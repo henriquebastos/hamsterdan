@@ -330,7 +330,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "githubkit", extras = ["auth-app"], specifier = "==0.16.0" },
-    { name = "petrus", git = "https://github.com/henriquebastos/impetus.git?rev=cd1187e44926d6a80e4a3538ad79762618d32a8b" },
+    { name = "petrus", git = "ssh://git@github.com/henriquebastos/petrus.git?rev=cd1187e44926d6a80e4a3538ad79762618d32a8b" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
 ]
 
@@ -526,7 +526,7 @@ wheels = [
 [[package]]
 name = "petrus"
 version = "0.0.0"
-source = { git = "https://github.com/henriquebastos/impetus.git?rev=cd1187e44926d6a80e4a3538ad79762618d32a8b#cd1187e44926d6a80e4a3538ad79762618d32a8b" }
+source = { git = "ssh://git@github.com/henriquebastos/petrus.git?rev=cd1187e44926d6a80e4a3538ad79762618d32a8b#cd1187e44926d6a80e4a3538ad79762618d32a8b" }
 dependencies = [
     { name = "cel-python" },
 ]

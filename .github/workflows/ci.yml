@@ -15,8 +15,24 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.14"
+      - name: Configure private Petrus dependency access
+        env:
+          PETRUS_DEPLOY_KEY: ${{ secrets.PETRUS_DEPLOY_KEY }}
+        run: |
+          set -eu
+          test -n "$PETRUS_DEPLOY_KEY"
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$PETRUS_DEPLOY_KEY" > "$HOME/.ssh/petrus-ci"
+          chmod 600 "$HOME/.ssh/petrus-ci"
+          ssh-keyscan -H github.com > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          printf 'GIT_SSH_COMMAND=ssh -i %s/.ssh/petrus-ci -o IdentitiesOnly=yes -o UserKnownHostsFile=%s/.ssh/known_hosts\n' \
+            "$HOME" "$HOME" >> "$GITHUB_ENV"
+      - run: uv sync --frozen
+      - name: Remove private Petrus dependency access
+        if: always()
+        run: rm -f "$HOME/.ssh/petrus-ci" "$HOME/.ssh/known_hosts"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.10"
-      - run: uv sync --frozen
       - run: scripts/check full
