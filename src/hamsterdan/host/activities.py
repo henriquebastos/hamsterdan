@@ -364,6 +364,14 @@ class PrReadinessActivities:
             try:
                 self._fence(work)
             except RuntimeError:
+                LOG.warning(
+                    "agent coding stopped kind=%s category=stale_authority attempt=%s epoch=%s head=%s operation=%s",
+                    kind,
+                    attempt,
+                    work.epoch,
+                    work.head,
+                    work.operation,
+                )
                 break
             try:
                 result = self.runner.code(self.public_clone_url, request, is_current=lambda: self._is_current(work))
@@ -395,6 +403,24 @@ class PrReadinessActivities:
             )
         try:
             self._fence(work)
+        except RuntimeError:
+            LOG.warning(
+                "agent coding result rejected kind=%s category=stale_authority epoch=%s head=%s operation=%s",
+                kind,
+                work.epoch,
+                work.head,
+                work.operation,
+            )
+            return EffectResult(
+                kind,
+                work.epoch,
+                work.head,
+                False,
+                fingerprint=request.fingerprint,
+                lineage=work.operation,
+                operation=work.operation,
+            )
+        try:
             published = self.git_publisher.publish(
                 result,
                 operation=work.operation,
@@ -404,6 +430,13 @@ class PrReadinessActivities:
                 merge_base=request.merge_base,
             )
         except RuntimeError:
+            LOG.warning(
+                "agent coding result rejected kind=%s category=publication epoch=%s head=%s operation=%s",
+                kind,
+                work.epoch,
+                work.head,
+                work.operation,
+            )
             return EffectResult(
                 kind,
                 work.epoch,

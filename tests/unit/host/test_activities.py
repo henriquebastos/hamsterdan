@@ -86,7 +86,7 @@ def test_conversation_gate_projection_and_status_override_latched_lifecycle_deta
     assert PrReadinessActivities._status(asdict(ready)) == "Readiness is ready; no current blockers are observed."
 
 
-def test_expected_publication_runtime_failure_becomes_typed_effect_result() -> None:
+def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog) -> None:
     operations = object.__new__(PrReadinessActivities)
     operations.repository = "owner/repo"
     operations.pr_number = 7
@@ -130,6 +130,8 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result() -> N
 
     assert result.kind == "repair" and result.ok is False
     assert result.operation == "repair-operation"
+    assert "category=publication" in caplog.text
+    assert "provider refused" not in caplog.text
 
 
 def test_coding_retries_nonchanging_agent_result_before_one_publication() -> None:
@@ -326,7 +328,7 @@ def test_canceled_coding_attempt_does_not_retry_or_publish() -> None:
     assert len(fences) == 1
 
 
-def test_stale_authority_between_coding_attempts_stops_before_retry_and_publication() -> None:
+def test_stale_authority_between_coding_attempts_stops_before_retry_and_publication(caplog) -> None:
     operations = object.__new__(PrReadinessActivities)
     operations.repository = "owner/repo"
     operations.pr_number = 7
@@ -380,9 +382,10 @@ def test_stale_authority_between_coding_attempts_stops_before_retry_and_publicat
     assert operations.change(work).ok is False
     assert operations.runner.calls == 1
     assert fence_calls == 2
+    assert "category=stale_authority attempt=2" in caplog.text
 
 
-def test_stale_final_fence_after_changed_retry_prevents_publication() -> None:
+def test_stale_final_fence_after_changed_retry_prevents_publication(caplog) -> None:
     operations = object.__new__(PrReadinessActivities)
     operations.repository = "owner/repo"
     operations.pr_number = 7
@@ -441,6 +444,7 @@ def test_stale_final_fence_after_changed_retry_prevents_publication() -> None:
     assert operations.runner.calls == 2
     assert operations.git_publisher.calls == 0
     assert fence_calls == 3
+    assert "coding result rejected kind=change category=stale_authority" in caplog.text
 
 
 def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(tmp_path: Path) -> None:
