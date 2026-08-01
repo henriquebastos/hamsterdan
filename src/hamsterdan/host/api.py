@@ -48,6 +48,6 @@ def create_app(service: HostService, *, reconcile_startup: bool = True) -> FastA
             receipt = await asyncio.to_thread(service.custody.receive, headers, bytes(body))
         except WebhookRejected as error:
             raise HTTPException(status_code=400, detail=str(error)) from None
-        return {"delivery_id": receipt.delivery_id, "disposition": receipt.disposition}
+        return {"custody": "durable", "delivery_id": receipt.delivery_id, "disposition": receipt.disposition}
 
     return app

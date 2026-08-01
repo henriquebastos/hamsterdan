@@ -2,5 +2,6 @@
 set -euo pipefail
 
 command -v uv >/dev/null
+command -v bun >/dev/null
 test -f uv.lock
 echo "Hamsterdan requires no resume-time repair yet"

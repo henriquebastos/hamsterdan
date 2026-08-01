@@ -16,6 +16,8 @@ from .config import HostConfig
 
 @dataclass(frozen=True)
 class RequestMetadata:
+    method: str
+    path: str
     request_id: str | None
     rate_limit_remaining: int | None
     rate_limit_reset: int | None
@@ -73,6 +75,8 @@ class GitHubAppClients:
         assert self._metadata_hook is not None
         self._metadata_hook(
             RequestMetadata(
+                response.request.method,
+                response.request.url.path,
                 response.headers.get("x-github-request-id"),
                 _integer_header(response, "x-ratelimit-remaining"),
                 _integer_header(response, "x-ratelimit-reset"),

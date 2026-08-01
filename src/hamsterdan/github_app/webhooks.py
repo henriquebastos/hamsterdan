@@ -6,8 +6,9 @@ import json
 import re
 import sqlite3
 import threading
+import time
 import uuid
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,8 @@ from .routing import InstallationRegistry
 
 MAX_BODY_BYTES = 1_048_576
 MAX_COMMENT_BYTES = 16_384
+MAX_DELIVERY_ATTEMPTS = 20
+MAX_RETRY_DELAY_SECONDS = 300
 SUPPORTED_EVENTS = frozenset(
     {
         "installation",
@@ -95,8 +98,10 @@ class WebhookCustody:
         webhook_secret: str,
         registry: InstallationRegistry | None = None,
         maximum_body_bytes: int = MAX_BODY_BYTES,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self._secret, self._registry, self._maximum = webhook_secret, registry, maximum_body_bytes
+        self._clock = clock
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._lock = threading.RLock()
         self._db.executescript("""
@@ -104,8 +109,12 @@ class WebhookCustody:
           CREATE TABLE IF NOT EXISTS inbox (
             delivery_id TEXT PRIMARY KEY, event TEXT NOT NULL, observation TEXT NOT NULL,
             status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
-            reason TEXT, error_class TEXT);
+            reason TEXT, error_class TEXT, next_attempt_at REAL NOT NULL DEFAULT 0);
         """)
+        columns = {str(row[1]) for row in self._db.execute("PRAGMA table_info(inbox)")}
+        if "next_attempt_at" not in columns:
+            with self._db:
+                self._db.execute("ALTER TABLE inbox ADD COLUMN next_attempt_at REAL NOT NULL DEFAULT 0")
 
     def receive(self, headers: Iterable[tuple[str, str]], body: bytes) -> Receipt:
         projected = _headers(headers)
@@ -208,7 +217,9 @@ class WebhookCustody:
         limit = max(1, min(limit, 1000))
         with self._lock:
             rows = self._db.execute(
-                "SELECT observation,attempts FROM inbox WHERE status='pending' ORDER BY rowid LIMIT ?", (limit,)
+                "SELECT observation,attempts FROM inbox "
+                "WHERE status='pending' AND next_attempt_at<=? ORDER BY rowid LIMIT ?",
+                (self._clock(), limit),
             ).fetchall()
         return tuple(
             Observation(
@@ -232,9 +243,23 @@ class WebhookCustody:
 
     def retry(self, delivery_id: str, error: BaseException) -> None:
         with self._lock, self._db:
+            row = self._db.execute(
+                "SELECT attempts FROM inbox WHERE delivery_id=? AND status='pending'", (delivery_id,)
+            ).fetchone()
+            if row is None:
+                return
+            attempts = int(row[0]) + 1
+            if attempts >= MAX_DELIVERY_ATTEMPTS:
+                self._db.execute(
+                    "UPDATE inbox SET status='failed',attempts=?,reason='attempts exhausted',error_class=? "
+                    "WHERE delivery_id=? AND status='pending'",
+                    (attempts, type(error).__name__[:128], delivery_id),
+                )
+                return
+            delay = min(2 ** (attempts - 1), MAX_RETRY_DELAY_SECONDS)
             self._db.execute(
-                "UPDATE inbox SET attempts=attempts+1,error_class=? WHERE delivery_id=?",
-                (type(error).__name__[:128], delivery_id),
+                "UPDATE inbox SET attempts=?,next_attempt_at=?,error_class=? WHERE delivery_id=? AND status='pending'",
+                (attempts, self._clock() + delay, type(error).__name__[:128], delivery_id),
             )
 
     def status(self, delivery_id: str) -> str | None:
@@ -246,6 +271,40 @@ class WebhookCustody:
             str(status): int(count)
             for status, count in self._db.execute("SELECT status,count(*) FROM inbox GROUP BY status")
         }
+
+    def failures(self, limit: int = 100) -> tuple[dict[str, object], ...]:
+        limit = max(1, min(limit, 1000))
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT delivery_id,event,attempts,error_class,reason FROM inbox "
+                "WHERE status='failed' ORDER BY rowid LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return tuple(
+            {
+                "delivery_id": str(delivery_id),
+                "event": str(event),
+                "attempts": int(attempts),
+                "error_class": None if error_class is None else str(error_class),
+                "reason": None if reason is None else str(reason),
+            }
+            for delivery_id, event, attempts, error_class, reason in rows
+        )
+
+    def requeue(self, delivery_id: str) -> bool:
+        try:
+            canonical = str(uuid.UUID(delivery_id))
+        except ValueError:
+            return False
+        if canonical != delivery_id:
+            return False
+        with self._lock, self._db:
+            cursor = self._db.execute(
+                "UPDATE inbox SET status='pending',attempts=0,next_attempt_at=0,reason=NULL,error_class=NULL "
+                "WHERE delivery_id=? AND status='failed'",
+                (delivery_id,),
+            )
+        return cursor.rowcount == 1
 
     def close(self) -> None:
         self._db.close()

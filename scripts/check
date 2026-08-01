@@ -10,6 +10,7 @@ case "$profile" in
         ;;
     full)
         "$0" quick
+        bun test ./tests/amp_webhook_relay.test.ts
         rm -rf dist
         uv build
         uv run --frozen pytest -q

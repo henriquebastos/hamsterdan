@@ -2,7 +2,7 @@
 code: CV1
 level: Value
 status: Active
-status_reason: The standalone project boundary is being established before GitHub App authentication and behavior transfer
+status_reason: The complete App host is locally qualified; provider-owned registration, installation, and live HBNetwork evidence remain
 updated: 2026-08-01
 ---
 

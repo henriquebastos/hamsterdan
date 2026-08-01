@@ -17,7 +17,7 @@ from hamsterdan.github_app.auth import GitHubAppClients, RequestMetadata
 from hamsterdan.github_app.config import ConfigurationError, HostConfig
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubKitTransport
-from hamsterdan.github_app.webhooks import SUPPORTED_EVENTS, WebhookCustody, WebhookRejected
+from hamsterdan.github_app.webhooks import MAX_DELIVERY_ATTEMPTS, SUPPORTED_EVENTS, WebhookCustody, WebhookRejected
 
 
 def secret(path: Path, value: bytes) -> Path:
@@ -105,7 +105,7 @@ def test_app_and_installation_auth_use_jwt_then_scoped_token_and_safe_metadata(t
     first.request("GET", "/installation/repositories")
     assert calls[0].headers["authorization"].startswith("Bearer ey")
     assert calls[-1].headers["authorization"] == "token installation-secret"
-    assert metadata[-1] == RequestMetadata("request", 9, 10, 200)
+    assert metadata[-1] == RequestMetadata("GET", "/installation/repositories", "request", 9, 10, 200)
     assert "installation-secret" not in repr(metadata) and not hasattr(metadata[-1], "headers")
     clients.close()
     clients.close()
@@ -126,6 +126,29 @@ def test_new_client_lifecycle_remints_without_a_host_token_cache(tmp_path: Path)
         with GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients:
             clients.installation(44, [31]).request("GET", "/installation/repositories")
     assert minted == 2
+
+
+def test_expired_installation_token_is_reminted_by_the_sdk(tmp_path: Path) -> None:
+    minted = 0
+    authorization: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal minted
+        if request.url.path.endswith("/access_tokens"):
+            minted += 1
+            expires = "2000-01-01T00:00:00Z" if minted == 1 else "2099-01-01T00:00:00Z"
+            return httpx.Response(201, json={"token": f"token-{minted}", "expires_at": expires})
+        authorization.append(request.headers["authorization"])
+        return httpx.Response(200, json={})
+
+    with GitHubAppClients(
+        HostConfig.from_environment(environment(tmp_path)), transport=httpx.MockTransport(handler)
+    ) as clients:
+        installation = clients.installation(44, [31])
+        installation.request("GET", "/installation/repositories")
+        installation.request("GET", "/installation/repositories")
+    assert minted == 2
+    assert authorization == ["token token-1", "token token-2"]
 
 
 def test_installation_client_drives_bounded_gateway_without_exposing_token(tmp_path: Path) -> None:
@@ -243,6 +266,54 @@ def test_webhook_dedupes_observes_issue_comment_and_never_stores_payload(tmp_pat
     rows = db.execute("select observation from inbox").fetchall()
     assert "secret payload text" in str(rows)
     assert "x-hub-signature" not in str(rows)
+
+
+def test_webhook_retry_is_delayed_and_eventually_parked(tmp_path: Path) -> None:
+    now = [100.0]
+    custody = WebhookCustody(tmp_path / "w.db", webhook_secret="hook-secret", clock=lambda: now[0])
+    body = b"{}"
+    delivery = str(uuid.uuid4())
+    custody.receive(signed_headers(body, "ping", delivery), body)
+
+    for attempt in range(1, MAX_DELIVERY_ATTEMPTS + 1):
+        pending = custody.pending()
+        assert len(pending) == 1 and pending[0].attempts == attempt - 1
+        custody.retry(delivery, RuntimeError("secret provider response"))
+        assert custody.pending() == ()
+        if attempt < MAX_DELIVERY_ATTEMPTS:
+            now[0] += min(2 ** (attempt - 1), 300)
+
+    assert custody.status(delivery) == "failed"
+    assert custody.counts() == {"failed": 1}
+    assert custody.failures() == (
+        {
+            "delivery_id": delivery,
+            "event": "ping",
+            "attempts": MAX_DELIVERY_ATTEMPTS,
+            "error_class": "RuntimeError",
+            "reason": "attempts exhausted",
+        },
+    )
+    assert custody.requeue("not-a-uuid") is False
+    assert custody.requeue(delivery) is True
+    assert custody.requeue(delivery) is False
+    pending = custody.pending()
+    assert len(pending) == 1 and pending[0].attempts == 0
+
+
+def test_webhook_custody_migrates_existing_inbox_for_retry_schedule(tmp_path: Path) -> None:
+    path = tmp_path / "legacy.db"
+    database = sqlite3.connect(path)
+    database.execute(
+        "CREATE TABLE inbox (delivery_id TEXT PRIMARY KEY,event TEXT NOT NULL,observation TEXT NOT NULL,"
+        "status TEXT NOT NULL,attempts INTEGER NOT NULL DEFAULT 0,reason TEXT,error_class TEXT)"
+    )
+    database.close()
+    custody = WebhookCustody(path, webhook_secret="hook-secret")
+    with sqlite3.connect(path) as migrated:
+        columns = {row[1] for row in migrated.execute("PRAGMA table_info(inbox)")}
+    assert "next_attempt_at" in columns
+    custody.close()
 
 
 def test_installation_webhook_admits_initial_repositories_and_reconciliation_portfolio(tmp_path: Path) -> None:

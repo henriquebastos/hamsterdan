@@ -7,6 +7,13 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 export PATH="$HOME/.local/bin:$PATH"
 
+echo "==> Installing Bun"
+if ! command -v bun >/dev/null 2>&1; then
+    curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"
+fi
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
 echo "==> Syncing the locked Hamsterdan environment"
 uv sync --frozen
 

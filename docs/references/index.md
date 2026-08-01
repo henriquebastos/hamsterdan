@@ -16,5 +16,18 @@ Authoritative GitHub documentation inspected 2026-08-01:
 - <https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/making-a-github-app-public-or-private>
 - <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation>
 - <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-an-installation-access-token-for-a-github-app>
+- <https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app>
 - <https://docs.github.com/en/apps/maintaining-github-apps/modifying-a-github-app-registration>
 - <https://docs.github.com/en/apps/maintaining-github-apps/transferring-ownership-of-a-github-app>
+- <https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks>
+- <https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps>
+- <https://docs.github.com/en/webhooks/webhook-events-and-payloads>
+
+## Runtime libraries and deployment contracts
+
+- GitHubKit 0.16.0 App authentication, installation scoping, cache, request,
+  GraphQL, and webhook APIs, pinned in `pyproject.toml` and exercised against its
+  real client with a mock HTTP transport.
+- Amp Plugin API `createWebhook` durable delivery contract and
+  `.amp/services.yaml` supervised-service contract, inspected from the installed
+  Amp version on 2026-08-01.

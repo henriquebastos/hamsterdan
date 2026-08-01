@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import sqlite3
 import time
 import uuid
 from pathlib import Path
@@ -144,6 +145,7 @@ def test_fastapi_accepts_durably_before_work_deduplicates_and_has_sanitized_heal
         time.sleep(0.02)
         response = client.post("/github/webhooks", content=body, headers=signed(body, delivery))
         assert response.status_code == 202
+        assert response.json() == {"custody": "durable", "delivery_id": delivery, "disposition": "accepted"}
         assert host.custody.status(delivery) == "pending" and made == []
         duplicate = client.post("/github/webhooks", content=body, headers=signed(body, delivery))
         assert duplicate.status_code == 202 and duplicate.json()["disposition"] == "duplicate"
@@ -268,14 +270,48 @@ def test_retry_does_not_block_later_delivery_and_new_process_resumes_same_custod
     first.process(pending[0])
     # A separate PR is still attempted despite the first delivery remaining pending.
     first.process(pending[1])
-    assert [item.attempts for item in first.custody.pending()] == [1, 1]
+    assert first.custody.pending() == ()
     first.close()
     resumed_apps: list[Application] = []
     second = service(tmp_path, factory=lambda *a, **k: resumed_apps.append(Application(*a, **k)) or resumed_apps[-1])
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        database.execute("UPDATE inbox SET next_attempt_at=0")
     for item in second.custody.pending():
         second.process(item)
     assert second.custody.pending() == () and len(resumed_apps) == 2
     second.close()
+
+
+def test_periodic_sweep_reopens_durable_instances_and_skips_inactive_routes(tmp_path: Path) -> None:
+    for repository, pr in ((31, 7), (31, 8), (999, 9)):
+        root = tmp_path / "applications" / "44" / str(repository) / str(pr)
+        root.mkdir(parents=True)
+        (root / "history.jsonl").write_text("", encoding="utf-8")
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
+
+    assert host.sweep("startup") == 2
+    assert [item.args[1] for item in made] == ["github:44:31:pr:7", "github:44:31:pr:8"]
+    assert [item.reconciles for item in made] == [["startup:44:31:7"], ["startup:44:31:8"]]
+    assert host.sweep() == 2
+    assert [item.reconciles[-1] for item in made] == ["periodic:44:31:7", "periodic:44:31:8"]
+
+
+def test_sweep_failure_on_one_pr_does_not_block_another(tmp_path: Path) -> None:
+    for pr in (7, 8):
+        root = tmp_path / "applications" / "44" / "31" / str(pr)
+        root.mkdir(parents=True)
+        (root / "history.jsonl").write_text("", encoding="utf-8")
+    made: list[Application] = []
+
+    def factory(*args: Any, **kwargs: Any) -> Application:
+        app = Application(*args, fail=len(made) == 0, **kwargs)
+        made.append(app)
+        return app
+
+    host = service(tmp_path, factory=factory)
+    assert host.sweep() == 1
+    assert len(made) == 2 and made[1].reconciles == ["periodic:44:31:8"]
 
 
 def registration_clients(

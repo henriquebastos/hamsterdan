@@ -13,11 +13,13 @@ state are intentionally separate.
 
 ## Status
 
-The standalone project boundary is being established. GitHub App credentials,
-webhook ingress, PR-readiness behavior, and live effects are not implemented in
-this repository yet. The qualified source behavior remains in Petrus's
-`examples/pr_readiness_next` package until it is transferred under parity
-tests.
+The standalone application, transferred PR-readiness Net, installation-authenticated
+GitHub boundary, durable App webhook ingress, host composition, credential-free
+Amp agent runner, guarded effects, and HBNetwork qualification tooling are
+implemented and locally qualified. Real-provider acceptance is pending the
+unavoidable provider bootstrap: create the private source repository, register
+the HBNetwork-owned private App, generate its key, install it on the selected
+demo repository, and run the controlled acceptance portfolio.
 
 ## Architecture
 
@@ -41,7 +43,7 @@ GitHub or agent providers perform typed Motus Activities.
 
 ## Development
 
-Python 3.14 and [uv](https://docs.astral.sh/uv/) are required.
+Python 3.14, [uv](https://docs.astral.sh/uv/), and Bun 1.3.10 are required.
 
 ```sh
 uv sync --frozen
@@ -51,3 +53,26 @@ scripts/check full
 The Petrus dependency is pinned to the accepted namespace-migration commit.
 Canonical environments never float on Petrus `main` or depend on a local
 checkout.
+
+## Runtime ownership
+
+The host authenticates as the GitHub App, obtains one-hour installation tokens
+through GitHubKit, and narrows each operation client to one admitted repository.
+The App-owned webhook reaches the orb through a durable Amp relay; the relay
+forwards exact signed bytes to the host but has neither the webhook secret nor
+GitHub credentials. The host verifies, sanitizes, durably accepts, deduplicates,
+and asynchronously processes each delivery. Failed deliveries back off and
+eventually park; persisted PR Instances are reconciled on startup and every
+minute so a missed follow-up event does not strand active work.
+
+## Operator qualification
+
+The production-owned, JSON-output demo CLI is available as
+`python -m hamsterdan.operator` or `scripts/hamsterdan-demo`. Start with the
+non-mutating `preflight`; scenario creation and broker preparation are explicit
+human operator actions and never merge, force-push, or bypass protection.
+
+The complete private App registration, supervised host, selected-repository
+installation, broker cutover, inspection, rotation, and isolated rollback
+sequence is in [the HBNetwork operator runbook](docs/operator/README.md). Live
+HBNetwork acceptance is intentionally not marked complete by this tooling.

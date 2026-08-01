@@ -52,6 +52,7 @@ class HostService:
         workflow_path: str = ".github/workflows/ci.yml",
         reminder_delay: float = 259200,
         poll_interval: float = 0.25,
+        sweep_interval: float = 60,
     ) -> None:
         self.config = config
         self.root = config.state_path
@@ -64,6 +65,7 @@ class HostService:
         self.custody = WebhookCustody(self.root / "webhooks.sqlite3", webhook_secret=secret, registry=self.registry)
         self.runner, self.application_factory = runner or AmpExecuteRunner(), application_factory
         self.workflow_path, self.reminder_delay, self.poll_interval = workflow_path, reminder_delay, poll_interval
+        self.sweep_interval = sweep_interval
         self.installation_id: int | None = None
         self._apps: dict[tuple[int, int, int], PrReadinessApplication] = {}
         self._locks: dict[tuple[int, int, int], threading.Lock] = {}
@@ -72,8 +74,16 @@ class HostService:
 
     def _request_metadata(self, metadata: Any) -> None:
         LOG.info(
-            "github_response",
+            "github_response method=%s path=%s request_id=%s status=%s rate_limit_remaining=%s rate_limit_reset=%s",
+            metadata.method,
+            metadata.path,
+            metadata.request_id,
+            metadata.status,
+            metadata.rate_limit_remaining,
+            metadata.rate_limit_reset,
             extra={
+                "github_method": metadata.method,
+                "github_path": metadata.path,
                 "github_request_id": metadata.request_id,
                 "rate_limit_remaining": metadata.rate_limit_remaining,
                 "rate_limit_reset": metadata.rate_limit_reset,
@@ -158,33 +168,26 @@ class HostService:
             "admitted_repositories": count,
         }
 
-    def _application(self, item: Observation) -> PrReadinessApplication:
-        assert (
-            item.installation_id is not None and item.repository_id is not None and item.pull_request_number is not None
-        )
-        key = item.installation_id, item.repository_id, item.pull_request_number
+    def _application(
+        self, installation_id: int, repository_id: int, pull_request_number: int
+    ) -> PrReadinessApplication:
+        key = installation_id, repository_id, pull_request_number
         if key not in self._apps:
-            route = self.registry.route(item.installation_id, item.repository_id)
+            route = self.registry.route(installation_id, repository_id)
             if route is None:
                 raise RuntimeError("route became inactive")
-            operation_client = self.clients.installation(item.installation_id, [item.repository_id])
+            operation_client = self.clients.installation(installation_id, [repository_id])
             transport = GitHubKitTransport(operation_client)
             authority = GitHubAuthority(
                 transport,
                 route.repository_full_name,
-                item.pull_request_number,
+                pull_request_number,
                 graphql=GitHubGraphQL(transport),
             )
-            root = (
-                self.root
-                / "applications"
-                / str(item.installation_id)
-                / str(item.repository_id)
-                / str(item.pull_request_number)
-            )
+            root = self.root / "applications" / str(installation_id) / str(repository_id) / str(pull_request_number)
             self._apps[key] = self.application_factory(
                 root,
-                f"github:{item.installation_id}:{item.repository_id}:pr:{item.pull_request_number}",
+                f"github:{installation_id}:{repository_id}:pr:{pull_request_number}",
                 authority,
                 self.runner,
                 bot_login=self.config.bot_login,
@@ -194,6 +197,43 @@ class HostService:
             )
             self._locks[key] = threading.Lock()
         return self._apps[key]
+
+    def sweep(self, trigger: str = "periodic") -> int:
+        """Reconcile durable PR Instances after restarts or missed provider events."""
+        applications = self.root / "applications"
+        if not applications.is_dir():
+            return 0
+        reconciled = 0
+        for history in sorted(applications.glob("*/*/*/history.jsonl")):
+            try:
+                installation_id, repository_id, pull_request_number = (int(part) for part in history.parts[-4:-1])
+            except ValueError:
+                continue
+            if min(installation_id, repository_id, pull_request_number) <= 0:
+                continue
+            if self.registry.route(installation_id, repository_id) is None:
+                continue
+            key = installation_id, repository_id, pull_request_number
+            try:
+                application = self._application(*key)
+                with self._locks[key]:
+                    application.reconcile(f"{trigger}:{installation_id}:{repository_id}:{pull_request_number}")
+                reconciled += 1
+            except Exception as error:  # noqa: BLE001 -- one PR must not prevent repair of another
+                LOG.warning(
+                    "application_sweep_retry installation_id=%s repository_id=%s pull_request_number=%s error_class=%s",
+                    installation_id,
+                    repository_id,
+                    pull_request_number,
+                    type(error).__name__,
+                    extra={
+                        "installation_id": installation_id,
+                        "repository_id": repository_id,
+                        "pull_request_number": pull_request_number,
+                        "error_class": type(error).__name__,
+                    },
+                )
+        return reconciled
 
     def process(self, item: Observation) -> None:
         fields = {
@@ -229,7 +269,7 @@ class HostService:
                 self.custody.acknowledge(item.delivery_id, "comment not addressed")
                 return
         try:
-            application = self._application(item)
+            application = self._application(item.installation_id, item.repository_id, item.pull_request_number)
             key = item.installation_id, item.repository_id, item.pull_request_number
             with self._locks[key]:
                 if self.registry.route(item.installation_id, item.repository_id) is None:
@@ -248,15 +288,39 @@ class HostService:
                 else:
                     application.reconcile(f"github-delivery:{item.delivery_id}")
             self.custody.acknowledge(item.delivery_id)
-            LOG.info("webhook_terminal", extra=fields | {"disposition": "processed"})
+            LOG.info(
+                "webhook_terminal delivery_id=%s event=%s installation_id=%s repository_id=%s "
+                "pull_request_number=%s disposition=processed",
+                item.delivery_id,
+                item.event,
+                item.installation_id,
+                item.repository_id,
+                item.pull_request_number,
+                extra=fields | {"disposition": "processed"},
+            )
         except Exception as error:  # noqa: BLE001 -- provider/Engine failures must leave every delivery retryable
             self.custody.retry(item.delivery_id, error)
-            LOG.warning("webhook_retry", extra=fields | {"disposition": "retry", "error_class": type(error).__name__})
+            LOG.warning(
+                "webhook_retry delivery_id=%s event=%s installation_id=%s repository_id=%s "
+                "pull_request_number=%s disposition=retry error_class=%s",
+                item.delivery_id,
+                item.event,
+                item.installation_id,
+                item.repository_id,
+                item.pull_request_number,
+                type(error).__name__,
+                extra=fields | {"disposition": "retry", "error_class": type(error).__name__},
+            )
 
     async def worker(self) -> None:
+        loop = asyncio.get_running_loop()
+        next_sweep = loop.time()
         while not self._stop.is_set():
             for item in self.custody.pending():
                 await asyncio.to_thread(self.process, item)
+            if loop.time() >= next_sweep:
+                await asyncio.to_thread(self.sweep)
+                next_sweep = loop.time() + self.sweep_interval
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self.poll_interval)
             except TimeoutError:
