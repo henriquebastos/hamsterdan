@@ -1,0 +1,601 @@
+"""Complete typed Activity composition for the next PR-readiness net."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import shlex
+from collections.abc import Callable
+from dataclasses import asdict
+
+from petrus.motus.activity import ActivityDefinition, DataclassPayloadConverter, activity
+
+from hamsterdan import agents
+from hamsterdan.contracts.readiness import (
+    ActionsObservation,
+    Control,
+    EffectResult,
+    Intent,
+    IntentBatch,
+    ReadinessCommand,
+    ReviewResult,
+    Work,
+    workflow_gates_ready,
+    workflow_wait,
+)
+from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
+from hamsterdan.github_app.gateway import GitHubAuthority
+from hamsterdan.github_app.models import ActionsRunSnapshot
+
+from .git_publish import HostGitPublisher, payload_digest
+
+CurrentFence = Callable[[int, str, str, str, str], None]
+Current = Callable[[int, str], bool]
+_MUTATIONS = {"change", "update_base", "resolve_conflict"}
+_ALLOWED = ("reply", "status", "acknowledge", "dismiss", "defer", "snooze", "resume", "reassign", *_MUTATIONS)
+
+
+class PrReadinessActivities:
+    """Petri-agnostic operations bound to exactly one repository and PR."""
+
+    def __init__(
+        self,
+        repository: str,
+        pr_number: int,
+        authority: GitHubAuthority,
+        publisher: CommentPublisher,
+        reruns: CommentRerunBroker,
+        runner: agents.AgentRunner,
+        public_clone_url: str,
+        workflow_path: str,
+        current_fence: CurrentFence,
+        git_publisher: HostGitPublisher | None = None,
+        is_current: Current | None = None,
+    ):
+        if authority.repository != repository or authority.pr_number != pr_number:
+            raise ValueError("GitHub authority differs from the configured repository/PR")
+        self.repository, self.pr_number = repository, pr_number
+        self.authority, self.publisher, self.reruns, self.runner = authority, publisher, reruns, runner
+        self.public_clone_url, self.workflow_path = public_clone_url, workflow_path
+        self.current_fence, self.git_publisher = current_fence, git_publisher
+        self.current = is_current
+
+    def _fence(self, value: Work | ReadinessCommand) -> None:
+        base = value.base_head if isinstance(value, ReadinessCommand) else str(value.payload.get("base_head", ""))
+        policy = (
+            value.policy_digest if isinstance(value, ReadinessCommand) else str(value.payload.get("policy_digest", ""))
+        )
+        if not base or not policy:
+            raise ValueError("effect lacks its complete authority fence")
+        self.current_fence(value.epoch, value.head, value.operation, base, policy)
+
+    def review(self, work: Work) -> ReviewResult:
+        payload = work.payload
+        comments = [
+            {
+                "id": item.get("id"),
+                "url": item.get("html_url", ""),
+                "body": str(item.get("body", ""))[:20_000],
+                "author": item.get("user", {}).get("login", "") if isinstance(item.get("user"), dict) else "",
+            }
+            for item in self.authority.comments()[-100:]
+        ]
+        run = self.authority.select_run(self.workflow_path, work.head)
+        actions_evidence = [] if run is None else [asdict(run)]
+        request = agents.ReviewRequest(
+            self.repository,
+            self.pr_number,
+            work.epoch,
+            work.head,
+            str(payload["base_head"]),
+            "diff.patch",
+            policy=dict(payload.get("policy", {})),
+            review_lenses=["correctness", "security", "tests", "maintainability", "developer experience"],
+            actions_evidence=actions_evidence,
+            prior_findings=list(payload.get("prior_findings", []))[:100],
+            prior_comments=comments,
+            prior_replies=list(payload.get("prior_replies", []))[:100],
+            applied_changes=list(payload.get("prior_lineage", []))[:100],
+        )
+        try:
+            result = self.runner.review(self.public_clone_url, request, is_current=lambda: self._is_current(work))
+        except agents.AgentProtocolError:
+            return ReviewResult(work.epoch, work.head, "unable", [], [], work.operation)
+        current_ids = {str(finding.get("id", "")) for finding in result.findings}
+        dispositions = {str(item.get("finding_id", "")): item.get("state") for item in result.lineage}
+        terminal = [
+            {**finding, "disposition": dispositions[str(finding.get("id", ""))]}
+            for finding in request.prior_findings
+            if str(finding.get("id", "")) not in current_ids
+            and dispositions.get(str(finding.get("id", ""))) in {"resolved", "superseded", "withdrawn"}
+        ]
+        self._fence(work)
+        return ReviewResult(
+            work.epoch,
+            work.head,
+            result.status,
+            [*result.findings, *terminal],
+            result.lineage,
+            work.operation,
+        )
+
+    def actions_discovery(self, work: Work) -> ActionsObservation:
+        self._fence(work)
+        run = self.authority.select_run(self.workflow_path, work.head)
+        if run is None:
+            return ActionsObservation(
+                work.epoch,
+                work.head,
+                "",
+                0,
+                "unavailable",
+                capability_available=False,
+                observation=f"absent:{self.workflow_path}:{work.head}",
+                operation=work.operation,
+                base_head=str(work.payload["base_head"]),
+                policy_digest=str(work.payload["policy_digest"]),
+            )
+        policy = self.authority.policy(self.authority.pull_request().base_ref)
+        run = self.authority.jobs(run, policy.required_checks)
+        result = self.authority.run_result(run)
+        conclusion = str(result["conclusion"])
+        fingerprint = self._failure_fingerprint(run) if conclusion == "failure" else ""
+        self._fence(work)
+        return ActionsObservation(
+            work.epoch,
+            work.head,
+            str(run.id),
+            run.attempt,
+            conclusion,
+            fingerprint,
+            operation=work.operation,
+            base_head=str(work.payload["base_head"]),
+            policy_digest=str(work.payload["policy_digest"]),
+        )
+
+    def actions_rerun(self, work: Work) -> ActionsObservation:
+        value = work.payload["actions"]
+        try:
+            run = next(
+                (
+                    item
+                    for item in self.authority.workflow_runs(self.workflow_path, work.head)
+                    if str(item.id) == str(value["run_id"]) and item.attempt == value["attempt"]
+                ),
+                None,
+            )
+            if run is None:
+                raise RuntimeError("the exact Actions run is no longer available")
+            self._fence(work)
+            self.reruns.request(run, epoch=work.epoch, operation=work.operation)
+        except RuntimeError:
+            return ActionsObservation(
+                work.epoch,
+                work.head,
+                str(value["run_id"]),
+                int(value["attempt"]),
+                "canceled",
+                observation=f"{value['run_id']}:{value['attempt']}:canceled",
+                operation=work.operation,
+                base_head=str(work.payload["base_head"]),
+                policy_digest=str(work.payload["policy_digest"]),
+            )
+        return ActionsObservation(
+            work.epoch,
+            work.head,
+            str(run.id),
+            run.attempt,
+            "requested",
+            observation=f"{run.id}:{run.attempt}:requested",
+            operation=work.operation,
+            base_head=str(work.payload["base_head"]),
+            policy_digest=str(work.payload["policy_digest"]),
+        )
+
+    def conversation(self, work: Work) -> IntentBatch:
+        comment, control = work.payload["comment"], work.payload["control"]
+        text = str(comment.get("text", "")).strip()
+        parsed = self._command(text, control, work)
+        if parsed is None:
+            declarations = self._intent_declarations(control)
+            request = agents.ConversationRequest(
+                self.repository,
+                self.pr_number,
+                work.epoch,
+                work.head,
+                str(work.payload["base_head"]),
+                comment,
+                {"id": comment.get("actor_id", 0), "login": comment.get("actor_login", "")},
+                control,
+                [],
+                list(control.get("findings", [])),
+                declarations,
+            )
+            try:
+                result = self.runner.converse(self.public_clone_url, request, is_current=lambda: self._is_current(work))
+                raw = result.intents
+            except agents.AgentProtocolError as error:
+                if error.canceled:
+                    return IntentBatch(work.epoch, work.head, [])
+                raw = [
+                    {
+                        "type": "reply",
+                        "arguments": {"message": "I could not interpret that request; no workflow change occurred."},
+                        "mutation": False,
+                        "explicit": False,
+                        "confidence": 1,
+                        "confirmation": False,
+                    }
+                ]
+        else:
+            raw = parsed
+        raw = self._confirmation_replies(raw, control, work)
+        intents = [asdict(self._intent(item, work, control)) for item in raw]
+        self._fence(work)
+        return IntentBatch(work.epoch, work.head, intents)
+
+    def conversation_publish(self, work: Work) -> EffectResult:
+        message = str(work.payload.get("intent", {}).get("arguments", {}).get("message", "Status acknowledged."))
+        try:
+            self._immutable("conversation", work, message)
+        except RuntimeError:
+            return EffectResult("conversation", work.epoch, work.head, False, operation=work.operation)
+        return self._effect("conversation", work)
+
+    def finding_publish(self, work: Work) -> EffectResult:
+        try:
+            self._fence(work)
+            references: list[dict] = []
+            for finding in work.payload.get("findings", []):
+                identity = str(finding.get("id", "unknown"))
+                operation = f"{work.operation}:{identity}"
+                lineage = next((x for x in work.payload.get("lineage", []) if x.get("finding_id") == identity), {})
+                body = (
+                    f"### {finding.get('title', identity)}\n\n{finding.get('body', '')}\n\n"
+                    f"Generation: `{work.epoch}` · Head: `{work.head}`\n\nEvidence: {finding.get('evidence', '')}\n\n"
+                    f"Lineage: `{json.dumps(lineage, sort_keys=True)}`"
+                )
+                marker = self.publisher.marker("finding", operation, work.head)
+                existing = self.publisher._find(marker)
+                detail = f"{body}\nLocation: {finding.get('path', '')}:{finding.get('line', '')}"
+                if existing is not None:
+                    if existing.get("body") != f"{detail}\n\n{marker}":
+                        raise ValueError("stable finding operation collided with a different payload")
+                    references.append({"finding_id": identity, "url": str(existing.get("html_url", ""))})
+                    continue
+                published = self.publisher.finding(
+                    operation,
+                    work.epoch,
+                    work.head,
+                    body,
+                    location=f"{finding.get('path', '')}:{finding.get('line', '')}",
+                    authority_operation=work.operation,
+                )
+                if published.reference is None:
+                    raise RuntimeError("GitHub did not return a finding reference")
+                references.append({"finding_id": identity, "url": published.reference.url})
+        except RuntimeError:
+            return EffectResult("finding", work.epoch, work.head, False, operation=work.operation)
+        return EffectResult("finding", work.epoch, work.head, True, operation=work.operation, references=references)
+
+    def dashboard_publish(self, work: Work) -> EffectResult:
+        control = work.payload["control"]
+        body = self._dashboard(control)
+        try:
+            self._fence(work)
+            result = self.publisher.dashboard(work.operation, work.epoch, work.head, body)
+        except RuntimeError:
+            return EffectResult("dashboard", work.epoch, work.head, False, operation=work.operation)
+        return self._effect("dashboard", work, capability_available=result.capability_available)
+
+    def reminder_publish(self, work: Work) -> EffectResult:
+        try:
+            self._fence(work)
+            result = self.publisher.reminder(
+                work.operation,
+                work.epoch,
+                work.head,
+                reviewer=work.payload.get("reviewer") or None,
+                author=str(work.payload.get("author", "")),
+            )
+        except RuntimeError:
+            return EffectResult("reminder", work.epoch, work.head, False, operation=work.operation)
+        return self._effect("reminder", work, capability_available=result.capability_available)
+
+    def readiness_publish(self, command: ReadinessCommand) -> EffectResult:
+        try:
+            result = self._immutable(
+                "readiness",
+                command,
+                "## Hamsterdan readiness advisory\n\nAll observed gates are ready. Advisory only; Hamsterdan does not merge PRs.",
+            )
+        except RuntimeError:
+            return EffectResult("readiness", command.epoch, command.head, False, operation=command.operation)
+        return EffectResult(
+            "readiness",
+            command.epoch,
+            command.head,
+            result.capability_available,
+            operation=command.operation,
+            capability_available=result.capability_available,
+        )
+
+    def repair(self, work: Work) -> EffectResult:
+        return self._code(work, "repair")
+
+    def change(self, work: Work) -> EffectResult:
+        return self._code(work, "change")
+
+    def _code(self, work: Work, kind: str) -> EffectResult:
+        if self.git_publisher is None:
+            raise RuntimeError("host Git publishing is not configured")
+        intent = work.payload.get("intent", {})
+        intent_kind = str(intent.get("kind", kind))
+        actions = work.payload.get("actions", {})
+        request = agents.CodingRequest(
+            kind,
+            self.repository,
+            self.pr_number,
+            work.epoch,
+            work.head,
+            str(work.payload["base_head"]),
+            f"hamsterdan/{kind}/{work.operation[-16:]}",
+            selected_work=[intent] if intent else [],
+            failure_evidence=[actions] if actions else [],
+            fingerprint=str(actions.get("fingerprint", "")),
+            lineage=list(work.payload.get("lineage", [])),
+            reproduction_status="unknown",
+            merge_base=intent_kind in {"update_base", "resolve_conflict"},
+        )
+        try:
+            result = self.runner.code(self.public_clone_url, request, is_current=lambda: self._is_current(work))
+        except agents.AgentProtocolError:
+            return EffectResult(
+                kind,
+                work.epoch,
+                work.head,
+                False,
+                fingerprint=request.fingerprint,
+                lineage=work.operation,
+                operation=work.operation,
+            )
+        if result.status != "changed":
+            return EffectResult(
+                kind,
+                work.epoch,
+                work.head,
+                False,
+                fingerprint=request.fingerprint,
+                lineage=work.operation,
+                operation=work.operation,
+            )
+        try:
+            self._fence(work)
+            published = self.git_publisher.publish(
+                result,
+                operation=work.operation,
+                payload_digest=payload_digest(work.payload),
+                expected_head=work.head,
+                base_head=request.base,
+                merge_base=request.merge_base,
+            )
+        except RuntimeError:
+            return EffectResult(
+                kind,
+                work.epoch,
+                work.head,
+                False,
+                fingerprint=request.fingerprint,
+                lineage=work.operation,
+                operation=work.operation,
+            )
+        return EffectResult(
+            kind, work.epoch, work.head, True, published.head, request.fingerprint, work.operation, work.operation
+        )
+
+    def _is_current(self, work: Work) -> bool:
+        if self.current is not None and not self.current(work.epoch, work.head):
+            return False
+        try:
+            self._fence(work)
+        except RuntimeError:
+            return False
+        return True
+
+    def _failure_fingerprint(self, run: ActionsRunSnapshot) -> str:
+        failed = sorted((job.name, job.conclusion) for job in run.jobs if job.required and job.conclusion != "success")
+        return hashlib.sha256(json.dumps(failed, separators=(",", ":")).encode()).hexdigest()
+
+    def _command(self, text: str, control: dict, work: Work) -> list[dict] | None:
+        if not text.startswith("/hamsterdan"):
+            return None
+        try:
+            words = shlex.split(text)
+        except ValueError:
+            return [{"type": "reply", "arguments": {"message": "Invalid /hamsterdan command syntax."}}]
+        if len(words) < 2:
+            return [{"type": "reply", "arguments": {"message": "Use /hamsterdan status or an explicit action."}}]
+        kind, args = words[1], words[2:]
+        if kind == "confirm":
+            pending = control.get("pending_intent", {})
+            if pending and args and args[0] == control.get("pending_intent_digest"):
+                return [{"type": pending["kind"], "arguments": pending.get("arguments", {}), "confirmation": True}]
+            return [{"type": "reply", "arguments": {"message": "No matching mutation is pending."}}]
+        if kind not in _ALLOWED:
+            return [{"type": "reply", "arguments": {"message": f"Unknown /hamsterdan action: {kind}."}}]
+        arguments: dict = {}
+        if kind in {"acknowledge", "dismiss", "defer"}:
+            arguments = {"findings": args}
+        elif kind == "reassign":
+            arguments = {"assignee": args[0] if args else ""}
+        elif kind in _MUTATIONS:
+            arguments = {"request": " ".join(args)}
+        elif kind in {"reply", "status"}:
+            arguments = {"message": " ".join(args) or self._status(control)}
+            kind = "reply"
+        return [{"type": kind, "arguments": arguments}]
+
+    def _intent(self, raw: dict, work: Work, control: dict) -> Intent:
+        kind, arguments = str(raw["type"]), dict(raw.get("arguments", {}))
+        digest = _intent_digest(self.repository, self.pr_number, work, kind, arguments)
+        confirmed = bool(raw.get("confirmation", False))
+        if confirmed and (
+            digest != control.get("pending_intent_digest") or kind != control.get("pending_intent", {}).get("kind")
+        ):
+            confirmed = False
+        return Intent(
+            work.epoch,
+            work.head,
+            kind,
+            digest,
+            True,
+            confirmed,
+            kind in _MUTATIONS,
+            arguments,
+            str(work.payload["base_head"]),
+            str(work.payload["policy_digest"]),
+        )
+
+    def _confirmation_replies(self, raw: list[dict], control: dict, work: Work) -> list[dict]:
+        values: list[dict] = []
+        for item in raw:
+            if item.get("type") == "status":
+                values.append({"type": "reply", "arguments": {"message": self._status(control)}})
+                continue
+            values.append(item)
+            if item.get("type") in _MUTATIONS:
+                if item.get("confirmation"):
+                    message = f"Confirmed {item['type']} mutation; execution is now authorized."
+                else:
+                    digest = _intent_digest(
+                        self.repository, self.pr_number, work, str(item["type"]), item.get("arguments", {})
+                    )
+                    message = (
+                        f"Mutation {item['type']} is not yet authorized. Reply `/hamsterdan confirm "
+                        f"{digest}` to confirm exactly."
+                    )
+                values.append({"type": "reply", "arguments": {"message": message}})
+        return values
+
+    def _intent_declarations(self, control: dict) -> list[dict]:
+        arguments = {
+            "reply": ["message"],
+            "status": [],
+            "acknowledge": ["findings"],
+            "dismiss": ["findings"],
+            "defer": ["findings"],
+            "snooze": [],
+            "resume": [],
+            "reassign": ["assignee"],
+            "change": ["request"],
+            "update_base": ["request"],
+            "resolve_conflict": ["request"],
+        }
+        return [
+            {
+                "type": name,
+                "mutation": name in _MUTATIONS,
+                "arguments": arguments[name],
+                "confirmation_available": name == control.get("pending_intent", {}).get("kind"),
+                "requires_explicit": name in _MUTATIONS,
+                "requires_confirmation": name in _MUTATIONS,
+            }
+            for name in _ALLOWED
+        ]
+
+    @staticmethod
+    def _status(control: dict) -> str:
+        return f"Readiness is waiting for {control.get('wait', 'remaining gates')}."
+
+    @staticmethod
+    def _dashboard(c: dict) -> str:
+        control = Control(**c)
+        gates_ready = workflow_gates_ready(control)
+        wait = workflow_wait(control)
+        findings = c.get("findings", [])
+        lines = [
+            f"- `{x.get('id')}` {x.get('disposition', 'new')} — {x.get('title', '')}"
+            + (f" ([detail]({x['comment_url']}))" if x.get("comment_url") else "")
+            for x in findings
+        ] or ["- None"]
+        run = (
+            f"[run {c.get('run_id')}](https://github.com/{c.get('repository_id')}/actions/runs/{c.get('run_id')})"
+            if c.get("run_id")
+            else "no adopted run"
+        )
+        capabilities = (
+            f"Actions blocking={c.get('actions_capability_blocking')}; human blocking={c.get('human_capability_blocking')}; "
+            f"dashboard blocking={c.get('dashboard_capability_blocking')}; "
+            f"finding publication blocking={c.get('finding_capability_blocking')}; "
+            f"readiness publication blocking={c.get('readiness_capability_blocking')}"
+        )
+        return (
+            f"## Hamsterdan PR readiness dashboard\n\nGeneration: `{c.get('epoch')}` · Head: `{c.get('head')}`\n\n"
+            f"Actions: **{c.get('actions')}**, attempt {c.get('attempt')} (flaky={c.get('actions') == 'flaky_green'}) · {run}\n\n"
+            f"Coordinating agent review: **{c.get('review')}**\n\n"
+            f"### Findings / lineage\n" + "\n".join(lines) + f"\n\nHuman approved: {c.get('human_approved')} · "
+            f"Review requested: {c.get('human_requested')} · Required approvals: {c.get('required_approvals')} · "
+            f"Distinct approval: {c.get('distinct_reviewer_approved')}\n\n"
+            f"Base policy: **{'strict / update required' if c.get('strict_base') else 'non-strict'}** · "
+            f"Observed base: `{c.get('base_head')}` · Base current: {c.get('base_current')}\n\n"
+            f"Mergeable: {c.get('mergeable')} · Conflict: {c.get('conflict')} · "
+            f"Unresolved conversations: {c.get('unresolved_conversations')}\n\n"
+            f"Mutation pending: {c.get('mutation_pending')} · Provisional: {c.get('provisional')}\n\n"
+            f"Capabilities: {capabilities}\n\nReadiness: **{'ready' if gates_ready else 'not ready'}** · "
+            f"Waiting for: {wait}\n\nThis dashboard is advisory; Hamsterdan never auto-merges."
+        )
+
+    @staticmethod
+    def _effect(kind: str, work: Work, *, capability_available: bool = True) -> EffectResult:
+        return EffectResult(
+            kind,
+            work.epoch,
+            work.head,
+            capability_available,
+            operation=work.operation,
+            capability_available=capability_available,
+        )
+
+    def _immutable(self, kind: str, value: Work | ReadinessCommand, body: str):
+        self._fence(value)
+        marker = self.publisher.marker(kind, value.operation, value.head)
+        existing = self.publisher._find(marker)
+        expected = f"{body}\n\n{marker}"
+        if existing is not None:
+            if existing.get("body") != expected:
+                raise ValueError("stable publication operation collided with a different payload")
+            return self.publisher.immutable(kind, value.operation, value.epoch, value.head, body)
+        return self.publisher.immutable(kind, value.operation, value.epoch, value.head, body)
+
+
+def _intent_digest(repository: str, pr: int, work: Work, kind: str, arguments: dict) -> str:
+    value = {
+        "repository": repository,
+        "pr": pr,
+        "epoch": work.epoch,
+        "head": work.head,
+        "base": work.payload["base_head"],
+        "policy": work.payload["policy_digest"],
+        "type": kind,
+        "arguments": arguments,
+    }
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def activity_definitions(operations: PrReadinessActivities) -> dict[str, ActivityDefinition]:
+    names = (
+        "review",
+        "actions_discovery",
+        "actions_rerun",
+        "conversation",
+        "conversation_publish",
+        "repair",
+        "change",
+        "finding_publish",
+        "dashboard_publish",
+        "reminder_publish",
+        "readiness_publish",
+    )
+    return {
+        name: activity(getattr(operations, name), name=name, converter=DataclassPayloadConverter()) for name in names
+    }

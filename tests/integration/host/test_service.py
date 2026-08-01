@@ -1,0 +1,352 @@
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import time
+import uuid
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from hamsterdan.github_app.config import HostConfig
+from hamsterdan.github_app.webhooks import Observation
+from hamsterdan.host.api import create_app
+from hamsterdan.host.service import APP_EVENTS, APP_PERMISSIONS, HostService
+
+
+class Response:
+    def __init__(self, value: object):
+        self.value = value
+
+    def json(self) -> object:
+        return self.value
+
+
+class Client:
+    def __init__(self, responses: dict[str, object] | None = None):
+        self.responses = responses or {}
+        self.calls: list[tuple[str, str]] = []
+
+    def request(self, method: str, path: str) -> Response:
+        self.calls.append((method, path))
+        return Response(self.responses.get(path, {}))
+
+
+class Clients:
+    def __init__(self, app: Client | None = None, inventory: Client | None = None):
+        self.app = app or Client()
+        self.inventory_client = inventory or Client()
+        self.operation_calls: list[tuple[int, tuple[int, ...]]] = []
+        self.operation_client = Client()
+        self.closed = 0
+
+    def inventory(self, installation_id: int) -> Client:
+        assert installation_id == 44
+        return self.inventory_client
+
+    def installation(self, installation_id: int, repository_ids: list[int] | tuple[int, ...]) -> Client:
+        self.operation_calls.append((installation_id, tuple(repository_ids)))
+        return self.operation_client
+
+    def close(self) -> None:
+        self.closed += 1
+
+
+class Application:
+    def __init__(self, *args: Any, fail: bool = False, **kwargs: Any):
+        self.args, self.kwargs, self.fail = args, kwargs, fail
+        self.reconciles: list[str] = []
+        self.comments: list[dict[str, object]] = []
+        self.closed = 0
+
+    def reconcile(self, trigger: str) -> None:
+        self.reconciles.append(trigger)
+        if self.fail:
+            raise RuntimeError("provider secret must not escape")
+
+    def route_comment(self, **kwargs: object) -> None:
+        self.comments.append(kwargs)
+
+    def close(self) -> None:
+        self.closed += 1
+
+
+def config(root: Path) -> HostConfig:
+    return HostConfig(
+        app_id=17,
+        app_slug="hamsterdan-test",
+        client_id="Iv1.client-secret-looking",
+        account_id=23,
+        account_login="Owner",
+        allowed_repositories=frozenset({(31, "owner/one"), (32, "owner/two")}),
+        state_path=root,
+        private_key="private-key-secret",
+        webhook_secret="hook-secret",
+    )
+
+
+def service(root: Path, *, clients: Clients | None = None, factory: Any = Application) -> HostService:
+    result = HostService(config(root), clients=clients or Clients(), runner=object(), application_factory=factory)
+    result.registry.reconcile(44, ((31, "owner/one"), (32, "owner/two")))
+    return result
+
+
+def observation(delivery: str, repository: int = 31, pr: int = 7, **values: object) -> Observation:
+    data: dict[str, object] = {
+        "delivery_id": delivery,
+        "event": "pull_request",
+        "action": "synchronize",
+        "installation_id": 44,
+        "account_id": 23,
+        "repository_id": repository,
+        "repository_full_name": "owner/one" if repository == 31 else "owner/two",
+        "pull_request_number": pr,
+    }
+    data.update(values)
+    return Observation(**data)  # type: ignore[arg-type]
+
+
+def signed(body: bytes, delivery: str, event: str = "pull_request") -> dict[str, str]:
+    digest = hmac.new(b"hook-secret", body, hashlib.sha256).hexdigest()
+    return {
+        "content-type": "application/json",
+        "x-hub-signature-256": f"sha256={digest}",
+        "x-github-delivery": delivery,
+        "x-github-event": event,
+    }
+
+
+def envelope(repository: int = 31, pr: int = 7) -> bytes:
+    return json.dumps(
+        {
+            "action": "synchronize",
+            "installation": {"id": 44, "account": {"id": 23}},
+            "repository": {"id": repository, "full_name": "owner/one"},
+            "pull_request": {"number": pr},
+        }
+    ).encode()
+
+
+def test_fastapi_accepts_durably_before_work_deduplicates_and_has_sanitized_health(tmp_path: Path) -> None:
+    made: list[Application] = []
+
+    def factory(*args: Any, **kwargs: Any) -> Application:
+        made.append(Application(*args, **kwargs))
+        return made[-1]
+
+    host = service(tmp_path, factory=factory)
+    delivery, body = str(uuid.uuid4()), envelope()
+    with TestClient(create_app(host, reconcile_startup=False)) as client:
+        # Let the initially empty worker reach its wait so the response witnesses custody, not application work.
+        time.sleep(0.02)
+        response = client.post("/github/webhooks", content=body, headers=signed(body, delivery))
+        assert response.status_code == 202
+        assert host.custody.status(delivery) == "pending" and made == []
+        duplicate = client.post("/github/webhooks", content=body, headers=signed(body, delivery))
+        assert duplicate.status_code == 202 and duplicate.json()["disposition"] == "duplicate"
+        health = client.get("/healthz")
+        assert health.status_code == 200
+        encoded = health.text
+        assert all(
+            secret not in encoded for secret in ("hook-secret", "private-key-secret", "client-secret", "comment")
+        )
+        host.process(host.custody.pending()[0])
+        assert len(made) == 1 and made[0].reconciles == [f"github-delivery:{delivery}"]
+
+
+@pytest.mark.parametrize(
+    ("body", "headers"),
+    [
+        (b"{}", {"content-type": "application/json"}),
+        (b"not-json", None),
+        (envelope(), {"content-type": "text/plain"}),
+    ],
+)
+def test_fastapi_rejects_malformed_signature_body_or_header(
+    tmp_path: Path, body: bytes, headers: dict[str, str] | None
+) -> None:
+    host = service(tmp_path)
+    delivery = str(uuid.uuid4())
+    actual = signed(body, delivery) if headers is None else signed(body, delivery) | headers
+    if body == b"{}":
+        actual.pop("x-hub-signature-256")
+    with TestClient(create_app(host, reconcile_startup=False)) as client:
+        assert client.post("/github/webhooks", content=body, headers=actual).status_code == 400
+
+
+def test_application_identity_roots_and_operation_clients_are_exact(tmp_path: Path) -> None:
+    made: list[Application] = []
+    clients = Clients()
+
+    def factory(*args: Any, **kwargs: Any) -> Application:
+        made.append(Application(*args, **kwargs))
+        return made[-1]
+
+    host = service(tmp_path, clients=clients, factory=factory)
+    for item in (observation("a"), observation("b"), observation("c", 32), observation("d", 31, 8)):
+        host.process(item)
+    assert len(made) == 3
+    assert made[0].args[0] == tmp_path / "applications/44/31/7"
+    assert made[0].args[1] == "github:44:31:pr:7"
+    assert [call[1] for call in clients.operation_calls] == [(31,), (32,), (31,)]
+    assert made[0].args[2].graphql is not None
+    host.close()
+    assert all(app.closed == 1 for app in made) and clients.closed == 1
+
+
+def test_inactive_routes_and_non_actionable_comments_are_terminal_without_application(tmp_path: Path) -> None:
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)))
+    cases = [
+        observation("missing", repository=999),
+        observation(
+            "bot",
+            event="issue_comment",
+            action="created",
+            comment_body="/hamsterdan",
+            actor_login=host.config.bot_login,
+        ),
+        observation(
+            "untrusted",
+            event="issue_comment",
+            action="created",
+            comment_body="/hamsterdan",
+            actor_login="x",
+            actor_type="User",
+            author_association="NONE",
+        ),
+        observation(
+            "unaddressed",
+            event="issue_comment",
+            action="created",
+            comment_body="hello",
+            actor_login="x",
+            actor_type="User",
+            author_association="OWNER",
+        ),
+    ]
+    for item in cases:
+        host.process(item)
+    host.registry.installation("suspend", 44, 23)
+    host.process(observation("suspended"))
+    host.registry.installation("deleted", 44, 23)
+    host.process(observation("removed"))
+    assert made == []
+
+
+def test_addressed_trusted_human_comment_is_routed(tmp_path: Path) -> None:
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
+    host.process(
+        observation(
+            "comment",
+            event="issue_comment",
+            action="created",
+            comment_id=9,
+            comment_body="@hamsterdan-test help",
+            actor_id=5,
+            actor_login="human",
+            actor_type="User",
+            author_association="MEMBER",
+        )
+    )
+    assert len(made) == 1 and made[0].comments[0]["comment_id"] == 9
+
+
+def test_retry_does_not_block_later_delivery_and_new_process_resumes_same_custody(tmp_path: Path) -> None:
+    first_apps: list[Application] = []
+    first = service(
+        tmp_path, factory=lambda *a, **k: first_apps.append(Application(*a, fail=True, **k)) or first_apps[-1]
+    )
+    for delivery in (str(uuid.uuid4()), str(uuid.uuid4())):
+        body = envelope(pr=7 if not first.custody.pending() else 8)
+        first.custody.receive(signed(body, delivery).items() | {("content-length", str(len(body)))}, body)
+    pending = first.custody.pending()
+    first.process(pending[0])
+    # A separate PR is still attempted despite the first delivery remaining pending.
+    first.process(pending[1])
+    assert [item.attempts for item in first.custody.pending()] == [1, 1]
+    first.close()
+    resumed_apps: list[Application] = []
+    second = service(tmp_path, factory=lambda *a, **k: resumed_apps.append(Application(*a, **k)) or resumed_apps[-1])
+    for item in second.custody.pending():
+        second.process(item)
+    assert second.custody.pending() == () and len(resumed_apps) == 2
+    second.close()
+
+
+def registration_clients(
+    *,
+    app_changes: dict[str, object] | None = None,
+    installations: object | None = None,
+    repositories: object | None = None,
+) -> Clients:
+    app: dict[str, object] = {
+        "id": 17,
+        "client_id": "Iv1.client-secret-looking",
+        "slug": "hamsterdan-test",
+        "permissions": APP_PERMISSIONS | {"metadata": "read"},
+        "events": sorted(APP_EVENTS),
+    }
+    app.update(app_changes or {})
+    installation_value = (
+        installations
+        if installations is not None
+        else [{"id": 44, "account": {"id": 23, "login": "Owner"}, "suspended_at": None}]
+    )
+    repository_value = (
+        repositories
+        if repositories is not None
+        else {
+            "total_count": 2,
+            "repositories": [{"id": 31, "full_name": "owner/one"}, {"id": 32, "full_name": "owner/two"}],
+        }
+    )
+    return Clients(
+        Client({"/app": app, "/app/installations?per_page=100&page=1": installation_value}),
+        Client({"/installation/repositories?per_page=100&page=1": repository_value}),
+    )
+
+
+def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_path: Path) -> None:
+    host = HostService(
+        config(tmp_path), clients=registration_clients(), runner=object(), application_factory=Application
+    )
+    assert host.reconcile_registration()["admitted_repositories"] == 2
+    assert host.registry.route(44, 32) is not None
+    host.clients = registration_clients(
+        repositories={"total_count": 1, "repositories": [{"id": 31, "full_name": "owner/one"}]}
+    )
+    assert host.reconcile_registration()["admitted_repositories"] == 1
+    assert host.registry.route(44, 32) is None
+
+
+@pytest.mark.parametrize(
+    ("changes", "installations", "message"),
+    [
+        ({"id": 18}, None, "identity"),
+        ({"client_id": "wrong"}, None, "identity"),
+        ({"slug": "wrong"}, None, "identity"),
+        ({}, [], "missing or ambiguous"),
+        ({}, [{"id": 44, "account": {"id": 23, "login": "Owner"}, "suspended_at": "now"}], "suspended"),
+        ({"permissions": APP_PERMISSIONS | {"checks": "write"}}, None, "permissions"),
+        ({"events": sorted(APP_EVENTS | {"check_run"})}, None, "events"),
+    ],
+)
+def test_startup_rejects_identity_account_suspension_and_broad_contract_safely(
+    tmp_path: Path, changes: dict[str, object], installations: object | None, message: str
+) -> None:
+    host = HostService(
+        config(tmp_path),
+        clients=registration_clients(app_changes=changes, installations=installations),
+        runner=object(),
+        application_factory=Application,
+    )
+    with pytest.raises(RuntimeError, match=message) as caught:
+        host.reconcile_registration()
+    assert all(
+        secret not in str(caught.value) for secret in ("client-secret-looking", "private-key-secret", "hook-secret")
+    )
