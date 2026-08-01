@@ -101,14 +101,22 @@ class HostService:
             raise RuntimeError("configured GitHub App identity does not match provider authority")
         permissions = app.get("permissions")
         events = app.get("events")
-        if (
-            not isinstance(permissions, dict)
-            or {str(key): str(value) for key, value in permissions.items() if key != "metadata"} != APP_PERMISSIONS
-            or permissions.get("metadata", "read") != "read"
-        ):
-            raise RuntimeError("GitHub App permissions do not match the required first-demo contract")
-        if not isinstance(events, list) or set(events) != APP_EVENTS or len(events) != len(APP_EVENTS):
-            raise RuntimeError("GitHub App events do not match the required first-demo contract")
+        if not isinstance(permissions, dict):
+            raise RuntimeError("GitHub App permissions are malformed")  # noqa: TRY004
+        observed_permissions = {str(key): str(value) for key, value in permissions.items() if key != "metadata"}
+        if observed_permissions != APP_PERMISSIONS or permissions.get("metadata", "read") != "read":
+            raise RuntimeError(
+                "GitHub App permissions do not match the required first-demo contract: "
+                f"expected={sorted(APP_PERMISSIONS.items())!r} observed={sorted(observed_permissions.items())!r}"
+            )
+        if not isinstance(events, list):
+            raise RuntimeError("GitHub App events are malformed")  # noqa: TRY004
+        observed_events = sorted(str(item) for item in events)
+        if set(observed_events) != APP_EVENTS or len(observed_events) != len(APP_EVENTS):
+            raise RuntimeError(
+                "GitHub App events do not match the required first-demo contract: "
+                f"expected={sorted(APP_EVENTS)!r} observed={observed_events!r}"
+            )
         installations: list[dict[str, Any]] = []
         for page in range(1, MAX_INVENTORY_PAGES + 1):
             batch = _json(self.clients.app.request("GET", f"/app/installations?per_page=100&page={page}"))
