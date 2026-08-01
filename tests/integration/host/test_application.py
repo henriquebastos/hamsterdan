@@ -278,11 +278,14 @@ def test_mention_conversation_uses_current_dashboard_and_exact_two_comment_confi
     assert not subject.route_comment(delivery_id="slash", comment_id=30, text="/hamsterdan status", **common)["routed"]
     authority.transport.comments.append({"id": 90, "body": "<!-- impetus:dashboard -->", "user": {"login": BOT}})
     subject.route_comment(delivery_id="status", comment_id=31, text="@hamster-dan How is this looking?", **common)
-    assert runner.conversations == 1 and any("Readiness is waiting" in x["body"] for x in authority.transport.comments)
+    assert runner.conversations == 1 and any(
+        "Readiness is ready; no current blockers" in x["body"] for x in authority.transport.comments
+    )
     request = runner.requests[-1]
     assert request.comment_context["text"] == "How is this looking?"
     assert request.dashboard["head"] == HEAD
     assert request.dashboard["findings"] == []
+    assert request.gates[0] == {"name": "overall", "ready": True, "blocker": ""}
     subject.route_comment(delivery_id="change", comment_id=32, text="@hamster-dan Please fix the finding", **common)
     control = subject.host.control  # type: ignore[union-attr]
     assert runner.codes == 0 and control is not None and control.mutation_pending

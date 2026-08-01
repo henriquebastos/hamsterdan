@@ -203,7 +203,7 @@ class PrReadinessActivities:
             comment,
             {"id": comment.get("actor_id", 0), "login": comment.get("actor_login", "")},
             control,
-            [],
+            self._conversation_gates(control),
             list(control.get("findings", [])),
             declarations,
         )
@@ -497,8 +497,34 @@ class PrReadinessActivities:
         ]
 
     @staticmethod
+    def _conversation_gates(control: dict) -> list[dict]:
+        current = Control(**control)
+        overall = workflow_gates_ready(current)
+        findings_clear = current.review == "clear" and not any(
+            finding.get("blocking") and finding.get("disposition") in {"new", "still_open"}
+            for finding in current.findings
+        )
+        return [
+            {"name": "overall", "ready": overall, "blocker": "" if overall else workflow_wait(current)},
+            {"name": "actions", "ready": current.actions in {"green", "flaky_green"}, "state": current.actions},
+            {"name": "findings", "ready": findings_clear, "state": current.review},
+            {
+                "name": "human_review",
+                "ready": current.human_approved
+                and not current.changes_requested
+                and current.unresolved_conversations == 0
+                and (not current.distinct_reviewer_required or current.distinct_reviewer_approved),
+            },
+            {"name": "base", "ready": current.base_current or not current.strict_base},
+            {"name": "mergeability", "ready": current.mergeable and not current.conflict},
+        ]
+
+    @staticmethod
     def _status(control: dict) -> str:
-        return f"Readiness is waiting for {control.get('wait', 'remaining gates')}."
+        current = Control(**control)
+        if workflow_gates_ready(current):
+            return "Readiness is ready; no current blockers are observed."
+        return f"Readiness is waiting for {workflow_wait(current)}."
 
     @staticmethod
     def _dashboard(c: dict) -> str:

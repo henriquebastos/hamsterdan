@@ -174,6 +174,8 @@ def test_conversation_instructions_stage_explicit_mutation_before_confirmation()
 
     assert "current durable dashboard" in instructions
     assert "readiness questions" in instructions
+    assert "current blockers, readiness, or status" in instructions
+    assert "overall gate is authoritative" in instructions
     assert "internal response capabilities" in instructions
     assert "user-visible commands" in instructions
     assert "emit exactly one reply" in instructions

@@ -57,6 +57,31 @@ def test_dashboard_projects_current_gates_instead_of_latched_announcement() -> N
     assert "Readiness: **not ready**" in PrReadinessActivities._dashboard(asdict(no_longer_ready))
 
 
+def test_conversation_gate_projection_and_status_override_latched_lifecycle_details() -> None:
+    ready = Control(
+        "repo",
+        7,
+        1,
+        "head",
+        "base",
+        True,
+        True,
+        actions="flaky_green",
+        rerun_requested=True,
+        review="clear",
+        findings_published=True,
+        human_approved=True,
+        mergeable=True,
+        wait="terminal lifecycle",
+    )
+
+    gates = {gate["name"]: gate for gate in PrReadinessActivities._conversation_gates(asdict(ready))}
+
+    assert gates["overall"] == {"name": "overall", "ready": True, "blocker": ""}
+    assert gates["actions"] == {"name": "actions", "ready": True, "state": "flaky_green"}
+    assert PrReadinessActivities._status(asdict(ready)) == "Readiness is ready; no current blockers are observed."
+
+
 def test_expected_publication_runtime_failure_becomes_typed_effect_result() -> None:
     operations = object.__new__(PrReadinessActivities)
     operations.repository = "owner/repo"
@@ -330,7 +355,7 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
             "base_head": "b" * 40,
             "policy_digest": "policy",
             "comment": {"text": "explain the blockers", "actor_id": 1, "actor_login": "human"},
-            "control": {},
+            "control": asdict(Control("owner/repo", 7, 2, "a" * 40, "b" * 40, False, True)),
         },
     )
 

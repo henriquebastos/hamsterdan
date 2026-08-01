@@ -2,7 +2,7 @@
 code: CV2.DS1
 level: Delivery Story
 status: In Progress
-status_reason: Experience accepted and implementation reviewed; source CI and live App acceptance remain
+status_reason: Live transport passed; reviewed semantic correction awaits exact-question redeployment
 updated: 2026-08-01
 related:
   - docs/project/decisions/records/2026-08-01T0203Z-hamsterdan-is-a-standalone-petrus-application.md
@@ -61,7 +61,7 @@ comments cannot trigger a self-loop.
 
 ## Acceptance evidence
 
-Local qualification passes 183 Python tests with one opt-in real-provider skip,
+Local qualification passes 184 Python tests with one opt-in real-provider skip,
 nine Bun relay tests, Ruff, formatting, ty, wheel/sdist build, and
 `git diff --check`. Tests prove exact mention stripping and trusted-human
 admission, slash/lookalike/bot rejection, current dashboard delivery, one raw
@@ -69,6 +69,13 @@ agent intent, host-verified digest confirmation, unchanged pending state after
 false confirmation, exact second-comment mutation authorization, and preserved
 bounded publication recovery.
 
-Private-source CI and live acceptance remain. Live acceptance will use
+The first live request proved webhook custody, exact App reply attribution,
+single publication, self-loop rejection, and terminal failure-free recovery,
+but its free-form answer contradicted the ready dashboard by treating a latched
+rerun flag as current work. The corrected request now includes host-derived
+authoritative gates and routes blocker/status questions through deterministic
+current-gate rendering. A credential-free real Amp probe against that exact
+conflicting shape selects the status intent. Source CI, exact-commit redeployment,
+and repeated live semantic acceptance remain. Live acceptance uses
 [HBNetwork/demo-pr-readiness#14](https://github.com/HBNetwork/demo-pr-readiness/pull/14)
 without replacing its durable dashboard or runtime history.
