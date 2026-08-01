@@ -10,7 +10,7 @@ from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.activities import PrReadinessActivities, _confirmation_text, _intent_digest, activity_definitions
-from hamsterdan.host.git_publish import GitPublishResult, payload_digest
+from hamsterdan.host.git_publish import GitPublishError, GitPublishResult, payload_digest
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
 
 
@@ -114,7 +114,7 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
 
     class Publisher:
         def publish(self, *args, **kwargs):
-            raise RuntimeError("provider refused the publication")
+            raise GitPublishError("provider refused the publication")
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
@@ -131,7 +131,7 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
     assert result.kind == "repair" and result.ok is False
     assert result.operation == "repair-operation"
     assert "category=publication" in caplog.text
-    assert "provider refused" not in caplog.text
+    assert "reason=provider refused the publication" in caplog.text
 
 
 def test_coding_retries_nonchanging_agent_result_before_one_publication() -> None:

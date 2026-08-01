@@ -27,7 +27,7 @@ from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import ActionsRunSnapshot, GitHubBoundaryError
 
-from .git_publish import HostGitPublisher, payload_digest
+from .git_publish import GitPublishError, HostGitPublisher, payload_digest
 
 CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]
@@ -429,10 +429,30 @@ class PrReadinessActivities:
                 base_head=request.base,
                 merge_base=request.merge_base,
             )
-        except RuntimeError:
+        except GitPublishError as error:
             LOG.warning(
-                "agent coding result rejected kind=%s category=publication epoch=%s head=%s operation=%s",
+                "agent coding result rejected kind=%s category=publication reason=%s epoch=%s head=%s operation=%s",
                 kind,
+                str(error),
+                work.epoch,
+                work.head,
+                work.operation,
+            )
+            return EffectResult(
+                kind,
+                work.epoch,
+                work.head,
+                False,
+                fingerprint=request.fingerprint,
+                lineage=work.operation,
+                operation=work.operation,
+            )
+        except RuntimeError as error:
+            LOG.warning(
+                "agent coding result rejected kind=%s category=publication_boundary error_type=%s "
+                "epoch=%s head=%s operation=%s",
+                kind,
+                type(error).__name__,
                 work.epoch,
                 work.head,
                 work.operation,
