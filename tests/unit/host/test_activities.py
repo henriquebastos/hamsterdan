@@ -2,10 +2,11 @@ from dataclasses import asdict, replace
 from typing import ClassVar
 
 from hamsterdan.agents import CodingResult
+from hamsterdan.agents import ConversationResult as AgentConversationResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
-from hamsterdan.host.activities import PrReadinessActivities, activity_definitions
+from hamsterdan.host.activities import PrReadinessActivities, _confirmation_text, _intent_digest, activity_definitions
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
 
 
@@ -290,3 +291,79 @@ def test_conversation_declarations_give_agents_exact_intent_arguments() -> None:
     assert declarations["change"]["arguments"] == ["request"]
     assert declarations["update_base"]["arguments"] == ["request"]
     assert declarations["resolve_conflict"]["arguments"] == ["request"]
+
+
+def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    operations.public_clone_url = "https://example.invalid/repo.git"
+    operations.current = None
+    operations.current_fence = lambda *args: None
+
+    class Runner:
+        def converse(self, repository_url, request, *, is_current=None):
+            reply = {
+                "type": "reply",
+                "arguments": {"message": "Duplicate"},
+                "mutation": False,
+                "explicit": False,
+                "confidence": 1,
+                "confirmation": False,
+            }
+            return AgentConversationResult(
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                [reply, reply],
+            )
+
+    operations.runner = Runner()
+    work = Work(
+        "conversation",
+        2,
+        "a" * 40,
+        "conversation-operation",
+        payload={
+            "base_head": "b" * 40,
+            "policy_digest": "policy",
+            "comment": {"text": "explain the blockers", "actor_id": 1, "actor_login": "human"},
+            "control": {},
+        },
+    )
+
+    result = operations.conversation(work)
+
+    assert len(result.intents) == 1
+    assert result.intents[0]["kind"] == "reply"
+    assert "could not interpret" in result.intents[0]["arguments"]["message"]
+
+
+def test_confirmation_requires_exact_human_text_pending_arguments_and_current_fence() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    work = Work(
+        "conversation",
+        2,
+        "a" * 40,
+        payload={"base_head": "b" * 40, "policy_digest": "policy"},
+    )
+    item = {"type": "change", "arguments": {"request": "fix the finding"}, "confirmation": True}
+    digest = _intent_digest(operations.repository, operations.pr_number, work, "change", item["arguments"])
+    control = {
+        "pending_intent": {"kind": "change", "arguments": item["arguments"]},
+        "pending_intent_digest": digest,
+    }
+    exact = {"text": _confirmation_text("change", digest)}
+
+    assert operations._confirmation_matches(item, exact, control, work)
+    assert not operations._confirmation_matches(item, {"text": "please do it"}, control, work)
+    assert not operations._confirmation_matches(item, {"text": _confirmation_text("change", "0" * 64)}, control, work)
+    assert not operations._confirmation_matches(
+        item | {"arguments": {"request": "different change"}}, exact, control, work
+    )
+    stale = replace(work, payload=work.payload | {"policy_digest": "new-policy"})
+    assert not operations._confirmation_matches(item, exact, control, stale)

@@ -38,8 +38,9 @@ def test_agent_requests_are_credential_free_and_mentions_are_exact() -> None:
 
     app = object.__new__(PrReadinessApplication)
     app.bot_login = "hamster-dan[bot]"
-    assert app._addressed_text("/hamsterdan status") == "/hamsterdan status"
+    assert app._addressed_text("/hamsterdan status") is None
     assert app._addressed_text("@HaMsTeR-DaN please explain") == "please explain"
+    assert app._addressed_text("@hamster-dan") == ""
     assert app._addressed_text("@hamsterdan please explain") is None
     assert app._addressed_text("@hamsterdan-other hello") is None
     assert app._addressed_text("/hamsterdangler status") is None

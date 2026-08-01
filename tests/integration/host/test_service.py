@@ -208,17 +208,35 @@ def test_inactive_routes_and_non_actionable_comments_are_terminal_without_applic
             "bot",
             event="issue_comment",
             action="created",
-            comment_body="/hamsterdan",
+            comment_body="@hamsterdan-test explain the blockers",
             actor_login=host.config.bot_login,
         ),
         observation(
             "untrusted",
             event="issue_comment",
             action="created",
-            comment_body="/hamsterdan",
+            comment_body="@hamsterdan-test explain the blockers",
             actor_login="x",
             actor_type="User",
             author_association="NONE",
+        ),
+        observation(
+            "retired-slash-command",
+            event="issue_comment",
+            action="created",
+            comment_body="/hamsterdan status",
+            actor_login="x",
+            actor_type="User",
+            author_association="OWNER",
+        ),
+        observation(
+            "mention-lookalike",
+            event="issue_comment",
+            action="created",
+            comment_body="@hamsterdan explain the blockers",
+            actor_login="x",
+            actor_type="User",
+            author_association="OWNER",
         ),
         observation(
             "unaddressed",
@@ -255,7 +273,9 @@ def test_addressed_trusted_human_comment_is_routed(tmp_path: Path) -> None:
             author_association="MEMBER",
         )
     )
-    assert len(made) == 1 and made[0].comments[0]["comment_id"] == 9
+    assert len(made) == 1
+    assert made[0].comments[0]["comment_id"] == 9
+    assert made[0].comments[0]["text"] == "@hamsterdan-test help"
 
 
 def test_retry_does_not_block_later_delivery_and_new_process_resumes_same_custody(tmp_path: Path) -> None:

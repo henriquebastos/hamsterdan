@@ -130,13 +130,37 @@ class Runner:
     def converse(self, repository_url, request, *, is_current=None):
         self.conversations += 1
         self.requests.append(request)
-        return ConversationResult(
-            request.repository,
-            request.pull_request,
-            request.epoch,
-            request.head,
-            request.base,
-            [
+        text = str(request.comment_context.get("text", ""))
+        pending = request.dashboard.get("pending_intent", {})
+        if text == "Please fix the finding":
+            intents = [
+                {
+                    "type": "change",
+                    "arguments": {"request": "fix the finding"},
+                    "mutation": True,
+                    "explicit": True,
+                    "confidence": 1,
+                    "confirmation": False,
+                }
+            ]
+        elif (
+            text == "This is not a confirmation"
+            and isinstance(pending, dict)
+            or text.startswith("Confirm the pending change mutation with digest")
+            and isinstance(pending, dict)
+        ):
+            intents = [
+                {
+                    "type": "change",
+                    "arguments": pending["arguments"],
+                    "mutation": True,
+                    "explicit": True,
+                    "confidence": 1,
+                    "confirmation": True,
+                }
+            ]
+        else:
+            intents = [
                 {
                     "type": "status",
                     "arguments": {},
@@ -145,7 +169,14 @@ class Runner:
                     "confidence": 1,
                     "confirmation": False,
                 }
-            ],
+            ]
+        return ConversationResult(
+            request.repository,
+            request.pull_request,
+            request.epoch,
+            request.head,
+            request.base,
+            intents,
         )
 
     def code(self, repository_url, request, *, is_current=None):
@@ -237,21 +268,43 @@ def test_merged_is_terminal_success_without_merge_commit_identity(tmp_path: Path
     subject.close()
 
 
-def test_prose_reply_exact_two_comment_confirmation_and_old_grammar_ignored(tmp_path: Path) -> None:
+def test_mention_conversation_uses_current_dashboard_and_exact_two_comment_confirmation(tmp_path: Path) -> None:
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner)
     subject.reconcile()
     common = {"actor_id": 7, "actor_login": "author", "actor_type": "User", "association": "OWNER"}
     assert not subject.route_comment(delivery_id="old", comment_id=30, text="/impetus status", **common)["routed"]
+    assert not subject.route_comment(delivery_id="slash", comment_id=30, text="/hamsterdan status", **common)["routed"]
     authority.transport.comments.append({"id": 90, "body": "<!-- impetus:dashboard -->", "user": {"login": BOT}})
     subject.route_comment(delivery_id="status", comment_id=31, text="@hamster-dan How is this looking?", **common)
     assert runner.conversations == 1 and any("Readiness is waiting" in x["body"] for x in authority.transport.comments)
-    subject.route_comment(delivery_id="change", comment_id=32, text="/hamsterdan change fix the finding", **common)
+    request = runner.requests[-1]
+    assert request.comment_context["text"] == "How is this looking?"
+    assert request.dashboard["head"] == HEAD
+    assert request.dashboard["findings"] == []
+    subject.route_comment(delivery_id="change", comment_id=32, text="@hamster-dan Please fix the finding", **common)
     control = subject.host.control  # type: ignore[union-attr]
     assert runner.codes == 0 and control is not None and control.mutation_pending
+    assert any(
+        "@hamster-dan" in comment["body"] and control.pending_intent_digest in comment["body"]
+        for comment in authority.transport.comments
+    )
     subject.route_comment(
-        delivery_id="confirm", comment_id=33, text=f"/hamsterdan confirm {control.pending_intent_digest}", **common
+        delivery_id="not-confirmation",
+        comment_id=33,
+        text="@hamster-dan This is not a confirmation",
+        **common,
+    )
+    assert runner.codes == 0
+    control = subject.host.control  # type: ignore[union-attr]
+    assert control is not None and control.mutation_pending
+    assert any("could not interpret" in comment["body"] for comment in authority.transport.comments)
+    subject.route_comment(
+        delivery_id="confirm",
+        comment_id=34,
+        text=f"@hamster-dan Confirm the pending change mutation with digest {control.pending_intent_digest}",
+        **common,
     )
     assert runner.codes == 1
     subject.close()
@@ -270,7 +323,7 @@ def test_only_trusted_addressed_users_route(tmp_path: Path, changes: dict[str, s
         "actor_login": "human",
         "actor_type": "User",
         "association": "MEMBER",
-        "text": "/hamsterdan status",
+        "text": "@hamster-dan explain the blockers",
     } | changes
     assert not subject.route_comment(**values)["routed"]
     assert runner.conversations == 0

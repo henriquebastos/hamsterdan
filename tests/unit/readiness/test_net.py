@@ -388,7 +388,7 @@ def test_failed_conversation_publication_reissues_the_same_fenced_operation() ->
     drive_bounded(subject)
     subject.deliver(
         "conversation_observation",
-        token(ConversationObservation(1, "h1", True, "/hamsterdan status", comment_id=31)),
+        token(ConversationObservation(1, "h1", True, "explain the blockers", comment_id=31)),
         identity="comment-31",
     )
     drive_bounded(subject)
@@ -452,7 +452,7 @@ def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -
     drive_bounded(subject)
     subject.deliver(
         "conversation_observation",
-        token(ConversationObservation(1, "h1", True, "/hamsterdan status", comment_id=32)),
+        token(ConversationObservation(1, "h1", True, "explain the blockers", comment_id=32)),
         identity="comment-32",
     )
     drive_bounded(subject)

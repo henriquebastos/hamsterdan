@@ -250,18 +250,14 @@ class PrReadinessApplication:
         return {"routed": True, "epoch": control.epoch, "head": control.head}
 
     def _addressed_text(self, text: str) -> str | None:
-        """Accept command grammar or an exact, case-insensitive bot mention."""
-        command = text.casefold()
-        if command == "/hamsterdan" or command.startswith("/hamsterdan "):
-            return text
-        aliases = {f"@{self.bot_login.removesuffix('[bot]')}"}
+        """Strip the exact, case-insensitive configured App mention."""
+        mention = f"@{self.bot_login.removesuffix('[bot]')}"
         folded = text.casefold()
-        for alias in aliases:
-            if folded == alias:
-                return ""
-            prefix = f"{alias} "
-            if folded.startswith(prefix):
-                return text[len(prefix) :].lstrip()
+        if folded == mention:
+            return ""
+        prefix = f"{mention} "
+        if folded.startswith(prefix):
+            return text[len(prefix) :].lstrip()
         return None
 
     def _observe_actions(self, control, required_checks: tuple[str, ...]) -> None:

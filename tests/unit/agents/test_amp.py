@@ -126,13 +126,60 @@ def test_valid_conversation_selects_declared_intent() -> None:
     assert isinstance(_validate_result("conversation", data, request), ConversationResult)
 
 
+@pytest.mark.parametrize(
+    "intents",
+    [
+        [],
+        [
+            {
+                "type": "reply",
+                "arguments": {"message": "First"},
+                "mutation": False,
+                "explicit": False,
+                "confidence": 1,
+                "confirmation": False,
+            },
+            {
+                "type": "reply",
+                "arguments": {"message": "Second"},
+                "mutation": False,
+                "explicit": False,
+                "confidence": 1,
+                "confirmation": False,
+            },
+        ],
+    ],
+)
+def test_conversation_requires_exactly_one_raw_intent(intents: list[dict[str, object]]) -> None:
+    request = ConversationRequest(
+        "owner/repo",
+        1,
+        0,
+        "a" * 40,
+        "b" * 40,
+        {},
+        {},
+        {},
+        [],
+        [],
+        [{"type": "reply", "mutation": False, "arguments": ["message"]}],
+    )
+
+    with pytest.raises(AgentProtocolError, match="exactly one intent"):
+        _validate_result("conversation", result_for(request, intents=intents), request)
+
+
 def test_conversation_instructions_stage_explicit_mutation_before_confirmation() -> None:
     instructions = AmpExecuteRunner._instructions("conversation", object())
 
+    assert "current durable dashboard" in instructions
+    assert "readiness questions" in instructions
+    assert "internal response capabilities" in instructions
+    assert "user-visible commands" in instructions
+    assert "emit exactly one reply" in instructions
     assert "Put the concrete edit and its scope" in instructions
-    assert "omit conversational directions about staging, confirmation, or whether to execute" in instructions
-    assert "emit the mutation intent with confirmation=false" in instructions
-    assert "host can stage it and request exact confirmation" in instructions
+    assert "emit only the mutation intent with confirmation=false" in instructions
+    assert "pending kind, arguments, and digest" in instructions
     assert "Never treat an unconfirmed request as authorized execution" in instructions
 
 

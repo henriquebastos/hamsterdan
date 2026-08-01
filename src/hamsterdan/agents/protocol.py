@@ -292,7 +292,10 @@ def _allowed_intents(request: ConversationRequest) -> dict[str, JSONDict]:
 
 def _validate_conversation(data: JSONDict, request: ConversationRequest) -> ConversationResult:
     allowed = _allowed_intents(request)
-    for intent in _list(data["intents"], "intents"):
+    intents = _list(data["intents"], "intents")
+    if len(intents) != 1:
+        _fail("conversation must select exactly one intent")
+    for intent in intents:
         if not isinstance(intent, dict):
             _fail("intent must be an object")
         intent = cast(JSONDict, intent)
@@ -325,7 +328,7 @@ def _validate_conversation(data: JSONDict, request: ConversationRequest) -> Conv
         epoch=cast(int, data["epoch"]),
         head=cast(str, data["head"]),
         base=cast(str, data["base"]),
-        intents=cast(list[JSONDict], data["intents"]),
+        intents=cast(list[JSONDict], intents),
     )
 
 

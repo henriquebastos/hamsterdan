@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shlex
 from collections.abc import Callable
 from dataclasses import asdict
 
@@ -194,41 +193,40 @@ class PrReadinessActivities:
 
     def conversation(self, work: Work) -> IntentBatch:
         comment, control = work.payload["comment"], work.payload["control"]
-        text = str(comment.get("text", "")).strip()
-        parsed = self._command(text, control, work)
-        if parsed is None:
-            declarations = self._intent_declarations(control)
-            request = agents.ConversationRequest(
-                self.repository,
-                self.pr_number,
-                work.epoch,
-                work.head,
-                str(work.payload["base_head"]),
-                comment,
-                {"id": comment.get("actor_id", 0), "login": comment.get("actor_login", "")},
-                control,
-                [],
-                list(control.get("findings", [])),
-                declarations,
-            )
-            try:
-                result = self.runner.converse(self.public_clone_url, request, is_current=lambda: self._is_current(work))
-                raw = result.intents
-            except agents.AgentProtocolError as error:
-                if error.canceled:
-                    return IntentBatch(work.epoch, work.head, [])
-                raw = [
-                    {
-                        "type": "reply",
-                        "arguments": {"message": "I could not interpret that request; no workflow change occurred."},
-                        "mutation": False,
-                        "explicit": False,
-                        "confidence": 1,
-                        "confirmation": False,
-                    }
-                ]
-        else:
-            raw = parsed
+        declarations = self._intent_declarations(control)
+        request = agents.ConversationRequest(
+            self.repository,
+            self.pr_number,
+            work.epoch,
+            work.head,
+            str(work.payload["base_head"]),
+            comment,
+            {"id": comment.get("actor_id", 0), "login": comment.get("actor_login", "")},
+            control,
+            [],
+            list(control.get("findings", [])),
+            declarations,
+        )
+        try:
+            result = self.runner.converse(self.public_clone_url, request, is_current=lambda: self._is_current(work))
+            raw = result.intents
+            if len(raw) != 1:
+                raise agents.AgentProtocolError("conversation must select exactly one intent")
+            if raw[0].get("confirmation") and not self._confirmation_matches(raw[0], comment, control, work):
+                raise agents.AgentProtocolError("human comment did not exactly confirm the pending mutation")
+        except agents.AgentProtocolError as error:
+            if error.canceled:
+                return IntentBatch(work.epoch, work.head, [])
+            raw = [
+                {
+                    "type": "reply",
+                    "arguments": {"message": "I could not interpret that request; no workflow change occurred."},
+                    "mutation": False,
+                    "explicit": False,
+                    "confidence": 1,
+                    "confirmation": False,
+                }
+            ]
         raw = self._confirmation_replies(raw, control, work)
         intents = [asdict(self._intent(item, work, control)) for item in raw]
         self._fence(work)
@@ -415,35 +413,6 @@ class PrReadinessActivities:
         failed = sorted((job.name, job.conclusion) for job in run.jobs if job.required and job.conclusion != "success")
         return hashlib.sha256(json.dumps(failed, separators=(",", ":")).encode()).hexdigest()
 
-    def _command(self, text: str, control: dict, work: Work) -> list[dict] | None:
-        if not text.startswith("/hamsterdan"):
-            return None
-        try:
-            words = shlex.split(text)
-        except ValueError:
-            return [{"type": "reply", "arguments": {"message": "Invalid /hamsterdan command syntax."}}]
-        if len(words) < 2:
-            return [{"type": "reply", "arguments": {"message": "Use /hamsterdan status or an explicit action."}}]
-        kind, args = words[1], words[2:]
-        if kind == "confirm":
-            pending = control.get("pending_intent", {})
-            if pending and args and args[0] == control.get("pending_intent_digest"):
-                return [{"type": pending["kind"], "arguments": pending.get("arguments", {}), "confirmation": True}]
-            return [{"type": "reply", "arguments": {"message": "No matching mutation is pending."}}]
-        if kind not in _ALLOWED:
-            return [{"type": "reply", "arguments": {"message": f"Unknown /hamsterdan action: {kind}."}}]
-        arguments: dict = {}
-        if kind in {"acknowledge", "dismiss", "defer"}:
-            arguments = {"findings": args}
-        elif kind == "reassign":
-            arguments = {"assignee": args[0] if args else ""}
-        elif kind in _MUTATIONS:
-            arguments = {"request": " ".join(args)}
-        elif kind in {"reply", "status"}:
-            arguments = {"message": " ".join(args) or self._status(control)}
-            kind = "reply"
-        return [{"type": kind, "arguments": arguments}]
-
     def _intent(self, raw: dict, work: Work, control: dict) -> Intent:
         kind, arguments = str(raw["type"]), dict(raw.get("arguments", {}))
         digest = _intent_digest(self.repository, self.pr_number, work, kind, arguments)
@@ -465,6 +434,20 @@ class PrReadinessActivities:
             str(work.payload["policy_digest"]),
         )
 
+    def _confirmation_matches(self, item: dict, comment: dict, control: dict, work: Work) -> bool:
+        pending = control.get("pending_intent")
+        kind = item.get("type")
+        arguments = item.get("arguments")
+        if not isinstance(pending, dict) or not isinstance(kind, str) or not isinstance(arguments, dict):
+            return False
+        digest = _intent_digest(self.repository, self.pr_number, work, kind, arguments)
+        return (
+            kind == pending.get("kind")
+            and arguments == pending.get("arguments")
+            and digest == control.get("pending_intent_digest")
+            and str(comment.get("text", "")).strip().casefold() == _confirmation_text(kind, digest).casefold()
+        )
+
     def _confirmation_replies(self, raw: list[dict], control: dict, work: Work) -> list[dict]:
         values: list[dict] = []
         for item in raw:
@@ -479,9 +462,10 @@ class PrReadinessActivities:
                     digest = _intent_digest(
                         self.repository, self.pr_number, work, str(item["type"]), item.get("arguments", {})
                     )
+                    mention = f"@{self.publisher.bot_login.removesuffix('[bot]')}"
                     message = (
-                        f"Mutation {item['type']} is not yet authorized. Reply `/hamsterdan confirm "
-                        f"{digest}` to confirm exactly."
+                        f"Mutation {item['type']} is not yet authorized. Reply "
+                        f"`{mention} {_confirmation_text(str(item['type']), digest)}` to confirm exactly."
                     )
                 values.append({"type": "reply", "arguments": {"message": message}})
         return values
@@ -590,6 +574,10 @@ def _intent_digest(repository: str, pr: int, work: Work, kind: str, arguments: d
         "arguments": arguments,
     }
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _confirmation_text(kind: str, digest: str) -> str:
+    return f"confirm the pending {kind} mutation with digest {digest}"
 
 
 def activity_definitions(operations: PrReadinessActivities) -> dict[str, ActivityDefinition]:

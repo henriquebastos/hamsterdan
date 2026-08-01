@@ -281,13 +281,13 @@ class HostService:
             return
         if item.event == "issue_comment":
             addressed = (item.comment_body or "").strip().casefold()
-            aliases = ("/hamsterdan", f"@{self.config.app_slug}")
+            mention = f"@{self.config.app_slug}"
             if (
                 item.action != "created"
                 or (item.actor_login or "").casefold() == self.config.bot_login
                 or item.actor_type != "User"
                 or (item.author_association or "").upper() not in {"OWNER", "MEMBER", "COLLABORATOR"}
-                or not any(addressed == alias or addressed.startswith(alias + " ") for alias in aliases)
+                or not (addressed == mention or addressed.startswith(mention + " "))
             ):
                 self.custody.acknowledge(item.delivery_id, "comment not addressed")
                 return

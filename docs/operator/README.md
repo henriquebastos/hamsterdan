@@ -111,9 +111,10 @@ HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE=.amp/runtime/webhook-secret
 ```
 
 GitHub assigned this registration the slug `hamster-dan`, so its bot login is
-`hamster-dan[bot]` and its mention is `@hamster-dan`. `/hamsterdan` remains the
-provider-independent command grammar. `@hamsterdan` is not a GitHub alias and
-is intentionally not accepted as one.
+`hamster-dan[bot]` and its exact public mention is `@hamster-dan`. Trusted PR
+participants interact through natural comments beginning with that mention,
+for example `@hamster-dan explain the current blockers`. The lookalike
+`@hamsterdan` is not a GitHub alias and is intentionally not accepted.
 
 Run `chmod 600 .amp/runtime/hamsterdan.env`. From the App settings choose
 **Install App**, select HBNetwork, choose **Only select repositories**, and
