@@ -4,7 +4,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import ClassVar
 
-from hamsterdan.agents import AmpExecuteRunner, CodingResult
+from hamsterdan.agents import AgentProtocolError, AmpExecuteRunner, CodingResult
 from hamsterdan.agents import ConversationResult as AgentConversationResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
@@ -130,6 +130,317 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result() -> N
 
     assert result.kind == "repair" and result.ok is False
     assert result.operation == "repair-operation"
+
+
+def test_coding_retries_nonchanging_agent_result_before_one_publication() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    operations.public_clone_url = "https://example.invalid/repo.git"
+    operations.current = None
+    fences: list[tuple] = []
+    operations.current_fence = lambda *args: fences.append(args)
+
+    class Runner:
+        calls = 0
+
+        def code(self, repository_url, request, *, is_current=None):
+            self.calls += 1
+            changed = self.calls == 3
+            return CodingResult(
+                request.kind,
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                request.ref,
+                "changed" if changed else "unchanged",
+                "not_attempted",
+                "diff" if changed else "",
+                ["file.txt"] if changed else [],
+                [{"check": "passed"}] if changed else [],
+                "Apply requested change" if changed else "",
+            )
+
+    class Publisher:
+        calls = 0
+
+        def publish(self, *args, **kwargs):
+            self.calls += 1
+            return GitPublishResult("c" * 40)
+
+    operations.runner = Runner()
+    operations.git_publisher = Publisher()
+    work = Work(
+        "change",
+        2,
+        "a" * 40,
+        "change-operation",
+        payload={"base_head": "b" * 40, "policy_digest": "policy", "intent": {}},
+    )
+
+    result = operations.change(work)
+
+    assert result.ok is True
+    assert operations.runner.calls == 3
+    assert operations.git_publisher.calls == 1
+    assert len(fences) == 4
+
+
+def test_coding_stops_after_three_nonchanging_agent_results() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    operations.public_clone_url = "https://example.invalid/repo.git"
+    operations.current = None
+    operations.current_fence = lambda *args: None
+
+    class Runner:
+        calls = 0
+
+        def code(self, repository_url, request, *, is_current=None):
+            self.calls += 1
+            return CodingResult(
+                request.kind,
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                request.ref,
+                "unable",
+                "not_attempted",
+                "",
+                [],
+                [],
+                "",
+            )
+
+    class Publisher:
+        def publish(self, *args, **kwargs):
+            raise AssertionError("nonchanging work must not publish")
+
+    operations.runner = Runner()
+    operations.git_publisher = Publisher()
+    work = Work(
+        "change",
+        2,
+        "a" * 40,
+        "change-operation",
+        payload={"base_head": "b" * 40, "policy_digest": "policy", "intent": {}},
+    )
+
+    result = operations.change(work)
+
+    assert result.ok is False
+    assert operations.runner.calls == 3
+
+
+def test_coding_retries_protocol_error_with_identical_request_then_publishes_once() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    operations.public_clone_url = "https://example.invalid/repo.git"
+    operations.current = None
+    operations.current_fence = lambda *args: None
+
+    class Runner:
+        requests: ClassVar[list] = []
+
+        def code(self, repository_url, request, *, is_current=None):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                raise AgentProtocolError("temporary failure")
+            return CodingResult(
+                request.kind,
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                request.ref,
+                "changed",
+                "not_attempted",
+                "diff",
+                ["file.txt"],
+                [{"check": "passed"}],
+                "Apply requested change",
+            )
+
+    class Publisher:
+        calls = 0
+
+        def publish(self, *args, **kwargs):
+            self.calls += 1
+            return GitPublishResult("c" * 40)
+
+    operations.runner = Runner()
+    operations.git_publisher = Publisher()
+    work = Work(
+        "change",
+        2,
+        "a" * 40,
+        "change-operation",
+        payload={"base_head": "b" * 40, "policy_digest": "policy", "intent": {}},
+    )
+
+    assert operations.change(work).ok is True
+    assert len(operations.runner.requests) == 2
+    assert operations.runner.requests[0] == operations.runner.requests[1]
+    assert operations.git_publisher.calls == 1
+
+
+def test_canceled_coding_attempt_does_not_retry_or_publish() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    operations.public_clone_url = "https://example.invalid/repo.git"
+    operations.current = None
+    fences: list[tuple] = []
+    operations.current_fence = lambda *args: fences.append(args)
+
+    class Runner:
+        calls = 0
+
+        def code(self, repository_url, request, *, is_current=None):
+            self.calls += 1
+            raise AgentProtocolError("superseded", canceled=True)
+
+    class Publisher:
+        def publish(self, *args, **kwargs):
+            raise AssertionError("canceled work must not publish")
+
+    operations.runner = Runner()
+    operations.git_publisher = Publisher()
+    work = Work(
+        "change",
+        2,
+        "a" * 40,
+        "change-operation",
+        payload={"base_head": "b" * 40, "policy_digest": "policy", "intent": {}},
+    )
+
+    assert operations.change(work).ok is False
+    assert operations.runner.calls == 1
+    assert len(fences) == 1
+
+
+def test_stale_authority_between_coding_attempts_stops_before_retry_and_publication() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    operations.public_clone_url = "https://example.invalid/repo.git"
+    operations.current = None
+    fence_calls = 0
+
+    def fence(*args):
+        nonlocal fence_calls
+        fence_calls += 1
+        if fence_calls == 2:
+            raise RuntimeError("stale authority")
+
+    operations.current_fence = fence
+
+    class Runner:
+        calls = 0
+
+        def code(self, repository_url, request, *, is_current=None):
+            self.calls += 1
+            return CodingResult(
+                request.kind,
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                request.ref,
+                "unchanged",
+                "not_attempted",
+                "",
+                [],
+                [],
+                "",
+            )
+
+    class Publisher:
+        def publish(self, *args, **kwargs):
+            raise AssertionError("stale work must not publish")
+
+    operations.runner = Runner()
+    operations.git_publisher = Publisher()
+    work = Work(
+        "change",
+        2,
+        "a" * 40,
+        "change-operation",
+        payload={"base_head": "b" * 40, "policy_digest": "policy", "intent": {}},
+    )
+
+    assert operations.change(work).ok is False
+    assert operations.runner.calls == 1
+    assert fence_calls == 2
+
+
+def test_stale_final_fence_after_changed_retry_prevents_publication() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    operations.public_clone_url = "https://example.invalid/repo.git"
+    operations.current = None
+    fence_calls = 0
+
+    def fence(*args):
+        nonlocal fence_calls
+        fence_calls += 1
+        if fence_calls == 3:
+            raise RuntimeError("stale authority")
+
+    operations.current_fence = fence
+
+    class Runner:
+        calls = 0
+
+        def code(self, repository_url, request, *, is_current=None):
+            self.calls += 1
+            changed = self.calls == 2
+            return CodingResult(
+                request.kind,
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                request.ref,
+                "changed" if changed else "unchanged",
+                "not_attempted",
+                "diff" if changed else "",
+                ["file.txt"] if changed else [],
+                [{"check": "passed"}] if changed else [],
+                "Apply requested change" if changed else "",
+            )
+
+    class Publisher:
+        calls = 0
+
+        def publish(self, *args, **kwargs):
+            self.calls += 1
+            return GitPublishResult("c" * 40)
+
+    operations.runner = Runner()
+    operations.git_publisher = Publisher()
+    work = Work(
+        "change",
+        2,
+        "a" * 40,
+        "change-operation",
+        payload={"base_head": "b" * 40, "policy_digest": "policy", "intent": {}},
+    )
+
+    assert operations.change(work).ok is False
+    assert operations.runner.calls == 2
+    assert operations.git_publisher.calls == 0
+    assert fence_calls == 3
 
 
 def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(tmp_path: Path) -> None:

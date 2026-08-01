@@ -33,6 +33,7 @@ CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]
 _MUTATIONS = {"change", "update_base", "resolve_conflict"}
 _ALLOWED = ("reply", "status", "acknowledge", "dismiss", "defer", "snooze", "resume", "reassign", *_MUTATIONS)
+MAX_CODING_ATTEMPTS = 3
 LOG = logging.getLogger(__name__)
 
 
@@ -358,20 +359,31 @@ class PrReadinessActivities:
             reproduction_status="unknown",
             merge_base=intent_kind in {"update_base", "resolve_conflict"},
         )
-        try:
-            result = self.runner.code(self.public_clone_url, request, is_current=lambda: self._is_current(work))
-        except agents.AgentProtocolError as error:
-            self._log_agent_error(kind, work, error)
-            return EffectResult(
+        result: agents.CodingResult | None = None
+        for attempt in range(1, MAX_CODING_ATTEMPTS + 1):
+            try:
+                self._fence(work)
+            except RuntimeError:
+                break
+            try:
+                result = self.runner.code(self.public_clone_url, request, is_current=lambda: self._is_current(work))
+            except agents.AgentProtocolError as error:
+                self._log_agent_error(kind, work, error)
+                if error.canceled:
+                    break
+                continue
+            if result.status == "changed":
+                break
+            LOG.warning(
+                "agent coding attempt produced no change kind=%s status=%s attempt=%s epoch=%s head=%s operation=%s",
                 kind,
+                result.status,
+                attempt,
                 work.epoch,
                 work.head,
-                False,
-                fingerprint=request.fingerprint,
-                lineage=work.operation,
-                operation=work.operation,
+                work.operation,
             )
-        if result.status != "changed":
+        if result is None or result.status != "changed":
             return EffectResult(
                 kind,
                 work.epoch,
