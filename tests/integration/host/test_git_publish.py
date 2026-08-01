@@ -142,8 +142,8 @@ def test_commit_upload_preserves_staged_modes_parents_and_binary_content(
             "message": "message",
             "tree": "b" * 40,
             "parents": [first],
-            "author": {"name": "Hamsterdan", "email": "hamsterdan[bot]@users.noreply.github.com"},
-            "committer": {"name": "Hamsterdan", "email": "hamsterdan[bot]@users.noreply.github.com"},
+            "author": {"name": "Hamsterdan", "email": "hamster-dan[bot]@users.noreply.github.com"},
+            "committer": {"name": "Hamsterdan", "email": "hamster-dan[bot]@users.noreply.github.com"},
         },
     )
 

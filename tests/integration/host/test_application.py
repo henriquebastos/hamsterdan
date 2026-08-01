@@ -20,7 +20,7 @@ from hamsterdan.github_app.models import (
 from hamsterdan.host.application import PrReadinessApplication
 
 HEAD, HEAD_2, BASE = "a" * 40, "c" * 40, "b" * 40
-BOT = "hamsterdan[bot]"
+BOT = "hamster-dan[bot]"
 SECRETS = ("ghs_installation_secret_value", "github_pat_secret_value")
 
 
@@ -245,7 +245,7 @@ def test_prose_reply_exact_two_comment_confirmation_and_old_grammar_ignored(tmp_
     common = {"actor_id": 7, "actor_login": "author", "actor_type": "User", "association": "OWNER"}
     assert not subject.route_comment(delivery_id="old", comment_id=30, text="/impetus status", **common)["routed"]
     authority.transport.comments.append({"id": 90, "body": "<!-- impetus:dashboard -->", "user": {"login": BOT}})
-    subject.route_comment(delivery_id="status", comment_id=31, text="@hamsterdan How is this looking?", **common)
+    subject.route_comment(delivery_id="status", comment_id=31, text="@hamster-dan How is this looking?", **common)
     assert runner.conversations == 1 and any("Readiness is waiting" in x["body"] for x in authority.transport.comments)
     subject.route_comment(delivery_id="change", comment_id=32, text="/hamsterdan change fix the finding", **common)
     control = subject.host.control  # type: ignore[union-attr]

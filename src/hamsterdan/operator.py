@@ -21,6 +21,8 @@ ORG_ID = 108842540
 REPOSITORY_ID = 1316665126
 DEFAULT_BRANCH = "main"
 WORKFLOWS = frozenset({"ci", "rerun-broker"})
+APP_SLUG = "hamster-dan"
+APP_BOT_LOGIN = f"{APP_SLUG}[bot]"
 SCENARIO_PATH = Path(".pr-lab/scenario.json")
 BROKER_PATH = Path(".github/workflows/rerun-broker.yml")
 OLD_MARKER = "impetus-rerun"
@@ -29,7 +31,7 @@ LEGACY_BROKER_AUTHORIZATION = (
     'contains(fromJSON(\'["OWNER","MEMBER","COLLABORATOR"]\'), github.event.comment.author_association) &&'
 )
 APP_BROKER_AUTHORIZATION = (
-    "github.event.comment.user.type == 'Bot' &&\n      github.event.comment.user.login == 'hamsterdan[bot]' &&"
+    f"github.event.comment.user.type == 'Bot' &&\n      github.event.comment.user.login == '{APP_BOT_LOGIN}' &&"
 )
 MARKER_RE = re.compile(
     r"<!-- (?P<identity>hamsterdan-rerun|impetus-rerun) run=(?P<run>[1-9][0-9]*) "
@@ -334,9 +336,7 @@ def _safe_comment(comment: dict[str, Any], bot_login: str) -> tuple[dict[str, ob
     return None, markers
 
 
-def inspect(
-    pr_number: int, runner: Runner = command_runner, *, bot_login: str = "hamsterdan[bot]"
-) -> dict[str, object]:
+def inspect(pr_number: int, runner: Runner = command_runner, *, bot_login: str = APP_BOT_LOGIN) -> dict[str, object]:
     if pr_number < 1:
         raise OperatorError("PR number must be positive")
     pull = _api(runner, f"/repos/{REPOSITORY}/pulls/{pr_number}")
@@ -434,7 +434,7 @@ def parser() -> argparse.ArgumentParser:
     commands.add_parser("prepare-broker")
     inspect_parser = commands.add_parser("inspect")
     inspect_parser.add_argument("--pr", type=int, required=True)
-    inspect_parser.add_argument("--bot-login", default="hamsterdan[bot]")
+    inspect_parser.add_argument("--bot-login", default=APP_BOT_LOGIN)
     return value
 
 

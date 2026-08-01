@@ -254,7 +254,7 @@ class PrReadinessApplication:
         command = text.casefold()
         if command == "/hamsterdan" or command.startswith("/hamsterdan "):
             return text
-        aliases = {"@hamsterdan", f"@{self.bot_login.removesuffix('[bot]')}"}
+        aliases = {f"@{self.bot_login.removesuffix('[bot]')}"}
         folded = text.casefold()
         for alias in aliases:
             if folded == alias:

@@ -50,7 +50,7 @@ def test_broker_cutover_replaces_human_association_with_exact_app_bot() -> None:
     assert operator.broker_status(CURRENT) == "hamsterdan"
     assert "author_association" not in CURRENT
     assert "github.event.comment.user.type == 'Bot'" in CURRENT
-    assert "github.event.comment.user.login == 'hamsterdan[bot]'" in CURRENT
+    assert "github.event.comment.user.login == 'hamster-dan[bot]'" in CURRENT
 
 
 def test_scenarios_are_the_fixture_closed_schema() -> None:
@@ -126,7 +126,7 @@ def test_operator_mutation_commands_contain_no_force_merge_or_bypass() -> None:
     assert "_assert_only(runner, checkout, {str(BROKER_PATH)})" in source
 
 
-def inspection_runner(owner: str = "hamsterdan[bot]") -> FakeRunner:
+def inspection_runner(owner: str = operator.APP_BOT_LOGIN) -> FakeRunner:
     head = "a" * 40
     marker = f"<!-- hamsterdan-rerun run=5 head={head} operation=rerun:1 -->"
     readiness = f"<!-- hamsterdan:readiness operation=readiness:1 head={head} -->"
@@ -174,7 +174,7 @@ def inspection_runner(owner: str = "hamsterdan[bot]") -> FakeRunner:
             f"/repos/{operator.REPOSITORY}/commits/{head}": {
                 "commit": {"author": {"name": "Explicit Author"}, "committer": {"name": "Explicit Committer"}},
                 "author": {"login": "human"},
-                "committer": {"login": "hamsterdan[bot]"},
+                "committer": {"login": operator.APP_BOT_LOGIN},
             },
             f"/repos/{operator.REPOSITORY}/actions/runs?event=pull_request&head_sha={head}&per_page=100": {
                 "workflow_runs": [
@@ -208,7 +208,7 @@ def test_inspection_redacts_prose_separates_attribution_and_rejects_old_identity
         "commit_author": {"name": "Explicit Author"},
         "commit_committer": {"name": "Explicit Committer"},
         "authenticated_author": "human",
-        "authenticated_committer": "hamsterdan[bot]",
+        "authenticated_committer": operator.APP_BOT_LOGIN,
     }
     marker_types = [item["type"] for item in result["markers"]]
     assert marker_types == ["hamsterdan-rerun", "readiness", "impetus-rerun"]

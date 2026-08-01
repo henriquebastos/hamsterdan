@@ -96,7 +96,7 @@ not secret values:
 
 ```sh
 HAMSTERDAN_GITHUB_APP_ID=<app-id>
-HAMSTERDAN_GITHUB_APP_SLUG=hamsterdan
+HAMSTERDAN_GITHUB_APP_SLUG=hamster-dan
 HAMSTERDAN_GITHUB_CLIENT_ID=<client-id>
 HAMSTERDAN_GITHUB_ACCOUNT_ID=108842540
 HAMSTERDAN_GITHUB_ACCOUNT_LOGIN=HBNetwork
@@ -105,6 +105,11 @@ HAMSTERDAN_STATE_PATH=.amp/runtime/state
 HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE=.amp/runtime/github-app.pem
 HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE=.amp/runtime/webhook-secret
 ```
+
+GitHub assigned this registration the slug `hamster-dan`, so its bot login is
+`hamster-dan[bot]` and its mention is `@hamster-dan`. `/hamsterdan` remains the
+provider-independent command grammar. `@hamsterdan` is not a GitHub alias and
+is intentionally not accepted as one.
 
 Run `chmod 600 .amp/runtime/hamsterdan.env`. From the App settings choose
 **Install App**, select HBNetwork, choose **Only select repositories**, and
@@ -155,7 +160,7 @@ scripts/hamsterdan-demo prepare-broker
 
 It changes only `.github/workflows/rerun-broker.yml`, including the event prefix,
 full-match regex, and human-association gate. The replacement accepts only an
-exact `hamsterdan[bot]` actor of type `Bot`. **Merge that PR only after** host validation,
+exact `hamster-dan[bot]` actor of type `Bot`. **Merge that PR only after** host validation,
 healthy webhook ingress, selected-repository routing, and App installation are
 all confirmed. Never count an old marker as Hamsterdan evidence. Never run the
 legacy PAT service and Hamsterdan as concurrent writers.

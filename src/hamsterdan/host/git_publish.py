@@ -36,7 +36,7 @@ class HostGitPublisher:
         clone_url: str,
         *,
         commit_name: str = "Hamsterdan",
-        commit_email: str = "hamsterdan[bot]@users.noreply.github.com",
+        commit_email: str = "hamster-dan[bot]@users.noreply.github.com",
     ):
         if not clone_url or ("://" in clone_url and "@" in clone_url.partition("://")[2]):
             raise ValueError("a credential-free clone URL is required")
