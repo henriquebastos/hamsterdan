@@ -1,0 +1,42 @@
+[project]
+name = "hamsterdan"
+version = "0.0.0"
+description = "Hamsterdan — a GitHub-native PR-readiness application powered by Petrus."
+readme = "README.md"
+requires-python = ">=3.14"
+authors = [
+    { name = "Henrique Bastos", email = "henrique@bastos.net" },
+]
+dependencies = [
+    "petrus @ git+https://github.com/henriquebastos/impetus.git@cd1187e44926d6a80e4a3538ad79762618d32a8b",
+]
+
+[dependency-groups]
+dev = [
+    "build>=1.5,<2",
+    "pytest>=8.3",
+    "pytest-timeout>=2.4,<3",
+    "ruff>=0.8",
+    "ty==0.0.63",
+]
+
+[build-system]
+requires = ["hatchling==1.31.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src/hamsterdan"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hamsterdan"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 30
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"

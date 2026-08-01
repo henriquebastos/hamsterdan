@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> Installing uv"
+if ! command -v uv >/dev/null 2>&1; then
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+fi
+export PATH="$HOME/.local/bin:$PATH"
+
+echo "==> Syncing the locked Hamsterdan environment"
+uv sync --frozen
+
+echo "==> Hamsterdan orb setup complete"

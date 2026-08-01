@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+profile="${1:-full}"
+case "$profile" in
+    quick)
+        uv run --frozen ruff check src tests
+        uv run --frozen ruff format --check src tests
+        uv run --frozen ty check src
+        ;;
+    full)
+        "$0" quick
+        rm -rf dist
+        uv build
+        uv run --frozen pytest -q
+        ;;
+    *)
+        echo "usage: scripts/check [quick|full]" >&2
+        exit 2
+        ;;
+esac
