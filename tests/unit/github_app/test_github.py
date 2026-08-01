@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import httpx
 import pytest
 
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
@@ -353,6 +354,21 @@ def test_transport_repr_does_not_claim_or_expose_credentials() -> None:
     transport = GitHubKitTransport(object())  # type: ignore[arg-type]
     assert "token" not in repr(transport).lower()
     assert "credential=<owned-by-githubkit>" in repr(transport)
+
+
+def test_transport_normalizes_httpx_network_failures() -> None:
+    class FailedClient:
+        def request(self, method: str, path: str, **_: object) -> object:
+            request = httpx.Request(method, f"https://api.github.com{path}")
+            raise httpx.ReadError("credential-bearing-provider-error", request=request)
+
+    transport = GitHubKitTransport(FailedClient())  # type: ignore[arg-type]
+    with pytest.raises(GitHubBoundaryError, match="without a proven outcome") as request_error:
+        transport.request("GET", "/repos/owner/repo")
+    with pytest.raises(GitHubBoundaryError, match="without a proven outcome") as download_error:
+        transport.download("/repos/owner/repo/actions/runs/1/logs")
+    assert "credential-bearing-provider-error" not in str(request_error.value)
+    assert "credential-bearing-provider-error" not in str(download_error.value)
 
 
 def test_policy_falls_back_only_on_effective_endpoint_404_and_rejects_malformed_evidence() -> None:

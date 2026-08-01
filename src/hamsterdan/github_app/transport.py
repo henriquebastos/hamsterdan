@@ -14,6 +14,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any, cast
 from urllib.parse import urlsplit
 
+import httpx
 from githubkit import GitHub
 from githubkit.exception import GitHubException, RequestFailed
 
@@ -74,7 +75,7 @@ class GitHubKitTransport:
             return WireResponse(raw_response.status_code, value, _next(raw_response.headers.get("link")))
         except GitHubBoundaryError:
             raise
-        except GitHubException, UnicodeDecodeError, json.JSONDecodeError, OSError, RuntimeError:
+        except GitHubException, httpx.HTTPError, UnicodeDecodeError, json.JSONDecodeError, OSError, RuntimeError:
             raise GitHubBoundaryError("GitHub request failed without a proven outcome") from None
 
     @staticmethod
@@ -100,7 +101,7 @@ class GitHubKitTransport:
                 raw_response.close()
         except GitHubBoundaryError:
             raise
-        except GitHubException:
+        except GitHubException, httpx.HTTPError:
             raise GitHubBoundaryError("GitHub download failed without a proven outcome") from None
 
     def pages(self, path: str) -> tuple[dict[str, Any], ...]:
