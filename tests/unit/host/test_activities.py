@@ -1,12 +1,16 @@
+import subprocess
+import sys
 from dataclasses import asdict, replace
+from pathlib import Path
 from typing import ClassVar
 
-from hamsterdan.agents import CodingResult
+from hamsterdan.agents import AmpExecuteRunner, CodingResult
 from hamsterdan.agents import ConversationResult as AgentConversationResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.activities import PrReadinessActivities, _confirmation_text, _intent_digest, activity_definitions
+from hamsterdan.host.git_publish import GitPublishResult, payload_digest
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
 
 
@@ -126,6 +130,91 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result() -> N
 
     assert result.kind == "repair" and result.ok is False
     assert result.operation == "repair-operation"
+
+
+def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ("git", "-C", str(source), *args), check=True, text=True, capture_output=True
+        ).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "Test")
+    fixture = source / "fixture.txt"
+    fixture.write_text("before\n")
+    git("add", "fixture.txt")
+    git("commit", "-qm", "requested head")
+    requested_head = git("rev-parse", "HEAD")
+    (source / "later.txt").write_text("default branch advanced\n")
+    git("add", "later.txt")
+    git("commit", "-qm", "advance source after requested head")
+    advanced_head = git("rev-parse", "HEAD")
+
+    script = tmp_path / "agent.py"
+    script.write_text(
+        "import json, pathlib, subprocess\n"
+        "root = pathlib.Path.cwd()\n"
+        "request = json.loads((root / '.impetus/request.json').read_text())\n"
+        "assert request['selected_work'] == "
+        + repr([{"kind": "change", "arguments": {"request": "update the tracked fixture"}}])
+        + "\n"
+        "observed = subprocess.run(['git', 'rev-parse', 'HEAD'], check=True, text=True, capture_output=True).stdout.strip()\n"
+        "reflog = subprocess.run(['git', 'reflog', '--format=%gs'], check=True, text=True, capture_output=True).stdout\n"
+        "assert observed == request['head'] and 'moving from' in reflog and request['head'] in reflog\n"
+        "assert not (root / 'later.txt').exists()\n"
+        "(root / 'fixture.txt').write_text('after\\n')\n"
+        "result = {key: request[key] for key in ('kind','repository','pull_request','epoch','head','base','ref')}\n"
+        "result.update(status='changed', reproduction_status='not_attempted', diff='CLAIMED', "
+        "changed_files=['claimed.txt'], validation_evidence=[{'detached_at_request_head': True, 'head': observed}], "
+        "proposed_commit_message='Update tracked fixture')\n"
+        "(root / '.impetus/result.json').write_text(json.dumps(result))\n"
+    )
+
+    class Publisher:
+        calls: ClassVar[list[tuple[CodingResult, dict[str, object]]]] = []
+
+        def publish(self, result: CodingResult, **kwargs: object) -> GitPublishResult:
+            self.calls.append((result, kwargs))
+            return GitPublishResult("c" * 40)
+
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    operations.public_clone_url = str(source)
+    operations.runner = AmpExecuteRunner(argv=(sys.executable, str(script)))
+    operations.git_publisher = Publisher()
+    operations.current = None
+    fences: list[tuple[object, ...]] = []
+    operations.current_fence = lambda *args: fences.append(args)
+    intent = {"kind": "change", "arguments": {"request": "update the tracked fixture"}}
+    payload = {"base_head": requested_head, "policy_digest": "policy", "intent": intent}
+    work = Work("change", 3, requested_head, "confirmed-change-operation", payload=payload)
+
+    result = operations.change(work)
+
+    assert result.ok and result.head == requested_head and result.provisional_head == "c" * 40
+    assert result.operation == work.operation
+    assert len(operations.git_publisher.calls) == 1
+    coding_result, publication = operations.git_publisher.calls[0]
+    assert isinstance(coding_result, CodingResult)
+    assert coding_result.changed_files == ["fixture.txt"]
+    assert "CLAIMED" not in coding_result.diff
+    assert "-before" in coding_result.diff and "+after" in coding_result.diff
+    assert coding_result.validation_evidence == [{"detached_at_request_head": True, "head": requested_head}]
+    assert publication == {
+        "operation": work.operation,
+        "payload_digest": payload_digest(payload),
+        "expected_head": requested_head,
+        "base_head": requested_head,
+        "merge_base": False,
+    }
+    assert fences and set(fences) == {(3, requested_head, work.operation, requested_head, "policy")}
+    assert fixture.read_text() == "before\n"
+    assert git("rev-parse", "HEAD") == advanced_head
 
 
 def test_stale_finding_publication_becomes_typed_effect_result() -> None:

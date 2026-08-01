@@ -7,3 +7,6 @@ Completed baseline: [CV1 — Independently identifiable PR-readiness application
 
 Current delivery: [CV2 — Conversational PR interaction](cv2-conversational-pr-interaction/index.md), beginning with
 [CV2.DS1 — Mention-first readiness conversation](cv2-conversational-pr-interaction/cv2-ds1-mention-first-readiness-conversation.md).
+
+Approved next value: [CV3 — Complete demo scenario portfolio](cv3-complete-demo-scenario-portfolio/index.md), sequenced after
+CV2.DS2 proves the guarded conversational coding path.

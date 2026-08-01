@@ -2,7 +2,7 @@
 code: CV2
 level: Value
 status: In Progress
-status_reason: CV2.DS1 is accepted live; any subsequent conversational Delivery Story requires explicit scope
+status_reason: CV2.DS1 is accepted live and CV2.DS2 guarded conversational change is approved
 updated: 2026-08-01
 ---
 
@@ -21,6 +21,9 @@ conversation interprets and explains that state rather than replacing it.
    establishes the exact `@hamster-dan` public interface, natural readiness
    explanations, and conversational confirmation of digest-bound mutations.
    It is accepted live on the private HBNetwork App instance.
+2. [CV2.DS2 — Conversational guarded change](cv2-ds2-conversational-guarded-change.md)
+   proves natural request staging, exact confirmation, same-orb credential-free
+   coding, App-owned publication, and new-head readiness on a fresh demo PR.
 
 ## Done condition
 

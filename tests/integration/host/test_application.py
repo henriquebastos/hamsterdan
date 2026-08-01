@@ -148,7 +148,7 @@ class Runner:
             and isinstance(pending, dict)
             or text.startswith("Confirm the pending change mutation with digest")
             and isinstance(pending, dict)
-        ):
+        ) and pending.get("arguments"):
             intents = [
                 {
                     "type": "change",
@@ -304,8 +304,22 @@ def test_mention_conversation_uses_current_dashboard_and_exact_two_comment_confi
     assert control is not None and control.mutation_pending
     assert any("could not interpret" in comment["body"] for comment in authority.transport.comments)
     subject.route_comment(
-        delivery_id="confirm",
+        delivery_id="wrong-digest",
         comment_id=34,
+        text=f"@hamster-dan Confirm the pending change mutation with digest {'0' * 64}",
+        **common,
+    )
+    assert runner.codes == 0
+    subject.route_comment(
+        delivery_id="confirm",
+        comment_id=35,
+        text=f"@hamster-dan Confirm the pending change mutation with digest {control.pending_intent_digest}",
+        **common,
+    )
+    assert runner.codes == 1
+    subject.route_comment(
+        delivery_id="duplicate-confirmation",
+        comment_id=36,
         text=f"@hamster-dan Confirm the pending change mutation with digest {control.pending_intent_digest}",
         **common,
     )
