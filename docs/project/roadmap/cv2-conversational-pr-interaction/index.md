@@ -1,8 +1,8 @@
 ---
 code: CV2
 level: Value
-status: In Progress
-status_reason: CV2.DS1 is accepted live and CV2.DS2 guarded conversational change is approved
+status: Completed
+status_reason: Mention-first readiness and guarded conversational change are accepted live
 updated: 2026-08-01
 ---
 

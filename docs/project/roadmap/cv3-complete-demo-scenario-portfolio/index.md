@@ -1,8 +1,8 @@
 ---
 code: CV3
 level: Value
-status: Planned
-status_reason: Entire portfolio approved; execution begins after CV2.DS2 proves guarded coding
+status: In Progress
+status_reason: CV2.DS2 proved guarded coding; deterministic scenario portfolio execution is active
 updated: 2026-08-01
 ---
 

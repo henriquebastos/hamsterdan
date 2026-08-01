@@ -1,7 +1,8 @@
 ---
 code: CV3.DS1
 level: Delivery Story
-status: Planned
+status: In Progress
+status_reason: CV2.DS2 is accepted live; deterministic portfolio implementation is active
 updated: 2026-08-01
 ---
 

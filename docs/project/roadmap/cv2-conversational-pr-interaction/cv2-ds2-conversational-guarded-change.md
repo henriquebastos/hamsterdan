@@ -1,8 +1,8 @@
 ---
 code: CV2.DS2
 level: Delivery Story
-status: In Progress
-status_reason: Plan approved; implementation and deterministic qualification are underway
+status: Completed
+status_reason: Accepted live on PR15 through digest confirmation, App-owned publication, and new-head convergence
 updated: 2026-08-01
 related:
   - CV2.DS1
@@ -49,6 +49,24 @@ but changes behavior to deterministic pass. Confirm only through the exact
 mention guidance. Verify conversation, coding, coordinating-review, Actions,
 App commit attribution, operation trailers, new-head admission, dashboard,
 restart, and duplicate-delivery behavior without merging the PR.
+
+## Accepted evidence
+
+PR 15 staged a natural bounded change without invoking coding, rejected an
+altered confirmation digest without mutation, and accepted the exact digest.
+The credential-free Amp coding agent changed only `.pr-lab/scenario.json`, and
+the host published App-authored commit
+`b90680615675721a4247131473b512a782b273e5` with operation and payload trailers.
+The PR advanced from epoch 1 to epoch 2, brokered its expected first-attempt CI
+flake to successful attempt 2, completed coordinating review with no findings,
+and returned to a current ready dashboard. Inbox custody ended with 221
+terminal deliveries, no pending delivery, and no failure. No duplicate,
+self-loop, credential-bearing log, manual push, approval, or merge occurred.
+
+Qualification also exposed and corrected three production defects before
+acceptance: provider-backed 50 ms agent polling, non-recovering review
+inability, and case-sensitive comparison of canonical GitHub repository names.
+Agent coding retries are bounded to three identical, freshly fenced attempts.
 
 ## Out of scope
 
