@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from githubkit import GitHub
-from githubkit.exception import GitHubException, RequestFailed
+from githubkit.exception import GitHubException
 
 API_HOST = "api.github.com"
 MAX_BODY_BYTES = 1_048_576
@@ -55,24 +55,18 @@ class GitHubKitTransport:
         if encoded is not None and len(encoded) > MAX_REQUEST_BYTES:
             raise GitHubBoundaryError("GitHub request body exceeds its bound")
         try:
-            try:
-                response = self._client.request(
-                    method,
-                    path,
-                    json=None if encoded is None else json.loads(encoded),
-                    stream=True,
-                )
-            except RequestFailed as error:
-                response = error.response
-            raw_response = response.raw_response
-            if 300 <= raw_response.status_code < 400:
-                raise GitHubBoundaryError("GitHub returned an unadmitted redirect")
-            try:
-                raw = self._read(raw_response.iter_bytes(), MAX_BODY_BYTES)
-            finally:
-                raw_response.close()
-            value = None if not raw else json.loads(raw)
-            return WireResponse(raw_response.status_code, value, _next(raw_response.headers.get("link")))
+            with self._client.get_sync_client() as client:
+                request = client.build_request(method, path, json=None if encoded is None else json.loads(encoded))
+                with self._client.config.throttler.acquire(request):
+                    raw_response = client.send(request, stream=True)
+                try:
+                    if 300 <= raw_response.status_code < 400:
+                        raise GitHubBoundaryError("GitHub returned an unadmitted redirect")
+                    raw = self._read(raw_response.iter_bytes(), MAX_BODY_BYTES)
+                    value = None if not raw else json.loads(raw)
+                    return WireResponse(raw_response.status_code, value, _next(raw_response.headers.get("link")))
+                finally:
+                    raw_response.close()
         except GitHubBoundaryError:
             raise
         except GitHubException, httpx.HTTPError, UnicodeDecodeError, json.JSONDecodeError, OSError, RuntimeError:
@@ -91,14 +85,16 @@ class GitHubKitTransport:
         if limit <= 0 or not path.startswith("/") or path.startswith("//") or urlsplit(path).netloc:
             raise GitHubBoundaryError("GitHub download is outside the admitted origin or bound")
         try:
-            response = self._client.request("GET", path, stream=True)
-            raw_response = response.raw_response
-            try:
-                if raw_response.status_code != 200:
-                    raise GitHubBoundaryError("GitHub download did not succeed")
-                return self._read(raw_response.iter_bytes(), limit)
-            finally:
-                raw_response.close()
+            with self._client.get_sync_client() as client:
+                request = client.build_request("GET", path)
+                with self._client.config.throttler.acquire(request):
+                    raw_response = client.send(request, stream=True)
+                try:
+                    if raw_response.status_code != 200:
+                        raise GitHubBoundaryError("GitHub download did not succeed")
+                    return self._read(raw_response.iter_bytes(), limit)
+                finally:
+                    raw_response.close()
         except GitHubBoundaryError:
             raise
         except GitHubException, httpx.HTTPError:

@@ -5,6 +5,7 @@ import hmac
 import json
 import sqlite3
 import uuid
+from contextvars import Context
 from pathlib import Path
 from typing import Any
 
@@ -168,6 +169,40 @@ def test_installation_client_drives_bounded_gateway_without_exposing_token(tmp_p
         assert (response.status, response.body) == (404, {"message": "missing"})
         assert transport.download("/repos/owner/one/actions/runs/1/logs") == b"bounded log"
         assert "installation-secret" not in repr(transport)
+
+
+def test_streamed_gateway_reads_body_before_context_local_client_closes(tmp_path: Path) -> None:
+    class CloseSensitiveStream(httpx.SyncByteStream):
+        def __init__(self, transport: CloseSensitiveTransport, body: bytes) -> None:
+            self.transport, self.body = transport, body
+
+        def __iter__(self):
+            if self.transport.closed:
+                raise httpx.ReadError("body read after client close")
+            yield self.body
+
+    class CloseSensitiveTransport(httpx.BaseTransport):
+        def __init__(self) -> None:
+            self.closed = False
+
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            self.closed = False
+            if request.url.path.endswith("/access_tokens"):
+                body = b'{"token":"installation-secret","expires_at":"2099-01-01T00:00:00Z"}'
+            else:
+                body = b'{"ok":true}'
+            return httpx.Response(200, request=request, stream=CloseSensitiveStream(self, body))
+
+        def close(self) -> None:
+            self.closed = True
+
+    provider = CloseSensitiveTransport()
+    clients = GitHubAppClients(HostConfig.from_environment(environment(tmp_path)), transport=provider)
+    transport = GitHubKitTransport(clients.installation(44, [31]))
+    for _ in range(2):
+        response = Context().run(transport.request, "GET", "/repos/owner/one")
+        assert (response.status, response.body) == (200, {"ok": True})
+    clients.close()
 
 
 def registry(tmp_path: Path) -> InstallationRegistry:

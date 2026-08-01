@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 import pytest
+from githubkit import GitHub
 
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
 from hamsterdan.github_app.gateway import GitHubAuthority
@@ -357,12 +358,10 @@ def test_transport_repr_does_not_claim_or_expose_credentials() -> None:
 
 
 def test_transport_normalizes_httpx_network_failures() -> None:
-    class FailedClient:
-        def request(self, method: str, path: str, **_: object) -> object:
-            request = httpx.Request(method, f"https://api.github.com{path}")
-            raise httpx.ReadError("credential-bearing-provider-error", request=request)
+    def fail(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadError("credential-bearing-provider-error", request=request)
 
-    transport = GitHubKitTransport(FailedClient())  # type: ignore[arg-type]
+    transport = GitHubKitTransport(GitHub("installation-secret", transport=httpx.MockTransport(fail)))
     with pytest.raises(GitHubBoundaryError, match="without a proven outcome") as request_error:
         transport.request("GET", "/repos/owner/repo")
     with pytest.raises(GitHubBoundaryError, match="without a proven outcome") as download_error:

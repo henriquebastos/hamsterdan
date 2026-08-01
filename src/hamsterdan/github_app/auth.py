@@ -67,9 +67,7 @@ class GitHubAppClients:
             "transport": self._transport,
         }
         kwargs["cache_strategy"] = self._cache
-        client = self._factory(auth, **kwargs)
-        client.__enter__()
-        return client
+        return self._factory(auth, **kwargs)
 
     def _observe(self, response: httpx.Response) -> None:
         assert self._metadata_hook is not None
@@ -115,8 +113,6 @@ class GitHubAppClients:
     def close(self) -> None:
         if self._closed:
             return
-        for client in {self._app, *self._clients.values()}:
-            client.__exit__(None, None, None)
         self._closed = True
 
     def __enter__(self) -> Self:
