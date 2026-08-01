@@ -2,7 +2,7 @@
 code: CV2
 level: Value
 status: In Progress
-status_reason: CV2.DS1 is locally qualified and awaiting Experience Report acceptance
+status_reason: CV2.DS1 is accepted live; any subsequent conversational Delivery Story requires explicit scope
 updated: 2026-08-01
 ---
 
@@ -20,6 +20,7 @@ conversation interprets and explains that state rather than replacing it.
 1. [CV2.DS1 — Mention-first readiness conversation](cv2-ds1-mention-first-readiness-conversation.md)
    establishes the exact `@hamster-dan` public interface, natural readiness
    explanations, and conversational confirmation of digest-bound mutations.
+   It is accepted live on the private HBNetwork App instance.
 
 ## Done condition
 

@@ -1,8 +1,8 @@
 ---
 code: CV2.DS1
 level: Delivery Story
-status: In Progress
-status_reason: Live transport passed; reviewed semantic correction awaits exact-question redeployment
+status: Completed
+status_reason: Exact mention conversation and corrected current-gate reply are accepted live on PR 14
 updated: 2026-08-01
 related:
   - docs/project/decisions/records/2026-08-01T0203Z-hamsterdan-is-a-standalone-petrus-application.md
@@ -75,7 +75,21 @@ but its free-form answer contradicted the ready dashboard by treating a latched
 rerun flag as current work. The corrected request now includes host-derived
 authoritative gates and routes blocker/status questions through deterministic
 current-gate rendering. A credential-free real Amp probe against that exact
-conflicting shape selects the status intent. Source CI, exact-commit redeployment,
-and repeated live semantic acceptance remain. Live acceptance uses
+conflicting shape selected the status intent. Corrective commit
+`a99ffff238b915f1490570806d6e07147e0f7396` passed private-source CI run
+`30708149931` and was deployed without replacing runtime custody or History.
+
+Final live acceptance on
 [HBNetwork/demo-pr-readiness#14](https://github.com/HBNetwork/demo-pr-readiness/pull/14)
-without replacing its durable dashboard or runtime history.
+used exact human request
+[5152324682](https://github.com/HBNetwork/demo-pr-readiness/pull/14#issuecomment-5152324682).
+Hamsterdan published exactly one correlated App reply
+[5152326755](https://github.com/HBNetwork/demo-pr-readiness/pull/14#issuecomment-5152326755):
+“Readiness is ready; no current blockers are observed.” Operation
+`conversation-reply:8448833ff45dab76d35aed429cbfa5f8ce91d7a7324fe96d2be56896bfaa1108`
+is fenced to the unchanged PR head. The dashboard remained current and ready;
+History advanced from 550 to 642 records, inbox custody advanced from 87 to 95
+terminal deliveries with zero pending/failures, and exactly one bot reply was
+created. The bot reply delivery was rejected from conversation admission, so no
+self-loop or duplicate publication occurred. Prior comments, SQLite state, and
+credential-free logs remained intact.
