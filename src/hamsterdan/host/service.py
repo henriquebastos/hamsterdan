@@ -26,7 +26,7 @@ APP_PERMISSIONS = {
     "actions": "read",
     "contents": "write",
     "issues": "write",
-    "pull_requests": "read",
+    "pull_requests": "write",
 }
 APP_EVENTS = {
     "issue_comment",
@@ -140,6 +140,21 @@ class HostService:
         selected = matches[0]
         if selected.get("suspended_at") is not None:
             raise RuntimeError("configured installation is suspended")
+        installation_permissions = selected.get("permissions")
+        if not isinstance(installation_permissions, dict):
+            raise RuntimeError("configured installation permissions are malformed")  # noqa: TRY004
+        observed_installation_permissions = {
+            str(key): str(value) for key, value in installation_permissions.items() if key != "metadata"
+        }
+        if (
+            observed_installation_permissions != APP_PERMISSIONS
+            or installation_permissions.get("metadata", "read") != "read"
+        ):
+            raise RuntimeError(
+                "configured installation permissions do not match the required first-demo contract: "
+                f"expected={sorted(APP_PERMISSIONS.items())!r} "
+                f"observed={sorted(observed_installation_permissions.items())!r}"
+            )
         installation_id = selected.get("id")
         if type(installation_id) is not int or installation_id <= 0:
             raise RuntimeError("configured installation identity is malformed")

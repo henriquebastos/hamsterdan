@@ -331,7 +331,14 @@ def registration_clients(
     installation_value = (
         installations
         if installations is not None
-        else [{"id": 44, "account": {"id": 23, "login": "Owner"}, "suspended_at": None}]
+        else [
+            {
+                "id": 44,
+                "account": {"id": 23, "login": "Owner"},
+                "suspended_at": None,
+                "permissions": APP_PERMISSIONS | {"metadata": "read"},
+            }
+        ]
     )
     repository_value = (
         repositories
@@ -368,6 +375,18 @@ def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_
         ({"slug": "wrong"}, None, "identity"),
         ({}, [], "missing or ambiguous"),
         ({}, [{"id": 44, "account": {"id": 23, "login": "Owner"}, "suspended_at": "now"}], "suspended"),
+        (
+            {},
+            [
+                {
+                    "id": 44,
+                    "account": {"id": 23, "login": "Owner"},
+                    "suspended_at": None,
+                    "permissions": APP_PERMISSIONS | {"metadata": "read", "pull_requests": "read"},
+                }
+            ],
+            "installation permissions",
+        ),
         ({"permissions": APP_PERMISSIONS | {"checks": "write"}}, None, "permissions"),
         ({"events": sorted(APP_EVENTS | {"check_run"})}, None, "events"),
     ],

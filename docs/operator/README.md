@@ -55,11 +55,15 @@ account permissions):
 | Actions | Read — workflow runs, attempts, jobs, and bounded failure evidence |
 | Contents | Read and write — compare/refs plus host-created Git objects and exact ref CAS |
 | Issues | Read and write — PR conversation lookup, dashboard, findings, reminders, and broker marker |
-| Pull requests | Read — PR authority, reviews, requested reviewers, and review threads |
+| Pull requests | Read and write — PR authority, reviews, requested reviewers, review threads, and PR-thread comments |
 
 Subscribe to exactly: **Issue comment**, **Pull request**, **Pull request
 review**, **Pull request review comment**, and **Workflow run**. Metadata read is
-implicit. GitHub also sends App lifecycle **Ping**, **Installation**, and
+implicit. The live provider denied PR-thread comment creation to an installation
+token carrying `issues=write` and `pull_requests=read`; its accepted-permissions
+response required `pull_requests=write`. Host code still exposes no merge,
+formal-review, or PR-edit operation, and every admitted comment effect retains
+its current-head/operation fence. GitHub also sends App lifecycle **Ping**, **Installation**, and
 **Installation repositories** deliveries; they are verified and applied but do
 not appear in the selectable startup event set. These values are
 startup-validated against the provider. No Checks, statuses, formal-review
