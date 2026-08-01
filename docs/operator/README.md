@@ -1,17 +1,17 @@
 # HBNetwork qualification operator runbook
 
-This runbook bootstraps the **private, HBNetwork-owned GitHub App** used only on
-the public `HBNetwork/demo-pr-readiness` fixture. Registration, installation,
-private-key creation, and broker merge are necessarily human actions: GitHub
-does not delegate organization App ownership or private-key custody to this
-program. Everything else is checked or automated without widening a human PAT.
+This runbook operates the **private, HBNetwork-owned GitHub App** used only on
+the public `HBNetwork/demo-pr-readiness` fixture. GitHub requires an App owner
+or organization owner to approve registration, increased permissions,
+installation, and private-key creation. Trusted operator automation may use the
+human's existing repository authority for PR creation or merge, but App effects
+never use that credential and never impersonate the human.
 
 ## 0. Create the private source repository and durable relay
 
-The Amp project already exists at `@henriquebastos/hamsterdan`, but GitHub's API
-credential available during implementation cannot create repositories. While
-signed in as `henriquebastos`, create an **empty private** repository named
-`hamsterdan` with no generated files. Then publish the prepared history:
+The canonical private source repository and Amp project already exist at
+`henriquebastos/hamsterdan` and `@henriquebastos/hamsterdan`. A new deployment
+should verify that source ownership before publishing prepared history:
 
 ```sh
 git remote get-url origin  # must be https://github.com/henriquebastos/hamsterdan.git
@@ -155,8 +155,9 @@ signatures, comment prose, or raw payloads.
 
 ## 4. Broker cutover and qualification
 
-The default broker currently recognizes the legacy `impetus-rerun` identity.
-Prepare (but do not merge) the one-file strict-grammar cutover:
+The HBNetwork broker now recognizes only the Hamsterdan App identity. On an
+uncut fixture, prepare (but do not merge) the one-file strict-grammar cutover;
+on HBNetwork this command reports the broker as already current:
 
 ```sh
 scripts/hamsterdan-demo prepare-broker
@@ -191,8 +192,14 @@ REST `author`/`committer` user objects, while the nested Git commit `author` and
 <https://docs.github.com/en/rest/commits/commits#get-a-commit> and
 <https://docs.github.com/en/rest/git/commits#create-a-commit>.
 
-This runbook does not declare live acceptance complete. Preserve PR URLs,
-numbers, heads, run attempts, and the redacted inspection JSON for review.
+The accepted HBNetwork portfolio is PR 14 at head
+`4e4f411c0ef352d7b39f7c7071380c433aa63a3b`. CI run `30699749460` failed on
+attempt 1, the App-owned exact rerun marker activated the strict broker, attempt
+2 passed, and the App-owned readiness advisory followed at the same head.
+`scripts/hamsterdan-demo inspect --pr 14` passes every ownership, marker,
+workflow-head, and attribution check. Preserve future PR URLs, numbers, heads,
+run attempts, and redacted inspection JSON in the same way; the CLI does not
+declare a partial run accepted.
 
 Repeat the flake scenario while restarting `hamsterdan-host` after the rerun is
 requested. Durable inbox replay and the one-minute persisted-Instance sweep must

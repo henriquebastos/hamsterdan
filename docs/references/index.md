@@ -3,7 +3,7 @@
 ## Petrus provenance
 
 - Petrus namespace migration and accepted application dependency:
-  `henriquebastos/impetus@cd1187e44926d6a80e4a3538ad79762618d32a8b`,
+  `henriquebastos/petrus@cd1187e44926d6a80e4a3538ad79762618d32a8b`,
   inspected 2026-08-01.
 - Qualified workflow source: `examples/pr_readiness_next/` and
   `tests/examples/pr_readiness_next/` at that commit.
@@ -21,6 +21,7 @@ Authoritative GitHub documentation inspected 2026-08-01:
 - <https://docs.github.com/en/apps/maintaining-github-apps/transferring-ownership-of-a-github-app>
 - <https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks>
 - <https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps>
+- <https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api#resource-not-accessible>
 - <https://docs.github.com/en/webhooks/webhook-events-and-payloads>
 
 ## Runtime libraries and deployment contracts

@@ -21,9 +21,12 @@ first sandbox organization for real-provider validation.
 - External effects are at-least-once, operation-identified, fenced, and
   lookup-first on recovery.
 
-## Current delivery
+## Delivered baseline
 
-CV1 establishes an independently visible Hamsterdan GitHub identity and proves
+CV1 established an independently visible Hamsterdan GitHub identity and proved
 the complete PR-readiness workflow through an HBNetwork-owned private GitHub App
-and selected-repository installation. The qualified Petrus CV9 implementation
-is behavioral evidence, not a package dependency.
+and selected-repository installation. The accepted baseline includes App-owned
+commit and comment attribution, strict bot-authorized rerun brokerage, durable
+restart/redelivery behavior, and a passing private-source CI path to the pinned
+Petrus repository. The qualified Petrus CV9 application remains behavioral
+evidence, not a Hamsterdan package dependency.

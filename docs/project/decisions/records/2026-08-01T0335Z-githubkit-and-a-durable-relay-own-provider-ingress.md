@@ -18,6 +18,13 @@ does not persist or expose raw installation tokens. It owns registration and
 installation validation, selected-repository routing, per-repository client
 scoping, request metadata, effect authority, and restart behavior.
 
+Every provider request opens a GitHubKit sync client in the executing context
+and consumes any streamed response before that scope closes. GitHubKit's
+entered client is context-local and is not retained across host worker
+contexts. Startup validates both the App registration permissions and the
+permissions accepted by the selected installation; a registration update that
+still awaits installation-owner approval fails closed.
+
 The canonical HBNetwork deployment uses an App-owned webhook. In an Amp orb, a
 project plugin registers a durable Amp webhook capability and forwards only the
 exact body plus four allowlisted GitHub headers to the loopback host. The relay
@@ -43,6 +50,10 @@ verification or coupling the App to Amp's agent surface.
 
 - Installation credentials remain short-lived provider artifacts; only App key
   and webhook secret require durable host custody.
+- The HBNetwork comment/effect route requires Pull requests write in addition
+  to Issues write. GitHub denied live PR-thread comments with Pull requests read
+  and advertised the write grant in its accepted-permissions response. Host
+  code still exposes no merge, formal-review, or PR-edit operation.
 - Deployment outside Amp may replace the relay with any HTTPS ingress that
   preserves exact bytes/headers and the same durable-custody contract.
 - GitHub does not automatically redeliver failed webhook deliveries. Periodic

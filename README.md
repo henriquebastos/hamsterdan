@@ -1,7 +1,7 @@
 # Hamsterdan
 
 Hamsterdan is a GitHub-native PR-readiness application powered by
-[Petrus](https://github.com/henriquebastos/impetus). It coordinates durable
+[Petrus](https://github.com/henriquebastos/petrus). It coordinates durable
 review, Actions observation, human decisions, and guarded repository effects
 through one explicit Petri-net workflow.
 
@@ -13,13 +13,13 @@ state are intentionally separate.
 
 ## Status
 
-The standalone application, transferred PR-readiness Net, installation-authenticated
-GitHub boundary, durable App webhook ingress, host composition, credential-free
-Amp agent runner, guarded effects, and HBNetwork qualification tooling are
-implemented and locally qualified. Real-provider acceptance is pending the
-unavoidable provider bootstrap: create the private source repository, register
-the HBNetwork-owned private App, generate its key, install it on the selected
-demo repository, and run the controlled acceptance portfolio.
+The standalone application and HBNetwork deployment are qualified. Live
+acceptance proves App-authored commits and comments, durable App webhook
+ingress, first-failure observation, exact bot-authorized rerun brokerage,
+second-attempt success, readiness publication, restart/remint recovery, and
+delivery deduplication on `HBNetwork/demo-pr-readiness`. The private source CI
+also passes against the exact private Petrus revision through a repository-
+scoped read-only deploy key.
 
 ## Architecture
 
@@ -74,5 +74,6 @@ human operator actions and never merge, force-push, or bypass protection.
 
 The complete private App registration, supervised host, selected-repository
 installation, broker cutover, inspection, rotation, and isolated rollback
-sequence is in [the HBNetwork operator runbook](docs/operator/README.md). Live
-HBNetwork acceptance is intentionally not marked complete by this tooling.
+sequence is in [the HBNetwork operator runbook](docs/operator/README.md). The
+accepted live portfolio is recorded in the project worklog; the tooling never
+turns a partial run into acceptance by itself.

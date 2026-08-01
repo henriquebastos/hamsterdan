@@ -1,8 +1,8 @@
 ---
 code: CV1.DS1
 level: Delivery Story
-status: Active
-status_reason: The complete deterministic portfolio qualifies the host; GitHub registration and live acceptance remain provider-blocked
+status: Completed
+status_reason: Deterministic qualification and the real HBNetwork App-identity portfolio both pass
 updated: 2026-08-01
 related:
   - docs/project/decisions/records/2026-08-01T0203Z-hamsterdan-is-a-standalone-petrus-application.md
@@ -40,7 +40,7 @@ And agent Activities receive no GitHub credential
 And the currently working human-PAT deployment remains available as an isolated
 rollback target until Hamsterdan is accepted.
 
-## Current evidence and remaining gate
+## Accepted evidence
 
 Local qualification proves the package boundaries, GitHubKit App JWT and
 installation-token mint/expiry/remint/restart behavior, exact registration and
@@ -49,11 +49,21 @@ relay failure behavior, retry backoff, periodic Instance recovery, effect
 fencing, App-only markers, guarded commit/ref publication, agent credential
 scrubbing, and full transferred Net behavior.
 
-The HBNetwork fixture preflight passes against repository `1316665126` and
-reports the expected legacy broker. Live completion still requires a human
-HBNetwork owner to create the private App registration and key, install it on
-`demo-pr-readiness`, and merge the prepared broker identity cutover only after
-the App host validates. Those actions cannot be simulated as acceptance.
+The private App registration is installed only on repository `1316665126` with
+the startup-validated permission/event contract. GitHub's live permission
+response proved that PR-thread comments require `pull_requests=write` for this
+installation; both registration and accepted installation grants are now
+validated before startup.
+
+[PR 14](https://github.com/HBNetwork/demo-pr-readiness/pull/14) proves visible
+`hamster-dan[bot]` commit, dashboard, rerun-marker, and readiness attribution.
+CI run `30699749460` failed on attempt 1, was broker-rerun from exact bot marker
+operation `actions-rerun:27ad783ee9233e7ae1b70d4c8ab54dcb7ee5821a27df371f886465bb32b1514c`,
+and passed on attempt 2 at the same head. Restart minted a fresh one-hour token;
+the persisted Instance remained at 458 records with no duplicate effects. A
+provider redelivery of the completed workflow delivery left inbox and History
+counts unchanged. The former PAT host remains stopped and its repository
+webhook is inactive, preserving rollback without a dual writer.
 
 ## Out of scope
 
