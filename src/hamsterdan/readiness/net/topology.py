@@ -36,6 +36,7 @@ from hamsterdan.contracts.readiness import (
 )
 
 DASHBOARD_FORMAT = 2
+MAX_CONVERSATION_ATTEMPTS = 3
 
 # Public composition surface: path -> (typed input, typed output).  A host binds
 # each path to a same-signature ActivityDefinition with DerivedActivityHandler.
@@ -148,7 +149,13 @@ def _effect_matches(control: Control, value: EffectResult) -> bool:
         "repair": control.mutation_operation,
         "readiness": control.readiness_operation,
     }.get(value.kind)
-    if value.kind in {"conversation", "reminder"}:
+    if value.kind == "conversation":
+        return (
+            bool(control.conversation_pending)
+            and _current(control, value)
+            and value.operation == control.conversation_pending.get("operation")
+        )
+    if value.kind == "reminder":
         return _current(control, value)
     return _current(control, value) and expected is not None and value.operation == expected
 
@@ -511,6 +518,22 @@ def fold_intent(control: Control, value: Intent) -> Control:
 
 @direct
 def fold_effect(control: Control, result: EffectResult) -> Control:
+    if result.kind == "conversation" and result.ok:
+        return update(
+            control,
+            conversation_pending={},
+            conversation_attempts=0,
+            conversation_capability_blocking=False,
+        )
+    if result.kind == "conversation" and not result.capability_available:
+        return update(control, conversation_capability_blocking=True, wait="conversation reply capability")
+    if result.kind == "conversation":
+        return update(
+            control,
+            conversation_pending={},
+            conversation_attempts=0,
+            conversation_capability_blocking=False,
+        )
     if result.kind in {"change", "repair"}:
         if result.ok:
             return update(
@@ -735,7 +758,39 @@ def _authorize_reply(binding, outputs):
         operation("conversation-reply", c, payload=payload),
         payload=payload,
     )
-    return {outputs[0].target: (Token(outputs[0].color, asdict(work)),)}
+    changed = update(
+        c,
+        conversation_pending=asdict(work),
+        conversation_attempts=1,
+        conversation_capability_blocking=False,
+    )
+    return {
+        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
+        outputs[1].target: (Token(outputs[1].color, asdict(work)),),
+    }
+
+
+def _retry_reply(c: Control) -> bool:
+    return (
+        c.conversation_capability_blocking
+        and bool(c.conversation_pending)
+        and c.conversation_attempts < MAX_CONVERSATION_ATTEMPTS
+    )
+
+
+def _reissue_reply(binding, outputs):
+    c = Control(**binding.tokens[0].data)
+    work = Work(**c.conversation_pending)
+    changed = update(
+        c,
+        conversation_attempts=c.conversation_attempts + 1,
+        conversation_capability_blocking=False,
+        wait="conversation reply",
+    )
+    return {
+        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
+        outputs[1].target: (Token(outputs[1].color, asdict(work)),),
+    }
 
 
 def _conversation(c: Control, value: ConversationObservation) -> bool:
@@ -1009,10 +1064,18 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     p.current >> arc.read() >> retire.t.change_basis(guards=_guard(lambda c, x: not _mutation(c, x)))
     p.change_basis >> retire.t.change_basis
-    p.current >> arc.read() >> t.authorize_reply(handler=petri_handler(_authorize_reply), guards=_guard(_replyable))
-    p.reply_basis >> t.authorize_reply >> work.p.conversation_reply
+    (
+        (p.current, p.reply_basis)
+        >> t.authorize_reply(handler=petri_handler(_authorize_reply), guards=_guard(_replyable))
+        >> (p.current, work.p.conversation_reply)
+    )
     p.current >> arc.read() >> retire.t.reply_basis(guards=_guard(lambda c, x: not _replyable(c, x)))
     p.reply_basis >> retire.t.reply_basis
+    (
+        p.current
+        >> t.reissue_reply(handler=petri_handler(_reissue_reply), guards=_guard(_retry_reply))
+        >> (p.current, work.p.conversation_reply)
+    )
 
     (p.current, p.lifecycle) >> t.draft(handler=to_dormant, guards=_guard(_draft)) >> p.dormant
     (

@@ -26,6 +26,7 @@ from hamsterdan.contracts.readiness import (
     ReviewResult,
     Seed,
     Work,
+    workflow_gates_ready,
     workflow_wait,
 )
 from hamsterdan.readiness.net.topology import (
@@ -381,6 +382,143 @@ def test_unauthorized_conversation_and_read_only_intent_leave_no_residue() -> No
     assert not values(subject, "change_basis") and not values(subject, "work.change")
 
 
+def test_failed_conversation_publication_reissues_the_same_fenced_operation() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    drive_bounded(subject)
+    subject.deliver(
+        "conversation_observation",
+        token(ConversationObservation(1, "h1", True, "/hamsterdan status", comment_id=31)),
+        identity="comment-31",
+    )
+    drive_bounded(subject)
+
+    conversation_occurrence, conversation_invocation = drive_until_activity(subject, dispatch, "conversation")
+    conversation_work = work_input(conversation_invocation)
+    reply = Intent(
+        1,
+        "h1",
+        "reply",
+        "status",
+        True,
+        True,
+        False,
+        {"message": "Safe status"},
+        "base",
+    )
+    dispatch.complete(conversation_occurrence, asdict(IntentBatch(1, "h1", [asdict(reply)])))
+    drive_bounded(subject)
+
+    first_occurrence, first_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
+    first_work = work_input(first_invocation)
+    dispatch.complete(
+        first_occurrence,
+        asdict(
+            EffectResult(
+                "conversation",
+                first_work.epoch,
+                first_work.head,
+                False,
+                operation=first_work.operation,
+                capability_available=False,
+            )
+        ),
+    )
+    drive_bounded(subject)
+
+    second_occurrence, second_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
+    second_work = work_input(second_invocation)
+    control = values(subject, "current")[0]
+    assert second_occurrence != first_occurrence
+    assert second_work == first_work
+    assert control["conversation_attempts"] == 2
+    assert control["conversation_pending"]["operation"] == first_work.operation
+
+    dispatch.complete(
+        second_occurrence,
+        asdict(EffectResult("conversation", 1, "h1", True, operation=second_work.operation)),
+    )
+    drive_bounded(subject)
+    control = values(subject, "current")[0]
+    assert control["conversation_pending"] == {}
+    assert control["conversation_attempts"] == 0
+    assert control["conversation_capability_blocking"] is False
+    assert conversation_work.operation != first_work.operation
+
+
+def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    drive_bounded(subject)
+    subject.deliver(
+        "conversation_observation",
+        token(ConversationObservation(1, "h1", True, "/hamsterdan status", comment_id=32)),
+        identity="comment-32",
+    )
+    drive_bounded(subject)
+    conversation_occurrence, _ = drive_until_activity(subject, dispatch, "conversation")
+    reply = Intent(
+        1,
+        "h1",
+        "reply",
+        "status",
+        True,
+        True,
+        False,
+        {"message": "Safe status"},
+        "base",
+    )
+    dispatch.complete(conversation_occurrence, asdict(IntentBatch(1, "h1", [asdict(reply)])))
+    drive_bounded(subject)
+
+    first_work = None
+    for attempt in range(1, 4):
+        occurrence, invocation = drive_until_activity(subject, dispatch, "conversation_publish")
+        work = work_input(invocation)
+        first_work = first_work or work
+        assert work == first_work
+        dispatch.complete(
+            occurrence,
+            asdict(
+                EffectResult(
+                    "conversation",
+                    work.epoch,
+                    work.head,
+                    False,
+                    operation=work.operation,
+                    capability_available=False,
+                )
+            ),
+        )
+        drive_bounded(subject)
+        if attempt < 3:
+            assert values(subject, "current")[0]["conversation_attempts"] == attempt + 1
+
+    control = values(subject, "current")[0]
+    assert pending_all(dispatch, "conversation_publish") == []
+    assert control["conversation_attempts"] == 3
+    assert control["conversation_capability_blocking"] is True
+    assert control["conversation_pending"]["operation"] == first_work.operation
+    assert workflow_gates_ready(Control(**control)) is False
+    otherwise_ready = Control(
+        "repo",
+        7,
+        1,
+        "h1",
+        "base",
+        True,
+        True,
+        actions="green",
+        review="clear",
+        findings_published=True,
+        human_approved=True,
+        mergeable=True,
+        conversation_capability_blocking=True,
+    )
+    assert workflow_wait(otherwise_ready) == "conversation reply capability"
+    assert workflow_gates_ready(otherwise_ready) is False
+
+
 def test_draft_resumes_new_epoch_and_terminal_absorbs_late_facts() -> None:
     subject = engine()
     admit(subject, "h1", "a")
@@ -584,6 +722,32 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
     )
     stale = EffectResult("dashboard", 1, "h1", True, operation="dashboard:1:3")
     assert _effect_matches(requested, stale) is False
+
+    conversation = replace(
+        requested,
+        conversation_pending=asdict(Work("conversation", 1, "h1", "conversation:1")),
+    )
+    assert (
+        _effect_matches(
+            conversation,
+            EffectResult("conversation", 1, "h1", True, operation="conversation:stale"),
+        )
+        is False
+    )
+    assert (
+        _effect_matches(
+            conversation,
+            EffectResult("conversation", 1, "h1", True, operation="conversation:1"),
+        )
+        is True
+    )
+    assert (
+        _effect_matches(
+            replace(conversation, conversation_pending={}),
+            EffectResult("conversation", 1, "h1", True, operation="conversation:1"),
+        )
+        is False
+    )
 
 
 def test_used_repair_fingerprint_names_human_wait_and_cannot_repair_again() -> None:
@@ -1097,6 +1261,30 @@ def test_dashboard_capability_denial_is_an_explicit_blocker_not_success() -> Non
     assert blocked.dashboard_current is False
     assert blocked.dashboard_capability_blocking is True
     assert blocked.wait == "dashboard update capability"
+
+
+def test_non_capability_conversation_failure_clears_pending_without_retry() -> None:
+    work = Work("conversation", 1, "h1", "conversation:1")
+    control = Control(
+        "repo",
+        7,
+        1,
+        "h1",
+        "base",
+        True,
+        True,
+        conversation_pending=asdict(work),
+        conversation_attempts=1,
+    )
+
+    cleared = fold_effect.implementation(
+        control,
+        EffectResult("conversation", 1, "h1", False, operation=work.operation),
+    )
+
+    assert cleared.conversation_pending == {}
+    assert cleared.conversation_attempts == 0
+    assert cleared.conversation_capability_blocking is False
 
 
 def test_readiness_ack_invalidates_dashboard_before_latching_announcement() -> None:

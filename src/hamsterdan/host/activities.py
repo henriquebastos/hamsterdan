@@ -25,7 +25,7 @@ from hamsterdan.contracts.readiness import (
 )
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
 from hamsterdan.github_app.gateway import GitHubAuthority
-from hamsterdan.github_app.models import ActionsRunSnapshot
+from hamsterdan.github_app.models import ActionsRunSnapshot, GitHubBoundaryError
 
 from .git_publish import HostGitPublisher, payload_digest
 
@@ -238,6 +238,15 @@ class PrReadinessActivities:
         message = str(work.payload.get("intent", {}).get("arguments", {}).get("message", "Status acknowledged."))
         try:
             self._immutable("conversation", work, message)
+        except GitHubBoundaryError:
+            return EffectResult(
+                "conversation",
+                work.epoch,
+                work.head,
+                False,
+                operation=work.operation,
+                capability_available=False,
+            )
         except RuntimeError:
             return EffectResult("conversation", work.epoch, work.head, False, operation=work.operation)
         return self._effect("conversation", work)
@@ -526,6 +535,7 @@ class PrReadinessActivities:
         capabilities = (
             f"Actions blocking={c.get('actions_capability_blocking')}; human blocking={c.get('human_capability_blocking')}; "
             f"dashboard blocking={c.get('dashboard_capability_blocking')}; "
+            f"conversation reply blocking={c.get('conversation_capability_blocking')}; "
             f"finding publication blocking={c.get('finding_capability_blocking')}; "
             f"readiness publication blocking={c.get('readiness_capability_blocking')}"
         )

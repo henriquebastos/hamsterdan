@@ -79,6 +79,9 @@ class Control:
     dashboard_requested: bool = False
     dashboard_operation: str = ""
     dashboard_format: int = 0
+    conversation_pending: dict = field(default_factory=dict)
+    conversation_attempts: int = 0
+    conversation_capability_blocking: bool = False
     review_operation: str = ""
     actions_operation: str = ""
     finding_operation: str = ""
@@ -282,6 +285,8 @@ def workflow_wait(control: Control) -> str:
         return "finding publication capability"
     if control.dashboard_capability_blocking:
         return "dashboard update capability"
+    if control.conversation_capability_blocking:
+        return "conversation reply capability"
     if control.readiness_capability_blocking:
         return "readiness publication capability"
     return "terminal lifecycle"
@@ -329,6 +334,7 @@ def workflow_gates_ready(control: Control) -> bool:
             not control.human_capability_blocking,
             not control.dashboard_capability_blocking,
             not control.finding_capability_blocking,
+            not control.conversation_capability_blocking,
             not control.readiness_capability_blocking,
         )
     )

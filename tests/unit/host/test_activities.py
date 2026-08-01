@@ -4,7 +4,7 @@ from typing import ClassVar
 from hamsterdan.agents import CodingResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
-from hamsterdan.github_app.models import CommentReference, PublicationResult
+from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.activities import PrReadinessActivities, activity_definitions
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
 
@@ -117,6 +117,24 @@ def test_stale_finding_publication_becomes_typed_effect_result() -> None:
 
     assert result.kind == "finding" and result.ok is False
     assert result.operation == "finding-operation"
+
+
+def test_conversation_provider_failure_becomes_a_retryable_typed_result() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations._immutable = lambda *args: (_ for _ in ()).throw(GitHubBoundaryError("transient provider failure"))
+    work = Work(
+        "conversation",
+        2,
+        "a" * 40,
+        "conversation-operation",
+        payload={"intent": {"arguments": {"message": "Safe reply"}}},
+    )
+
+    result = operations.conversation_publish(work)
+
+    assert result.kind == "conversation" and result.ok is False
+    assert result.operation == "conversation-operation"
+    assert result.capability_available is False
 
 
 def test_one_coordinated_review_publishes_multiple_findings_with_one_authority_lease() -> None:
