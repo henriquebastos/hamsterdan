@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import asdict
 
@@ -32,6 +33,7 @@ CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]
 _MUTATIONS = {"change", "update_base", "resolve_conflict"}
 _ALLOWED = ("reply", "status", "acknowledge", "dismiss", "defer", "snooze", "resume", "reassign", *_MUTATIONS)
+LOG = logging.getLogger(__name__)
 
 
 class PrReadinessActivities:
@@ -98,7 +100,8 @@ class PrReadinessActivities:
         )
         try:
             result = self.runner.review(self.public_clone_url, request, is_current=lambda: self._is_current(work))
-        except agents.AgentProtocolError:
+        except agents.AgentProtocolError as error:
+            self._log_agent_error("review", work, error)
             return ReviewResult(work.epoch, work.head, "unable", [], [], work.operation)
         current_ids = {str(finding.get("id", "")) for finding in result.findings}
         dispositions = {str(item.get("finding_id", "")): item.get("state") for item in result.lineage}
@@ -215,6 +218,7 @@ class PrReadinessActivities:
             if raw[0].get("confirmation") and not self._confirmation_matches(raw[0], comment, control, work):
                 raise agents.AgentProtocolError("human comment did not exactly confirm the pending mutation")
         except agents.AgentProtocolError as error:
+            self._log_agent_error("conversation", work, error)
             if error.canceled:
                 return IntentBatch(work.epoch, work.head, [])
             raw = [
@@ -356,7 +360,8 @@ class PrReadinessActivities:
         )
         try:
             result = self.runner.code(self.public_clone_url, request, is_current=lambda: self._is_current(work))
-        except agents.AgentProtocolError:
+        except agents.AgentProtocolError as error:
+            self._log_agent_error(kind, work, error)
             return EffectResult(
                 kind,
                 work.epoch,
@@ -401,13 +406,7 @@ class PrReadinessActivities:
         )
 
     def _is_current(self, work: Work) -> bool:
-        if self.current is not None and not self.current(work.epoch, work.head):
-            return False
-        try:
-            self._fence(work)
-        except RuntimeError:
-            return False
-        return True
+        return self.current is None or self.current(work.epoch, work.head)
 
     def _failure_fingerprint(self, run: ActionsRunSnapshot) -> str:
         failed = sorted((job.name, job.conclusion) for job in run.jobs if job.required and job.conclusion != "success")
@@ -563,6 +562,18 @@ class PrReadinessActivities:
             f"Mutation pending: {c.get('mutation_pending')} · Provisional: {c.get('provisional')}\n\n"
             f"Capabilities: {capabilities}\n\nReadiness: **{'ready' if gates_ready else 'not ready'}** · "
             f"Waiting for: {wait}\n\nThis dashboard is advisory; Hamsterdan never auto-merges."
+        )
+
+    @staticmethod
+    def _log_agent_error(kind: str, work: Work, error: agents.AgentProtocolError) -> None:
+        category = "canceled" if error.canceled else "timed_out" if error.timed_out else "protocol"
+        LOG.warning(
+            "agent activity unavailable kind=%s category=%s epoch=%s head=%s operation=%s",
+            kind,
+            category,
+            work.epoch,
+            work.head,
+            work.operation,
         )
 
     @staticmethod

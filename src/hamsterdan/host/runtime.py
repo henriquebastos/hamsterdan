@@ -37,7 +37,7 @@ class WallClock:
 
 
 class AuthorityLease:
-    """Join an Activity request to current marking and a fresh GitHub read."""
+    """Join fast local cancellation to fresh provider-backed effect fencing."""
 
     def __init__(self, authority: GitHubAuthority):
         self.authority = authority
@@ -56,15 +56,7 @@ class AuthorityLease:
 
     def is_current(self, epoch: int, head: str) -> bool:
         control = self.control()
-        if control is None or control.provisional or (control.epoch, control.head) != (epoch, head):
-            return False
-        try:
-            pull = self.authority.pull_request()
-            if pull.closed or pull.merged or pull.draft or pull.head != head or pull.base != control.base_head:
-                return False
-            return self.authority.policy(pull.base_ref).digest == control.policy_digest
-        except RuntimeError:
-            return False
+        return control is not None and not control.provisional and (control.epoch, control.head) == (epoch, head)
 
     def fence(self, epoch: int, head: str, operation: str, base_head: str, policy_digest: str) -> None:
         control = self.control()

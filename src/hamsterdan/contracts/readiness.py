@@ -83,6 +83,7 @@ class Control:
     conversation_attempts: int = 0
     conversation_capability_blocking: bool = False
     review_operation: str = ""
+    review_attempts: int = 0
     actions_operation: str = ""
     finding_operation: str = ""
     mutation_operation: str = ""

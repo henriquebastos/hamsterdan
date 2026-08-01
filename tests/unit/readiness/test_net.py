@@ -32,6 +32,7 @@ from hamsterdan.contracts.readiness import (
 from hamsterdan.readiness.net.topology import (
     ACTIVITY_TRANSITIONS,
     DASHBOARD_FORMAT,
+    MAX_REVIEW_ATTEMPTS,
     _basis_done,
     _effect_matches,
     _guard,
@@ -39,6 +40,8 @@ from hamsterdan.readiness.net.topology import (
     _reminder_due,
     _repairable,
     _request_dashboard,
+    _retry_review,
+    _retryable_review,
     build_net,
     fold_actions,
     fold_effect,
@@ -357,6 +360,98 @@ def test_same_head_is_duplicate_distinct_head_supersedes_and_counts_stay_bounded
     assert all(len(tokens) <= 1 for _, tokens in subject.marking)
 
 
+def test_same_head_reconcile_retries_unable_review_twice_then_waits() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    operations = []
+
+    for attempt in range(1, MAX_REVIEW_ATTEMPTS + 1):
+        _, invocation = drive_until_activity(subject, dispatch, "review")
+        work = work_input(invocation)
+        operations.append(work.operation)
+        complete(dispatch, "review", ReviewResult(1, "h1", "unable", [], [], work.operation))
+        drive_bounded(subject)
+        control = values(subject, "current")[0]
+        assert (control["review"], control["review_attempts"]) == ("unable", attempt)
+        if attempt < MAX_REVIEW_ATTEMPTS:
+            subject.deliver(
+                "verified_admission",
+                token(Admission("repo", 7, "h1", "base", True)),
+                identity=f"reconcile-{attempt}",
+            )
+            drive_bounded(subject)
+
+    assert len(set(operations)) == MAX_REVIEW_ATTEMPTS
+    subject.deliver(
+        "verified_admission",
+        token(Admission("repo", 7, "h1", "base", True)),
+        identity="reconcile-at-cap",
+    )
+    drive_bounded(subject)
+    assert not pending_all(dispatch, "review")
+    control = values(subject, "current")[0]
+    assert control["review_attempts"] == MAX_REVIEW_ATTEMPTS
+    assert control["wait"] == "coordinating review capability"
+
+
+def test_legacy_unable_review_without_attempt_count_resumes_at_attempt_two() -> None:
+    control = Control("repo", 7, 1, "h1", "base", True, True, review="unable")
+    admission = Admission("repo", 7, "h1", "base", True)
+
+    assert _retryable_review(control, admission)
+    outputs = (SimpleNamespace(target="current", color="control"), SimpleNamespace(target="work", color="work"))
+    binding = SimpleNamespace(peeked=[token(control), token(admission)])
+    routed = _retry_review(binding, outputs)
+
+    assert routed[outputs[0].target][0].data["review_attempts"] == 2
+    assert routed[outputs[1].target][0].data["sequence"] == 2
+
+
+def test_review_retry_atomically_refreshes_admission_authority() -> None:
+    control = Control(
+        "repo",
+        7,
+        1,
+        "h1",
+        "base",
+        True,
+        False,
+        review="unable",
+        review_attempts=1,
+    )
+    admission = Admission("repo", 7, "h1", "base", True, base_current=True)
+    outputs = (SimpleNamespace(target="current", color="control"), SimpleNamespace(target="work", color="work"))
+    binding = SimpleNamespace(peeked=[token(control), token(admission)])
+
+    routed = _retry_review(binding, outputs)
+
+    changed = routed[outputs[0].target][0].data
+    work = routed[outputs[1].target][0].data
+    assert changed["base_current"] is True
+    assert changed["review_attempts"] == 2
+    assert work["payload"]["base_current"] is True
+    assert len(routed[outputs[1].target]) == 1
+
+
+def test_same_head_reconcile_does_not_retry_clear_review_and_new_head_resets_attempts() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    _, invocation = drive_until_activity(subject, dispatch, "review")
+    work = work_input(invocation)
+    complete(dispatch, "review", ReviewResult(1, "h1", "clear", [], [], work.operation))
+    drive_bounded(subject)
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="same-head")
+    drive_bounded(subject)
+    assert not pending_all(dispatch, "review")
+    assert values(subject, "current")[0]["review_attempts"] == 1
+
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h2", "base", True)), identity="new-head")
+    _, invocation = drive_until_activity(subject, dispatch, "review")
+    new_work = work_input(invocation)
+    assert (new_work.epoch, new_work.head) == (2, "h2")
+    assert values(subject, "current")[0]["review_attempts"] == 1
+
+
 def test_unauthorized_conversation_and_read_only_intent_leave_no_residue() -> None:
     subject = engine()
     admit(subject, "h1", "a")
@@ -600,15 +695,25 @@ def test_actions_basis_cannot_retire_before_a_current_observation_is_folded() ->
 def test_advanced_guards_hydrate_defaults_for_replayed_control_tokens() -> None:
     old_control = asdict(Control("repo", 7, 1, "h", "base", True, True))
     old_control.pop("rerun_attempt")
+    old_control.pop("review_attempts")
     companion = asdict(ActionsObservation(1, "h", "run", 1, "failure"))
     binding = SimpleNamespace(
-        peeked=(
-            Token("Control", old_control),
-            Token("ActionsObservation", companion),
-        )
+        consumed=(("actions", (Token("ActionsObservation", companion),)),),
+        read=(("current", (Token("Control", old_control),)),),
     )
     guard = _guard(lambda control, value: control.rerun_attempt == 0 and value.attempt == 1)
     assert guard.implementation(binding) is True
+
+
+def test_irrelevant_lifecycle_fact_is_retired_while_dormant() -> None:
+    subject = engine()
+    admit(subject, "h1", "admit")
+    deliver(subject, "lifecycle_observation", Lifecycle("draft", "h1"), "draft")
+    deliver(subject, "lifecycle_observation", Lifecycle("open", "h1"), "irrelevant")
+
+    assert values(subject, "dormant")
+    assert not values(subject, "lifecycle")
+    assert not values(subject, "terminal")
 
 
 def test_failed_repair_spends_the_automatic_budget() -> None:

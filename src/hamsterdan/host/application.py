@@ -173,11 +173,15 @@ class PrReadinessApplication:
             "required_approvals": admission.required_approvals,
             "conversation_resolution": admission.conversation_resolution,
         }
-        if current_basis != admission_basis:
+        review_attempt = max(control.review_attempts, 1) if control is not None and control.review == "unable" else 0
+        if current_basis != admission_basis or review_attempt:
             self._deliver(
                 "verified_admission",
                 admission,
-                f"reconcile:admission:{target_epoch}:{_digest(current_basis)}:{_digest(admission_basis)}",
+                (
+                    f"reconcile:admission:{target_epoch}:{_digest(current_basis)}:"
+                    f"{_digest(admission_basis)}:{review_attempt}"
+                ),
             )
         control = self.host.control
         if control is None:

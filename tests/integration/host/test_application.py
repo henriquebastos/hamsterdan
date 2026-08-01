@@ -209,6 +209,14 @@ class UnavailableRunner(Runner):
         raise AgentProtocolError("provider unavailable")
 
 
+class RecoveringReviewRunner(Runner):
+    def review(self, repository_url, request, *, is_current=None):
+        if self.reviews < 2:
+            self.reviews += 1
+            raise AgentProtocolError("provider unavailable")
+        return super().review(repository_url, request, is_current=is_current)
+
+
 def application(tmp_path: Path, authority: Authority, runner: Runner) -> PrReadinessApplication:
     return PrReadinessApplication(
         tmp_path / "state",
@@ -400,6 +408,38 @@ def test_provider_failures_are_typed_inability_and_recovery(tmp_path: Path) -> N
     control = subject.host.control  # type: ignore[union-attr]
     assert recovered["actions"] == "reproduced" and control is not None and not control.repair_in_flight
     assert control.wait == "repair recovery" and runner.codes == 1
+    subject.close()
+
+
+def test_same_basis_reconciliation_recovers_review_with_bounded_distinct_attempts(tmp_path: Path) -> None:
+    authority, runner = Authority(), RecoveringReviewRunner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner)
+
+    assert subject.reconcile("attempt-1")["review"] == "unable"
+    assert subject.reconcile("attempt-2")["review"] == "unable"
+    assert subject.reconcile("attempt-3")["review"] == "clear"
+    assert runner.reviews == 3
+    subject.reconcile("settled")
+    assert runner.reviews == 3
+    subject.close()
+
+
+def test_same_basis_reconciliation_stops_after_three_unavailable_reviews(tmp_path: Path, caplog) -> None:
+    authority, runner = Authority(), UnavailableRunner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner)
+
+    projection = {}
+    for attempt in range(1, 7):
+        projection = subject.reconcile(f"attempt-{attempt}")
+
+    control = subject.host.control  # type: ignore[union-attr]
+    assert runner.reviews == 3
+    assert projection["review"] == "unable"
+    assert control is not None and control.review_attempts == 3
+    assert "agent activity unavailable kind=review category=protocol" in caplog.text
+    assert "provider unavailable" not in caplog.text
     subject.close()
 
 

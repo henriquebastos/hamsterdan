@@ -37,6 +37,7 @@ from hamsterdan.contracts.readiness import (
 
 DASHBOARD_FORMAT = 2
 MAX_CONVERSATION_ATTEMPTS = 3
+MAX_REVIEW_ATTEMPTS = 3
 
 # Public composition surface: path -> (typed input, typed output).  A host binds
 # each path to a same-signature ActivityDefinition with DerivedActivityHandler.
@@ -86,12 +87,12 @@ def _guard(predicate):
     """Use the advanced guard flavor for identity-polymorphic retirement."""
 
     def evaluate(binding):
+        selections = (*binding.read, *binding.consumed)
         values = [
             Control(**token.data) if "revision" in token.data else SimpleNamespace(**token.data)
-            for token in binding.peeked
+            for _, selected in selections
+            for token in selected
         ]
-        if len(values) == 2 and hasattr(values[1], "repository_id"):
-            values.reverse()
         return predicate(*values)
 
     return petri_guard(evaluate)
@@ -188,6 +189,18 @@ def _changed_basis(control: Control, admission: Admission) -> bool:
     return _same(control, admission) and not _same_basis(control, admission)
 
 
+def _retryable_review(control: Control, admission: Admission) -> bool:
+    return (
+        _same_basis(control, admission)
+        and control.review == "unable"
+        and max(control.review_attempts, 1) < MAX_REVIEW_ATTEMPTS
+    )
+
+
+def _refreshable_admission(control: Control, admission: Admission) -> bool:
+    return _same_basis(control, admission) and not _retryable_review(control, admission)
+
+
 def _admit(binding, outputs):
     values = [token.data for token in binding.tokens]
     raw = next(value for value in values if "base_head" in value and "epoch" not in value)
@@ -247,6 +260,7 @@ def _admit(binding, outputs):
     control = update(
         control,
         review_operation=review_work.operation,
+        review_attempts=1,
         actions_operation=actions_work.operation,
     )
     routed = {}
@@ -277,6 +291,56 @@ def refresh_admission(control: Control, admission: Admission) -> Control:
     )
 
 
+def _retry_review(binding, outputs):
+    control, admission = _control_value(binding, Admission)
+    # Histories written before review attempts were recorded deserialize as zero;
+    # an unable result proves that generation has already spent its first attempt.
+    attempt = max(control.review_attempts, 1) + 1
+    payload = effect_payload(
+        control,
+        {
+            "strict_base": admission.strict_base,
+            "base_current": admission.base_current,
+            "prior_findings": control.findings,
+            "prior_lineage": control.finding_lineage,
+            "policy": {
+                "strict_base": admission.strict_base,
+                "required_checks": admission.required_checks,
+                "required_approvals": admission.required_approvals,
+                "conversation_resolution": admission.conversation_resolution,
+                "digest": admission.policy_digest,
+            },
+            "review_attempt": attempt,
+        },
+    )
+    work = Work(
+        "review",
+        control.epoch,
+        control.head,
+        operation("review", control, payload=payload, sequence=attempt),
+        sequence=attempt,
+        payload=payload,
+    )
+    changed = update(
+        control,
+        base_head=admission.base_head,
+        strict_base=admission.strict_base,
+        base_current=admission.base_current,
+        policy_digest=admission.policy_digest,
+        required_checks=admission.required_checks,
+        required_approvals=admission.required_approvals,
+        conversation_resolution=admission.conversation_resolution,
+        admission_relation="same_head",
+        review="pending",
+        review_attempts=attempt,
+        review_operation=work.operation,
+    )
+    return {
+        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
+        outputs[1].target: (Token(outputs[1].color, asdict(work)),),
+    }
+
+
 def _refresh_basis(binding, outputs):
     control, admission = _control_value(binding, Admission)
     changed = update(
@@ -297,6 +361,7 @@ def _refresh_basis(binding, outputs):
         fingerprint="",
         actions_observation="",
         review="pending",
+        review_attempts=1,
         findings_published=False,
         finding_publication_requested=False,
         mutation_pending=False,
@@ -1011,7 +1076,12 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     (
         (p.current, p.admission)
-        >> t.refresh_admission(handler=refresh_admission, guards=_guard(_same_basis))
+        >> t.retry_review(handler=petri_handler(_retry_review), guards=_guard(_retryable_review))
+        >> (p.current, work.p.review)
+    )
+    (
+        (p.current, p.admission)
+        >> t.refresh_admission(handler=refresh_admission, guards=_guard(_refreshable_admission))
         >> p.current
     )
 
