@@ -36,6 +36,9 @@ packages = ["src/hamsterdan"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 timeout = 30
+markers = [
+    "real_provider_acceptance: opt-in tests that may invoke authenticated external provider clients",
+]
 
 [tool.ruff]
 line-length = 120
