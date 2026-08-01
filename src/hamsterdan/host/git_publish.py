@@ -60,8 +60,8 @@ class HostGitPublisher:
         if result.head != expected_head or result.base != base_head:
             raise GitPublishError("stale or incorrectly correlated Git publication")
         if (
-            pull.repository != self.authority.repository
-            or pull.head_repository != self.authority.repository
+            not _same_repository(pull.repository, self.authority.repository)
+            or not _same_repository(pull.head_repository, self.authority.repository)
             or not _safe_branch(pull.head_ref)
         ):
             raise GitPublishError("fork or unsafe pull-request ref is not publishable")
@@ -224,6 +224,10 @@ class HostGitPublisher:
 
 def _safe_branch(value: str) -> bool:
     return bool(_SAFE_REF.fullmatch(value)) and ".." not in value and "@{" not in value and not value.startswith("-")
+
+
+def _same_repository(left: str, right: str) -> bool:
+    return left.casefold() == right.casefold()
 
 
 def _safe_path(value: str) -> bool:

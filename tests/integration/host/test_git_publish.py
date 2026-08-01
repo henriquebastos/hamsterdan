@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from hamsterdan.github_app.models import WireResponse
-from hamsterdan.host.git_publish import GitPublishError, HostGitPublisher, _validate_declared_paths
+from hamsterdan.host.git_publish import GitPublishError, HostGitPublisher, _same_repository, _validate_declared_paths
 
 
 def git(root: Path, *arguments: str, input_text: str | None = None) -> str:
@@ -87,6 +87,11 @@ def test_ref_advance_uses_github_exact_compare_and_swap(tmp_path: Path) -> None:
     authority.graphql.fail = True
     with pytest.raises(GitPublishError, match="exact ref compare-and-swap"):
         subject._advance_ref("topic/branch", expected, commit)
+
+
+def test_same_repository_identity_is_case_insensitive_but_still_rejects_forks() -> None:
+    assert _same_repository("HBNetwork/demo-pr-readiness", "hbnetwork/demo-pr-readiness")
+    assert not _same_repository("fork/demo-pr-readiness", "hbnetwork/demo-pr-readiness")
 
 
 @pytest.mark.parametrize("path", ["../x", "/x", "x\\y", "-x", ".GIT/config", "a/.GitModules", "a//b"])
