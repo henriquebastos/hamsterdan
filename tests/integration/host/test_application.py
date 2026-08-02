@@ -512,6 +512,109 @@ def test_strict_policy_requires_base_alignment(tmp_path: Path) -> None:
     subject.close()
 
 
+def test_real_provider_collaboration_facts_fold_into_minimal_gates(tmp_path: Path) -> None:
+    authority, runner = Authority(), Runner()
+    subject = application(tmp_path, authority, runner)
+
+    assert subject.reconcile("draft")["instance"] == "absent"
+
+    ready(authority)
+    authority.policy_value = replace(
+        authority.policy_value,
+        strict=True,
+        update_required=True,
+        required_approvals=1,
+        conversation_resolution=True,
+        digest="authority-policy",
+    )
+    authority.review = HumanReviewSnapshot(("reviewer",), (), (), (), 0, "available")
+    requested = subject.reconcile("review-requested")
+    control = subject.host.control  # type: ignore[union-attr]
+    assert control is not None
+    assert requested["wait"] == "human review"
+    assert (control.human_requested, control.human_approved, control.required_approvals) == (True, False, 1)
+
+    authority.review = HumanReviewSnapshot((), (("reviewer", "CHANGES_REQUESTED"),), (), ("reviewer",), 1, "available")
+    changes_requested = subject.reconcile("changes-requested")
+    control = subject.host.control  # type: ignore[union-attr]
+    assert control is not None
+    assert changes_requested["wait"] == "requested changes"
+    assert (control.changes_requested, control.unresolved_conversations) == (True, 1)
+
+    authority.review = HumanReviewSnapshot((), (("reviewer", "APPROVED"),), ("reviewer",), (), 1, "available")
+    approved = subject.reconcile("approved-thread-open")
+    control = subject.host.control  # type: ignore[union-attr]
+    assert control is not None
+    assert approved["wait"] == "conversation resolution"
+    assert (control.human_approved, control.distinct_reviewer_approved) == (True, True)
+
+    authority.review = replace(authority.review, unresolved_threads=0)
+    clear = subject.reconcile("thread-resolved")
+    control = subject.host.control  # type: ignore[union-attr]
+    assert control is not None and workflow_gates_ready(control)
+    assert clear["wait"] == "terminal lifecycle"
+
+    authority.pull = replace(authority.pull, base="d" * 40)
+    stale = subject.reconcile("base-advanced")
+    assert stale["wait"] == "base update"
+
+    authority.pull = replace(authority.pull, mergeable=False, mergeable_state="dirty")
+    conflicted = subject.reconcile("conflict")
+    assert conflicted["wait"] == "conflict resolution"
+
+    authority.pull = replace(authority.pull, base=BASE, mergeable=True, mergeable_state="clean")
+    restored = subject.reconcile("authority-restored")
+    control = subject.host.control  # type: ignore[union-attr]
+    assert control is not None and workflow_gates_ready(control)
+    assert restored["wait"] == "terminal lifecycle"
+
+    authority.pull = replace(authority.pull, draft=True)
+    assert subject.reconcile("draft-again")["instance"] == "dormant"
+    ready(authority)
+    resumed = subject.reconcile("ready-again")
+    assert (resumed["instance"], resumed["epoch"]) == ("active", 2)
+    subject.close()
+
+
+def test_author_approval_is_excluded_case_insensitively(tmp_path: Path) -> None:
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    authority.pull = replace(authority.pull, author="Author")
+    authority.policy_value = replace(authority.policy_value, required_approvals=1, digest="approval-policy")
+    authority.review = HumanReviewSnapshot((), (("author", "APPROVED"),), ("author",), (), 0, "available")
+    subject = application(tmp_path, authority, runner)
+
+    projection = subject.reconcile("author-approved")
+
+    control = subject.host.control  # type: ignore[union-attr]
+    assert control is not None and not control.human_approved
+    assert projection["wait"] == "human review"
+    subject.close()
+
+
+def test_reversible_human_authority_survives_restart_without_duplicate_poll_churn(tmp_path: Path) -> None:
+    authority, first_runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, first_runner)
+    assert first.reconcile("clean")["wait"] == "terminal lifecycle"
+    authority.pull = replace(authority.pull, mergeable=False, mergeable_state="dirty")
+    assert first.reconcile("conflict")["wait"] == "conflict resolution"
+    first.close()
+
+    authority.pull = replace(authority.pull, mergeable=True, mergeable_state="clean")
+    second_runner = Runner()
+    second = application(tmp_path, authority, second_runner)
+    assert second.reconcile("restored-after-restart")["wait"] == "terminal lifecycle"
+    history = (tmp_path / "state/history.jsonl").read_text()
+    writes = len(authority.transport.writes)
+
+    assert second.reconcile("duplicate-clean-poll")["wait"] == "terminal lifecycle"
+    assert (tmp_path / "state/history.jsonl").read_text() == history
+    assert len(authority.transport.writes) == writes
+    assert second_runner.reviews == 0
+    second.close()
+
+
 def test_state_root_refuses_rebinding(tmp_path: Path) -> None:
     authority, runner = Authority(), Runner()
     ready(authority)

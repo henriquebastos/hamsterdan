@@ -210,6 +210,77 @@ one second to five minutes and park after 20 attempts; `/healthz` exposes a
 delivery missed before first PR admission, so use the App's **Recent deliveries
 → Redeliver** action after an outage.
 
+## 5. Authority and collaboration portfolio
+
+Authority qualification uses real GitHub state. Never add draft, stale,
+conflict, review, approval, or thread fields to `.pr-lab/scenario.json`,
+`.pr-lab/scenarios/**`, or `scenario-fixtures/**`. The Net retains only its
+normalized workflow facts; the operator command below reads richer provider
+evidence without writing it to History:
+
+```sh
+scripts/hamsterdan-demo inspect-authority --pr <number> --expect <expectation>
+```
+
+The accepted expectations are `non-draft`, `strict-stale`, `conflict`,
+`review-requested`, `changes-requested`, `required-approval`,
+`unresolved-thread`, and `collaboration-clear`. The command revalidates the head,
+base branch, and current base SHA after collection. It fails closed when
+mergeability is still calculating, a bounded provider collection may be
+incomplete, or authority changes during inspection. Retry an indeterminate read;
+never reinterpret it as acceptance.
+
+### Isolated fixture topology
+
+Create a unique same-repository base branch from current `main`, then apply a
+ruleset targeting only that exact branch. The ruleset requires the existing
+`lint`, `type`, `unit`, `build`, and `integration` checks to be strict, one
+approval, and review-thread resolution. Do not edit the `main` ruleset. Record
+the base ref, initial SHA, ruleset ID, operator login, and distinct reviewer
+login before creating PRs.
+
+From the initial authority-base SHA, prepare three branches:
+
+1. **base advance** replaces only the first module docstring in
+   `src/pr_fixture/__init__.py`;
+2. **strict stale** appends a unique documentation-only line to `README.md`;
+3. **true conflict** replaces the same original module docstring with text
+   different from the base-advance branch.
+
+Each branch must pass the fixture's full checks. Obtain a real distinct human
+approval for the base-advance PR and merge that PR with the ruleset's allowed
+squash method. This is the portfolio's only planned merge. GitHub must then
+report the README PR behind but cleanly mergeable and the same-line PR as a real
+conflict.
+
+After the base advance, create two more branches from the new authority-base
+SHA using unique neutral README additions:
+
+4. create **draft/ready** as a draft PR, inspect `draft=true` through the REST
+   PR fact, then mark it ready and inspect `non-draft`;
+5. create **collaboration** as ready, request the distinct reviewer, and inspect
+   `review-requested`.
+
+On the collaboration PR, the reviewer submits a real inline
+`CHANGES_REQUESTED` review. Record both `changes-requested` and
+`unresolved-thread`. The reviewer then submits an approval: accept
+`required-approval` only when GitHub GraphQL reports `reviewDecision=APPROVED`.
+The unresolved thread must continue to block until the reviewer resolves it;
+then inspect `collaboration-clear`.
+
+On the stale and conflict PRs, address `@hamster-dan` with the respective base
+update or conflict-resolution request. Each mutation requires the exact pending
+digest in a second human confirmation. Record the operation identity, old and
+new head, App-authored commit attribution, successful exact-head checks, and
+the final authority inspection. Hamsterdan must use a credential-free agent
+checkout and host-owned compare-and-swap publication; never update either branch
+manually, force-push, bypass protection, or edit History.
+
+For every transition preserve PR and visible effect URLs, exact SHAs, bounded
+inspection JSON, Actions run IDs/conclusions, History projection, unresolved
+Activity count, and duplicate-effect assessment. Keep PR14/15 and PR23-28
+untouched. PR20 retry churn remains CV3.DS3 debt and is not acceptance evidence.
+
 For an exhausted delivery, inspect only its bounded identifiers/error class and
 then explicitly requeue it after correcting the provider or configuration
 failure:

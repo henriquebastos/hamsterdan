@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from hamsterdan import operator
+from hamsterdan.github_app.gateway import _derive_policy
 
 
 def completed(value: object = "", returncode: int = 0) -> subprocess.CompletedProcess[str]:
@@ -233,3 +234,227 @@ def test_inspection_accepts_complete_fresh_hamsterdan_evidence() -> None:
     result = operator.inspect(7, fake)
     assert result["ok"] is True
     assert all(item["pass"] for item in result["checks"])
+
+
+def authority_runner() -> FakeRunner:
+    head, base, old_base = "a" * 40, "b" * 40, "c" * 40
+    return FakeRunner(
+        {
+            f"/repos/{operator.REPOSITORY}/pulls/9": {
+                "html_url": "https://github.test/pr/9",
+                "state": "open",
+                "draft": False,
+                "user": {"login": "Author"},
+                "head": {"sha": head, "ref": "authority/collaboration", "repo": {"id": operator.REPOSITORY_ID}},
+                "base": {"sha": old_base, "ref": "authority-base", "repo": {"id": operator.REPOSITORY_ID}},
+                "mergeable": True,
+                "mergeable_state": "clean",
+            },
+            f"/repos/{operator.REPOSITORY}/git/ref/heads/authority-base": {"object": {"sha": base}},
+            f"/repos/{operator.REPOSITORY}/compare/{base}...{head}": {
+                "status": "behind",
+                "ahead_by": 1,
+                "behind_by": 1,
+            },
+            f"/repos/{operator.REPOSITORY}/rules/branches/authority-base?per_page=100": [
+                {
+                    "type": "pull_request",
+                    "parameters": {
+                        "required_approving_review_count": 1,
+                        "required_review_thread_resolution": True,
+                    },
+                },
+                {
+                    "type": "required_status_checks",
+                    "parameters": {
+                        "strict_required_status_checks_policy": True,
+                        "required_status_checks": [{"context": "unit"}],
+                    },
+                },
+            ],
+            f"/repos/{operator.REPOSITORY}/pulls/9/requested_reviewers": {
+                "users": [{"login": "Reviewer"}],
+                "teams": [],
+            },
+            f"/repos/{operator.REPOSITORY}/pulls/9/reviews?per_page=100": [
+                {
+                    "id": 1,
+                    "submitted_at": "2026-08-02T01:00:00Z",
+                    "state": "APPROVED",
+                    "user": {"login": "author"},
+                },
+                {
+                    "id": 2,
+                    "submitted_at": "2026-08-02T02:00:00Z",
+                    "state": "CHANGES_REQUESTED",
+                    "user": {"login": "Reviewer"},
+                },
+            ],
+            "graphql": {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewDecision": "CHANGES_REQUESTED",
+                            "reviewThreads": {
+                                "nodes": [{"id": "thread-1", "isResolved": False}],
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                            },
+                        }
+                    }
+                }
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "expected",
+    ("non-draft", "strict-stale", "review-requested", "changes-requested", "unresolved-thread"),
+)
+def test_authority_inspection_asserts_real_provider_facts_without_prose(expected: str) -> None:
+    result = operator.inspect_authority(9, expected, authority_runner())
+
+    assert result["ok"] is True
+    assert result["authority"] == {
+        "draft": False,
+        "head": "a" * 40,
+        "base": "b" * 40,
+        "base_ref": "authority-base",
+        "behind_by": 1,
+        "mergeable": True,
+        "mergeable_state": "clean",
+        "strict_base": True,
+        "required_approvals": 1,
+        "conversation_resolution": True,
+        "requested_reviewers": ["Reviewer"],
+        "requested_teams": [],
+        "latest_reviews": [
+            {"reviewer": "Reviewer", "state": "CHANGES_REQUESTED"},
+            {"reviewer": "author", "state": "APPROVED"},
+        ],
+        "distinct_approvals": [],
+        "changes_requested": ["Reviewer"],
+        "unresolved_threads": 1,
+        "review_decision": "CHANGES_REQUESTED",
+    }
+    assert "submitted_at" not in json.dumps(result)
+    assert "thread-1" not in json.dumps(result)
+
+
+def test_authority_inspection_distinguishes_approval_and_conflict() -> None:
+    approved = authority_runner()
+    reviews = approved.responses[f"/repos/{operator.REPOSITORY}/pulls/9/reviews?per_page=100"]
+    assert isinstance(reviews, list)
+    reviews[-1] = reviews[-1] | {"state": "APPROVED"}
+    graphql = approved.responses["graphql"]
+    assert isinstance(graphql, dict)
+    graphql["data"]["repository"]["pullRequest"]["reviewDecision"] = "APPROVED"
+    assert operator.inspect_authority(9, "required-approval", approved)["ok"] is True
+
+    conflict = authority_runner()
+    pull = conflict.responses[f"/repos/{operator.REPOSITORY}/pulls/9"]
+    assert isinstance(pull, dict)
+    conflict.responses[f"/repos/{operator.REPOSITORY}/pulls/9"] = pull | {
+        "mergeable": False,
+        "mergeable_state": "dirty",
+    }
+    assert operator.inspect_authority(9, "conflict", conflict)["ok"] is True
+
+
+def test_authority_inspection_rejects_incomplete_thread_evidence() -> None:
+    fake = authority_runner()
+    response = fake.responses["graphql"]
+    assert isinstance(response, dict)
+    response["data"]["repository"]["pullRequest"]["reviewThreads"]["pageInfo"]["hasNextPage"] = True
+
+    with pytest.raises(operator.OperatorError, match="exceeds one bounded page"):
+        operator.inspect_authority(9, "unresolved-thread", fake)
+
+
+def test_authority_review_folding_preserves_dismissal_tombstone_regardless_of_order() -> None:
+    approved = {
+        "id": 1,
+        "submitted_at": "2026-08-02T01:00:00Z",
+        "state": "APPROVED",
+        "user": {"login": "Reviewer"},
+    }
+    dismissed = approved | {"id": 2, "submitted_at": "2026-08-02T02:00:00Z", "state": "DISMISSED"}
+    reapproved = approved | {"id": 3, "submitted_at": "2026-08-02T03:00:00Z"}
+
+    assert operator._latest_reviews([approved, dismissed]) == {}
+    assert operator._latest_reviews([dismissed, approved]) == {}
+    assert operator._latest_reviews([dismissed, approved, reapproved]) == {"Reviewer": "APPROVED"}
+
+
+def test_authority_policy_evidence_matches_production_normalization() -> None:
+    fake = authority_runner()
+    path = f"/repos/{operator.REPOSITORY}/rules/branches/authority-base?per_page=100"
+    rules = fake.responses[path]
+    assert isinstance(rules, list)
+
+    strict, _, approvals, resolution = _derive_policy(rules)
+
+    assert operator._authority_policy(rules) == (strict, approvals, resolution)
+
+
+def test_authority_inspection_includes_team_requests_and_requires_stable_determinate_basis() -> None:
+    team = authority_runner()
+    requested = team.responses[f"/repos/{operator.REPOSITORY}/pulls/9/requested_reviewers"]
+    assert isinstance(requested, dict)
+    requested["users"] = []
+    requested["teams"] = [{"slug": "maintainers"}]
+    result = operator.inspect_authority(9, "review-requested", team)
+    assert result["ok"] is True
+    assert result["authority"]["requested_teams"] == ["maintainers"]
+
+    indeterminate = authority_runner()
+    pull = indeterminate.responses[f"/repos/{operator.REPOSITORY}/pulls/9"]
+    assert isinstance(pull, dict)
+    indeterminate.responses[f"/repos/{operator.REPOSITORY}/pulls/9"] = pull | {"mergeable": None}
+    with pytest.raises(operator.OperatorError, match="indeterminate"):
+        operator.inspect_authority(9, "strict-stale", indeterminate)
+
+
+def test_authority_inspection_rejects_provider_basis_change_during_collection() -> None:
+    class MovingBasis(FakeRunner):
+        pull_reads = 0
+
+        def __call__(self, command: Any, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
+            call = tuple(command)
+            pull_path = f"/repos/{operator.REPOSITORY}/pulls/9"
+            if call[:3] == ("gh", "api", pull_path):
+                self.pull_reads += 1
+                value = self.responses[pull_path]
+                assert isinstance(value, dict)
+                if self.pull_reads > 1:
+                    value = value | {"head": value["head"] | {"sha": "d" * 40}}
+                return completed(value)
+            return super().__call__(command, cwd)
+
+    fake = authority_runner()
+    moving = MovingBasis(fake.responses)
+    with pytest.raises(operator.OperatorError, match="changed during inspection"):
+        operator.inspect_authority(9, "non-draft", moving)
+
+
+@pytest.mark.parametrize("collection", ("reviews", "rules"))
+def test_authority_inspection_rejects_full_potentially_incomplete_pages(collection: str) -> None:
+    fake = authority_runner()
+    if collection == "reviews":
+        path = f"/repos/{operator.REPOSITORY}/pulls/9/reviews?per_page=100"
+        fake.responses[path] = [
+            {
+                "id": index,
+                "submitted_at": f"2026-08-02T00:00:{index:02d}Z",
+                "state": "APPROVED",
+                "user": {"login": f"reviewer-{index}"},
+            }
+            for index in range(100)
+        ]
+        message = "review authority exceeds"
+    else:
+        path = f"/repos/{operator.REPOSITORY}/rules/branches/authority-base?per_page=100"
+        fake.responses[path] = [{} for _ in range(100)]
+        message = "policy exceeds"
+    with pytest.raises(operator.OperatorError, match=message):
+        operator.inspect_authority(9, "non-draft", fake)

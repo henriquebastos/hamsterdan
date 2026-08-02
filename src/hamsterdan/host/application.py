@@ -191,7 +191,7 @@ class PrReadinessApplication:
             return self.projection(pull.state)
 
         review = self.authority.human_review()
-        approvals = tuple(name for name in review.approvals if name != pull.author)
+        approvals = tuple(name for name in review.approvals if name.casefold() != pull.author.casefold())
         required_satisfied = len(approvals) >= policy.required_approvals
         requested_satisfied = not review.requested_reviewers
         threads_available = review.unresolved_threads is not None
@@ -211,11 +211,40 @@ class PrReadinessApplication:
             pull.author,
             threads_available or not policy.conversation_resolution,
         )
-        self._deliver(
-            "human_observation",
-            human,
-            f"reconcile:human:{control.epoch}:{_digest(asdict(human))}",
+        current_human = (
+            control.human_requested,
+            control.human_approved,
+            control.changes_requested,
+            control.unresolved_conversations,
+            control.distinct_reviewer_required,
+            control.distinct_reviewer_approved,
+            control.mergeable,
+            control.conflict,
+            control.base_current,
+            control.reminder_recipient,
+            control.author,
+            not control.human_capability_blocking,
         )
+        observed_human = (
+            human.requested,
+            human.approved,
+            human.changes_requested,
+            human.unresolved_conversations,
+            human.distinct_required,
+            human.distinct_approved,
+            human.mergeable,
+            human.conflict,
+            human.base_current,
+            human.reviewer,
+            human.author,
+            human.capability_available,
+        )
+        if current_human != observed_human:
+            self._deliver(
+                "human_observation",
+                human,
+                f"reconcile:human:{control.epoch}:{control.revision}:{_digest(asdict(human))}",
+            )
         current = self.host.control
         if current is not None:
             self._observe_actions(current, policy.required_checks)

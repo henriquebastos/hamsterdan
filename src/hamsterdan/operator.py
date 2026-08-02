@@ -14,7 +14,8 @@ import tempfile
 import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+from urllib.parse import quote
 
 REPOSITORY = "HBNetwork/demo-pr-readiness"
 ORG_ID = 108842540
@@ -42,6 +43,29 @@ IMMUTABLE_RE = re.compile(
     r"<!-- hamsterdan:(?P<kind>finding|reminder|readiness) "
     r"operation=(?P<operation>[A-Za-z0-9][A-Za-z0-9._:-]{0,127}) head=(?P<head>[0-9a-f]{40}) -->"
 )
+AUTHORITY_EXPECTATIONS = (
+    "non-draft",
+    "strict-stale",
+    "conflict",
+    "review-requested",
+    "changes-requested",
+    "required-approval",
+    "unresolved-thread",
+    "collaboration-clear",
+)
+AUTHORITY_REVIEW_FACTS = """
+query($owner:String!,$repository:String!,$number:Int!) {
+  repository(owner:$owner,name:$repository) {
+    pullRequest(number:$number) {
+      reviewDecision
+      reviewThreads(first:100) {
+        nodes { id isResolved }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}
+"""
 Runner = Callable[[Sequence[str], Path | None], subprocess.CompletedProcess[str]]
 
 
@@ -424,6 +448,234 @@ def inspect(pr_number: int, runner: Runner = command_runner, *, bot_login: str =
     return result
 
 
+def _authority_policy(rules: object) -> tuple[bool, int, bool]:
+    if not isinstance(rules, list) or not all(isinstance(rule, dict) for rule in rules):
+        raise OperatorError("GitHub authority policy evidence is malformed")
+    if len(rules) >= 100:
+        raise OperatorError("GitHub authority policy exceeds one bounded page")
+    strict, approvals, resolution = False, 0, False
+    for rule in cast(list[dict[str, Any]], rules):
+        if rule.get("type") == "required_status_checks":
+            parameters = rule.get("parameters")
+            if (
+                not isinstance(parameters, dict)
+                or type(parameters.get("strict_required_status_checks_policy")) is not bool
+                or not isinstance(parameters.get("required_status_checks"), list)
+            ):
+                raise OperatorError("GitHub authority policy evidence is malformed")
+            strict |= parameters["strict_required_status_checks_policy"]
+            for check in parameters["required_status_checks"]:
+                if not isinstance(check, dict) or not isinstance(check.get("context"), str) or not check["context"]:
+                    raise OperatorError("GitHub authority policy evidence is malformed")
+        elif rule.get("type") == "pull_request":
+            parameters = rule.get("parameters")
+            count = parameters.get("required_approving_review_count") if isinstance(parameters, dict) else None
+            conversations = (
+                parameters.get("required_review_thread_resolution") if isinstance(parameters, dict) else None
+            )
+            if type(count) is not int or count < 0 or type(conversations) is not bool:
+                raise OperatorError("GitHub authority policy evidence is malformed")
+            approvals = max(approvals, count)
+            resolution |= conversations
+    return strict, approvals, resolution
+
+
+def _latest_reviews(value: object) -> dict[str, str]:
+    if not isinstance(value, list) or not all(isinstance(review, dict) for review in value):
+        raise OperatorError("GitHub review authority evidence is malformed")
+    if len(value) >= 100:
+        raise OperatorError("GitHub review authority exceeds one bounded page")
+    latest: dict[str, tuple[str, str, str, int]] = {}
+    for review in cast(list[dict[str, Any]], value):
+        user = review.get("user")
+        login = user.get("login") if isinstance(user, dict) else None
+        state, submitted, identifier = review.get("state"), review.get("submitted_at"), review.get("id")
+        if (
+            not isinstance(login, str)
+            or not login
+            or not isinstance(state, str)
+            or not isinstance(submitted, str)
+            or type(identifier) is not int
+        ):
+            raise OperatorError("GitHub review authority evidence is malformed")
+        normalized = state.upper()
+        if normalized not in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
+            continue
+        key = login.casefold()
+        if key not in latest or (submitted, identifier) > latest[key][2:]:
+            latest[key] = (login, normalized, submitted, identifier)
+    return {
+        login: state
+        for login, state, _, _ in sorted(latest.values(), key=lambda item: item[0].casefold())
+        if state != "DISMISSED"
+    }
+
+
+def _review_facts(pr_number: int, runner: Runner) -> tuple[int, str | None]:
+    owner, repository = REPOSITORY.split("/", 1)
+    value = _json(
+        runner,
+        (
+            "gh",
+            "api",
+            "graphql",
+            "-f",
+            f"query={AUTHORITY_REVIEW_FACTS}",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"repository={repository}",
+            "-F",
+            f"number={pr_number}",
+        ),
+    )
+    try:
+        pull = value["data"]["repository"]["pullRequest"]
+        decision = pull["reviewDecision"]
+        threads = pull["reviewThreads"]
+        nodes, page = threads["nodes"], threads["pageInfo"]
+    except KeyError, TypeError:
+        raise OperatorError("GitHub review-thread authority evidence is malformed") from None
+    if (
+        not isinstance(nodes, list)
+        or not all(
+            isinstance(node, dict) and isinstance(node.get("id"), str) and type(node.get("isResolved")) is bool
+            for node in nodes
+        )
+        or not isinstance(page, dict)
+        or type(page.get("hasNextPage")) is not bool
+        or decision not in {None, "APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"}
+    ):
+        raise OperatorError("GitHub review-thread authority evidence is malformed")
+    if page["hasNextPage"]:
+        raise OperatorError("GitHub review-thread authority exceeds one bounded page")
+    return sum(not node["isResolved"] for node in nodes), decision
+
+
+def inspect_authority(pr_number: int, expected: str, runner: Runner = command_runner) -> dict[str, object]:
+    """Inspect real GitHub authority without copying provider objects into the Net."""
+    if pr_number < 1:
+        raise OperatorError("PR number must be positive")
+    if expected not in AUTHORITY_EXPECTATIONS:
+        raise OperatorError("unsupported authority expectation")
+    pull = _api(runner, f"/repos/{REPOSITORY}/pulls/{pr_number}")
+    if not isinstance(pull, dict):
+        raise OperatorError("GitHub pull-request authority evidence is malformed")
+    try:
+        head, base_value = pull["head"], pull["base"]
+        head_sha, base_ref = head["sha"], base_value["ref"]
+        author = pull["user"]["login"]
+        if (
+            not isinstance(head_sha, str)
+            or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha)
+            or not isinstance(base_ref, str)
+            or not base_ref
+            or not isinstance(author, str)
+            or not author
+        ):
+            raise TypeError
+    except KeyError, TypeError:
+        raise OperatorError("GitHub pull-request authority evidence is malformed") from None
+    encoded_base = quote(base_ref, safe="")
+    reference = _api(runner, f"/repos/{REPOSITORY}/git/ref/heads/{encoded_base}")
+    try:
+        base_sha = reference["object"]["sha"]
+    except KeyError, TypeError:
+        raise OperatorError("GitHub base authority evidence is malformed") from None
+    if not isinstance(base_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", base_sha):
+        raise OperatorError("GitHub base authority evidence is malformed")
+    comparison = _api(runner, f"/repos/{REPOSITORY}/compare/{base_sha}...{head_sha}")
+    behind = comparison.get("behind_by") if isinstance(comparison, dict) else None
+    if type(behind) is not int or behind < 0:
+        raise OperatorError("GitHub comparison authority evidence is malformed")
+    strict, required, resolution = _authority_policy(
+        _api(runner, f"/repos/{REPOSITORY}/rules/branches/{encoded_base}?per_page=100")
+    )
+    requested_value = _api(runner, f"/repos/{REPOSITORY}/pulls/{pr_number}/requested_reviewers")
+    requested_users = requested_value.get("users") if isinstance(requested_value, dict) else None
+    requested_teams = requested_value.get("teams") if isinstance(requested_value, dict) else None
+    if (
+        not isinstance(requested_users, list)
+        or not all(isinstance(user, dict) for user in requested_users)
+        or not isinstance(requested_teams, list)
+        or not all(isinstance(team, dict) for team in requested_teams)
+    ):
+        raise OperatorError("GitHub requested-reviewer authority evidence is malformed")
+    requested = sorted(
+        str(user["login"]) for user in requested_users if isinstance(user.get("login"), str) and user["login"]
+    )
+    teams = sorted(str(team["slug"]) for team in requested_teams if isinstance(team.get("slug"), str) and team["slug"])
+    reviews = _latest_reviews(_api(runner, f"/repos/{REPOSITORY}/pulls/{pr_number}/reviews?per_page=100"))
+    approvals = sorted(
+        login for login, state in reviews.items() if state == "APPROVED" and login.casefold() != author.casefold()
+    )
+    changes = sorted(login for login, state in reviews.items() if state == "CHANGES_REQUESTED")
+    unresolved, review_decision = _review_facts(pr_number, runner)
+    mergeable, mergeable_state, draft = pull.get("mergeable"), pull.get("mergeable_state"), pull.get("draft")
+    if mergeable not in {True, False, None} or not isinstance(mergeable_state, str) or type(draft) is not bool:
+        raise OperatorError("GitHub mergeability authority evidence is malformed")
+    if mergeable is None:
+        raise OperatorError("GitHub mergeability authority is indeterminate; retry inspection")
+    final_pull = _api(runner, f"/repos/{REPOSITORY}/pulls/{pr_number}")
+    final_reference = _api(runner, f"/repos/{REPOSITORY}/git/ref/heads/{encoded_base}")
+    try:
+        final_basis = (
+            final_pull["head"]["sha"],
+            final_pull["base"]["ref"],
+            final_reference["object"]["sha"],
+        )
+    except KeyError, TypeError:
+        raise OperatorError("GitHub final authority basis is malformed") from None
+    if final_basis != (head_sha, base_ref, base_sha):
+        raise OperatorError("GitHub authority changed during inspection")
+    authority = {
+        "draft": draft,
+        "head": head_sha.lower(),
+        "base": base_sha.lower(),
+        "base_ref": base_ref,
+        "behind_by": behind,
+        "mergeable": mergeable,
+        "mergeable_state": mergeable_state,
+        "strict_base": strict,
+        "required_approvals": required,
+        "conversation_resolution": resolution,
+        "requested_reviewers": requested,
+        "requested_teams": teams,
+        "latest_reviews": [{"reviewer": login, "state": state} for login, state in sorted(reviews.items())],
+        "distinct_approvals": approvals,
+        "changes_requested": changes,
+        "unresolved_threads": unresolved,
+        "review_decision": review_decision,
+    }
+    expectations = {
+        "non-draft": not draft,
+        "strict-stale": not draft and strict and behind > 0 and mergeable is True,
+        "conflict": not draft and (mergeable is False or mergeable_state == "dirty"),
+        "review-requested": bool(requested or teams),
+        "changes-requested": bool(changes),
+        "required-approval": required > 0 and review_decision == "APPROVED",
+        "unresolved-thread": resolution and unresolved > 0,
+        "collaboration-clear": (
+            not requested
+            and not teams
+            and not changes
+            and (required == 0 or review_decision == "APPROVED")
+            and unresolved == 0
+        ),
+    }
+    check = _check(expected, expectations[expected], authority)
+    return {
+        "command": "inspect-authority",
+        "repository": REPOSITORY,
+        "number": pr_number,
+        "url": pull.get("html_url"),
+        "expectation": expected,
+        "authority": authority,
+        "checks": [check],
+        "ok": check["pass"],
+    }
+
+
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser(prog="python -m hamsterdan.operator")
     commands = value.add_subparsers(dest="command", required=True)
@@ -435,6 +687,9 @@ def parser() -> argparse.ArgumentParser:
     inspect_parser = commands.add_parser("inspect")
     inspect_parser.add_argument("--pr", type=int, required=True)
     inspect_parser.add_argument("--bot-login", default=APP_BOT_LOGIN)
+    authority_parser = commands.add_parser("inspect-authority")
+    authority_parser.add_argument("--pr", type=int, required=True)
+    authority_parser.add_argument("--expect", choices=AUTHORITY_EXPECTATIONS, required=True)
     return value
 
 
@@ -447,8 +702,10 @@ def main() -> int:
             output = create(args.scenario)
         elif args.command == "prepare-broker":
             output = prepare_broker()
-        else:
+        elif args.command == "inspect":
             output = inspect(args.pr, bot_login=args.bot_login)
+        else:
+            output = inspect_authority(args.pr, args.expect)
     except OperatorError as error:
         output = {"command": args.command, "ok": False, "error": str(error)}
     print(json.dumps(output, sort_keys=True))
