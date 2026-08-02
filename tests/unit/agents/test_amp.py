@@ -185,6 +185,14 @@ def test_conversation_instructions_stage_explicit_mutation_before_confirmation()
     assert "Never treat an unconfirmed request as authorized execution" in instructions
 
 
+def test_coding_instructions_forbid_disabling_scenario_controls_instead_of_repairing() -> None:
+    instructions = AmpExecuteRunner._instructions("coding", object())
+
+    assert "Never alter .pr-lab control" in instructions
+    assert "never delete a scenario fixture merely to make checks pass" in instructions
+    assert "report unchanged or unable" in instructions
+
+
 def test_unconfirmed_mutation_is_staged_but_unavailable_confirmation_is_rejected() -> None:
     request = ConversationRequest(
         "owner/repo",
