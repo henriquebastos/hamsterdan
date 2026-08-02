@@ -195,11 +195,23 @@ def create(scenario: str, runner: Runner = command_runner) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="hamsterdan-operator-") as temporary:
         checkout = _clone(runner, Path(temporary))
         _run(runner, ("git", "switch", "--create", branch, "origin/main"), checkout)
-        (checkout / SCENARIO_PATH).write_text(json.dumps(scenario_value(scenario), indent=2) + "\n", encoding="utf-8")
+        prepared = _json(runner, ("python", "tools/scenario_control.py", "prepare", scenario), checkout)
+        admitted = prepared.get("admitted_changed_paths") if isinstance(prepared, dict) else None
+        if (
+            not isinstance(admitted, list)
+            or not admitted
+            or not all(isinstance(path, str) and path for path in admitted)
+            or str(SCENARIO_PATH) not in admitted
+        ):
+            raise OperatorError("scenario preparation returned malformed admitted paths")
+        admitted_paths = set(admitted)
         _run(runner, ("python", "tools/scenario_control.py", "--attempt", "2"), checkout)
-        _run(runner, ("git", "add", "--", str(SCENARIO_PATH)), checkout)
+        changed = set(_run(runner, ("git", "diff", "--name-only"), checkout).splitlines())
+        if not changed or not changed <= admitted_paths:
+            raise OperatorError(f"refusing unexpected changed paths: {sorted(changed)}")
+        _run(runner, ("git", "add", "--", *sorted(changed)), checkout)
         _run(runner, ("git", "commit", "-m", title), checkout)
-        _assert_only(runner, checkout, {str(SCENARIO_PATH)})
+        _assert_only(runner, checkout, changed)
         _run(runner, ("git", "push", "--set-upstream", "origin", branch), checkout)
         _run(
             runner,

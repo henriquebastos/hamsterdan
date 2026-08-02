@@ -123,7 +123,9 @@ def test_operator_mutation_commands_contain_no_force_merge_or_bypass() -> None:
     assert '"--force"' not in source
     assert '"merge"' not in source
     assert '"--admin"' not in source
-    assert "_assert_only(runner, checkout, {str(SCENARIO_PATH)})" in source
+    assert '("python", "tools/scenario_control.py", "prepare", scenario)' in source
+    assert "not changed or not changed <= admitted_paths" in source
+    assert "_assert_only(runner, checkout, changed)" in source
     assert "_assert_only(runner, checkout, {str(BROKER_PATH)})" in source
 
 
