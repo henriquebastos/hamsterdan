@@ -120,7 +120,10 @@ class PrReadinessApplication:
         if pull.closed or pull.merged:
             if self.host is not None:
                 status = "merged" if pull.merged else "closed"
-                self._deliver("lifecycle_observation", Lifecycle(status, pull.head), f"{trigger}:{status}:{pull.head}")
+                if not self.host.place("terminal"):
+                    self._deliver(
+                        "lifecycle_observation", Lifecycle(status, pull.head), f"{trigger}:{status}:{pull.head}"
+                    )
             return self.projection(pull.state)
         if pull.draft:
             if self.host is not None and self.host.control is not None:

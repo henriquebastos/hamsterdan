@@ -261,7 +261,9 @@ def test_new_head_and_closed_terminal_absorb_late_poll(tmp_path: Path) -> None:
     authority.pull = replace(authority.pull, state="closed", closed=True)
     assert subject.reconcile("closed")["status"] == "abort"
     writes = len(authority.transport.writes)
+    history = (tmp_path / "state/history.jsonl").read_text()
     assert subject.reconcile("late")["status"] == "abort" and len(authority.transport.writes) == writes
+    assert (tmp_path / "state/history.jsonl").read_text() == history
     subject.close()
 
 
