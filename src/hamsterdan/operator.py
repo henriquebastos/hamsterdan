@@ -164,7 +164,7 @@ def preflight(runner: Runner = command_runner, *, health_url: str | None = None)
 def scenario_value(scenario: str) -> dict[str, object]:
     behavior: dict[str, str] = {"kind": "pass"}
     if scenario == "first-attempt-flake":
-        behavior = {"kind": "first_attempt_flake", "fingerprint": "hamsterdan:first-attempt-flake:v1"}
+        behavior = {"kind": "first_attempt_flake", "fingerprint": "scenario:first-attempt-flake:v1"}
     elif scenario != "clean-green":
         raise OperatorError("unsupported scenario")
     return {

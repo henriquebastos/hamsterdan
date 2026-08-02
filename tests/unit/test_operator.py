@@ -61,7 +61,7 @@ def test_scenarios_are_the_fixture_closed_schema() -> None:
     assert clean["behavior"] == {"kind": "pass"}
     assert flake["behavior"] == {
         "kind": "first_attempt_flake",
-        "fingerprint": "hamsterdan:first-attempt-flake:v1",
+        "fingerprint": "scenario:first-attempt-flake:v1",
     }
     assert clean["review_lenses"] == ["correctness", "test-quality", "risk"]
 
