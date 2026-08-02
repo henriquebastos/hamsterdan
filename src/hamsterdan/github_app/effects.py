@@ -9,21 +9,31 @@ from .gateway import GitHubAuthority
 from .models import ActionsRunSnapshot, CommentReference, GitHubBoundaryError, PublicationResult, Transport
 
 Fence = Callable[[str, int, int, str, str], None]
+EffectFault = Callable[[str, str, int, str, str], None]
 
 
 class CommentPublisher:
     """Lookup-first comments with an immediate pre-effect stale fence."""
 
-    def __init__(self, transport: Transport, repository: str, pr_number: int, bot_login: str, fence: Fence):
+    def __init__(
+        self,
+        transport: Transport,
+        repository: str,
+        pr_number: int,
+        bot_login: str,
+        fence: Fence,
+        fault: EffectFault | None = None,
+    ):
         normalized_login = bot_login.strip().casefold()
         if not normalized_login or not normalized_login.endswith("[bot]"):
             raise ValueError("bot login must be the configured GitHub App bot login")
-        self.transport, self.repository, self.pr_number, self.bot_login, self.fence = (
+        self.transport, self.repository, self.pr_number, self.bot_login, self.fence, self.fault = (
             transport,
             repository,
             pr_number,
             normalized_login,
             fence,
+            fault,
         )
         self.root = f"/repos/{repository}/issues/{pr_number}/comments"
         self.edit_root = f"/repos/{repository}/issues/comments"
@@ -56,15 +66,44 @@ class CommentPublisher:
         authority_operation: str | None = None,
     ) -> PublicationResult:
         marker = self.marker(kind, operation, head)
+        payload = f"{body}\n\n{marker}"
         existing = self._find(marker)
         if existing:
+            if existing.get("body") != payload:
+                raise ValueError("stable publication operation collided with a different payload")
             return PublicationResult("existing", _reference(existing))
-        payload = f"{body}\n\n{marker}"
-        self.fence(self.repository, self.pr_number, epoch, head, authority_operation or operation)
-        response = self.transport.request("POST", self.root, {"body": payload})
-        if response.status != 201 or not isinstance(response.body, dict):
-            raise GitHubBoundaryError("GitHub did not prove comment publication")
-        return PublicationResult("created", _reference(_response_mapping(response.body)))
+        for attempt in range(2):
+            self.fence(self.repository, self.pr_number, epoch, head, authority_operation or operation)
+            try:
+                if self.fault is not None:
+                    self.fault("before_call", self.repository, self.pr_number, kind, operation)
+                response = self.transport.request("POST", self.root, {"body": payload})
+                if self.fault is not None:
+                    self.fault("after_call", self.repository, self.pr_number, kind, operation)
+            except GitHubBoundaryError:
+                recovered = self._recover(marker, payload)
+                if recovered is not None:
+                    return recovered
+                if attempt:
+                    raise
+                continue
+            if response.status == 201 and isinstance(response.body, dict):
+                return PublicationResult("created", _reference(_response_mapping(response.body)))
+            recovered = self._recover(marker, payload)
+            if recovered is not None:
+                return recovered
+            error = GitHubBoundaryError("GitHub did not prove comment publication")
+            if response.status != 201 or attempt:
+                raise error
+        raise AssertionError("bounded comment recovery exhausted without an outcome")
+
+    def _recover(self, marker: str, payload: str) -> PublicationResult | None:
+        existing = self._find(marker)
+        if existing is None:
+            return None
+        if existing.get("body") != payload:
+            raise ValueError("stable publication operation collided with a different payload")
+        return PublicationResult("existing", _reference(existing))
 
     def dashboard(self, operation: str, epoch: int, head: str, body: str) -> PublicationResult:
         marker = "<!-- hamsterdan:dashboard -->"

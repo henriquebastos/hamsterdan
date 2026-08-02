@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any, cast
 
+from hamsterdan.agents import AgentProtocolError
 from hamsterdan.agents.amp import AmpExecuteRunner
 from hamsterdan.github_app.auth import GitHubAppClients
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.gateway import GitHubAuthority
+from hamsterdan.github_app.models import GitHubBoundaryError
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 from hamsterdan.github_app.webhooks import Observation, WebhookCustody
@@ -35,6 +40,105 @@ APP_EVENTS = {
     "pull_request_review_comment",
     "workflow_run",
 }
+_FAULT_BOUNDARIES = frozenset({"agent", "comment"})
+_FAULT_PHASES = frozenset({"timed_out", "malformed", "before_call", "after_call"})
+
+
+@dataclass
+class QualificationFault:
+    """One exact, host-owned, disabled-by-default qualification failure."""
+
+    repository: str
+    pull_request: int
+    boundary: str
+    phase: str
+    kind: str
+    operation: str
+    _spent: bool = field(default=False, init=False, repr=False)
+    _spent_operation: str | None = field(default=None, init=False, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+
+    @classmethod
+    def from_environment(cls, environment: dict[str, str] | None = None) -> QualificationFault | None:
+        raw = (os.environ if environment is None else environment).get("HAMSTERDAN_QUALIFICATION_FAULT")
+        if raw is None:
+            return None
+        if not 0 < len(raw.encode()) <= 4096:
+            raise ValueError("qualification fault configuration is malformed")
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            raise ValueError("qualification fault configuration is malformed") from None
+        names = {"repository", "pull_request", "boundary", "phase", "kind", "operation"}
+        if not isinstance(value, dict) or set(value) != names:
+            raise ValueError("qualification fault configuration is malformed")
+        repository, boundary, phase, kind, operation = (
+            value["repository"],
+            value["boundary"],
+            value["phase"],
+            value["kind"],
+            value["operation"],
+        )
+        pull_request = value["pull_request"]
+        if (
+            not isinstance(repository, str)
+            or repository.count("/") != 1
+            or type(pull_request) is not int
+            or pull_request <= 0
+            or boundary not in _FAULT_BOUNDARIES
+            or phase not in _FAULT_PHASES
+            or not isinstance(kind, str)
+            or not kind
+            or not isinstance(operation, str)
+            or not operation
+            or (boundary == "agent") != (phase in {"timed_out", "malformed"})
+        ):
+            raise ValueError("qualification fault configuration is malformed")
+        return cls(repository, pull_request, boundary, phase, kind, operation)
+
+    def _matches(
+        self, repository: str, pull_request: int, boundary: str, phase: str, kind: str, operation: str
+    ) -> bool:
+        return (
+            not self._spent
+            and (repository.casefold(), pull_request, boundary, phase, kind)
+            == (
+                self.repository.casefold(),
+                self.pull_request,
+                self.boundary,
+                self.phase,
+                self.kind,
+            )
+            and self.operation in {operation, "next"}
+        )
+
+    def _consume(self, boundary: str, phase: str, kind: str, operation: str) -> None:
+        self._spent = True
+        self._spent_operation = operation
+        LOG.warning(
+            "qualification_fault boundary=%s phase=%s kind=%s operation=%s",
+            boundary,
+            phase,
+            kind,
+            operation,
+            extra={"boundary": boundary, "phase": phase, "kind": kind, "operation": operation},
+        )
+
+    def publication(self, phase: str, repository: str, pull_request: int, kind: str, operation: str) -> None:
+        with self._lock:
+            if not self._matches(repository, pull_request, "comment", phase, kind, operation):
+                return
+            self._consume("comment", phase, kind, operation)
+        raise GitHubBoundaryError("qualified provider outcome was deliberately withheld")
+
+    def agent(self, repository: str, pull_request: int, kind: str, operation: str) -> None:
+        with self._lock:
+            if not self._matches(repository, pull_request, "agent", self.phase, kind, operation):
+                return
+            self._consume("agent", self.phase, kind, operation)
+        if self.phase == "timed_out":
+            raise AgentProtocolError("qualified agent execution timed out", timed_out=True)
+        raise AgentProtocolError("qualified agent result is malformed")
 
 
 def _json(response: Any) -> Any:
@@ -53,6 +157,7 @@ class HostService:
         reminder_delay: float = 259200,
         poll_interval: float = 0.25,
         sweep_interval: float = 60,
+        qualification_fault: QualificationFault | None = None,
     ) -> None:
         self.config = config
         self.root = config.state_path
@@ -66,6 +171,7 @@ class HostService:
         self.runner, self.application_factory = runner or AmpExecuteRunner(), application_factory
         self.workflow_path, self.reminder_delay, self.poll_interval = workflow_path, reminder_delay, poll_interval
         self.sweep_interval = sweep_interval
+        self.qualification_fault = qualification_fault
         self.installation_id: int | None = None
         self._apps: dict[tuple[int, int, int], PrReadinessApplication] = {}
         self._locks: dict[tuple[int, int, int], threading.Lock] = {}
@@ -208,6 +314,7 @@ class HostService:
                 graphql=GitHubGraphQL(transport),
             )
             root = self.root / "applications" / str(installation_id) / str(repository_id) / str(pull_request_number)
+            qualification_fault = self.qualification_fault
             self._apps[key] = self.application_factory(
                 root,
                 f"github:{installation_id}:{repository_id}:pr:{pull_request_number}",
@@ -217,6 +324,14 @@ class HostService:
                 public_clone_url=f"https://github.com/{route.repository_full_name}.git",
                 workflow_path=self.workflow_path,
                 reminder_delay=self.reminder_delay,
+                publication_fault=None if qualification_fault is None else qualification_fault.publication,
+                agent_fault=(
+                    None
+                    if qualification_fault is None
+                    else lambda kind, operation: qualification_fault.agent(
+                        route.repository_full_name, pull_request_number, kind, operation
+                    )
+                ),
             )
             self._locks[key] = threading.Lock()
         return self._apps[key]

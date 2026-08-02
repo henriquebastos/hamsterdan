@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
 from petrus.engine import Engine, choose_throughput
 from petrus.impetus.binding import DerivedActivityHandler
-from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested
+from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested, FiringFailed
 from petrus.impetus.history_store import JsonlHistoryStore
 from petrus.impetus.petrinet import Marking, NetPath, Token
 from petrus.motus.dispatch import InlineDispatch
@@ -47,6 +48,11 @@ class AuthorityLease:
         if self.engine is not None:
             raise RuntimeError("authority lease is already bound")
         self.engine = engine
+
+    def replace(self, expected: Engine, replacement: Engine) -> None:
+        if self.engine is not expected:
+            raise RuntimeError("authority lease Engine changed during recovery")
+        self.engine = replacement
 
     def control(self) -> Control | None:
         if self.engine is None:
@@ -134,8 +140,16 @@ class AuthorityLease:
 class PrReadinessHost:
     """One replacement Engine using an independent canonical History."""
 
-    def __init__(self, root: Path, engine: Engine, lease: AuthorityLease, operations: PrReadinessActivities):
+    def __init__(
+        self,
+        root: Path,
+        engine: Engine,
+        lease: AuthorityLease,
+        operations: PrReadinessActivities,
+        loader: Callable[[], Engine],
+    ):
         self.root, self.engine, self.lease, self.operations = root, engine, lease, operations
+        self._loader = loader
 
     @classmethod
     def open(
@@ -156,31 +170,32 @@ class PrReadinessHost:
         for path in ACTIVITY_TRANSITIONS:
             name = path.removeprefix("execute.")
             handlers[name] = DerivedActivityHandler(built.net, NetPath(path), definitions[name])
-        history_path = root / "history.jsonl"
-        exists = history_path.exists()
-        history = JsonlHistoryStore(history_path)
-        dispatch = InlineDispatch(definitions)
         activities = tuple(item.declaration for item in definitions.values())
-        if exists:
-            engine = Engine.load(
+
+        def load() -> Engine:
+            return Engine.load(
                 built.net,
                 instance_id,
-                history=history,
-                dispatch=dispatch,
+                history=JsonlHistoryStore(root / "history.jsonl"),
+                dispatch=InlineDispatch(definitions),
                 handlers=handlers,
                 guards=built.guards,
                 policy=choose_throughput,
                 clock=WallClock(),
                 activities=activities,
             )
+
+        history_path = root / "history.jsonl"
+        if history_path.exists():
+            engine = load()
         else:
             seed = Seed(authority.repository, authority.pr_number)
             marking = Marking({NetPath("seed"): (Token("Seed", asdict(seed)),)})
             engine = Engine.create(
                 built.net,
                 instance_id,
-                history=history,
-                dispatch=dispatch,
+                history=JsonlHistoryStore(history_path),
+                dispatch=InlineDispatch(definitions),
                 handlers=handlers,
                 guards=built.guards,
                 policy=choose_throughput,
@@ -189,7 +204,7 @@ class PrReadinessHost:
                 marking=marking,
             )
         lease.bind(engine)
-        return cls(root, engine, lease, operations)
+        return cls(root, engine, lease, operations, load)
 
     @property
     def control(self) -> Control | None:
@@ -204,9 +219,49 @@ class PrReadinessHost:
 
     def drain(self, limit: int = 500) -> None:
         for _ in range(limit):
-            if not self.engine.advance().ready:
-                return
+            before = tuple(self.engine.records)
+            unresolved = self._unresolved(before)
+            try:
+                if not self.engine.advance().ready:
+                    return
+            except RuntimeError:
+                replacement = self._loader()
+                after = tuple(replacement.records)
+                prefix_matches = after[: len(before)] == before
+                suffix = after[len(before) :]
+                failed = [record for record in suffix if isinstance(record, ActivityFailed)]
+                firing_failed = [record for record in suffix if isinstance(record, FiringFailed)]
+                request = unresolved.get(failed[0].occurrence) if len(failed) == 1 else None
+                if (
+                    not prefix_matches
+                    or len(suffix) != 2
+                    or not isinstance(suffix[0], ActivityFailed)
+                    or not isinstance(suffix[1], FiringFailed)
+                    or len(firing_failed) != 1
+                    or request is None
+                    or failed[0].occurrence != firing_failed[0].occurrence
+                    or failed[0].transition != request.transition
+                    or firing_failed[0].transition != request.transition
+                ):
+                    replacement.close()
+                    raise
+                previous = self.engine
+                try:
+                    self.lease.replace(previous, replacement)
+                except Exception:
+                    replacement.close()
+                    raise
+                self.engine = replacement
         raise RuntimeError("PR-readiness Engine did not reach an external wait")
+
+    @staticmethod
+    def _unresolved(records: tuple[object, ...]) -> dict[int, ActivityRequested]:
+        terminal = {record.occurrence for record in records if isinstance(record, (ActivityCompleted, ActivityFailed))}
+        return {
+            record.occurrence: record
+            for record in records
+            if isinstance(record, ActivityRequested) and record.occurrence not in terminal
+        }
 
     def close(self) -> None:
         self.engine.close()

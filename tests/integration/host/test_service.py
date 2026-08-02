@@ -14,8 +14,9 @@ from fastapi.testclient import TestClient
 
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.webhooks import Observation
+from hamsterdan.host.__main__ import inspect_instance
 from hamsterdan.host.api import create_app
-from hamsterdan.host.service import APP_EVENTS, APP_PERMISSIONS, HostService
+from hamsterdan.host.service import APP_EVENTS, APP_PERMISSIONS, HostService, QualificationFault
 
 
 class Response:
@@ -195,8 +196,55 @@ def test_application_identity_roots_and_operation_clients_are_exact(tmp_path: Pa
     assert made[0].args[1] == "github:44:31:pr:7"
     assert [call[1] for call in clients.operation_calls] == [(31,), (32,), (31,)]
     assert made[0].args[2].graphql is not None
+    assert made[0].kwargs["publication_fault"] is None
+    assert made[0].kwargs["agent_fault"] is None
     host.close()
     assert all(app.closed == 1 for app in made) and clients.closed == 1
+
+
+def test_qualification_fault_is_exact_one_shot_and_disabled_by_default() -> None:
+    assert QualificationFault.from_environment({}) is None
+    raw = json.dumps(
+        {
+            "repository": "owner/one",
+            "pull_request": 7,
+            "boundary": "agent",
+            "phase": "timed_out",
+            "kind": "review",
+            "operation": "next",
+        }
+    )
+    fault = QualificationFault.from_environment({"HAMSTERDAN_QUALIFICATION_FAULT": raw})
+    assert fault is not None
+
+    with pytest.raises(Exception) as raised:
+        fault.agent("OWNER/ONE", 7, "review", "review:one")
+    assert getattr(raised.value, "timed_out", False)
+    assert fault._spent_operation == "review:one"
+    fault.agent("owner/one", 7, "review", "review:two")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"phase": "after_call"},
+        {"boundary": "comment"},
+        {"operation": ""},
+        {"extra": True},
+    ],
+)
+def test_qualification_fault_configuration_rejects_mismatched_shapes(change: dict[str, object]) -> None:
+    value: dict[str, object] = {
+        "repository": "owner/one",
+        "pull_request": 7,
+        "boundary": "agent",
+        "phase": "timed_out",
+        "kind": "review",
+        "operation": "review:one",
+    }
+    value.update(change)
+    with pytest.raises(ValueError, match="qualification fault configuration is malformed"):
+        QualificationFault.from_environment({"HAMSTERDAN_QUALIFICATION_FAULT": json.dumps(value)})
 
 
 def test_inactive_routes_and_non_actionable_comments_are_terminal_without_application(tmp_path: Path) -> None:
@@ -315,6 +363,104 @@ def test_periodic_sweep_reopens_durable_instances_and_skips_inactive_routes(tmp_
     assert [item.reconciles for item in made] == [["startup:44:31:7"], ["startup:44:31:8"]]
     assert host.sweep() == 2
     assert [item.reconciles[-1] for item in made] == ["periodic:44:31:7", "periodic:44:31:8"]
+
+
+def test_instance_inspection_is_bounded_and_excludes_payloads_and_errors(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "binding.json").write_text(
+        json.dumps({"instance_id": "github:44:31:pr:7", "repository": "owner/one", "pull_request": 7})
+    )
+    records = [
+        {"record": "InstanceCreated", "instant": 0},
+        {
+            "record": "ActivityRequested",
+            "occurrence": 3,
+            "instant": 1,
+            "transition": "execute.dashboard_publish",
+            "activity": "dashboard_publish",
+            "input": {"work": {"operation": "dashboard:three", "payload": {"secret": "must-not-escape"}}},
+        },
+        {
+            "record": "ActivityFailed",
+            "occurrence": 3,
+            "instant": 2,
+            "error": "credential-bearing failure must not escape",
+        },
+        {"record": "FiringFailed", "occurrence": 3, "instant": 2},
+        {
+            "record": "ActivityRequested",
+            "occurrence": 4,
+            "instant": 3,
+            "transition": "execute.review",
+            "activity": "review",
+            "input": {"work": {"operation": "review:four"}},
+        },
+    ]
+    (root / "history.jsonl").write_text("".join(json.dumps(record) + "\n" for record in records))
+
+    result = inspect_instance(tmp_path, 44, 31, 7)
+    encoded = json.dumps(result)
+
+    assert result["record_count"] == 5
+    assert result["activities"] == {
+        "requested": 2,
+        "completed": 0,
+        "failed": 1,
+        "firing_failed": 1,
+        "unresolved": [
+            {
+                "occurrence": 4,
+                "transition": "execute.review",
+                "activity": "review",
+                "operation": "review:four",
+            }
+        ],
+    }
+    assert "must-not-escape" not in encoded and "credential-bearing" not in encoded
+
+
+def test_instance_inspection_rejects_unsafe_binding_and_emitted_fields(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    target = tmp_path / "binding-target.json"
+    target.write_text(json.dumps({"instance_id": "github:44:31:pr:7", "repository": "owner/one", "pull_request": 7}))
+    (root / "binding.json").symlink_to(target)
+    (root / "history.jsonl").write_text(json.dumps({"record": "InstanceCreated", "instant": 0}) + "\n")
+    with pytest.raises(ValueError, match="bounded regular file"):
+        inspect_instance(tmp_path, 44, 31, 7)
+
+    (root / "binding.json").unlink()
+    (root / "binding.json").write_text(
+        json.dumps({"instance_id": "github:44:31:pr:7", "repository": "owner/one", "pull_request": 7})
+    )
+    (root / "history.jsonl").write_text(
+        json.dumps(
+            {
+                "record": "ActivityRequested",
+                "occurrence": 1,
+                "instant": 1,
+                "transition": {"secret": "must-not-escape"},
+                "activity": "review",
+                "input": {"work": {"operation": "review:one"}},
+            }
+        )
+        + "\n"
+    )
+    with pytest.raises(ValueError, match="Activity identifiers are malformed") as raised:
+        inspect_instance(tmp_path, 44, 31, 7)
+    assert "must-not-escape" not in str(raised.value)
+
+
+def test_instance_inspection_rejects_a_symlinked_instance_directory(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    applications = tmp_path / "applications/44/31"
+    applications.mkdir(parents=True)
+    (applications / "7").symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="not a real directory"):
+        inspect_instance(tmp_path, 44, 31, 7)
 
 
 def test_sweep_failure_on_one_pr_does_not_block_another(tmp_path: Path) -> None:

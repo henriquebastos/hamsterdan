@@ -21,3 +21,13 @@ an explicit terminal failure, preserves operation identity and lookup-first
 provider recovery, drains custody without duplicate effects, and does not
 weaken per-Instance synchronization. Cache eviction and synthetic no-progress
 heuristics are not accepted solutions without that evidence.
+
+CV3.DS3 now provides the bounded local recovery contract: an Engine replacement
+is accepted only when canonical History preserves the exact prior prefix and
+adds the terminal failure pair for a previously unresolved occurrence. The
+replacement is installed atomically in both host and authority lease, after
+which sibling Activities continue draining. Integration coverage reproduces
+the terminal failure with a sibling dashboard effect and proves one visible
+effect and no later append. This closes the source-code uncertainty but not the
+live debt: PR20 must still be inspected through deployment custody before and
+after a normal corrected sweep. A drained inbox alone remains insufficient.

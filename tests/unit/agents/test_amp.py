@@ -333,6 +333,17 @@ def test_timeout_and_supersession_stop_process_group(timeout: float, current, at
     assert getattr(raised.value, attribute)
 
 
+def test_process_start_failure_is_a_sanitized_protocol_error(tmp_path: Path) -> None:
+    def unavailable(*args, **kwargs):
+        raise OSError("secret-looking executable failure")
+
+    runner = AmpExecuteRunner(popen=unavailable)
+    with pytest.raises(AgentProtocolError, match="agent execution could not start") as raised:
+        runner._execute(tmp_path, "prompt", None)
+    assert "secret-looking" not in str(raised.value)
+    assert not raised.value.timed_out and not raised.value.canceled
+
+
 def test_output_is_drained_without_pipe_deadlock_and_bounded(tmp_path: Path) -> None:
     script = tmp_path / "output.py"
     script.write_text("import sys\nsys.stdout.buffer.write(b'x'*2_000_000); sys.stdout.flush()\n")

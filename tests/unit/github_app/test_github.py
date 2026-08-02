@@ -252,14 +252,148 @@ def test_lookup_first_retry_recovers_an_uncertain_successful_comment_write() -> 
     fences: list[str] = []
     publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append("fenced"))
 
-    with pytest.raises(GitHubBoundaryError, match="did not prove"):
-        publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
     recovered = publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
 
     assert recovered.status == "existing"
     assert recovered.reference is not None and recovered.reference.id == 8
     assert len([call for call in fake.calls if call[0] == "POST"]) == 1
     assert fences == ["fenced"]
+
+
+def test_immutable_comment_retries_once_after_proven_pre_call_failure() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+
+    class BeforeCallFailure(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.attempts = 0
+
+        def request(self, method: str, path: str, body=None) -> WireResponse:
+            self.calls.append((method, path, body))
+            if method == "POST" and path == comments:
+                self.attempts += 1
+                if self.attempts == 1:
+                    raise GitHubBoundaryError("injected before call")
+                item = {"id": 9, "html_url": "url", "body": body["body"], "user": {"login": "hamsterdan[bot]"}}
+                self.page_values[f"{comments}?per_page=100"] = (item,)
+                return WireResponse(201, item)
+            return super().request(method, path, body)
+
+    fake = BeforeCallFailure()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fences: list[str] = []
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append("fenced"))
+
+    result = publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
+
+    assert result.status == "created"
+    assert fake.attempts == 2
+    assert [call[0] for call in fake.calls] == ["PAGES", "POST", "PAGES", "POST"]
+    assert fences == ["fenced", "fenced"]
+
+
+def test_after_call_fault_recovers_by_lookup_without_a_second_mutation() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+
+    class AcceptedWrite(FakeTransport):
+        def request(self, method: str, path: str, body=None) -> WireResponse:
+            self.calls.append((method, path, body))
+            item = {"id": 10, "html_url": "url", "body": body["body"], "user": {"login": "hamsterdan[bot]"}}
+            self.page_values[f"{comments}?per_page=100"] = (item,)
+            return WireResponse(201, item)
+
+    spent = False
+
+    def fault(phase, repository, pull_request, kind, operation):
+        nonlocal spent
+        if phase == "after_call" and not spent:
+            spent = True
+            raise GitHubBoundaryError("qualified ambiguous outcome")
+
+    fake = AcceptedWrite()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None, fault)
+
+    result = publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
+
+    assert result.status == "existing"
+    assert len([call for call in fake.calls if call[0] == "POST"]) == 1
+
+
+def test_definitive_comment_rejection_is_looked_up_but_not_retried() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fake.responses[("POST", comments)] = WireResponse(403, {"message": "denied"})
+    fences: list[str] = []
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append("fenced"))
+
+    with pytest.raises(GitHubBoundaryError, match="did not prove"):
+        publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
+
+    assert len([call for call in fake.calls if call[0] == "POST"]) == 1
+    assert fences == ["fenced"]
+
+
+def test_initial_immutable_lookup_rejects_a_stable_operation_payload_collision() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+    marker = CommentPublisher.marker("finding", "stable-operation", HEAD)
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = (
+        {"id": 11, "html_url": "url", "body": f"Different\n\n{marker}", "user": {"login": "hamsterdan[bot]"}},
+    )
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    with pytest.raises(ValueError, match="different payload"):
+        publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
+
+    assert not any(call[0] == "POST" for call in fake.calls)
+
+
+def test_two_unproven_comment_outcomes_stop_after_two_fenced_mutations() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+
+    class Unproven(FakeTransport):
+        def request(self, method: str, path: str, body=None) -> WireResponse:
+            self.calls.append((method, path, body))
+            raise GitHubBoundaryError("unproven")
+
+    fake = Unproven()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fences: list[str] = []
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append("fenced"))
+
+    with pytest.raises(GitHubBoundaryError, match="unproven"):
+        publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
+
+    assert len([call for call in fake.calls if call[0] == "POST"]) == 2
+    assert fences == ["fenced", "fenced"]
+
+
+def test_stale_recovery_fence_prevents_a_second_comment_mutation() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+
+    class Unproven(FakeTransport):
+        def request(self, method: str, path: str, body=None) -> WireResponse:
+            self.calls.append((method, path, body))
+            raise GitHubBoundaryError("unproven")
+
+    fake = Unproven()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fences = 0
+
+    def fence(*args):
+        nonlocal fences
+        fences += 1
+        if fences == 2:
+            raise RuntimeError("stale authority")
+
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", fence)
+
+    with pytest.raises(RuntimeError, match="stale authority"):
+        publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
+
+    assert len([call for call in fake.calls if call[0] == "POST"]) == 1
 
 
 def test_lookup_requires_normalized_exact_bot_login_and_hamsterdan_marker() -> None:
@@ -273,7 +407,7 @@ def test_lookup_requires_normalized_exact_bot_login_and_hamsterdan_marker() -> N
             "body": "<!-- impetus:finding operation=operation head=" + HEAD + " -->",
             "user": {"login": "hamsterdan[bot]"},
         },
-        {"id": 3, "body": marker, "user": {"login": " HamsterDan[Bot] "}},
+        {"id": 3, "body": f"body\n\n{marker}", "user": {"login": " HamsterDan[Bot] "}},
     )
     publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
 

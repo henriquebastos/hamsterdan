@@ -31,6 +31,7 @@ from .git_publish import GitPublishError, HostGitPublisher, payload_digest
 
 CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]
+AgentFault = Callable[[str, str], None]
 _MUTATIONS = {"change", "update_base", "resolve_conflict"}
 _ALLOWED = ("reply", "status", "acknowledge", "dismiss", "defer", "snooze", "resume", "reassign", *_MUTATIONS)
 MAX_CODING_ATTEMPTS = 3
@@ -53,6 +54,7 @@ class PrReadinessActivities:
         current_fence: CurrentFence,
         git_publisher: HostGitPublisher | None = None,
         is_current: Current | None = None,
+        agent_fault: AgentFault | None = None,
     ):
         if authority.repository != repository or authority.pr_number != pr_number:
             raise ValueError("GitHub authority differs from the configured repository/PR")
@@ -61,6 +63,7 @@ class PrReadinessActivities:
         self.public_clone_url, self.workflow_path = public_clone_url, workflow_path
         self.current_fence, self.git_publisher = current_fence, git_publisher
         self.current = is_current
+        self.agent_fault = agent_fault
 
     def _fence(self, value: Work | ReadinessCommand) -> None:
         base = value.base_head if isinstance(value, ReadinessCommand) else str(value.payload.get("base_head", ""))
@@ -100,6 +103,9 @@ class PrReadinessActivities:
             applied_changes=list(payload.get("prior_lineage", []))[:100],
         )
         try:
+            fault = getattr(self, "agent_fault", None)
+            if fault is not None:
+                fault("review", work.operation)
             result = self.runner.review(self.public_clone_url, request, is_current=lambda: self._is_current(work))
         except agents.AgentProtocolError as error:
             self._log_agent_error("review", work, error)
@@ -212,6 +218,9 @@ class PrReadinessActivities:
             declarations,
         )
         try:
+            fault = getattr(self, "agent_fault", None)
+            if fault is not None:
+                fault("conversation", work.operation)
             result = self.runner.converse(self.public_clone_url, request, is_current=lambda: self._is_current(work))
             raw = result.intents
             if len(raw) != 1:
@@ -374,6 +383,9 @@ class PrReadinessActivities:
                 )
                 break
             try:
+                fault = getattr(self, "agent_fault", None)
+                if fault is not None:
+                    fault(kind, work.operation)
                 result = self.runner.code(self.public_clone_url, request, is_current=lambda: self._is_current(work))
             except agents.AgentProtocolError as error:
                 self._log_agent_error(kind, work, error)

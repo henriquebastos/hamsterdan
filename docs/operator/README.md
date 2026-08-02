@@ -303,6 +303,51 @@ Requeue resets the retry schedule for the already verified, sanitized durable
 observation; it does not bypass signature verification, duplicate custody,
 repository admission, current-authority fencing, or effect lookup.
 
+## 6. Lifecycle and recovery qualification
+
+Use fresh isolated PRs for CV3.DS3. Do not mutate accepted PR14/15, PR23-28, or
+PR29-33, and do not use historical PR20 as a fault fixture. Coordinate deploy,
+restart, and runtime inspection with the thread that owns the supervised host;
+never start a competing writer.
+
+Inspect a persisted Instance without replaying or editing it:
+
+```sh
+set -a; . .amp/runtime/hamsterdan.env; set +a
+uv run --frozen python -m hamsterdan.host inspect-instance \
+  --installation <installation-id> --repository <repository-id> --pr <number>
+```
+
+The command requires positive canonical IDs, rejects symlinked or nonregular
+state paths, bounds both state files, verifies a stable snapshot and exact
+Instance binding, and emits no payload, prompt, result, error prose, or
+credential. Preserve its JSON before and after each controlled transition.
+
+Fault injection is disabled when `HAMSTERDAN_QUALIFICATION_FAULT` is absent. To
+arm one process-local failure, place exactly one compact JSON object in the
+supervised service environment and restart it:
+
+```sh
+HAMSTERDAN_QUALIFICATION_FAULT='{"repository":"HBNetwork/demo-pr-readiness","pull_request":<number>,"boundary":"agent","phase":"timed_out","kind":"review","operation":"next"}'
+```
+
+The exact keys are `repository`, `pull_request`, `boundary`, `phase`, `kind`,
+and `operation`. Agent phases are `timed_out` or `malformed`; immutable-comment
+phases are `before_call` or `after_call` with boundary `comment`. Prefer an
+already observed exact operation. `next` is permitted only for a fresh isolated
+PR and latches the first matching operation. The fault is one-shot per process;
+remove the variable and restart after capturing evidence. Do not combine fault
+phases in one run.
+
+Qualify four fresh routes: lifecycle (head supersession, exact delivery UUID
+redelivery, supervised restart, then unmerged closure), agent timeout and
+malformed result, provider failure before call, and ambiguous provider outcome
+after call. For every route preserve exact PR/head, delivery UUID where used,
+latched operation, visible App effect URL, inbox disposition, Actions outcome,
+terminal History counts, and duplicate assessment. Before and after deployment,
+inspect PR20 read-only through existing runtime custody; allow only a normal
+sweep and do not edit its History or provider state.
+
 ## Rotation, suspension, removal, and rollback
 
 For key rotation, generate and deploy a second private key, restart and

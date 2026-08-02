@@ -217,6 +217,12 @@ class RecoveringReviewRunner(Runner):
         return super().review(repository_url, request, is_current=is_current)
 
 
+class TerminalReviewRunner(Runner):
+    def review(self, repository_url, request, *, is_current=None):
+        self.reviews += 1
+        raise RuntimeError("terminal review failure")
+
+
 def application(tmp_path: Path, authority: Authority, runner: Runner) -> PrReadinessApplication:
     return PrReadinessApplication(
         tmp_path / "state",
@@ -457,6 +463,32 @@ def test_restart_one_history_has_no_duplicate_agent_or_publication(tmp_path: Pat
     assert second.reconcile("restart") == initial
     assert second_runner.reviews == 0 and len(authority.transport.writes) == writes
     second.close()
+
+
+def test_terminal_activity_failure_reloads_and_resolves_in_flight_siblings(tmp_path: Path) -> None:
+    authority, runner = Authority(), TerminalReviewRunner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner)
+
+    projection = subject.reconcile("terminal-agent-failure")
+    records = [json.loads(line) for line in (tmp_path / "state/history.jsonl").read_text().splitlines()]
+    requested = {record["occurrence"] for record in records if record["record"] == "ActivityRequested"}
+    terminal = {
+        record["occurrence"] for record in records if record["record"] in {"ActivityCompleted", "ActivityFailed"}
+    }
+    failed = [record for record in records if record["record"] == "ActivityFailed"]
+    firing_failed = [record for record in records if record["record"] == "FiringFailed"]
+
+    assert projection["instance"] == "active"
+    assert requested == terminal
+    assert len(failed) == len(firing_failed) == 1
+    assert failed[0]["occurrence"] == firing_failed[0]["occurrence"]
+    assert sum("hamsterdan:dashboard" in item["body"] for item in authority.transport.comments) == 1
+
+    settled = (tmp_path / "state/history.jsonl").read_text()
+    subject.reconcile("settled")
+    assert (tmp_path / "state/history.jsonl").read_text() == settled
+    subject.close()
 
 
 def test_close_reopen_restart_preserves_pending_durable_activity_without_duplicate_effect(tmp_path: Path) -> None:

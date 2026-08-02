@@ -16,10 +16,10 @@ from hamsterdan.contracts.readiness import (
     Lifecycle,
     workflow_wait,
 )
-from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
+from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
 from hamsterdan.github_app.gateway import GitHubAuthority
 
-from .activities import PrReadinessActivities
+from .activities import AgentFault, PrReadinessActivities
 from .git_publish import HostGitPublisher
 from .runtime import AuthorityLease, PrReadinessHost
 
@@ -44,6 +44,8 @@ class PrReadinessApplication:
         workflow_path: str = ".github/workflows/ci.yml",
         reminder_delay: float = 3 * 24 * 60 * 60,
         trusted_associations: frozenset[str] = frozenset({"OWNER", "MEMBER", "COLLABORATOR"}),
+        publication_fault: EffectFault | None = None,
+        agent_fault: AgentFault | None = None,
     ):
         self.root, self.instance_id, self.authority, self.runner = root, instance_id, authority, runner
         normalized_login = bot_login.strip().casefold()
@@ -53,6 +55,7 @@ class PrReadinessApplication:
         self.trusted_associations = frozenset(value.upper() for value in trusted_associations)
         self.public_clone_url, self.workflow_path = public_clone_url, workflow_path
         self.reminder_delay = reminder_delay
+        self.publication_fault, self.agent_fault = publication_fault, agent_fault
         self.host: PrReadinessHost | None = None
         if (root / "history.jsonl").exists():
             self.host = self._open_host()
@@ -67,6 +70,7 @@ class PrReadinessApplication:
                 self.authority.pr_number,
                 self.bot_login,
                 lease.publisher_fence,
+                self.publication_fault,
             )
             reruns = CommentRerunBroker(self.authority, publisher)
             git = HostGitPublisher(self.authority, self.public_clone_url)
@@ -82,6 +86,7 @@ class PrReadinessApplication:
                 lease.fence,
                 git,
                 lease.is_current,
+                self.agent_fault,
             )
 
         return PrReadinessHost.open(

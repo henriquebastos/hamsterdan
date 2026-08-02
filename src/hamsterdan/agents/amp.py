@@ -208,7 +208,10 @@ class AmpExecuteRunner:
         kwargs = dict(cwd=root, env=self._clean_env(), shell=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if os.name == "posix":
             kwargs["start_new_session"] = True
-        process = self._popen((*self.argv, prompt), **kwargs)
+        try:
+            process = self._popen((*self.argv, prompt), **kwargs)
+        except OSError:
+            raise AgentProtocolError("agent execution could not start") from None
         output = bytearray()
         overflow = threading.Event()
 

@@ -4,11 +4,14 @@ from dataclasses import asdict
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
+from petrus.impetus.history import ActivityFailed, ActivityRequested, FiringFailed
 from petrus.impetus.petrinet import NetPath, Token
+from petrus.motus.activity import ExecutionPolicy
 
 from hamsterdan.contracts.readiness import Control, Work
 from hamsterdan.host.activities import PrReadinessActivities
-from hamsterdan.host.runtime import AuthorityLease
+from hamsterdan.host.runtime import AuthorityLease, PrReadinessHost
 
 
 class ProviderAuthority:
@@ -52,3 +55,125 @@ def test_agent_polling_predicate_does_not_invoke_provider_fence() -> None:
     work = Work("review", 2, "head", "review:operation")
 
     assert all(activities._is_current(work) for _ in range(1_000))
+
+
+def test_drain_does_not_replace_engine_without_a_new_exact_failure_pair(tmp_path) -> None:
+    class BrokenEngine:
+        records = ()
+
+        def advance(self):
+            raise RuntimeError("unproven engine failure")
+
+    class Replacement:
+        records = ()
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    broken, replacement = BrokenEngine(), Replacement()
+    lease = AuthorityLease(cast(Any, ProviderAuthority()))
+    lease.engine = cast(Any, broken)
+    subject = PrReadinessHost(
+        tmp_path,
+        cast(Any, broken),
+        lease,
+        cast(Any, object()),
+        lambda: cast(Any, replacement),
+    )
+
+    with pytest.raises(RuntimeError, match="unproven engine failure"):
+        subject.drain()
+
+    assert subject.engine is broken
+    assert lease.engine is broken
+    assert replacement.closed
+
+
+def test_drain_rejects_a_divergent_history_prefix(tmp_path) -> None:
+    requested = ActivityRequested(
+        NetPath("execute.review"),
+        activity="review",
+        input={},
+        policy=ExecutionPolicy(),
+        correlation="correlation",
+        idempotency="idempotency",
+        occurrence=1,
+    )
+    divergent = ActivityRequested(
+        NetPath("execute.dashboard_publish"),
+        activity="dashboard_publish",
+        input={},
+        policy=ExecutionPolicy(),
+        correlation="other",
+        idempotency="other",
+        occurrence=1,
+    )
+
+    class BrokenEngine:
+        records = (requested,)
+
+        def advance(self):
+            raise RuntimeError("terminal failure")
+
+    class Replacement:
+        records = (
+            divergent,
+            ActivityFailed(NetPath("execute.review"), "failed", occurrence=1),
+            FiringFailed(NetPath("execute.review"), "failed", occurrence=1),
+        )
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    broken, replacement = BrokenEngine(), Replacement()
+    lease = AuthorityLease(cast(Any, ProviderAuthority()))
+    lease.engine = cast(Any, broken)
+    subject = PrReadinessHost(tmp_path, cast(Any, broken), lease, cast(Any, object()), lambda: cast(Any, replacement))
+
+    with pytest.raises(RuntimeError, match="terminal failure"):
+        subject.drain()
+
+    assert subject.engine is broken and lease.engine is broken
+    assert replacement.closed
+
+
+def test_drain_rejects_a_failure_pair_for_the_wrong_transition(tmp_path) -> None:
+    requested = ActivityRequested(
+        NetPath("execute.review"),
+        activity="review",
+        input={},
+        policy=ExecutionPolicy(),
+        correlation="correlation",
+        idempotency="idempotency",
+        occurrence=1,
+    )
+
+    class BrokenEngine:
+        records = (requested,)
+
+        def advance(self):
+            raise RuntimeError("terminal failure")
+
+    class Replacement:
+        records = (
+            requested,
+            ActivityFailed(NetPath("execute.dashboard_publish"), "failed", occurrence=1),
+            FiringFailed(NetPath("execute.dashboard_publish"), "failed", occurrence=1),
+        )
+        closed = False
+
+        def close(self):
+            self.closed = True
+
+    broken, replacement = BrokenEngine(), Replacement()
+    lease = AuthorityLease(cast(Any, ProviderAuthority()))
+    lease.engine = cast(Any, broken)
+    subject = PrReadinessHost(tmp_path, cast(Any, broken), lease, cast(Any, object()), lambda: cast(Any, replacement))
+
+    with pytest.raises(RuntimeError, match="terminal failure"):
+        subject.drain()
+
+    assert subject.engine is broken and lease.engine is broken
+    assert replacement.closed
