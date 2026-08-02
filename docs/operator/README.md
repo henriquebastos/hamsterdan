@@ -182,6 +182,29 @@ scripts/hamsterdan-demo create --scenario first-attempt-flake
 scripts/hamsterdan-demo inspect --pr <number>
 ```
 
+Qualification orbs receive the two human operator sessions from Amp project
+secrets `HAMSTERDAN_GH_HENRIQUEBASTOS_HOSTS` and
+`HAMSTERDAN_GH_HSBASTOS_HOSTS`. `.agents/setup` writes them only to ignored,
+mode-`0700` identity roots under `.amp/runtime/`, with mode-`0600` files. Human
+commands must bypass Amp's injected `gh` wrapper and select one identity
+explicitly:
+
+```sh
+# Author/operator
+env -i HOME="$HOME" PATH="/usr/bin:/bin" \
+  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-henriquebastos" /usr/bin/gh api user
+
+# Distinct reviewer
+env -i HOME="$HOME" PATH="/usr/bin:/bin" \
+  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-hsbastos" /usr/bin/gh api user
+```
+
+Never print, copy into source, or pass either session into the host or agent
+checkout. `henriquebastos` owns fixture branches, PR lifecycle, and operator
+actions; `hsbastos` owns distinct-human reviews. The App remains the only
+product effect identity. Rotate the project secrets when either OAuth session
+is revoked or replaced.
+
 Creation branches from fresh `origin/main`, changes only the fixture's closed
 schema control, validates it, and creates—but never merges—the PR. Inspection
 requires an App-owned dashboard, readiness advisory, no legacy marker, exact

@@ -17,4 +17,23 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 echo "==> Syncing the locked Hamsterdan environment"
 uv sync --frozen
 
+install_gh_identity() {
+    local variable="$1"
+    local config_root="$2"
+    local value="${!variable:-}"
+    if [[ -z "$value" ]]; then
+        echo "==> Optional GitHub identity $variable is not configured"
+        return
+    fi
+    install -d -m 0700 "$config_root" "$config_root/gh"
+    umask 077
+    printf '%s' "$value" > "$config_root/gh/hosts.yml"
+    chmod 0600 "$config_root/gh/hosts.yml"
+}
+
+echo "==> Installing project-scoped human GitHub operator identities"
+install_gh_identity HAMSTERDAN_GH_HENRIQUEBASTOS_HOSTS .amp/runtime/gh-henriquebastos
+install_gh_identity HAMSTERDAN_GH_HSBASTOS_HOSTS .amp/runtime/gh-hsbastos
+unset HAMSTERDAN_GH_HENRIQUEBASTOS_HOSTS HAMSTERDAN_GH_HSBASTOS_HOSTS
+
 echo "==> Hamsterdan orb setup complete"
