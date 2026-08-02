@@ -9,3 +9,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-01 — Mention-first readiness conversation qualified locally](entries/2026-08-01T1515Z-mention-first-readiness-conversation-qualified-locally.md)
 - [2026-08-01 — Mention-first readiness conversation accepted live](entries/2026-08-01T1632Z-mention-first-readiness-conversation-accepted-live.md)
 - [2026-08-01 — Conversational guarded change accepted live](entries/2026-08-01T2102Z-conversational-guarded-change-accepted-live.md)
+- [2026-08-02 — Deterministic scenario laboratory accepted live](entries/2026-08-02T0108Z-deterministic-scenario-laboratory-accepted-live.md)

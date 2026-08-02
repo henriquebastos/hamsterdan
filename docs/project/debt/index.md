@@ -4,3 +4,4 @@ Durable debt items live under `items/`, one file per accepted obligation. Create
 an item only when debt should outlive one story's review notes.
 
 - [Transferred agent control files retain an internal Impetus name](items/transferred-agent-control-files-retain-impetus-name.md)
+- [Non-terminal unresolved activities can churn reconciliation](items/non-terminal-unresolved-activities-can-churn-reconciliation.md)

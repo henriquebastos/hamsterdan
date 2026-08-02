@@ -5,8 +5,9 @@ Task hierarchy. Lifecycle state belongs in each roadmap item's own metadata.
 
 Completed baseline: [CV1 — Independently identifiable PR-readiness application](cv1-independent-pr-readiness/index.md).
 
-Current delivery: [CV2 — Conversational PR interaction](cv2-conversational-pr-interaction/index.md), beginning with
-[CV2.DS1 — Mention-first readiness conversation](cv2-conversational-pr-interaction/cv2-ds1-mention-first-readiness-conversation.md).
+Completed conversational delivery: [CV2 — Conversational PR interaction](cv2-conversational-pr-interaction/index.md).
 
-Approved next value: [CV3 — Complete demo scenario portfolio](cv3-complete-demo-scenario-portfolio/index.md), sequenced after
-CV2.DS2 proves the guarded conversational coding path.
+Current value: [CV3 — Complete demo scenario portfolio](cv3-complete-demo-scenario-portfolio/index.md).
+[CV3.DS1 — Deterministic scenario laboratory](cv3-complete-demo-scenario-portfolio/cv3-ds1-deterministic-scenario-laboratory.md)
+is accepted live; the next planned delivery is
+[CV3.DS2 — Authority and collaboration gates](cv3-complete-demo-scenario-portfolio/cv3-ds2-authority-and-collaboration-gates.md).

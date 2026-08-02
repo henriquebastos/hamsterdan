@@ -2,8 +2,8 @@
 code: CV3
 level: Value
 status: In Progress
-status_reason: CV2.DS2 proved guarded coding; deterministic scenario portfolio execution is active
-updated: 2026-08-01
+status_reason: CV3.DS1 is accepted live across six deterministic scenarios; authority and collaboration gates are next
+updated: 2026-08-02
 ---
 
 # CV3 — Complete demo scenario portfolio
@@ -18,9 +18,11 @@ provider and History evidence rather than inferred from unit tests.
 ## Scope and sequence
 
 1. [CV3.DS1 — Deterministic scenario laboratory](cv3-ds1-deterministic-scenario-laboratory.md)
-   owns clean, flake, persistent-failure, review-finding, and repair fixtures.
+   completed clean, flake, persistent-failure, review-finding, conversational,
+   and repair qualification.
 2. [CV3.DS2 — Authority and collaboration gates](cv3-ds2-authority-and-collaboration-gates.md)
-   owns stale base, conflicts, reviews, threads, and draft transitions.
+   is next and owns stale base, conflicts, reviews, threads, and draft
+   transitions.
 3. [CV3.DS3 — Lifecycle and recovery portfolio](cv3-ds3-lifecycle-and-recovery-portfolio.md)
    owns supersession, closure, restart, redelivery, and agent/provider failures.
 
