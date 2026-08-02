@@ -281,6 +281,14 @@ inspection JSON, Actions run IDs/conclusions, History projection, unresolved
 Activity count, and duplicate-effect assessment. Keep PR14/15 and PR23-28
 untouched. PR20 retry churn remains CV3.DS3 debt and is not acceptance evidence.
 
+The accepted CV3.DS2 portfolio used branch-only ruleset `20242556` and PR29-33.
+PR29 was the one reviewed base merge. PR30 proved strict stale-base update, PR31
+proved true conflict resolution, PR32 proved draft silence followed by ready
+admission, and PR33 proved the complete requested-review, changes-requested,
+approval, and thread-resolution sequence. PR30-33 remain open and unmerged. The
+accepted exact heads and durable evidence are recorded in the CV3.DS2 roadmap
+item and worklog; do not reuse these PRs for later lifecycle fault injection.
+
 For an exhausted delivery, inspect only its bounded identifiers/error class and
 then explicitly requeue it after correcting the provider or configuration
 failure:

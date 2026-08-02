@@ -11,3 +11,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-01 — Conversational guarded change accepted live](entries/2026-08-01T2102Z-conversational-guarded-change-accepted-live.md)
 - [2026-08-02 — Deterministic scenario laboratory accepted live](entries/2026-08-02T0108Z-deterministic-scenario-laboratory-accepted-live.md)
 - [2026-08-02 — Authority and collaboration folding qualified locally](entries/2026-08-02T1033Z-authority-and-collaboration-folding-qualified-locally.md)
+- [2026-08-02 — Authority and collaboration gates accepted live](entries/2026-08-02T1752Z-authority-and-collaboration-gates-accepted-live.md)

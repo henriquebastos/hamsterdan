@@ -2,7 +2,7 @@
 code: CV3
 level: Value
 status: In Progress
-status_reason: CV3.DS1 is accepted live; CV3.DS2 authority folding is qualified locally and awaits its fresh provider portfolio
+status_reason: CV3.DS1 and CV3.DS2 are accepted live; lifecycle and recovery qualification is next
 updated: 2026-08-02
 ---
 
@@ -21,11 +21,11 @@ provider and History evidence rather than inferred from unit tests.
    completed clean, flake, persistent-failure, review-finding, conversational,
    and repair qualification.
 2. [CV3.DS2 — Authority and collaboration gates](cv3-ds2-authority-and-collaboration-gates.md)
-   is in progress and owns stale base, conflicts, reviews, threads, and draft
-   transitions. Its minimal authority folding and bounded evidence route are
-   qualified locally; live provider acceptance remains.
+   completed stale base, true conflict, reviews, threads, and draft transitions
+   through real provider authority on isolated PR29-33.
 3. [CV3.DS3 — Lifecycle and recovery portfolio](cv3-ds3-lifecycle-and-recovery-portfolio.md)
-   owns supersession, closure, restart, redelivery, and agent/provider failures.
+   is next and owns supersession, closure, restart, redelivery, and
+   agent/provider failures.
 
 ## Done condition
 
