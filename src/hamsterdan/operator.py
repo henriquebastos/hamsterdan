@@ -209,6 +209,7 @@ def create(scenario: str, runner: Runner = command_runner) -> dict[str, object]:
         admitted_paths = set(admitted)
         _run(runner, ("python", "tools/scenario_control.py", "--attempt", "2"), checkout)
         changed = set(_run(runner, ("git", "diff", "--name-only"), checkout).splitlines())
+        changed.update(_run(runner, ("git", "ls-files", "--others", "--exclude-standard"), checkout).splitlines())
         if not changed or not changed <= admitted_paths:
             raise OperatorError(f"refusing unexpected changed paths: {sorted(changed)}")
         _run(runner, ("git", "add", "--", *sorted(changed)), checkout)

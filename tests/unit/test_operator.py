@@ -129,6 +129,7 @@ def test_operator_mutation_commands_contain_no_force_merge_or_bypass() -> None:
     assert '"--admin"' not in source
     assert '("python", "tools/scenario_control.py", "prepare", scenario)' in source
     assert "not changed or not changed <= admitted_paths" in source
+    assert '("git", "ls-files", "--others", "--exclude-standard")' in source
     assert "_assert_only(runner, checkout, changed)" in source
     assert "_assert_only(runner, checkout, {str(BROKER_PATH)})" in source
     assert 'f"reviewers[]={HERO_REVIEWER}"' in source
@@ -145,7 +146,8 @@ def test_hero_creation_admits_multiple_fixture_paths_and_requests_cris(monkeypat
             f"git switch --create {branch} origin/main": "",
             "python tools/scenario_control.py prepare hero-review": {"admitted_changed_paths": admitted},
             "python tools/scenario_control.py --attempt 2": "",
-            "git diff --name-only": changed,
+            "git diff --name-only": admitted[0],
+            "git ls-files --others --exclude-standard": "\n".join(admitted[1:]),
             f"git add -- {admitted[0]} {admitted[1]} {admitted[2]}": "",
             "git commit -m Hamsterdan demo: hero-review": "",
             "git diff --name-only origin/main...HEAD": changed,
