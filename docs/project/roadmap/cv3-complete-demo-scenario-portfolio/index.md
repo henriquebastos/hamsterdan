@@ -1,9 +1,9 @@
 ---
 code: CV3
 level: Value
-status: In Progress
-status_reason: CV3.DS1 and CV3.DS2 are accepted live; lifecycle and recovery qualification is next
-updated: 2026-08-02
+status: Completed
+status_reason: All deterministic, authority, collaboration, lifecycle, restart, redelivery, agent-failure, and provider-ambiguity scenarios are accepted live
+updated: 2026-08-03
 ---
 
 # CV3 — Complete demo scenario portfolio
@@ -24,8 +24,19 @@ provider and History evidence rather than inferred from unit tests.
    completed stale base, true conflict, reviews, threads, and draft transitions
    through real provider authority on isolated PR29-33.
 3. [CV3.DS3 — Lifecycle and recovery portfolio](cv3-ds3-lifecycle-and-recovery-portfolio.md)
-   is next and owns supersession, closure, restart, redelivery, and
-   agent/provider failures.
+   completed supersession, closure, restart, redelivery, and operation-scoped
+   agent/provider failure recovery on human-created PR39-44.
+
+## Accepted value evidence
+
+CV3's three Delivery Stories are accepted from fresh provider and durable
+History evidence. PR23-28 proved the deterministic scenario laboratory;
+PR29-33 proved real GitHub authority and collaboration gates; PR39-44 proved
+lifecycle and recovery boundaries. Every accepted Instance ended with no
+unresolved Activity, provider effects retained exact current-authority fencing
+and lookup-first recovery, and human, App, and credential-free agent identities
+remained separate. The final lifecycle inbox contained 1,220 terminal entries,
+zero pending, and zero failed entries.
 
 ## Done condition
 

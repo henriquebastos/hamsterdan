@@ -309,9 +309,13 @@ def test_secret_environment_and_url_credentials_are_stripped(
     monkeypatch.setenv("GH_TOKEN", "do-not-pass")
     monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "do-not-pass")
     monkeypatch.setenv("MY_GITHUB_CREDENTIAL", "do-not-pass")
+    monkeypatch.setenv("HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS", "do-not-pass")
+    monkeypatch.setenv("HAMSTERDAN_GITHUB_HSBASTOS_HOSTS", "do-not-pass")
     argv = agent_script(
         tmp_path,
-        "assert not {'GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_APP_PRIVATE_KEY', 'MY_GITHUB_CREDENTIAL', 'DATABASE_URL_SECRET'} & os.environ.keys()\n"
+        "assert not {'GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_APP_PRIVATE_KEY', 'MY_GITHUB_CREDENTIAL', "
+        "'DATABASE_URL_SECRET', 'HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS', "
+        "'HAMSTERDAN_GITHUB_HSBASTOS_HOSTS'} & os.environ.keys()\n"
         "result={k:request[k] for k in ('repository','pull_request','epoch','head','base')}\n"
         "result.update(status='clear',findings=[],lineage=[]); (root/'.impetus/result.json').write_text(json.dumps(result))\n",
     )

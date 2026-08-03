@@ -32,8 +32,8 @@ install_gh_identity() {
 }
 
 echo "==> Installing project-scoped human GitHub operator identities"
-install_gh_identity HAMSTERDAN_GH_HENRIQUEBASTOS_HOSTS .amp/runtime/gh-henriquebastos
-install_gh_identity HAMSTERDAN_GH_HSBASTOS_HOSTS .amp/runtime/gh-hsbastos
-unset HAMSTERDAN_GH_HENRIQUEBASTOS_HOSTS HAMSTERDAN_GH_HSBASTOS_HOSTS
+install_gh_identity HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS .amp/runtime/gh-henriquebastos
+install_gh_identity HAMSTERDAN_GITHUB_HSBASTOS_HOSTS .amp/runtime/gh-hsbastos
+unset HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS HAMSTERDAN_GITHUB_HSBASTOS_HOSTS
 
 echo "==> Hamsterdan orb setup complete"

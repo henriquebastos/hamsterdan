@@ -7,10 +7,10 @@ Completed baseline: [CV1 — Independently identifiable PR-readiness application
 
 Completed conversational delivery: [CV2 — Conversational PR interaction](cv2-conversational-pr-interaction/index.md).
 
-Current value: [CV3 — Complete demo scenario portfolio](cv3-complete-demo-scenario-portfolio/index.md).
+Completed scenario portfolio: [CV3 — Complete demo scenario portfolio](cv3-complete-demo-scenario-portfolio/index.md).
 [CV3.DS1 — Deterministic scenario laboratory](cv3-complete-demo-scenario-portfolio/cv3-ds1-deterministic-scenario-laboratory.md)
 and
 [CV3.DS2 — Authority and collaboration gates](cv3-complete-demo-scenario-portfolio/cv3-ds2-authority-and-collaboration-gates.md)
-are accepted live; the current delivery is
-[CV3.DS3 — Lifecycle and recovery portfolio](cv3-complete-demo-scenario-portfolio/cv3-ds3-lifecycle-and-recovery-portfolio.md).
-CV3.DS3 is qualified locally and in progress pending fresh live evidence.
+and
+[CV3.DS3 — Lifecycle and recovery portfolio](cv3-complete-demo-scenario-portfolio/cv3-ds3-lifecycle-and-recovery-portfolio.md)
+are accepted live; CV3 is completed.

@@ -1,7 +1,8 @@
 ---
-status: Accepted
+status: Resolved
 owner: CV3.DS3
 observed: 2026-08-02
+resolved: 2026-08-03
 ---
 
 # Non-terminal unresolved activities can churn reconciliation
@@ -28,15 +29,34 @@ adds the terminal failure pair for a previously unresolved occurrence. The
 replacement is installed atomically in both host and authority lease, after
 which sibling Activities continue draining. Integration coverage reproduces
 the terminal failure with a sibling dashboard effect and proves one visible
-effect and no later append. This closes the source-code uncertainty but not the
-live debt: PR20 must still be inspected through deployment custody before and
-after a normal corrected sweep. A drained inbox alone remains insufficient.
+effect and no later append. This closed the source-code uncertainty; live
+custody evidence was still required because a drained inbox alone was
+insufficient.
 
 After deploying CV3.DS3 commit `c67e777`, the bounded PR20 inspection reported
 756 records, 33 requested Activities, 32 completed, one terminal
 `ActivityFailed`/`FiringFailed` pair, and zero unresolved Activities. Its inbox
 entries were all terminal. This is compatible with the new recovery contract,
-but there is no retained before-deployment History projection proving the exact
-transition from the historically churning state. Keep the debt open: current
-drainage proves neither that earlier retries used this correction nor that the
-same source condition has been live-reproduced without duplicate effects.
+but the initial report had not yet retained the before-deployment projection
+needed to prove stability across deployment. The later custody pass recovered
+that baseline and completed the comparison recorded below.
+
+## Resolution
+
+The source condition is now bounded by a real persisted-History integration
+regression: recovery accepts only an unchanged canonical prefix followed by the
+exact terminal pair for a previously unresolved occurrence, atomically replaces
+both Engine custodians, continues sibling work, publishes one visible effect,
+and makes no later append. Divergent or unproven replacement History remains
+closed.
+
+PR20's projection was captured before deployment and remained byte-count and
+instant stable after deployment, normal sweep, supervised restart, and the full
+PR39-44 qualification: 756 records, 33 requested, 32 completed, one explicit
+`ActivityFailed`/`FiringFailed` pair, and zero unresolved Activities. Its 31
+deliveries remained terminal with no retry churn. Fresh DS3 lifecycle and fault
+Instances drained with no unresolved Activity or duplicate effect. The exact
+historical four-request intermediate state no longer exists and was not
+manufactured by editing History; the corrected regression plus unchanged live
+terminal projection satisfy the recovery obligation without a cache-eviction
+or synthetic no-progress heuristic.

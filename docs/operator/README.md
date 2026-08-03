@@ -183,8 +183,8 @@ scripts/hamsterdan-demo inspect --pr <number>
 ```
 
 Qualification orbs receive the two human operator sessions from Amp project
-secrets `HAMSTERDAN_GH_HENRIQUEBASTOS_HOSTS` and
-`HAMSTERDAN_GH_HSBASTOS_HOSTS`. `.agents/setup` writes them only to ignored,
+secrets `HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS` and
+`HAMSTERDAN_GITHUB_HSBASTOS_HOSTS`. `.agents/setup` writes them only to ignored,
 mode-`0700` identity roots under `.amp/runtime/`, with mode-`0600` files. Human
 commands must bypass Amp's injected `gh` wrapper and select one identity
 explicitly:
@@ -302,7 +302,8 @@ manually, force-push, bypass protection, or edit History.
 For every transition preserve PR and visible effect URLs, exact SHAs, bounded
 inspection JSON, Actions run IDs/conclusions, History projection, unresolved
 Activity count, and duplicate-effect assessment. Keep PR14/15 and PR23-28
-untouched. PR20 retry churn remains CV3.DS3 debt and is not acceptance evidence.
+untouched. PR20's historical retry churn was resolved under CV3.DS3; its drained
+state alone was not used as acceptance evidence.
 
 The accepted CV3.DS2 portfolio used branch-only ruleset `20242556` and PR29-33.
 PR29 was the one reviewed base merge. PR30 proved strict stale-base update, PR31
