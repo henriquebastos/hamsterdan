@@ -36,6 +36,34 @@ def test_complete_fence_uses_effect_payload_and_readiness_command() -> None:
     assert calls == [(2, "h", "op", "b", "p"), (3, "h2", "op2", "b2", "p2")]
 
 
+def test_readiness_replay_accepts_the_exact_legacy_voice_payload() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.current_fence = lambda *args: None
+    command = ReadinessCommand(3, "a" * 40, "readiness-operation", "b" * 40, "policy")
+    marker = f"<!-- hamsterdan:readiness operation={command.operation} head={command.head} -->"
+    legacy = "## Hamsterdan readiness advisory\n\nAll observed gates are ready. Advisory only; Hamsterdan does not merge PRs."
+
+    class Publisher:
+        compatible: ClassVar[tuple[str, ...] | None] = None
+
+        def marker(self, kind, operation, head):
+            return marker
+
+        def _find(self, expected_marker):
+            return {"id": 1, "body": f"{legacy}\n\n{marker}", "html_url": "url"}
+
+        def immutable(self, kind, operation, epoch, head, body, *, compatible_bodies=()):
+            self.compatible = compatible_bodies
+            return PublicationResult("existing", CommentReference(1, "url"))
+
+    operations.publisher = Publisher()
+
+    result = operations.readiness_publish(command)
+
+    assert result.ok
+    assert operations.publisher.compatible == (legacy,)
+
+
 def test_dashboard_projects_current_gates_instead_of_latched_announcement() -> None:
     ready = Control(
         "repo",
@@ -83,7 +111,9 @@ def test_conversation_gate_projection_and_status_override_latched_lifecycle_deta
 
     assert gates["overall"] == {"name": "overall", "ready": True, "blocker": ""}
     assert gates["actions"] == {"name": "actions", "ready": True, "state": "flaky_green"}
-    assert PrReadinessActivities._status(asdict(ready)) == "Readiness is ready; no current blockers are observed."
+    assert PrReadinessActivities._status(asdict(ready)) == (
+        "Ready: every observed gate is clear. Clean. I'll keep one paw on the wheel."
+    )
 
 
 def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog) -> None:
@@ -583,7 +613,9 @@ def test_one_coordinated_review_publishes_multiple_findings_with_one_authority_l
 
         def finding(self, operation, epoch, head, body, **kwargs):
             self.published.append((operation, epoch, head, body, kwargs))
-            return PublicationResult("created", CommentReference(len(self.published), f"url-{len(self.published)}"))
+            return PublicationResult(
+                "created", CommentReference(len(self.published), f"url-{len(self.published)}"), inline=True
+            )
 
     operations.publisher = Publisher()
     findings = [
@@ -594,6 +626,8 @@ def test_one_coordinated_review_publishes_multiple_findings_with_one_authority_l
             "evidence": "Exact evidence",
             "path": "file.py",
             "line": index,
+            "related_locations": [],
+            "suggestion": "",
         }
         for index, identity in enumerate(("one", "two"), 1)
     ]
@@ -608,11 +642,15 @@ def test_one_coordinated_review_publishes_multiple_findings_with_one_authority_l
     result = operations.finding_publish(work)
 
     assert result.ok and result.references == [
-        {"finding_id": "one", "url": "url-1"},
-        {"finding_id": "two", "url": "url-2"},
+        {"finding_id": "one", "url": "url-1", "inline": True},
+        {"finding_id": "two", "url": "url-2", "inline": True},
     ]
     assert len(operations.publisher.published) == 2
     assert all(item[-1]["authority_operation"] == "finding-operation" for item in operations.publisher.published)
+    assert [(item[-1]["path"], item[-1]["line"]) for item in operations.publisher.published] == [
+        ("file.py", 1),
+        ("file.py", 2),
+    ]
     assert fences == [(2, "a" * 40, "finding-operation", "b" * 40, "policy")]
 
 
@@ -767,7 +805,8 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
 
     assert len(result.intents) == 1
     assert result.intents[0]["kind"] == "reply"
-    assert "could not interpret" in result.intents[0]["arguments"]["message"]
+    assert "couldn't interpret" in result.intents[0]["arguments"]["message"]
+    assert "no workflow change" in result.intents[0]["arguments"]["message"]
 
 
 def test_confirmation_requires_exact_human_text_pending_arguments_and_current_fence() -> None:

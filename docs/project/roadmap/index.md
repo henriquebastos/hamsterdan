@@ -14,3 +14,7 @@ and
 and
 [CV3.DS3 — Lifecycle and recovery portfolio](cv3-complete-demo-scenario-portfolio/cv3-ds3-lifecycle-and-recovery-portfolio.md)
 are accepted live; CV3 is completed.
+
+Active hero delivery: [CV4 — Cohesive three-actor hero journey](cv4-cohesive-hero-journey/index.md).
+[CV4.DS1 — Native review and hero rehearsal](cv4-cohesive-hero-journey/cv4-ds1-native-review-and-hero-rehearsal.md)
+is qualified locally and awaiting deployment plus live three-actor acceptance.

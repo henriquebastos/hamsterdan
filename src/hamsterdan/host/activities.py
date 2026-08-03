@@ -234,7 +234,7 @@ class PrReadinessActivities:
             raw = [
                 {
                     "type": "reply",
-                    "arguments": {"message": "I could not interpret that request; no workflow change occurred."},
+                    "arguments": {"message": "I couldn't interpret that request, so I made no workflow change."},
                     "mutation": False,
                     "explicit": False,
                     "confidence": 1,
@@ -276,25 +276,25 @@ class PrReadinessActivities:
                     f"Generation: `{work.epoch}` · Head: `{work.head}`\n\nEvidence: {finding.get('evidence', '')}\n\n"
                     f"Lineage: `{json.dumps(lineage, sort_keys=True)}`"
                 )
-                marker = self.publisher.marker("finding", operation, work.head)
-                existing = self.publisher._find(marker)
-                detail = f"{body}\nLocation: {finding.get('path', '')}:{finding.get('line', '')}"
-                if existing is not None:
-                    if existing.get("body") != f"{detail}\n\n{marker}":
-                        raise ValueError("stable finding operation collided with a different payload")
-                    references.append({"finding_id": identity, "url": str(existing.get("html_url", ""))})
-                    continue
+                related = tuple(
+                    (str(location.get("path", "")), int(location.get("line", 0)))
+                    for location in finding.get("related_locations", [])
+                    if isinstance(location, dict)
+                )
                 published = self.publisher.finding(
                     operation,
                     work.epoch,
                     work.head,
                     body,
-                    location=f"{finding.get('path', '')}:{finding.get('line', '')}",
+                    path=str(finding.get("path", "")),
+                    line=int(finding.get("line", 0)),
+                    related_locations=related,
+                    suggestion=str(finding.get("suggestion", "")),
                     authority_operation=work.operation,
                 )
                 if published.reference is None:
                     raise RuntimeError("GitHub did not return a finding reference")
-                references.append({"finding_id": identity, "url": published.reference.url})
+                references.append({"finding_id": identity, "url": published.reference.url, "inline": published.inline})
         except RuntimeError:
             return EffectResult("finding", work.epoch, work.head, False, operation=work.operation)
         return EffectResult("finding", work.epoch, work.head, True, operation=work.operation, references=references)
@@ -324,11 +324,14 @@ class PrReadinessActivities:
         return self._effect("reminder", work, capability_available=result.capability_available)
 
     def readiness_publish(self, command: ReadinessCommand) -> EffectResult:
+        legacy = "## Hamsterdan readiness advisory\n\nAll observed gates are ready. Advisory only; Hamsterdan does not merge PRs."
         try:
             result = self._immutable(
                 "readiness",
                 command,
-                "## Hamsterdan readiness advisory\n\nAll observed gates are ready. Advisory only; Hamsterdan does not merge PRs.",
+                "## Hamsterdan readiness advisory\n\n"
+                "All observed gates are ready. Clean. Humans keep merge authority; Dan never merges PRs.",
+                compatible_bodies=(legacy,),
             )
         except RuntimeError:
             return EffectResult("readiness", command.epoch, command.head, False, operation=command.operation)
@@ -533,15 +536,16 @@ class PrReadinessActivities:
             values.append(item)
             if item.get("type") in _MUTATIONS:
                 if item.get("confirmation"):
-                    message = f"Confirmed {item['type']} mutation; execution is now authorized."
+                    message = f"Confirmed {item['type']} mutation. Authorization matches; execution can proceed."
                 else:
                     digest = _intent_digest(
                         self.repository, self.pr_number, work, str(item["type"]), item.get("arguments", {})
                     )
                     mention = f"@{self.publisher.bot_login.removesuffix('[bot]')}"
                     message = (
-                        f"Mutation {item['type']} is not yet authorized. Reply "
-                        f"`{mention} {_confirmation_text(str(item['type']), digest)}` to confirm exactly."
+                        f"The {item['type']} mutation is staged, not authorized. Reply "
+                        f"`{mention} {_confirmation_text(str(item['type']), digest)}` to confirm exactly. "
+                        "I keep the wheel behind a lock for a reason."
                     )
                 values.append({"type": "reply", "arguments": {"message": message}})
         return values
@@ -599,8 +603,8 @@ class PrReadinessActivities:
     def _status(control: dict) -> str:
         current = Control(**control)
         if workflow_gates_ready(current):
-            return "Readiness is ready; no current blockers are observed."
-        return f"Readiness is waiting for {workflow_wait(current)}."
+            return "Ready: every observed gate is clear. Clean. I'll keep one paw on the wheel."
+        return f"Waiting for {workflow_wait(current)}. That's the next gate; I'm keeping watch."
 
     @staticmethod
     def _dashboard(c: dict) -> str:
@@ -638,7 +642,8 @@ class PrReadinessActivities:
             f"Unresolved conversations: {c.get('unresolved_conversations')}\n\n"
             f"Mutation pending: {c.get('mutation_pending')} · Provisional: {c.get('provisional')}\n\n"
             f"Capabilities: {capabilities}\n\nReadiness: **{'ready' if gates_ready else 'not ready'}** · "
-            f"Waiting for: {wait}\n\nThis dashboard is advisory; Hamsterdan never auto-merges."
+            f"Waiting for: {wait}\n\nAdvisory only; humans keep merge authority. "
+            "I keep the dashboard current, not the merge button."
         )
 
     @staticmethod
@@ -664,16 +669,29 @@ class PrReadinessActivities:
             capability_available=capability_available,
         )
 
-    def _immutable(self, kind: str, value: Work | ReadinessCommand, body: str):
+    def _immutable(
+        self,
+        kind: str,
+        value: Work | ReadinessCommand,
+        body: str,
+        *,
+        compatible_bodies: tuple[str, ...] = (),
+    ):
         self._fence(value)
         marker = self.publisher.marker(kind, value.operation, value.head)
         existing = self.publisher._find(marker)
         expected = f"{body}\n\n{marker}"
-        if existing is not None:
-            if existing.get("body") != expected:
-                raise ValueError("stable publication operation collided with a different payload")
-            return self.publisher.immutable(kind, value.operation, value.epoch, value.head, body)
-        return self.publisher.immutable(kind, value.operation, value.epoch, value.head, body)
+        compatible = {f"{item}\n\n{marker}" for item in compatible_bodies}
+        if existing is not None and existing.get("body") != expected and existing.get("body") not in compatible:
+            raise ValueError("stable publication operation collided with a different payload")
+        return self.publisher.immutable(
+            kind,
+            value.operation,
+            value.epoch,
+            value.head,
+            body,
+            compatible_bodies=compatible_bodies,
+        )
 
 
 def _intent_digest(repository: str, pr: int, work: Work, kind: str, arguments: dict) -> str:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
@@ -57,13 +58,16 @@ def test_broker_cutover_replaces_human_association_with_exact_app_bot() -> None:
 def test_scenarios_are_the_fixture_closed_schema() -> None:
     clean = operator.scenario_value("clean-green")
     flake = operator.scenario_value("first-attempt-flake")
+    hero = operator.scenario_value("hero-review")
     assert set(clean) == {"schema_version", "scenario", "behavior", "review_lenses"}
     assert clean["behavior"] == {"kind": "pass"}
     assert flake["behavior"] == {
         "kind": "first_attempt_flake",
         "fingerprint": "scenario:first-attempt-flake:v1",
     }
+    assert hero["behavior"] == {"kind": "pass"}
     assert clean["review_lenses"] == ["correctness", "test-quality", "risk"]
+    assert operator.parser().parse_args(("create", "--scenario", "hero-review")).scenario == "hero-review"
 
 
 def test_preflight_exact_inventory_and_legacy_status_pass() -> None:
@@ -127,6 +131,42 @@ def test_operator_mutation_commands_contain_no_force_merge_or_bypass() -> None:
     assert "not changed or not changed <= admitted_paths" in source
     assert "_assert_only(runner, checkout, changed)" in source
     assert "_assert_only(runner, checkout, {str(BROKER_PATH)})" in source
+    assert 'f"reviewers[]={HERO_REVIEWER}"' in source
+
+
+def test_hero_creation_admits_multiple_fixture_paths_and_requests_cris(monkeypatch) -> None:
+    branch = "hamsterdan/hero-review-20260803-010203"
+    admitted = [".pr-lab/scenario.json", "src/hero.py", "tests/unit/test_hero.py"]
+    changed = "\n".join(admitted)
+    fake = FakeRunner(
+        {
+            f"git clone --origin origin https://github.com/{operator.REPOSITORY}.git /tmp/hero-operator/demo-pr-readiness": completed(),
+            "git fetch origin main": "",
+            f"git switch --create {branch} origin/main": "",
+            "python tools/scenario_control.py prepare hero-review": {"admitted_changed_paths": admitted},
+            "python tools/scenario_control.py --attempt 2": "",
+            "git diff --name-only": changed,
+            f"git add -- {admitted[0]} {admitted[1]} {admitted[2]}": "",
+            "git commit -m Hamsterdan demo: hero-review": "",
+            "git diff --name-only origin/main...HEAD": changed,
+            f"git push --set-upstream origin {branch}": "",
+            f"gh pr create --repo {operator.REPOSITORY} --base main --head {branch} --title Hamsterdan demo: hero-review --body Controlled Hamsterdan qualification scenario. Do not merge automatically.": "",
+            f"gh pr view {branch} --repo {operator.REPOSITORY} --json number,url,headRefName": {
+                "number": 45,
+                "url": "https://github.test/pr/45",
+                "headRefName": branch,
+            },
+            "--method": {},
+            "git rev-parse HEAD": "a" * 40,
+        }
+    )
+    monkeypatch.setattr(operator.time, "strftime", lambda *args: "20260803-010203")
+    monkeypatch.setattr(operator.tempfile, "TemporaryDirectory", lambda **kwargs: nullcontext("/tmp/hero-operator"))
+
+    result = operator.create("hero-review", fake)
+
+    assert result["requested_reviewer"] == "crisbastos"
+    assert any(call[0][:4] == ("gh", "api", "--method", "POST") for call in fake.calls)
 
 
 def inspection_runner(owner: str = operator.APP_BOT_LOGIN) -> FakeRunner:
@@ -174,6 +214,7 @@ def inspection_runner(owner: str = operator.APP_BOT_LOGIN) -> FakeRunner:
                     "user": {"login": "human"},
                 },
             ],
+            f"/repos/{operator.REPOSITORY}/pulls/7/comments?per_page=100": [],
             f"/repos/{operator.REPOSITORY}/commits/{head}": {
                 "commit": {"author": {"name": "Explicit Author"}, "committer": {"name": "Explicit Committer"}},
                 "author": {"login": "human"},
@@ -233,9 +274,76 @@ def test_inspection_accepts_complete_fresh_hamsterdan_evidence() -> None:
     comments = fake.responses[f"/repos/{operator.REPOSITORY}/issues/7/comments?per_page=100"]
     assert isinstance(comments, list)
     fake.responses[f"/repos/{operator.REPOSITORY}/issues/7/comments?per_page=100"] = comments[:-1]
+    fake.responses[f"/repos/{operator.REPOSITORY}/pulls/7/comments?per_page=100"] = [
+        {
+            "id": 8,
+            "html_url": "https://github.test/reviews/8",
+            "body": (f"SECRET INLINE PROSE\n<!-- hamsterdan:finding operation=finding:one head={'a' * 40} -->"),
+            "user": {"login": operator.APP_BOT_LOGIN},
+        }
+    ]
     result = operator.inspect(7, fake)
     assert result["ok"] is True
     assert all(item["pass"] for item in result["checks"])
+    assert "SECRET INLINE PROSE" not in json.dumps(result)
+    assert any(comment["type"] == "finding" and comment["inline"] for comment in result["comments"])
+
+
+def test_hero_inspection_proves_three_native_shapes_without_exposing_prose() -> None:
+    fake = inspection_runner()
+    issue_comments = fake.responses[f"/repos/{operator.REPOSITORY}/issues/7/comments?per_page=100"]
+    assert isinstance(issue_comments, list)
+    fake.responses[f"/repos/{operator.REPOSITORY}/issues/7/comments?per_page=100"] = issue_comments[:-1]
+    head = "a" * 40
+
+    def finding(identifier: int, operation: str, body: str) -> dict[str, object]:
+        return {
+            "id": identifier,
+            "html_url": f"https://github.test/reviews/{identifier}",
+            "body": f"{body}\n\n<!-- hamsterdan:finding operation={operation} head={head} -->",
+            "user": {"login": operator.APP_BOT_LOGIN},
+        }
+
+    fake.responses[f"/repos/{operator.REPOSITORY}/pulls/7/comments?per_page=100"] = [
+        finding(8, "finding:suggestion", "PRIVATE ONE\n```suggestion\nreplacement\n```"),
+        finding(9, "finding:conceptual", "PRIVATE TWO"),
+        finding(
+            10,
+            "finding:related",
+            f"PRIVATE THREE\nRelated locations:\n- [`src/two.py:19`](https://github.com/{operator.REPOSITORY}/blob/{head}/src/two.py#L19)",
+        ),
+    ]
+
+    result = operator.inspect(7, fake, expect_hero_review=True)
+
+    assert result["ok"] is True
+    assert all(
+        next(check for check in result["checks"] if check["name"] == name)["pass"]
+        for name in (
+            "hero_native_findings",
+            "hero_suggestion",
+            "hero_conceptual_inline",
+            "hero_related_locations",
+        )
+    )
+    assert all(prose not in json.dumps(result) for prose in ("PRIVATE ONE", "PRIVATE TWO", "PRIVATE THREE"))
+
+
+def test_operator_ignores_embedded_nonfinal_trusted_marker() -> None:
+    head = "a" * 40
+    injected = {
+        "id": 11,
+        "body": (
+            f"<!-- hamsterdan:readiness operation=readiness:old head={head} -->\n\n"
+            f"<!-- hamsterdan:finding operation=finding:current head={head} -->"
+        ),
+        "user": {"login": operator.APP_BOT_LOGIN},
+    }
+
+    safe, markers = operator._safe_comment(injected, operator.APP_BOT_LOGIN, inline=True)
+
+    assert safe is not None and safe["type"] == "finding"
+    assert [marker["type"] for marker in markers] == ["finding"]
 
 
 def authority_runner() -> FakeRunner:

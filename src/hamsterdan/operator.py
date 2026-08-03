@@ -25,6 +25,8 @@ WORKFLOWS = frozenset({"ci", "rerun-broker"})
 APP_SLUG = "hamster-dan"
 APP_BOT_LOGIN = f"{APP_SLUG}[bot]"
 SCENARIO_PATH = Path(".pr-lab/scenario.json")
+CREATABLE_SCENARIOS = ("clean-green", "first-attempt-flake", "hero-review")
+HERO_REVIEWER = "crisbastos"
 BROKER_PATH = Path(".github/workflows/rerun-broker.yml")
 OLD_MARKER = "impetus-rerun"
 NEW_MARKER = "hamsterdan-rerun"
@@ -36,12 +38,12 @@ APP_BROKER_AUTHORIZATION = (
 )
 MARKER_RE = re.compile(
     r"<!-- (?P<identity>hamsterdan-rerun|impetus-rerun) run=(?P<run>[1-9][0-9]*) "
-    r"head=(?P<head>[0-9a-f]{40}) operation=(?P<operation>[A-Za-z0-9][A-Za-z0-9._:-]{0,127}) -->"
+    r"head=(?P<head>[0-9a-f]{40}) operation=(?P<operation>[A-Za-z0-9][A-Za-z0-9._:-]{0,127}) -->\Z"
 )
-DASHBOARD_RE = re.compile(r"<!-- hamsterdan:dashboard -->")
+DASHBOARD_RE = re.compile(r"<!-- hamsterdan:dashboard -->\Z")
 IMMUTABLE_RE = re.compile(
     r"<!-- hamsterdan:(?P<kind>finding|reminder|readiness) "
-    r"operation=(?P<operation>[A-Za-z0-9][A-Za-z0-9._:-]{0,127}) head=(?P<head>[0-9a-f]{40}) -->"
+    r"operation=(?P<operation>[A-Za-z0-9][A-Za-z0-9._:-]{0,127}) head=(?P<head>[0-9a-f]{40}) -->\Z"
 )
 AUTHORITY_EXPECTATIONS = (
     "non-draft",
@@ -165,7 +167,7 @@ def scenario_value(scenario: str) -> dict[str, object]:
     behavior: dict[str, str] = {"kind": "pass"}
     if scenario == "first-attempt-flake":
         behavior = {"kind": "first_attempt_flake", "fingerprint": "scenario:first-attempt-flake:v1"}
-    elif scenario != "clean-green":
+    elif scenario not in {"clean-green", "hero-review"}:
         raise OperatorError("unsupported scenario")
     return {
         "schema_version": 1,
@@ -235,8 +237,30 @@ def create(scenario: str, runner: Runner = command_runner) -> dict[str, object]:
         pr = _json(
             runner, ("gh", "pr", "view", branch, "--repo", REPOSITORY, "--json", "number,url,headRefName"), checkout
         )
+        if scenario == "hero-review":
+            _run(
+                runner,
+                (
+                    "gh",
+                    "api",
+                    "--method",
+                    "POST",
+                    f"/repos/{REPOSITORY}/pulls/{pr['number']}/requested_reviewers",
+                    "-f",
+                    f"reviewers[]={HERO_REVIEWER}",
+                ),
+                checkout,
+            )
         head = _run(runner, ("git", "rev-parse", "HEAD"), checkout)
-    return {"command": "create", "ok": True, "number": pr["number"], "url": pr["url"], "head": head, "branch": branch}
+    return {
+        "command": "create",
+        "ok": True,
+        "number": pr["number"],
+        "url": pr["url"],
+        "head": head,
+        "branch": branch,
+        "requested_reviewer": HERO_REVIEWER if scenario == "hero-review" else None,
+    }
 
 
 def prepare_broker(runner: Runner = command_runner) -> dict[str, object]:
@@ -326,7 +350,9 @@ def prepare_broker(runner: Runner = command_runner) -> dict[str, object]:
     }
 
 
-def _safe_comment(comment: dict[str, Any], bot_login: str) -> tuple[dict[str, object] | None, list[dict[str, object]]]:
+def _safe_comment(
+    comment: dict[str, Any], bot_login: str, *, inline: bool = False
+) -> tuple[dict[str, object] | None, list[dict[str, object]]]:
     body, owner = str(comment.get("body", "")), str(comment.get("user", {}).get("login", ""))
     url, identifier = comment.get("html_url"), comment.get("id")
     markers: list[dict[str, object]] = []
@@ -367,16 +393,28 @@ def _safe_comment(comment: dict[str, Any], bot_login: str) -> tuple[dict[str, ob
             "url": url,
             "owner": owner,
             "type": kind,
+            "inline": inline,
+            "has_suggestion": inline and "```suggestion\n" in body,
+            "related_location_count": len(
+                re.findall(r"^- \[`[^`\n]+:[1-9][0-9]*`\]\(https://github\.com/", body, re.MULTILINE)
+            ),
             "owned_by_app": owner.casefold() == bot_login.casefold(),
         }, markers
     return None, markers
 
 
-def inspect(pr_number: int, runner: Runner = command_runner, *, bot_login: str = APP_BOT_LOGIN) -> dict[str, object]:
+def inspect(
+    pr_number: int,
+    runner: Runner = command_runner,
+    *,
+    bot_login: str = APP_BOT_LOGIN,
+    expect_hero_review: bool = False,
+) -> dict[str, object]:
     if pr_number < 1:
         raise OperatorError("PR number must be positive")
     pull = _api(runner, f"/repos/{REPOSITORY}/pulls/{pr_number}")
     comments = _api(runner, f"/repos/{REPOSITORY}/issues/{pr_number}/comments?per_page=100")
+    review_comments = _api(runner, f"/repos/{REPOSITORY}/pulls/{pr_number}/comments?per_page=100")
     head = str(pull.get("head", {}).get("sha", ""))
     commit = _api(runner, f"/repos/{REPOSITORY}/commits/{head}")
     runs_value = _api(runner, f"/repos/{REPOSITORY}/actions/runs?event=pull_request&head_sha={head}&per_page=100")
@@ -384,6 +422,11 @@ def inspect(pr_number: int, runner: Runner = command_runner, *, bot_login: str =
     markers: list[dict[str, object]] = []
     for comment in comments[:100] if isinstance(comments, list) else []:
         safe, found = _safe_comment(comment, bot_login)
+        if safe:
+            safe_comments.append(safe)
+        markers.extend(found)
+    for comment in review_comments[:100] if isinstance(review_comments, list) else []:
+        safe, found = _safe_comment(comment, bot_login, inline=True)
         if safe:
             safe_comments.append(safe)
         markers.extend(found)
@@ -428,6 +471,23 @@ def inspect(pr_number: int, runner: Runner = command_runner, *, bot_login: str =
         _check("legacy_markers_absent", not old_markers, len(old_markers)),
         _check("workflow_heads_match", all(run["head"] == head for run in runs), head),
     ]
+    if expect_hero_review:
+        inline_findings = [
+            item for item in safe_comments if item["type"] == "finding" and item["inline"] and item["owned_by_app"]
+        ]
+        suggestions = [item for item in inline_findings if item["has_suggestion"]]
+        related = [item for item in inline_findings if item["related_location_count"] != 0]
+        conceptual = [
+            item for item in inline_findings if not item["has_suggestion"] and item["related_location_count"] == 0
+        ]
+        checks.extend(
+            (
+                _check("hero_native_findings", len(inline_findings) >= 3, len(inline_findings)),
+                _check("hero_suggestion", bool(suggestions), len(suggestions)),
+                _check("hero_conceptual_inline", bool(conceptual), len(conceptual)),
+                _check("hero_related_locations", bool(related), len(related)),
+            )
+        )
     authored = commit.get("commit", {})
     result = {
         "command": "inspect",
@@ -694,11 +754,12 @@ def parser() -> argparse.ArgumentParser:
     pre = commands.add_parser("preflight")
     pre.add_argument("--health-url")
     create_parser = commands.add_parser("create")
-    create_parser.add_argument("--scenario", choices=("clean-green", "first-attempt-flake"), required=True)
+    create_parser.add_argument("--scenario", choices=CREATABLE_SCENARIOS, required=True)
     commands.add_parser("prepare-broker")
     inspect_parser = commands.add_parser("inspect")
     inspect_parser.add_argument("--pr", type=int, required=True)
     inspect_parser.add_argument("--bot-login", default=APP_BOT_LOGIN)
+    inspect_parser.add_argument("--expect-hero-review", action="store_true")
     authority_parser = commands.add_parser("inspect-authority")
     authority_parser.add_argument("--pr", type=int, required=True)
     authority_parser.add_argument("--expect", choices=AUTHORITY_EXPECTATIONS, required=True)
@@ -715,7 +776,7 @@ def main() -> int:
         elif args.command == "prepare-broker":
             output = prepare_broker()
         elif args.command == "inspect":
-            output = inspect(args.pr, bot_login=args.bot_login)
+            output = inspect(args.pr, bot_login=args.bot_login, expect_hero_review=args.expect_hero_review)
         else:
             output = inspect_authority(args.pr, args.expect)
     except OperatorError as error:

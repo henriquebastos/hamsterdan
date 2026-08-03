@@ -2,14 +2,29 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol, cast
+from urllib.parse import quote
 
 from .gateway import GitHubAuthority
-from .models import ActionsRunSnapshot, CommentReference, GitHubBoundaryError, PublicationResult, Transport
+from .models import (
+    ActionsRunSnapshot,
+    CommentReference,
+    GitHubBoundaryError,
+    PublicationResult,
+    Transport,
+    WireResponse,
+)
 
 Fence = Callable[[str, int, int, str, str], None]
 EffectFault = Callable[[str, str, int, str, str], None]
+_MARKER_OPERATION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
+_HEAD = re.compile(r"[0-9a-f]{40}")
+_MARKER_KINDS = frozenset({"conversation", "finding", "readiness", "reminder"})
+_INLINE_UNAVAILABLE_MESSAGES = frozenset(
+    {"line is not in diff", "pull request review thread line must be part of the diff"}
+)
 
 
 class CommentPublisher:
@@ -37,9 +52,12 @@ class CommentPublisher:
         )
         self.root = f"/repos/{repository}/issues/{pr_number}/comments"
         self.edit_root = f"/repos/{repository}/issues/comments"
+        self.review_root = f"/repos/{repository}/pulls/{pr_number}/comments"
 
     @staticmethod
     def marker(kind: str, operation: str, head: str) -> str:
+        if kind not in _MARKER_KINDS or not _MARKER_OPERATION.fullmatch(operation) or not _HEAD.fullmatch(head):
+            raise ValueError("publication marker identity is malformed")
         return f"<!-- hamsterdan:{kind} operation={operation} head={head} -->"
 
     def _comments(self) -> tuple[dict[str, Any], ...]:
@@ -50,7 +68,20 @@ class CommentPublisher:
             (
                 item
                 for item in self._comments()
-                if _login(item) == self.bot_login and marker in str(item.get("body", ""))
+                if _login(item) == self.bot_login and _final_marker(str(item.get("body", "")), marker)
+            ),
+            None,
+        )
+
+    def _review_comments(self) -> tuple[dict[str, Any], ...]:
+        return self.transport.pages(f"{self.review_root}?per_page=100")
+
+    def _find_review(self, marker: str) -> Mapping[str, Any] | None:
+        return next(
+            (
+                item
+                for item in self._review_comments()
+                if _login(item) == self.bot_login and _final_marker(str(item.get("body", "")), marker)
             ),
             None,
         )
@@ -64,12 +95,14 @@ class CommentPublisher:
         body: str,
         *,
         authority_operation: str | None = None,
+        compatible_bodies: tuple[str, ...] = (),
     ) -> PublicationResult:
         marker = self.marker(kind, operation, head)
         payload = f"{body}\n\n{marker}"
+        compatible_payloads = {f"{value}\n\n{marker}" for value in compatible_bodies}
         existing = self._find(marker)
         if existing:
-            if existing.get("body") != payload:
+            if existing.get("body") != payload and existing.get("body") not in compatible_payloads:
                 raise ValueError("stable publication operation collided with a different payload")
             return PublicationResult("existing", _reference(existing))
         for attempt in range(2):
@@ -132,34 +165,135 @@ class CommentPublisher:
         head: str,
         text: str,
         *,
-        location: str = "",
+        path: str = "",
+        line: int = 0,
+        related_locations: tuple[tuple[str, int], ...] = (),
+        suggestion: str = "",
         link: str = "",
         authority_operation: str | None = None,
     ) -> PublicationResult:
-        detail = "\n".join(
+        marker = self.marker("finding", operation, head)
+        location = f"`{path}:{line}`" if path and line > 0 else ""
+        related = (
+            "Related locations:\n"
+            + "\n".join(
+                f"- [`{related_path}:{related_line}`]"
+                f"(https://github.com/{self.repository}/blob/{head}/{quote(related_path, safe='/')}#L{related_line})"
+                for related_path, related_line in related_locations
+            )
+            if related_locations
+            else ""
+        )
+        suggestion_block = f"```suggestion\n{suggestion}\n```" if suggestion else ""
+        detail = "\n\n".join(
             item
-            for item in (text, f"Location: {location}" if location else "", f"Link: {link}" if link else "")
+            for item in (
+                text,
+                f"Primary location: {location}" if location else "",
+                related,
+                suggestion_block,
+                f"Link: {link}" if link else "",
+            )
             if item
         )
-        result = self.immutable(
-            "finding",
-            operation,
-            epoch,
-            head,
-            detail,
-            authority_operation=authority_operation,
+        payload = f"{detail}\n\n{marker}"
+        legacy_detail = "\n".join(
+            item
+            for item in (text, f"Location: {path}:{line}" if location else "", f"Link: {link}" if link else "")
+            if item
         )
+        legacy_payload = f"{legacy_detail}\n\n{marker}"
+        existing_review = self._find_review(marker) if location else None
+        if existing_review is not None:
+            if existing_review.get("body") != payload:
+                raise ValueError("stable publication operation collided with a different payload")
+            return PublicationResult("existing", _reference(existing_review), inline=True)
+        existing_issue = self._find(marker)
+        if existing_issue is not None:
+            compatible_legacy = (
+                not suggestion and not related_locations and existing_issue.get("body") == legacy_payload
+            )
+            if existing_issue.get("body") != payload and not compatible_legacy:
+                raise ValueError("stable publication operation collided with a different payload")
+            return PublicationResult("existing", _reference(existing_issue), inline=False)
+        if location:
+            result = self._inline_finding(
+                operation,
+                epoch,
+                head,
+                detail,
+                path,
+                line,
+                authority_operation=authority_operation,
+            )
+            if result.capability_available:
+                return result
+        result = self.immutable("finding", operation, epoch, head, detail, authority_operation=authority_operation)
         return PublicationResult(result.status, result.reference, result.capability_available, inline=False)
+
+    def _inline_finding(
+        self,
+        operation: str,
+        epoch: int,
+        head: str,
+        body: str,
+        path: str,
+        line: int,
+        *,
+        authority_operation: str | None,
+    ) -> PublicationResult:
+        marker = self.marker("finding", operation, head)
+        payload = f"{body}\n\n{marker}"
+        for attempt in range(2):
+            self.fence(self.repository, self.pr_number, epoch, head, authority_operation or operation)
+            try:
+                if self.fault is not None:
+                    self.fault("before_call", self.repository, self.pr_number, "finding", operation)
+                response = self.transport.request(
+                    "POST",
+                    self.review_root,
+                    {"body": payload, "commit_id": head, "path": path, "line": line, "side": "RIGHT"},
+                )
+                if self.fault is not None:
+                    self.fault("after_call", self.repository, self.pr_number, "finding", operation)
+            except GitHubBoundaryError:
+                recovered = self._find_review(marker)
+                if recovered is not None:
+                    if recovered.get("body") != payload:
+                        raise ValueError("stable publication operation collided with a different payload")
+                    return PublicationResult("existing", _reference(recovered), inline=True)
+                if attempt:
+                    raise
+                continue
+            if response.status == 201 and isinstance(response.body, dict):
+                return PublicationResult("created", _reference(_response_mapping(response.body)), inline=True)
+            recovered = self._find_review(marker)
+            if recovered is not None:
+                if recovered.get("body") != payload:
+                    raise ValueError("stable publication operation collided with a different payload")
+                return PublicationResult("existing", _reference(recovered), inline=True)
+            if _inline_unavailable(response):
+                return PublicationResult("inline_unavailable", capability_available=False)
+            raise GitHubBoundaryError("GitHub did not prove inline finding publication")
+        raise AssertionError("bounded inline finding recovery exhausted without an outcome")
 
     def reminder(
         self, operation: str, epoch: int, head: str, *, reviewer: str | None, author: str, maintainer: str | None = None
     ) -> PublicationResult:
         target = reviewer or maintainer or author
-        action = "please review this PR" if reviewer else "please assign a reviewer for this PR"
+        action = "Please review this PR" if reviewer else "Please assign a reviewer for this PR"
         dashboard = self._find("<!-- hamsterdan:dashboard -->")
         state = str(dashboard.get("html_url", "")) if dashboard is not None else ""
         link = f" [See current readiness state.]({state})" if state else ""
-        return self.immutable("reminder", operation, epoch, head, f"@{target.lstrip('@')}, {action}.{link}")
+        legacy = f"@{target.lstrip('@')}, {'please review this PR' if reviewer else 'please assign a reviewer for this PR'}.{link}"
+        return self.immutable(
+            "reminder",
+            operation,
+            epoch,
+            head,
+            f"@{target.lstrip('@')}, this PR and I have gotten to know each other quite well. {action}.{link}",
+            compatible_bodies=(legacy,),
+        )
 
     @property
     def reviewer_assignment_available(self) -> bool:
@@ -172,6 +306,17 @@ def _reference(value: Mapping[str, Any]) -> CommentReference:
 
 def _response_mapping(value: object) -> Mapping[str, Any]:
     return cast(Mapping[str, Any], value)
+
+
+def _inline_unavailable(response: WireResponse) -> bool:
+    if response.status != 422 or not isinstance(response.body, Mapping):
+        return False
+    message = response.body.get("message")
+    return isinstance(message, str) and message.strip().casefold() in _INLINE_UNAVAILABLE_MESSAGES
+
+
+def _final_marker(body: str, marker: str) -> bool:
+    return body == marker or body.endswith(f"\n\n{marker}")
 
 
 def _login(value: Mapping[str, Any]) -> str | None:

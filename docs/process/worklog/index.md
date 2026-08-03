@@ -15,3 +15,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-02 — Lifecycle and recovery portfolio qualified locally](entries/2026-08-02T2025Z-lifecycle-and-recovery-portfolio-qualified-locally.md)
 - [2026-08-02 — Lifecycle recovery deployed; live qualification blocked](entries/2026-08-02T2113Z-lifecycle-recovery-deployed-qualification-blocked.md)
 - [2026-08-03 — Complete demo scenario portfolio accepted live](entries/2026-08-03T0003Z-complete-demo-scenario-portfolio-accepted-live.md)
+- [2026-08-03 — Native review hero qualified locally](entries/2026-08-03T0225Z-native-review-hero-qualified-locally.md)

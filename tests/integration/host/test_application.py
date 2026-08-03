@@ -295,7 +295,7 @@ def test_mention_conversation_uses_current_dashboard_and_exact_two_comment_confi
     authority.transport.comments.append({"id": 90, "body": "<!-- impetus:dashboard -->", "user": {"login": BOT}})
     subject.route_comment(delivery_id="status", comment_id=31, text="@hamster-dan How is this looking?", **common)
     assert runner.conversations == 1 and any(
-        "Readiness is ready; no current blockers" in x["body"] for x in authority.transport.comments
+        "Ready: every observed gate is clear" in x["body"] for x in authority.transport.comments
     )
     request = runner.requests[-1]
     assert request.comment_context["text"] == "How is this looking?"
@@ -318,7 +318,7 @@ def test_mention_conversation_uses_current_dashboard_and_exact_two_comment_confi
     assert runner.codes == 0
     control = subject.host.control  # type: ignore[union-attr]
     assert control is not None and control.mutation_pending
-    assert any("could not interpret" in comment["body"] for comment in authority.transport.comments)
+    assert any("couldn't interpret" in comment["body"] for comment in authority.transport.comments)
     subject.route_comment(
         delivery_id="wrong-digest",
         comment_id=34,

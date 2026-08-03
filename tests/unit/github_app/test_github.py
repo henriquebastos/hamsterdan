@@ -227,7 +227,12 @@ def test_dashboard_fences_immediately_before_create_and_does_not_append_on_patch
     assert fake.calls[-2][0] == "PAGES" and fake.calls[-1][0] == "POST"
 
     fake.page_values[f"{comments}?per_page=100"] = (
-        {"id": 4, "html_url": "url", "body": "old <!-- hamsterdan:dashboard -->", "user": {"login": "hamsterdan[bot]"}},
+        {
+            "id": 4,
+            "html_url": "url",
+            "body": "old\n\n<!-- hamsterdan:dashboard -->",
+            "user": {"login": "hamsterdan[bot]"},
+        },
     )
     fake.responses[("PATCH", "/repos/owner/repo/issues/comments/4")] = WireResponse(403, {"message": "denied"})
     result = publisher.dashboard("dash-2", 3, HEAD, "new")
@@ -441,14 +446,15 @@ def test_reminder_mentions_configured_reviewer_and_never_assigns() -> None:
         {
             "id": 9,
             "html_url": "https://github.invalid/pr/7#dashboard",
-            "body": "current <!-- hamsterdan:dashboard -->",
+            "body": "current\n\n<!-- hamsterdan:dashboard -->",
             "user": {"login": "hamsterdan[bot]"},
         },
     )
     fake.responses[("POST", comments)] = WireResponse(201, {"id": 1, "html_url": "url"})
     publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
     publisher.reminder("remind", 1, HEAD, reviewer="reviewer", author="author")
-    assert "@reviewer, please review" in str(fake.calls[-1][2]["body"])
+    assert "@reviewer, this PR and I have gotten to know each other quite well" in str(fake.calls[-1][2]["body"])
+    assert "Please review this PR" in str(fake.calls[-1][2]["body"])
     assert "[See current readiness state.](https://github.invalid/pr/7#dashboard)" in str(fake.calls[-1][2]["body"])
     assert publisher.reviewer_assignment_available is False
 
@@ -462,7 +468,8 @@ def test_reminder_asks_author_to_assign_without_inventing_a_reviewer() -> None:
 
     publisher.reminder("remind", 1, HEAD, reviewer=None, author="author")
 
-    assert "@author, please assign a reviewer" in str(fake.calls[-1][2]["body"])
+    assert "@author, this PR and I have gotten to know each other quite well" in str(fake.calls[-1][2]["body"])
+    assert "Please assign a reviewer" in str(fake.calls[-1][2]["body"])
 
 
 def test_finding_uses_distinct_publication_and_authority_operations() -> None:
@@ -483,6 +490,232 @@ def test_finding_uses_distinct_publication_and_authority_operations() -> None:
 
     assert fences == [("owner/repo", 7, 3, HEAD, "finding-activity")]
     assert "operation=finding-activity:finding-id" in str(fake.calls[-1][2]["body"])
+
+
+def test_finding_publishes_native_inline_suggestion_with_related_locations() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fake.responses[("POST", reviews)] = WireResponse(201, {"id": 8, "html_url": "inline-url"})
+    fences: list[tuple] = []
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append(args))
+
+    result = publisher.finding(
+        "finding-activity:finding-id",
+        3,
+        HEAD,
+        "Dan found one shared invariant wearing two different hats.",
+        path="src/one.py",
+        line=4,
+        related_locations=(("src/two.py", 19),),
+        suggestion="if state.is_ready:",
+        authority_operation="finding-activity",
+    )
+
+    assert result.status == "created" and result.inline
+    assert result.reference is not None and result.reference.url == "inline-url"
+    request = next(call for call in fake.calls if call[:2] == ("POST", reviews))
+    assert request[2] is not None
+    assert request[2]["commit_id"] == HEAD
+    assert request[2]["path"] == "src/one.py" and request[2]["line"] == 4 and request[2]["side"] == "RIGHT"
+    assert f"Related locations:\n- [`src/two.py:19`](https://github.com/owner/repo/blob/{HEAD}/src/two.py#L19)" in str(
+        request[2]["body"]
+    )
+    assert "```suggestion\nif state.is_ready:\n```" in str(request[2]["body"])
+    assert fences == [("owner/repo", 7, 3, HEAD, "finding-activity")]
+
+
+def test_definitive_inline_denial_falls_back_to_one_immutable_issue_comment() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fake.responses[("POST", reviews)] = WireResponse(422, {"message": "line is not in diff"})
+    fake.responses[("POST", issues)] = WireResponse(201, {"id": 9, "html_url": "issue-url"})
+    fences: list[tuple] = []
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append(args))
+
+    result = publisher.finding(
+        "finding-activity:finding-id",
+        3,
+        HEAD,
+        "Conceptual concern.",
+        path="src/one.py",
+        line=4,
+        authority_operation="finding-activity",
+    )
+
+    assert result.status == "created" and not result.inline
+    assert result.reference is not None and result.reference.url == "issue-url"
+    assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 1
+    assert len([call for call in fake.calls if call[:2] == ("POST", issues)]) == 1
+    assert fences == [
+        ("owner/repo", 7, 3, HEAD, "finding-activity"),
+        ("owner/repo", 7, 3, HEAD, "finding-activity"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        WireResponse(403, {"message": "Resource not accessible by integration"}),
+        WireResponse(404, {"message": "Not Found"}),
+        WireResponse(422, {"message": "Validation Failed", "errors": [{"field": "body", "code": "invalid"}]}),
+        WireResponse(422, {"message": "Validation Failed", "errors": [{"field": "line", "code": "invalid"}]}),
+    ],
+)
+def test_inline_authorization_or_payload_failure_does_not_fall_back(response: WireResponse) -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fake.responses[("POST", reviews)] = response
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    with pytest.raises(GitHubBoundaryError, match="did not prove inline"):
+        publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
+
+    assert not [call for call in fake.calls if call[:2] == ("POST", issues)]
+
+
+def test_ambiguous_accepted_inline_finding_recovers_without_a_second_mutation() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+
+    class AcceptedInline(FakeTransport):
+        def request(self, method: str, path: str, body=None) -> WireResponse:
+            self.calls.append((method, path, body))
+            assert method == "POST" and path == reviews and body is not None
+            item = {"id": 10, "html_url": "inline-url", "body": body["body"], "user": {"login": "hamsterdan[bot]"}}
+            self.page_values[f"{reviews}?per_page=100"] = (item,)
+            return WireResponse(201, item)
+
+    spent = False
+
+    def fault(phase, repository, pull_request, kind, operation):
+        nonlocal spent
+        if phase == "after_call" and not spent:
+            spent = True
+            raise GitHubBoundaryError("qualified ambiguous outcome")
+
+    fake = AcceptedInline()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None, fault)
+
+    result = publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
+
+    assert result.status == "existing" and result.inline
+    assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 1
+
+
+def test_inline_before_call_fault_retries_only_after_a_fresh_fence() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fake.responses[("POST", reviews)] = WireResponse(201, {"id": 11, "html_url": "inline-url"})
+    fences: list[tuple] = []
+    spent = False
+
+    def fault(phase, repository, pull_request, kind, operation):
+        nonlocal spent
+        if phase == "before_call" and not spent:
+            spent = True
+            raise GitHubBoundaryError("qualified pre-call failure")
+
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append(args), fault)
+
+    result = publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
+
+    assert result.status == "created" and result.inline
+    assert len(fences) == 2
+    assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 1
+
+
+def test_inline_retry_stops_when_the_fresh_second_fence_rejects_authority() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fences = 0
+    spent = False
+
+    def fence(*args):
+        nonlocal fences
+        fences += 1
+        if fences == 2:
+            raise RuntimeError("stale head")
+
+    def fault(phase, repository, pull_request, kind, operation):
+        nonlocal spent
+        if phase == "before_call" and not spent:
+            spent = True
+            raise GitHubBoundaryError("qualified pre-call failure")
+
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", fence, fault)
+
+    with pytest.raises(RuntimeError, match="stale head"):
+        publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
+
+    assert fences == 2
+    assert not [call for call in fake.calls if call[:2] == ("POST", reviews)]
+
+
+def test_legacy_issue_finding_and_reminder_payloads_recover_exactly() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+    finding_operation = "finding-activity:finding-id"
+    finding_marker = CommentPublisher.marker("finding", finding_operation, HEAD)
+    reminder_marker = CommentPublisher.marker("reminder", "reminder-operation", HEAD)
+    fake = FakeTransport()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = (
+        {
+            "id": 12,
+            "html_url": "finding-url",
+            "body": f"Finding body\nLocation: src/one.py:4\n\n{finding_marker}",
+            "user": {"login": "hamsterdan[bot]"},
+        },
+        {
+            "id": 13,
+            "html_url": "reminder-url",
+            "body": f"@reviewer, please review this PR.\n\n{reminder_marker}",
+            "user": {"login": "hamsterdan[bot]"},
+        },
+    )
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    finding = publisher.finding(finding_operation, 3, HEAD, "Finding body", path="src/one.py", line=4)
+    reminder = publisher.reminder("reminder-operation", 3, HEAD, reviewer="reviewer", author="author")
+
+    assert finding.status == "existing" and not finding.inline
+    assert reminder.status == "existing"
+    assert not [call for call in fake.calls if call[0] == "POST"]
+
+
+def test_marker_lookup_requires_the_unique_final_marker_line() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    marker = CommentPublisher.marker("finding", "finding-operation", HEAD)
+    fake = FakeTransport()
+    fake.page_values[f"{issues}?per_page=100"] = (
+        {
+            "id": 14,
+            "body": f"Injected {marker}\n\n<!-- hamsterdan:readiness operation=readiness-operation head={HEAD} -->",
+            "user": {"login": "hamsterdan[bot]"},
+        },
+    )
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    assert publisher._find(marker) is None
+    with pytest.raises(ValueError, match="marker identity"):
+        CommentPublisher.marker("finding", "bad -->\n<!-- marker", HEAD)
 
 
 def test_transport_repr_does_not_claim_or_expose_credentials() -> None:

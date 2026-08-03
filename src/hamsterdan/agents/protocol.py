@@ -17,6 +17,7 @@ CURRENT = Callable[[], bool]
 _SHA = re.compile(r"[0-9a-f]{40,64}")
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}")
+_FINDING_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,47}")
 _MAX_ITEMS, _MAX_TEXT, _MAX_PATH, _MAX_FILE = 100, 20_000, 1024, 2_000_000
 _SECRET_WORDS = ("TOKEN", "PASSWORD", "PASSWD", "SECRET", "CREDENTIAL", "PRIVATE_KEY", "API_KEY")
 
@@ -213,14 +214,26 @@ def _validate_review(data: JSONDict) -> ReviewResult:
     findings = cast(list[JSONDict], _list(data["findings"], "findings"))
     lineage = cast(list[JSONDict], _list(data["lineage"], "lineage"))
     ids: set[str] = set()
-    fields = {"id", "path", "line", "title", "body", "severity", "confidence", "evidence", "blocking", "suggestion"}
+    fields = {
+        "id",
+        "path",
+        "line",
+        "related_locations",
+        "title",
+        "body",
+        "severity",
+        "confidence",
+        "evidence",
+        "blocking",
+        "suggestion",
+    }
     for finding in findings:
         if not isinstance(finding, dict):
             _fail("finding must be an object")
         _exact(finding, fields)
         finding_id = _text(finding["id"], "finding id", limit=200)
-        if finding_id in ids:
-            _fail("duplicate finding id")
+        if not _FINDING_ID.fullmatch(finding_id) or finding_id in ids:
+            _fail("invalid or duplicate finding id")
         ids.add(finding_id)
         severity = finding["severity"]
         if (
@@ -232,8 +245,26 @@ def _validate_review(data: JSONDict) -> ReviewResult:
             or type(finding["blocking"]) is not bool
         ):
             _fail("invalid or inconsistent finding")
+        primary = (finding["path"], finding["line"])
+        locations = cast(list[JSONDict], _list(finding["related_locations"], "related locations"))
+        seen_locations = {primary}
+        for location in locations:
+            if not isinstance(location, dict):
+                _fail("related location must be an object")
+            _exact(location, {"path", "line"})
+            key = (location["path"], location["line"])
+            if (
+                not _safe_path(location["path"])
+                or type(location["line"]) is not int
+                or location["line"] < 1
+                or key in seen_locations
+            ):
+                _fail("invalid or duplicate related location")
+            seen_locations.add(key)
         for name in ("title", "body", "evidence", "suggestion"):
             _text(finding[name], name, empty=name == "suggestion")
+        if "```" in cast(str, finding["suggestion"]):
+            _fail("invalid suggestion")
     seen_lineage: set[str] = set()
     for item in lineage:
         if not isinstance(item, dict):

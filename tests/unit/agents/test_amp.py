@@ -82,6 +82,110 @@ def test_valid_review_is_typed_and_instructions_supply_schema(repository: tuple[
     assert value.status == "clear"
 
 
+def test_review_supports_suggestion_and_non_contiguous_related_locations() -> None:
+    request = review_request("a" * 40)
+    finding = {
+        "id": "F1",
+        "path": "src/one.py",
+        "line": 4,
+        "related_locations": [{"path": "src/two.py", "line": 19}],
+        "title": "Keep both guards aligned",
+        "body": "These guards enforce one invariant but currently disagree.",
+        "severity": "high",
+        "confidence": 0.99,
+        "evidence": "The primary path allows the state rejected by the related path.",
+        "blocking": True,
+        "suggestion": "if state.is_ready:",
+    }
+    value = _validate_result(
+        "review",
+        result_for(
+            request,
+            status="blocking",
+            findings=[finding],
+            lineage=[{"finding_id": "F1", "state": "new", "supersedes": None}],
+        ),
+        request,
+    )
+    assert value.findings == [finding]
+
+
+@pytest.mark.parametrize(
+    "related",
+    [
+        [{"path": "src/one.py", "line": 4}],
+        [{"path": "../escape.py", "line": 2}],
+        [{"path": "src/two.py", "line": 0}],
+    ],
+)
+def test_review_rejects_invalid_or_duplicate_related_locations(related: list[dict[str, object]]) -> None:
+    request = review_request("a" * 40)
+    finding = {
+        "id": "F1",
+        "path": "src/one.py",
+        "line": 4,
+        "related_locations": related,
+        "title": "Finding",
+        "body": "Body",
+        "severity": "high",
+        "confidence": 1,
+        "evidence": "Evidence",
+        "blocking": True,
+        "suggestion": "",
+    }
+    with pytest.raises(AgentProtocolError, match="related location"):
+        _validate_result(
+            "review",
+            result_for(
+                request,
+                status="blocking",
+                findings=[finding],
+                lineage=[{"finding_id": "F1", "state": "new", "supersedes": None}],
+            ),
+            request,
+        )
+
+
+def test_review_rejects_marker_unsafe_finding_identity() -> None:
+    request = review_request("a" * 40)
+    finding = {
+        "id": "F1 -->\n<!-- hamsterdan:dashboard -->",
+        "path": "src/one.py",
+        "line": 4,
+        "related_locations": [],
+        "title": "Finding",
+        "body": "Body",
+        "severity": "high",
+        "confidence": 1,
+        "evidence": "Evidence",
+        "blocking": True,
+        "suggestion": "",
+    }
+    with pytest.raises(AgentProtocolError, match="finding id"):
+        _validate_result(
+            "review",
+            result_for(
+                request,
+                status="blocking",
+                findings=[finding],
+                lineage=[{"finding_id": finding["id"], "state": "new", "supersedes": None}],
+            ),
+            request,
+        )
+
+
+def test_review_and_conversation_instructions_use_dan_voice() -> None:
+    review = AmpExecuteRunner._instructions("review", object())
+    conversation = AmpExecuteRunner._instructions("conversation", object())
+
+    for prompt in (review, conversation):
+        assert 'Hamsterdan ("Dan")' in prompt
+        assert "never the author or reviewer" in prompt
+        assert "One joke per message, maximum" in prompt
+        assert "would this make the author smile" in prompt
+    assert "related_locations" in review and "mechanically safe localized replacement" in review
+
+
 def test_execute_stdout_is_a_strict_fallback_when_agent_does_not_write_result(
     repository: tuple[Path, str], tmp_path: Path
 ) -> None:
@@ -310,12 +414,12 @@ def test_secret_environment_and_url_credentials_are_stripped(
     monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "do-not-pass")
     monkeypatch.setenv("MY_GITHUB_CREDENTIAL", "do-not-pass")
     monkeypatch.setenv("HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS", "do-not-pass")
-    monkeypatch.setenv("HAMSTERDAN_GITHUB_HSBASTOS_HOSTS", "do-not-pass")
+    monkeypatch.setenv("HAMSTERDAN_GITHUB_CRISBASTOS_HOSTS", "do-not-pass")
     argv = agent_script(
         tmp_path,
         "assert not {'GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_APP_PRIVATE_KEY', 'MY_GITHUB_CREDENTIAL', "
         "'DATABASE_URL_SECRET', 'HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS', "
-        "'HAMSTERDAN_GITHUB_HSBASTOS_HOSTS'} & os.environ.keys()\n"
+        "'HAMSTERDAN_GITHUB_CRISBASTOS_HOSTS'} & os.environ.keys()\n"
         "result={k:request[k] for k in ('repository','pull_request','epoch','head','base')}\n"
         "result.update(status='clear',findings=[],lineage=[]); (root/'.impetus/result.json').write_text(json.dumps(result))\n",
     )

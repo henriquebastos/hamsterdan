@@ -179,12 +179,14 @@ gh auth status
 gh auth setup-git  # one-time human operator workstation setup
 scripts/hamsterdan-demo create --scenario clean-green
 scripts/hamsterdan-demo create --scenario first-attempt-flake
+scripts/hamsterdan-demo create --scenario hero-review
 scripts/hamsterdan-demo inspect --pr <number>
+scripts/hamsterdan-demo inspect --pr <hero-number> --expect-hero-review
 ```
 
 Qualification orbs receive the two human operator sessions from Amp project
 secrets `HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS` and
-`HAMSTERDAN_GITHUB_HSBASTOS_HOSTS`. `.agents/setup` writes them only to ignored,
+`HAMSTERDAN_GITHUB_CRISBASTOS_HOSTS`. `.agents/setup` writes them only to ignored,
 mode-`0700` identity roots under `.amp/runtime/`, with mode-`0600` files. Human
 commands must bypass Amp's injected `gh` wrapper and select one identity
 explicitly:
@@ -196,25 +198,90 @@ env -i HOME="$HOME" PATH="/usr/bin:/bin" \
 
 # Distinct reviewer
 env -i HOME="$HOME" PATH="/usr/bin:/bin" \
-  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-hsbastos" /usr/bin/gh api user
+  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-crisbastos" /usr/bin/gh api user
 ```
 
 Never print, copy into source, or pass either session into the host or agent
 checkout. `henriquebastos` owns fixture branches, PR lifecycle, and operator
-actions; `hsbastos` owns distinct-human reviews. The App remains the only
-product effect identity. Rotate the project secrets when either OAuth session
-is revoked or replaced.
+actions; `crisbastos` owns distinct-human reviews. GitHub renamed this same
+reviewer account from `hsbastos` after CV3 acceptance; historical evidence keeps
+the login observed at the time. The App remains the only product effect
+identity. Rotate the project secrets when either OAuth session is revoked or
+replaced.
 
-Creation branches from fresh `origin/main`, changes only the fixture's closed
-schema control, validates it, and creates—but never merges—the PR. Inspection
-requires an App-owned dashboard, readiness advisory, no legacy marker, exact
-workflow heads, and App ownership for every recognized comment. It reports only
+Creation branches from fresh `origin/main`, changes only paths admitted by the
+fixture's closed schema, validates them, and creates—but never merges—the PR.
+The `hero-review` route also requests `crisbastos` immediately so human review
+authority is present before readiness can settle. Inspection covers both PR
+conversation comments and native inline review comments. It requires an
+App-owned dashboard, readiness advisory, no legacy marker, exact workflow
+heads, and App ownership for every recognized comment, while reporting only
 recognized marker identities/IDs/URLs, bounded workflow/job facts, and
 attribution. GitHub's App bot may be the **authenticated pusher** exposed in
 REST `author`/`committer` user objects, while the nested Git commit `author` and
 `committer` are explicit commit metadata; neither proves the other. See
 <https://docs.github.com/en/rest/commits/commits#get-a-commit> and
 <https://docs.github.com/en/rest/git/commits#create-a-commit>.
+
+### Cohesive three-actor hero rehearsal
+
+The hero fixture is the largest single-PR review story. It keeps CI green while
+seeding three independently discoverable defects: one safe one-line replacement,
+one conceptual policy issue, and one invariant broken at two non-contiguous
+locations. Dan must discover them from the diff. Scenario controls never inject
+comment prose or provider state.
+
+Rehearse with three identities: `henriquebastos` is the author, `crisbastos` is
+the team reviewer, and `hamster-dan[bot]` is the App. Coordinate any host stop or
+restart with the operations thread that owns runtime custody. A host stop before
+creation is optional for ordinary use, but useful for a deterministic recording:
+the relay durably queues the opened and review events while the humans establish
+the first review state.
+
+1. Stop the supervised host without deleting its unit state, then use Henrique's
+   explicit identity to run `scripts/hamsterdan-demo create --scenario
+   hero-review`. The command opens the PR and requests Cris automatically.
+2. While the host remains stopped, use Cris's explicit identity to submit one
+   `REQUEST_CHANGES` review on the original head. Keep its text short and
+   human-authored; do not copy Dan's expected findings into it.
+3. Restart the supervised host. In **Files changed**, capture Dan's three native
+   review comments: a GitHub `suggestion` block, a conceptual inline comment,
+   and one inline concern with clickable related locations. In **Conversation**,
+   capture the single updating dashboard. Dan's blocking review may then launch
+   the ordinary fenced App repair and advance the head.
+4. After the repaired head settles, Henrique posts `@hamster-dan status`. Capture
+   Dan's concise current-gate reply and the refreshed dashboard. If demonstrating
+   a conversational mutation, ask for one bounded follow-up edit, then post the
+   exact digest confirmation Dan supplies; never improvise confirmation text.
+5. Cris reviews the current head and submits `APPROVE`. Resolve any human inline
+   thread if one was created. Capture the final dashboard and readiness advisory,
+   then close the rehearsal PR unmerged unless a separately approved demo calls
+   for merge.
+
+At the finding checkpoint, `inspect --expect-hero-review` adds redacted checks
+for at least three App-owned native findings and proves that the set includes a
+suggestion, an ordinary conceptual inline comment, and a related-location
+comment. It reports shape counts and provider URLs but never finding prose.
+
+For a cohesive recording, use three pinned browser tabs rather than repeatedly
+scrolling one growing conversation: **Conversation** anchored at the dashboard,
+**Files changed** filtered to unresolved comments, and **Actions** on the current
+run. Record short checkpoint clips and cut between them. Refresh only the active
+tab, keep the same browser zoom, and open each comment's permalink before the
+next event. This prevents appended comments from moving the subject under the
+cursor while preserving an honest chronological story.
+
+Native finding publication is lookup-first and fenced to the exact current head.
+Suggestions apply only at the primary anchor. A multi-location finding remains
+one operation and one visible comment, with links to its other locations. If
+GitHub definitively rejects a changed-line anchor as unavailable, Dan falls back
+to one immutable conversation comment; authorization failures and malformed
+payloads fail closed rather than disguising themselves as fallback success.
+Review and conversation agents receive Dan's canonical voice rules. Deterministic
+status, dashboard, reminder, readiness, malformed-request, and mutation-
+confirmation messages follow the same register without changing stable markers,
+operation identities, or exact confirmation grammar. Security and protocol
+failures remain plain and joke-free.
 
 The accepted HBNetwork portfolio is PR 14 at head
 `4e4f411c0ef352d7b39f7c7071380c433aa63a3b`. CI run `30699749460` failed on
