@@ -1,8 +1,8 @@
 ---
 code: CV4.DS1
 level: Delivery Story
-status: Qualified Locally
-status_reason: Implementation, compatibility, safety review, demo fixture, and full local suites pass; live provider evidence remains
+status: Accepted Live
+status_reason: PR47 completed the bounded three-actor journey with four native findings, two confirmed App mutations, green current-head CI, distinct approval, readiness, and safe unmerged closure
 updated: 2026-08-03
 ---
 
@@ -44,11 +44,26 @@ The corrected implementation rejects `403`, `404`, and generic `422` responses,
 recognizes only exact legacy bodies, restricts finding and marker identities,
 and trusts only final App-owned marker lines.
 
-## Live acceptance remaining
+## Live acceptance
 
-Deploy the exact Hamsterdan commit through the existing runtime custodian, then
-create one fresh `hero-review` PR as `henriquebastos` with `crisbastos` requested.
-Capture the three App-owned native finding shapes, App repair/head advance,
-Henrique's status conversation, Cris's current-head review and approval, final
-dashboard/readiness convergence, History/inbox stability, and unmerged closure.
-No accepted CV3 PR may be reused or mutated.
+The existing runtime custodian deployed exact Hamsterdan SHA
+`7df9baf5847726f22f94d1512f56a5c07ed91787`. Fresh PR47 began at human-authored
+head `d231386f02837f22f773f78be6b14efd4b614f36`. Dan published the three required
+native review shapes exactly once, and Henrique's exact digest confirmation
+authorized a three-line repair at App-authored head
+`ac5739ad96a7691ecf7c7a6384c4298edffb3386`.
+
+The repaired code exposed a deterministic demo-gate defect. Correction PR48
+made CI accept only the exact seeded state or exact complete repaired state and
+reject partial repairs. Its merge advanced the strict base. Dan published a
+fourth native finding, then a second exact confirmation authorized one App-owned
+base merge at final head `47e7e9be7bb7b3dc8e6d886f3d4f09fe95e71332`.
+All six checks passed on attempt 1, coordinating review cleared all four finding
+lineages, Cris resolved all four native threads and approved the exact current
+head, and dashboard plus readiness publication converged.
+
+The instance completed 67 Activity requests with 67 completions, zero failures,
+and zero unresolved work. The inbox drained to zero pending and zero failed.
+Henrique closed PR47 unmerged; closure produced no later Activity, comment,
+review, commit, dashboard update, or readiness loop. Runtime custody was
+preserved and the supervised host stopped safely.

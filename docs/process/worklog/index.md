@@ -16,3 +16,5 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-02 — Lifecycle recovery deployed; live qualification blocked](entries/2026-08-02T2113Z-lifecycle-recovery-deployed-qualification-blocked.md)
 - [2026-08-03 — Complete demo scenario portfolio accepted live](entries/2026-08-03T0003Z-complete-demo-scenario-portfolio-accepted-live.md)
 - [2026-08-03 — Native review hero qualified locally](entries/2026-08-03T0225Z-native-review-hero-qualified-locally.md)
+- [2026-08-03 — Cohesive three-actor hero accepted live](entries/2026-08-03T0455Z-cohesive-three-actor-hero-accepted-live.md)
+- [2026-08-04 — Reproducible hero video studio committed](entries/2026-08-04T0046Z-reproducible-hero-video-studio.md)

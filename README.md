@@ -77,3 +77,11 @@ installation, broker cutover, inspection, rotation, and isolated rollback
 sequence is in [the HBNetwork operator runbook](docs/operator/README.md). The
 accepted live portfolio is recorded in the project worklog; the tooling never
 turns a partial run into acceptance by itself.
+
+## Demo video production
+
+The reproducible Remotion studio under [`tools/demo-video`](tools/demo-video/)
+turns an accepted GitHub scenario into a guided presentation for first-time
+viewers. Its production guide preserves the narrative, layout, cadence,
+artifact, and QA contracts established by the PR47 hero video. Fresh Amp project
+orbs install the locked video environment and rendering tools automatically.

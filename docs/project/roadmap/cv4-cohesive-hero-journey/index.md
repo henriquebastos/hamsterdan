@@ -1,8 +1,8 @@
 ---
 code: CV4
 level: Value
-status: Active
-status_reason: Native review, voice, identity, and deterministic hero-fixture implementation are qualified locally; deployment and live three-actor acceptance remain
+status: Completed
+status_reason: PR47 proved the complete three-actor native-review, guarded-repair, base-update, approval, readiness, and unmerged-closure journey live
 updated: 2026-08-03
 ---
 
@@ -43,3 +43,20 @@ story using stable checkpoint views.
 - Native review fallback must fail closed for authorization and malformed
   payloads.
 - The rehearsal PR remains isolated and unmerged.
+
+## Accepted live evidence
+
+Fresh demo PR47 completed the full journey with `henriquebastos` as author,
+`crisbastos` as the distinct reviewer, and Hamsterdan as reviewer, coordinator,
+and coding App. Dan published three initial native review threads: an exact
+one-line suggestion, a conceptual inline policy finding, and one cache-key
+finding spanning non-contiguous locations. A fourth native finding later caught
+the demo gate rejecting the correct repair.
+
+Henrique's exact digest confirmations authorized one three-line App repair and
+one App-owned strict-base merge. Final head
+`47e7e9be7bb7b3dc8e6d886f3d4f09fe95e71332` passed all six checks on attempt 1.
+Dan's review was clear, all four threads were resolved, and Cris approved that
+exact head. The mutable dashboard and readiness advisory converged without
+duplicates. Henrique then closed the PR unmerged; the host observed terminal
+closure without any late Activity or provider effect.
