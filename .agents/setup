@@ -17,6 +17,26 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 echo "==> Syncing the locked Hamsterdan environment"
 uv sync --frozen
 
+missing_media_tools=()
+if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+    missing_media_tools+=(ffmpeg)
+fi
+command -v montage >/dev/null 2>&1 || missing_media_tools+=(imagemagick)
+if (( ${#missing_media_tools[@]} > 0 )); then
+    echo "==> Installing demo-video media tools"
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_media_tools[@]}"
+else
+    echo "==> Demo-video media tools already available"
+fi
+
+echo "==> Syncing the locked demo-video environment"
+(
+    cd tools/demo-video
+    bun install --frozen-lockfile
+    bunx remotion browser ensure
+)
+
 install_gh_identity() {
     local variable="$1"
     local config_root="$2"

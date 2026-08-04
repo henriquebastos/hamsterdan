@@ -1,0 +1,24 @@
+{
+  "name": "hamsterdan-demo-video",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "studio": "remotion studio src/index.ts",
+    "still": "remotion still src/index.ts",
+    "render": "remotion render src/index.ts",
+    "stills:pr47": "bash scripts/render-checkpoints.sh",
+    "render:pr47": "bash scripts/render-pr47.sh"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.420",
+    "@remotion/google-fonts": "4.0.420",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "remotion": "4.0.420"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3"
+  }
+}
