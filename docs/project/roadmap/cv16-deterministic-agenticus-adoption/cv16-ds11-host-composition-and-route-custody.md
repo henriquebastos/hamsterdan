@@ -2,7 +2,7 @@
 code: CV16.DS11
 level: Delivery Story
 status: Qualified Locally
-status_reason: Production direct-key composition and all deterministic gates pass; the authorized live gate is blocked before attempt because direct Anthropic authority is unavailable
+status_reason: Deterministic gates pass; the first authority-bearing live attempt failed closed at HostGitPublisher before any ref mutation
 updated: 2026-08-05
 ---
 
@@ -56,18 +56,33 @@ operation was run.
 Production composition commit `c368fefab686840c557150833c77ce0acf1c7382`
 was pushed before live preflight. A fresh isolated clone matched local and
 remote `main`, installed the frozen project, and selected the exact READY A2
-runtime with no authority request. The first authorized authority check found
-no direct Anthropic key configuration, so the attempt ledger remains zero for
-attempts, retries, provider calls, operations, Hands calls, mutations, and
-publications. The qualification roots were then removed.
+runtime with no authority request. An encrypted cross-thread handoff then
+admitted the separately authorized direct key without rendering it or placing it
+in project history.
+
+The first authority-bearing production attempt selected `PI_NATIVE_A2_LOCAL`
+with API-key authority and `claude-sonnet-4-5`. Its sanitized ledger is one
+attempt, zero retries, one authority materialization, provider call begun, zero
+recorded operations, zero recorded Hands calls, one returned mutation candidate,
+and zero publications. Route and strict correlation assertions passed and
+terminal History followed the coding request. The real `HostGitPublisher`
+rejected the candidate before ref advancement; exact schema/tree/replay and the
+harness aggregate cleanup assertion did not pass. The deterministic-stop rule
+forbade retry.
+
+Independent terminal checks found the qualification key, Petrus custody key,
+operation workspace, Hands stage, and Pi process absent; the Hamsterdan checkout
+remained at `05df1d2f762a0e6b15ca311584c2088c1883347f` and clean. Local
+qualification and handoff roots were erased. The disposable remote repository
+could not be deleted, made private, or archived with the available qualification
+identity, so remote cleanup is unresolved and recorded as debt.
 
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
-qualified, but provider execution remains unaccepted because direct authority
-was unavailable at the binding live gate. No Anthropic key was read and no paid
-or live operation ran. DS11 therefore remains Qualified Locally rather than
-Done.
+qualified, and one-shot custody was exercised once, but the complete provider
+route remains unaccepted because the controlled result did not cross the Git
+publication proof. DS11 therefore remains Qualified Locally rather than Done.
 The Local provider classifies active process death as indeterminate but cannot
 reconcile a lease whose process-memory registry died. This is not exactly-once
 execution, forensic erasure, complete migration, or live-support evidence.
@@ -80,7 +95,9 @@ repositories remain a host resource-trust boundary.
 
 ## Next slice
 
-Provision one direct Anthropic API-key file through the explicit production
-configuration and rerun the already-authorized bounded live gate from the exact
-pushed revision. Native subscription and extra usage remain excluded. Do not
-begin DS12 before this live gate passes.
+Diagnose the sanitized publication-boundary rejection without provider work,
+add a deterministic regression for any confirmed defect, and dispose of the
+orphaned qualification repository through an identity with repository-deletion
+authority. A new provider attempt requires a fresh bounded authorization after
+that deterministic correction. Native subscription and extra usage remain
+excluded. Do not begin DS12 before the live gate passes.

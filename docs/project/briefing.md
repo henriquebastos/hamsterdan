@@ -42,6 +42,8 @@ A private host receiver now rejects unsafe settled archives and replaces model
 patch claims with a reproduced canonical binary patch before the existing
 publication fences. Production now requires explicit absolute Pi installation
 paths and lazily transfers a direct key from an owned `0600` file through the
-one-shot supplier. `legacy-amp` remains rollback only. Live acceptance is
-blocked before its first attempt because direct Anthropic authority is not
-configured; no fallback profile is permitted.
+one-shot supplier. `legacy-amp` remains rollback only. The first
+authority-bearing live attempt proved one-shot direct-key custody and
+fail-closed rejection but did not publish: the real host publisher rejected the
+controlled coding candidate at its Git publication boundary. Live support
+therefore remains unaccepted and no fallback profile is permitted.

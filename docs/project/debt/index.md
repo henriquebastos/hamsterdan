@@ -8,3 +8,4 @@ an item only when debt should outlive one story's review notes.
 - [Petri net grouping obscures workflow continuity in Arx](items/petri-net-grouping-obscures-workflow-continuity-in-arx.md)
 - [Petrus Pi A2 host factory delivered](items/petrus-lacks-supported-pi-a2-host-factory.md)
 - [Pi A2 workspace archive application resolved](items/pi-a2-workspace-archives-lack-safe-host-tree-application.md)
+- [DS11 live publication rejection and disposable repository cleanup remain unresolved](items/ds11-live-publication-and-repository-cleanup.md)

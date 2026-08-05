@@ -23,3 +23,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-05 — Petrus-owned Pi A2 host consumed deterministically](entries/2026-08-05T1544Z-petrus-owned-pi-a2-host-consumed-deterministically.md)
 - [2026-08-05 — Pi workspaces reach canonical publication proof](entries/2026-08-05T1745Z-pi-workspaces-reach-canonical-publication-proof.md)
 - [2026-08-05 — Direct-key production wiring qualified; live gate blocked before attempt](entries/2026-08-05T1947Z-direct-key-production-wiring-qualified-live-gate-blocked.md)
+- [2026-08-05 — Direct-key live attempt failed closed at Git publication](entries/2026-08-05T2315Z-direct-key-live-attempt-failed-closed.md)

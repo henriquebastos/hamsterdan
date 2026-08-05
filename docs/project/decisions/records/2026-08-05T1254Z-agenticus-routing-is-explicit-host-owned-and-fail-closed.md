@@ -68,3 +68,7 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
 - Startup and FastAPI lifespan failures close every already-owned runtime
   resource so Petrus can revoke connection custody and erase persistent key
   operations. Cleanup uncertainty remains fail-closed.
+- The first direct-key live attempt exercised authority once but was rejected by
+  the host Git publication boundary before ref mutation. That result does not
+  change the selected profile or authorize fallback; live support remains
+  unaccepted pending deterministic diagnosis and a separately bounded rerun.
