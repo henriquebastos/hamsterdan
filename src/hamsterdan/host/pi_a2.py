@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import stat
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 
@@ -26,9 +27,39 @@ from .agenticus import PI_MODEL, PI_PROVIDER
 _KEY_VERSION = b"\x01"
 _KEY_BYTES = 32
 _NONCE_BYTES = 12
+_MAX_API_KEY_BYTES = 512
 _CONNECTION_ID = "hamsterdan-pi-a2-direct-v1"
-_ACCOUNT_FINGERPRINT = "hamsterdan-direct-authority-unconfigured-v1"
+_ACCOUNT_FINGERPRINT = "hamsterdan-direct-authority-v1"
 _CAPABILITIES = frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH, ToolMethod.WORKSPACE_WRITE})
+
+
+@dataclass(frozen=True)
+class PiA2InstallationConfig:
+    """Installation-owned runtime paths; parsing never reads authority material."""
+
+    direct_key_path: Path
+    cli_path: Path
+    node_path: Path
+    package_root: Path
+
+    @classmethod
+    def from_environment(cls, environment: Mapping[str, str]) -> PiA2InstallationConfig:
+        names = (
+            "HAMSTERDAN_ANTHROPIC_API_KEY_FILE",
+            "HAMSTERDAN_PI_CLI_PATH",
+            "HAMSTERDAN_PI_NODE_PATH",
+            "HAMSTERDAN_PI_PACKAGE_ROOT",
+        )
+        if any(not environment.get(name) for name in names):
+            raise ValueError("Agenticus requires explicit direct-key and Pi runtime paths")
+        config = cls(*(Path(environment[name]) for name in names))
+        if any(
+            not path.is_absolute()
+            for path in (config.direct_key_path, config.cli_path, config.node_path, config.package_root)
+        ):
+            raise ValueError("Agenticus installation paths must be absolute")
+        _validate_direct_key_file(config.direct_key_path)
+        return config
 
 
 class OneShotApiKeySupplier:
@@ -164,7 +195,7 @@ class PersistentKeyOperations:
         return self._root / f"{sha256(connection_id.encode()).hexdigest()}.key"
 
 
-def compose_owned_pi_a2(state_path: Path) -> PiA2RuntimeHost:
+def compose_owned_pi_a2(state_path: Path, installation: PiA2InstallationConfig | None = None) -> PiA2RuntimeHost:
     """Compose the production A2 boundary without consulting ambient authority."""
 
     root = _private_directory(state_path / "pi-a2")
@@ -172,7 +203,9 @@ def compose_owned_pi_a2(state_path: Path) -> PiA2RuntimeHost:
     authority = PiA2DirectAuthority(
         ConnectionIdentity(_CONNECTION_ID, PI_PROVIDER, _ACCOUNT_FINGERPRINT, "api-key"),
         PersistentKeyOperations(root / "keys"),
-        OneShotApiKeySupplier(_authority_unavailable),
+        OneShotApiKeySupplier(
+            _authority_unavailable if installation is None else lambda: _load_direct_key(installation.direct_key_path)
+        ),
     )
     config = PiA2RuntimeHostConfig(
         state_root=root / "runtime-host",
@@ -181,12 +214,74 @@ def compose_owned_pi_a2(state_path: Path) -> PiA2RuntimeHost:
         model=PI_MODEL,
         host_id="hamsterdan-pi-a2",
         capabilities=_CAPABILITIES,
+        cli_path=None if installation is None else str(installation.cli_path),
+        node_path=None if installation is None else str(installation.node_path),
+        package_root=None if installation is None else str(installation.package_root),
     )
     return compose_pi_a2_runtime(config=config, authority=authority)
 
 
 def _authority_unavailable() -> bytearray:
     raise RuntimeError("Pi A2 direct authority is not enabled")
+
+
+def _validate_direct_key_file(path: Path) -> os.stat_result:
+    try:
+        metadata = path.lstat()
+    except OSError:
+        raise ValueError("Anthropic API-key file cannot be inspected safely") from None
+    _validate_direct_key_metadata(metadata)
+    return metadata
+
+
+def _validate_direct_key_metadata(metadata: os.stat_result) -> None:
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+        or metadata.st_uid != os.geteuid()
+        or not 16 <= metadata.st_size <= _MAX_API_KEY_BYTES
+    ):
+        raise ValueError("Anthropic API-key file is not an owned, bounded 0600 regular file")
+
+
+def _direct_key_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_uid,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _load_direct_key(path: Path) -> bytearray:
+    """Read authority once into an erasable buffer after all preflight gates pass."""
+
+    _validate_direct_key_file(path)
+    value = bytearray()
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            before = os.fstat(descriptor)
+            _validate_direct_key_metadata(before)
+            value = bytearray(before.st_size)
+            if os.readv(descriptor, (value,)) != len(value) or os.read(descriptor, 1):
+                raise ValueError("Anthropic API-key file changed while reading")
+            after = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+        _validate_direct_key_metadata(after)
+        if _direct_key_identity(after) != _direct_key_identity(before) or any(
+            byte < 0x21 or byte > 0x7E for byte in value
+        ):
+            raise ValueError("Anthropic API-key material is malformed")
+        return value
+    except BaseException:
+        _erase(value)
+        raise
 
 
 def _private_directory(path: Path) -> Path:

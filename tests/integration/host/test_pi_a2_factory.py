@@ -31,7 +31,12 @@ from petrus.motus.execution.archive import workspace_archive
 from petrus.motus.execution.providers import LocalProcessEnvironment
 
 from hamsterdan.agents import PiNativeRunner, ReviewRequest
-from hamsterdan.host.pi_a2 import OneShotApiKeySupplier, PersistentKeyOperations
+from hamsterdan.host.pi_a2 import (
+    OneShotApiKeySupplier,
+    PersistentKeyOperations,
+    PiA2InstallationConfig,
+    compose_owned_pi_a2,
+)
 
 _SESSION = "11111111-1111-4111-8111-111111111111"
 _READ_POLICY = PiA2RuntimePolicy(frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH}), max_tool_calls=8)
@@ -194,6 +199,23 @@ def _host(
     )
     assert host.probe().disposition is ProbeDisposition.READY
     return host
+
+
+def test_production_owned_composition_uses_explicit_installed_package_without_authority(tmp_path: Path) -> None:
+    cli, node, package = _package(tmp_path)
+    direct_key = tmp_path / "direct-key"
+    direct_key.write_bytes(b"synthetic-direct-authority")
+    direct_key.chmod(0o600)
+    installation = PiA2InstallationConfig(direct_key, Path(cli), Path(node), Path(package))
+
+    host = compose_owned_pi_a2(tmp_path / "production", installation)
+    try:
+        probe = host.probe()
+        assert probe.disposition is ProbeDisposition.READY
+        assert probe.runtime.name == "pi.native.a2.local"
+        assert not host.authority_requested
+    finally:
+        assert host.close()
 
 
 def _start(

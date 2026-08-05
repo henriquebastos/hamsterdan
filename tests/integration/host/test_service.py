@@ -225,6 +225,22 @@ def test_fastapi_accepts_durably_before_work_deduplicates_and_has_sanitized_heal
         assert len(made) == 1 and made[0].reconciles == [f"github-delivery:{delivery}"]
 
 
+def test_fastapi_startup_reconciliation_failure_still_closes_owned_service(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clients = Clients()
+    host = service(tmp_path, clients=clients)
+    monkeypatch.setattr(
+        host,
+        "reconcile_registration",
+        lambda: (_ for _ in ()).throw(RuntimeError("synthetic startup failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic startup failure"), TestClient(create_app(host)):
+        raise AssertionError("failed startup must not enter the application lifespan")
+    assert clients.closed == 1
+
+
 @pytest.mark.parametrize(
     ("body", "headers"),
     [

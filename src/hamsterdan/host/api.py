@@ -15,20 +15,21 @@ from .service import HostService
 def create_app(service: HostService, *, reconcile_startup: bool = True) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        if reconcile_startup:
-            await asyncio.to_thread(service.reconcile_registration)
-        task = asyncio.create_task(service.worker(), name="webhook-inbox-worker")
+        task: asyncio.Task[None] | None = None
         try:
+            if reconcile_startup:
+                await asyncio.to_thread(service.reconcile_registration)
+            task = asyncio.create_task(service.worker(), name="webhook-inbox-worker")
             yield
         finally:
             service.stop()
-            try:
-                await asyncio.wait_for(task, timeout=max(1.0, service.poll_interval * 2))
-            except TimeoutError:
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
-            finally:
-                await asyncio.to_thread(service.close)
+            if task is not None:
+                try:
+                    await asyncio.wait_for(task, timeout=max(1.0, service.poll_interval * 2))
+                except TimeoutError:
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+            await asyncio.to_thread(service.close)
 
     app = FastAPI(title="Hamsterdan host", lifespan=lifespan)
 

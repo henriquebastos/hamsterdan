@@ -21,6 +21,8 @@ from petrus.impetus.petrinet import NetPath
 from petrus.motus.activity import ExecutionPolicy
 
 from hamsterdan.agents import AmpExecuteRunner, PiNativeRunner, UnavailablePiRunner
+from hamsterdan.host import __main__ as host_main
+from hamsterdan.host.__main__ import _close_owned_resources, _compose_agent_runtime
 from hamsterdan.host.agenticus import (
     AGENTICUS_DESCRIPTORS,
     HOST_FENCED_EFFECT,
@@ -157,6 +159,63 @@ def test_not_ready_probe_fails_closed_without_legacy_fallback(disposition: Probe
 def test_legacy_amp_is_selected_only_by_explicit_legacy_composition() -> None:
     legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
     assert isinstance(select_agent_runner(legacy), AmpExecuteRunner)
+
+
+def test_production_runtime_requires_explicit_installation_but_legacy_consults_none(tmp_path: Path) -> None:
+    agenticus = compose_agent(AgentConfig(AgentMode.AGENTICUS))
+    with pytest.raises(ValueError, match="explicit direct-key and Pi runtime paths"):
+        _compose_agent_runtime(agenticus, tmp_path / "agenticus", {})
+
+    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+    assert _compose_agent_runtime(legacy, tmp_path / "legacy", {}) == (None, None)
+
+
+def test_production_runtime_constructs_workspace_before_owned_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    key = tmp_path / "authority"
+    key.write_bytes(b"synthetic-direct-authority")
+    key.chmod(0o600)
+    environment = {
+        "HAMSTERDAN_ANTHROPIC_API_KEY_FILE": str(key),
+        "HAMSTERDAN_PI_CLI_PATH": str(tmp_path / "cli"),
+        "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
+        "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),
+    }
+    runtimes = 0
+
+    def compose(*args: object) -> object:
+        nonlocal runtimes
+        runtimes += 1
+        return object()
+
+    monkeypatch.setattr(host_main, "compose_owned_pi_a2", compose)
+    monkeypatch.setattr(
+        host_main,
+        "GitPiWorkspaceProvider",
+        lambda path: (_ for _ in ()).throw(ValueError("synthetic workspace failure")),
+    )
+
+    with pytest.raises(ValueError, match="synthetic workspace failure"):
+        _compose_agent_runtime(compose_agent(AgentConfig(AgentMode.AGENTICUS)), tmp_path / "state", environment)
+    assert runtimes == 0
+
+
+def test_startup_cleanup_attempts_every_independently_owned_resource() -> None:
+    closed: list[str] = []
+
+    class Resource:
+        def __init__(self, name: str, fail: bool = False) -> None:
+            self.name, self.fail = name, fail
+
+        def close(self) -> None:
+            closed.append(self.name)
+            if self.fail:
+                raise RuntimeError("synthetic")
+
+    with pytest.raises(RuntimeError, match="cleanup is unverified"):
+        _close_owned_resources(None, Resource("runtime", True), Resource("routes"))  # type: ignore[arg-type]
+    assert closed == ["runtime", "routes"]
 
 
 def test_snapshot_persists_and_same_route_is_reconstructed_before_redispatch(tmp_path: Path) -> None:

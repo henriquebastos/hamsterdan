@@ -7,21 +7,57 @@ import json
 import math
 import os
 import stat
+from collections.abc import Mapping
 from pathlib import Path
 
 import uvicorn
+from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
 
 from hamsterdan.github_app.config import ConfigurationError, HostConfig
 
-from .agenticus import AgentConfig, AgentMode, AgentRouteStore, compose_agent, select_agent_runner
+from .agenticus import AgentComposition, AgentConfig, AgentMode, AgentRouteStore, compose_agent, select_agent_runner
 from .api import create_app
-from .pi_a2 import compose_owned_pi_a2
+from .pi_a2 import PiA2InstallationConfig, compose_owned_pi_a2
 from .pi_workspace import GitPiWorkspaceProvider
 from .service import HostService, QualificationFault
 
 MAX_HISTORY_BYTES = 16 * 1024 * 1024
 MAX_BINDING_BYTES = 4096
 MAX_IDENTIFIER_BYTES = 1024
+
+
+def _compose_agent_runtime(
+    composition: AgentComposition,
+    state_path: Path,
+    environment: Mapping[str, str],
+) -> tuple[PiA2RuntimeHost | None, GitPiWorkspaceProvider | None]:
+    if composition.mode is AgentMode.LEGACY_AMP:
+        return None, None
+    installation = PiA2InstallationConfig.from_environment(environment)
+    workspaces = GitPiWorkspaceProvider(state_path / "pi-workspaces")
+    return (
+        compose_owned_pi_a2(state_path, installation),
+        workspaces,
+    )
+
+
+def _close_owned_resources(
+    service: HostService | None,
+    runtime: PiA2RuntimeHost | None,
+    routes: AgentRouteStore | None,
+) -> None:
+    resources = (service,) if service is not None else (runtime, routes)
+    failure: Exception | None = None
+    for resource in resources:
+        if resource is None:
+            continue
+        try:
+            resource.close()
+        except Exception as error:  # noqa: BLE001 - every independently owned startup resource must be attempted
+            if failure is None:
+                failure = error
+    if failure is not None:
+        raise RuntimeError("host resource cleanup is unverified") from failure
 
 
 def _read_bounded_regular(path: Path, limit: int) -> bytes:
@@ -191,9 +227,7 @@ def main() -> int:
         agent = compose_agent(AgentConfig.from_environment(dict(os.environ)))
         route_store = AgentRouteStore(config.state_path / "agent-routes.sqlite3")
         route_store.activate(agent, config.state_path / "applications")
-        if agent.mode is AgentMode.AGENTICUS:
-            pi_runtime = compose_owned_pi_a2(config.state_path)
-            pi_workspaces = GitPiWorkspaceProvider(config.state_path / "pi-workspaces")
+        pi_runtime, pi_workspaces = _compose_agent_runtime(agent, config.state_path, os.environ)
         service = HostService(
             config,
             runner=select_agent_runner(agent, pi_runtime=pi_runtime, pi_workspaces=pi_workspaces),
@@ -206,31 +240,23 @@ def main() -> int:
         )
         if args.command == "validate":
             print(json.dumps(service.reconcile_registration(), sort_keys=True))
-            service.close()
             return 0
         if args.command == "inbox":
             print(
                 json.dumps({"counts": service.custody.counts(), "failures": service.custody.failures()}, sort_keys=True)
             )
-            service.close()
             return 0
         if args.command == "requeue":
             requeued = service.custody.requeue(args.delivery)
             print(json.dumps({"delivery_id": args.delivery, "requeued": requeued}, sort_keys=True))
-            service.close()
             return 0 if requeued else 1
         uvicorn.run(create_app(service), host=args.host, port=args.port)
         return 0
     except (ConfigurationError, RuntimeError, ValueError) as error:
-        if service is not None:
-            service.close()
-        else:
-            if pi_runtime is not None:
-                pi_runtime.close()
-            if route_store is not None:
-                route_store.close()
         parser().error(str(error))
         return 2
+    finally:
+        _close_owned_resources(service, pi_runtime, route_store)
 
 
 if __name__ == "__main__":
