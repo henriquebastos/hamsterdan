@@ -122,6 +122,7 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
+    operations.agent_dispatch = lambda operation: None
     operations.current_fence = lambda *args: None
 
     class Runner:
@@ -166,10 +167,12 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
 
 def test_coding_retries_nonchanging_agent_result_before_one_publication() -> None:
     operations = object.__new__(PrReadinessActivities)
+    dispatched: list[str] = []
     operations.repository = "owner/repo"
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
+    operations.agent_dispatch = dispatched.append
     fences: list[tuple] = []
     operations.current_fence = lambda *args: fences.append(args)
 
@@ -217,6 +220,7 @@ def test_coding_retries_nonchanging_agent_result_before_one_publication() -> Non
     assert result.ok is True
     assert operations.runner.calls == 3
     assert operations.git_publisher.calls == 1
+    assert dispatched == ["change-operation"] * 3
     assert len(fences) == 4
 
 
@@ -226,6 +230,7 @@ def test_coding_stops_after_three_nonchanging_agent_results() -> None:
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
+    operations.agent_dispatch = lambda operation: None
     operations.current_fence = lambda *args: None
 
     class Runner:
@@ -275,6 +280,7 @@ def test_coding_retries_protocol_error_with_identical_request_then_publishes_onc
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
+    operations.agent_dispatch = lambda operation: None
     operations.current_fence = lambda *args: None
 
     class Runner:
@@ -329,6 +335,7 @@ def test_canceled_coding_attempt_does_not_retry_or_publish() -> None:
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
+    operations.agent_dispatch = lambda operation: None
     fences: list[tuple] = []
     operations.current_fence = lambda *args: fences.append(args)
 
@@ -364,6 +371,7 @@ def test_stale_authority_between_coding_attempts_stops_before_retry_and_publicat
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
+    operations.agent_dispatch = lambda operation: None
     fence_calls = 0
 
     def fence(*args):
@@ -421,6 +429,7 @@ def test_stale_final_fence_after_changed_retry_prevents_publication(caplog) -> N
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
+    operations.agent_dispatch = lambda operation: None
     fence_calls = 0
 
     def fence(*args):
@@ -533,6 +542,7 @@ def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(t
     operations.runner = AmpExecuteRunner(argv=(sys.executable, str(script)))
     operations.git_publisher = Publisher()
     operations.current = None
+    operations.agent_dispatch = lambda operation: None
     fences: list[tuple[object, ...]] = []
     operations.current_fence = lambda *args: fences.append(args)
     intent = {"kind": "change", "arguments": {"request": "update the tracked fixture"}}
@@ -686,12 +696,15 @@ def test_stale_actions_rerun_becomes_a_typed_canceled_observation() -> None:
 
 def test_review_preserves_terminal_prior_finding_detail_for_dashboard_lineage() -> None:
     operations = object.__new__(PrReadinessActivities)
+    dispatched: list[str] = []
     operations.repository = "owner/repo"
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.workflow_path = "ci.yml"
     operations.current = None
+    operations.agent_dispatch = lambda operation: None
     operations.current_fence = lambda *args: None
+    operations.agent_dispatch = dispatched.append
 
     class Authority:
         def comments(self):
@@ -702,6 +715,7 @@ def test_review_preserves_terminal_prior_finding_detail_for_dashboard_lineage() 
 
     class Runner:
         def review(self, repository_url, request, *, is_current=None):
+            assert dispatched == ["review-operation"]
             return AgentReviewResult(
                 request.repository,
                 request.pull_request,
@@ -736,6 +750,7 @@ def test_review_preserves_terminal_prior_finding_detail_for_dashboard_lineage() 
     result = operations.review(work)
 
     assert result.status == "clear"
+    assert dispatched == ["review-operation"]
     assert result.findings == [
         {
             "id": "finding-1",
@@ -762,14 +777,17 @@ def test_conversation_declarations_give_agents_exact_intent_arguments() -> None:
 
 def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
     operations = object.__new__(PrReadinessActivities)
+    dispatched: list[str] = []
     operations.repository = "owner/repo"
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
+    operations.agent_dispatch = dispatched.append
     operations.current_fence = lambda *args: None
 
     class Runner:
         def converse(self, repository_url, request, *, is_current=None):
+            assert dispatched == ["conversation-operation"]
             reply = {
                 "type": "reply",
                 "arguments": {"message": "Duplicate"},
@@ -803,6 +821,7 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
 
     result = operations.conversation(work)
 
+    assert dispatched == ["conversation-operation"]
     assert len(result.intents) == 1
     assert result.intents[0]["kind"] == "reply"
     assert "couldn't interpret" in result.intents[0]["arguments"]["message"]

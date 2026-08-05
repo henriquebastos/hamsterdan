@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -39,6 +40,8 @@ class PrReadinessApplication:
         authority: GitHubAuthority,
         runner: AgentRunner,
         *,
+        agent_dispatch: Callable[[str], None],
+        agent_settle: Callable[[set[str]], None],
         bot_login: str,
         public_clone_url: str,
         workflow_path: str = ".github/workflows/ci.yml",
@@ -56,6 +59,7 @@ class PrReadinessApplication:
         self.public_clone_url, self.workflow_path = public_clone_url, workflow_path
         self.reminder_delay = reminder_delay
         self.publication_fault, self.agent_fault = publication_fault, agent_fault
+        self.agent_dispatch, self.agent_settle = agent_dispatch, agent_settle
         self.host: PrReadinessHost | None = None
         if (root / "history.jsonl").exists():
             self.host = self._open_host()
@@ -84,6 +88,7 @@ class PrReadinessApplication:
                 self.public_clone_url,
                 self.workflow_path,
                 lease.fence,
+                self.agent_dispatch,
                 git,
                 lease.is_current,
                 self.agent_fault,
@@ -95,6 +100,7 @@ class PrReadinessApplication:
             self.authority,
             operations,
             reminder_delay=self.reminder_delay,
+            agent_settle=self.agent_settle,
         )
 
     def _bind_state_root(self) -> None:

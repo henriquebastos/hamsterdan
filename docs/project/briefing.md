@@ -30,3 +30,9 @@ commit and comment attribution, strict bot-authorized rerun brokerage, durable
 restart/redelivery behavior, and a passing private-source CI path to the pinned
 Petrus repository. The qualified Petrus CV9 application remains behavioral
 evidence, not a Hamsterdan package dependency.
+
+The first CV16.DS11 adoption slice resolves a host-owned Pi native A2 Local
+Agenticus profile deterministically and fences every agent operation to its
+persisted mode, profile, and Catalog snapshot. Provider execution remains
+deliberately unavailable pending a separately bounded live gate; explicit
+`legacy-amp` is rollback only.

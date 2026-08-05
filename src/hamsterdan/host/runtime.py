@@ -147,9 +147,10 @@ class PrReadinessHost:
         lease: AuthorityLease,
         operations: PrReadinessActivities,
         loader: Callable[[], Engine],
+        agent_settle: Callable[[set[str]], None] | None = None,
     ):
         self.root, self.engine, self.lease, self.operations = root, engine, lease, operations
-        self._loader = loader
+        self._loader, self._agent_settle = loader, agent_settle
 
     @classmethod
     def open(
@@ -160,6 +161,7 @@ class PrReadinessHost:
         operations_factory,
         *,
         reminder_delay: float = 3 * 24 * 60 * 60,
+        agent_settle: Callable[[set[str]], None] | None = None,
     ) -> PrReadinessHost:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         built = build_net(reminder_delay)
@@ -204,7 +206,7 @@ class PrReadinessHost:
                 marking=marking,
             )
         lease.bind(engine)
-        return cls(root, engine, lease, operations, load)
+        return cls(root, engine, lease, operations, load, agent_settle)
 
     @property
     def control(self) -> Control | None:
@@ -218,12 +220,15 @@ class PrReadinessHost:
         return self.engine.deliver(source, token, identity=identity)
 
     def drain(self, limit: int = 500) -> None:
+        self._settle_agent_routes()
         for _ in range(limit):
             before = tuple(self.engine.records)
             unresolved = self._unresolved(before)
             try:
                 if not self.engine.advance().ready:
+                    self._settle_agent_routes()
                     return
+                self._settle_agent_routes()
             except RuntimeError:
                 replacement = self._loader()
                 after = tuple(replacement.records)
@@ -252,7 +257,23 @@ class PrReadinessHost:
                     replacement.close()
                     raise
                 self.engine = replacement
+                self._settle_agent_routes()
         raise RuntimeError("PR-readiness Engine did not reach an external wait")
+
+    def _settle_agent_routes(self) -> None:
+        if self._agent_settle is None:
+            return
+        requested: dict[int, str] = {}
+        terminal: set[int] = set()
+        for record in self.engine.records:
+            if isinstance(record, ActivityRequested) and isinstance(record.input, dict):
+                work = record.input.get("work", record.input.get("command"))
+                operation = work.get("operation") if isinstance(work, dict) else None
+                if isinstance(operation, str):
+                    requested[record.occurrence] = operation
+            elif isinstance(record, (ActivityCompleted, ActivityFailed)):
+                terminal.add(record.occurrence)
+        self._agent_settle({requested[item] for item in terminal & requested.keys()})
 
     @staticmethod
     def _unresolved(records: tuple[object, ...]) -> dict[int, ActivityRequested]:

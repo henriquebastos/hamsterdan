@@ -18,3 +18,7 @@ are accepted live; CV3 is completed.
 Completed hero delivery: [CV4 — Cohesive three-actor hero journey](cv4-cohesive-hero-journey/index.md).
 [CV4.DS1 — Native review and hero rehearsal](cv4-cohesive-hero-journey/cv4-ds1-native-review-and-hero-rehearsal.md)
 is accepted live through the closed-unmerged PR47 journey.
+
+Active runtime adoption: [CV16 — Deterministic Agenticus adoption](cv16-deterministic-agenticus-adoption/index.md).
+[CV16.DS11 — Host composition and operation-route custody](cv16-deterministic-agenticus-adoption/cv16-ds11-host-composition-and-route-custody.md)
+is qualified locally; provider authority and live support remain deferred.

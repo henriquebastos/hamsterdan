@@ -229,6 +229,8 @@ def application(tmp_path: Path, authority: Authority, runner: Runner) -> PrReadi
         "github-1-pr-3",
         authority,
         runner,  # type: ignore[arg-type]
+        agent_dispatch=lambda operation: None,
+        agent_settle=lambda operations: None,
         bot_login=BOT,
         public_clone_url=str(tmp_path),
         reminder_delay=10**30,
@@ -668,6 +670,8 @@ def test_credentials_never_enter_agent_requests_or_durable_history(tmp_path: Pat
         "github-1-pr-3",
         authority,
         runner,  # type: ignore[arg-type]
+        agent_dispatch=lambda operation: None,
+        agent_settle=lambda operations: None,
         bot_login=BOT,
         public_clone_url=f"https://example.invalid/repo?x={SECRETS[0]}",
         reminder_delay=10**30,

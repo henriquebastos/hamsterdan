@@ -13,6 +13,7 @@ import uvicorn
 
 from hamsterdan.github_app.config import ConfigurationError, HostConfig
 
+from .agenticus import AgentConfig, AgentRouteStore, compose_agent
 from .api import create_app
 from .service import HostService, QualificationFault
 
@@ -173,6 +174,7 @@ def main() -> int:
     ):
         parser().error("inspect-instance requires --installation, --repository, and --pr")
     service: HostService | None = None
+    route_store: AgentRouteStore | None = None
     try:
         config = HostConfig.from_environment()
         if args.command == "inspect-instance":
@@ -182,8 +184,14 @@ def main() -> int:
                 )
             )
             return 0
+        agent = compose_agent(AgentConfig.from_environment(dict(os.environ)))
+        route_store = AgentRouteStore(config.state_path / "agent-routes.sqlite3")
+        route_store.activate(agent, config.state_path / "applications")
         service = HostService(
             config,
+            runner=agent.runner(),
+            agent_composition=agent,
+            agent_routes=route_store,
             workflow_path=os.getenv("HAMSTERDAN_WORKFLOW_PATH", ".github/workflows/ci.yml"),
             reminder_delay=float(os.getenv("HAMSTERDAN_REMINDER_SECONDS", "259200")),
             qualification_fault=QualificationFault.from_environment(),
@@ -208,6 +216,8 @@ def main() -> int:
     except (ConfigurationError, RuntimeError, ValueError) as error:
         if service is not None:
             service.close()
+        elif route_store is not None:
+            route_store.close()
         parser().error(str(error))
         return 2
 

@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host.__main__ import inspect_instance
+from hamsterdan.host.agenticus import AgentConfig, AgentMode, AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
 from hamsterdan.host.service import APP_EVENTS, APP_PERMISSIONS, HostService, QualificationFault
 
@@ -91,9 +92,29 @@ def config(root: Path) -> HostConfig:
 
 
 def service(root: Path, *, clients: Clients | None = None, factory: Any = Application) -> HostService:
-    result = HostService(config(root), clients=clients or Clients(), runner=object(), application_factory=factory)
+    composition, routes = agent_custody(root)
+    result = HostService(
+        config(root),
+        clients=clients or Clients(),
+        runner=object(),
+        agent_composition=composition,
+        agent_routes=routes,
+        application_factory=factory,
+    )
     result.registry.reconcile(44, ((31, "owner/one"), (32, "owner/two")))
     return result
+
+
+def agent_custody(root: Path):
+    composition = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+    routes = AgentRouteStore(root / "test-agent-routes.sqlite3")
+    routes.activate(composition, root / "applications")
+    return composition, routes
+
+
+def test_host_service_requires_agent_route_custody(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match="agent_composition"):
+        HostService(config(tmp_path), runner=object())  # type: ignore[call-arg, arg-type]
 
 
 def observation(delivery: str, repository: int = 31, pr: int = 7, **values: object) -> Observation:
@@ -521,8 +542,14 @@ def registration_clients(
 
 
 def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_path: Path) -> None:
+    composition, routes = agent_custody(tmp_path)
     host = HostService(
-        config(tmp_path), clients=registration_clients(), runner=object(), application_factory=Application
+        config(tmp_path),
+        clients=registration_clients(),
+        runner=object(),
+        agent_composition=composition,
+        agent_routes=routes,
+        application_factory=Application,
     )
     assert host.reconcile_registration()["admitted_repositories"] == 2
     assert host.registry.route(44, 32) is not None
@@ -560,10 +587,13 @@ def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_
 def test_startup_rejects_identity_account_suspension_and_broad_contract_safely(
     tmp_path: Path, changes: dict[str, object], installations: object | None, message: str
 ) -> None:
+    composition, routes = agent_custody(tmp_path)
     host = HostService(
         config(tmp_path),
         clients=registration_clients(app_changes=changes, installations=installations),
         runner=object(),
+        agent_composition=composition,
+        agent_routes=routes,
         application_factory=Application,
     )
     with pytest.raises(RuntimeError, match=message) as caught:

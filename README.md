@@ -50,9 +50,9 @@ uv sync --frozen
 scripts/check full
 ```
 
-The Petrus dependency is pinned to the accepted namespace-migration commit.
-Canonical environments never float on Petrus `main` or depend on a local
-checkout.
+The Petrus dependency is pinned to the exact Agenticus-adoption revision.
+Canonical environments never float on Petrus `main`, assume package
+publication, or depend on a local checkout.
 
 ## Runtime ownership
 
