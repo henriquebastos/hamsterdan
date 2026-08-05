@@ -20,3 +20,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-04 — Reproducible hero video studio committed](entries/2026-08-04T0046Z-reproducible-hero-video-studio.md)
 - [2026-08-05 — First Agenticus host-adoption slice qualified locally](entries/2026-08-05T1254Z-first-agenticus-host-adoption-slice-qualified-locally.md)
 - [2026-08-05 — Pi native A2 deterministic adapter qualified locally](entries/2026-08-05T1335Z-pi-native-a2-deterministic-adapter-qualified-locally.md)
+- [2026-08-05 — Petrus-owned Pi A2 host consumed deterministically](entries/2026-08-05T1544Z-petrus-owned-pi-a2-host-consumed-deterministically.md)

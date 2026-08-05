@@ -309,6 +309,7 @@ name = "hamsterdan"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "githubkit", extra = ["auth-app"] },
     { name = "petrus" },
@@ -328,9 +329,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=46,<51" },
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "githubkit", extras = ["auth-app"], specifier = "==0.16.0" },
-    { name = "petrus", git = "ssh://git@github.com/henriquebastos/petrus.git?rev=ceb36d5db5b3bc9ed13ebc02a9971708d9461b20" },
+    { name = "petrus", git = "ssh://git@github.com/henriquebastos/petrus.git?rev=aa5a9152f0c9b36358c0a3019716f47511f64802" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
 ]
 
@@ -526,7 +528,7 @@ wheels = [
 [[package]]
 name = "petrus"
 version = "0.0.0"
-source = { git = "ssh://git@github.com/henriquebastos/petrus.git?rev=ceb36d5db5b3bc9ed13ebc02a9971708d9461b20#ceb36d5db5b3bc9ed13ebc02a9971708d9461b20" }
+source = { git = "ssh://git@github.com/henriquebastos/petrus.git?rev=aa5a9152f0c9b36358c0a3019716f47511f64802#aa5a9152f0c9b36358c0a3019716f47511f64802" }
 dependencies = [
     { name = "cel-python" },
     { name = "pydantic" },

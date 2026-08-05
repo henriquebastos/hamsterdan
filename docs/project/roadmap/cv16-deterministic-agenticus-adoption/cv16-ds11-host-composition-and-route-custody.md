@@ -2,7 +2,7 @@
 code: CV16.DS11
 level: Delivery Story
 status: Qualified Locally
-status_reason: Exact Pi native A2 Local composition, probe-gated adapter, and durable same-route lifecycle gates pass without provider authority
+status_reason: The exact Pi native A2 Local owned host, adapter, replay, and recovery gates pass without provider authority; changed-work application remains fail-closed
 updated: 2026-08-05
 ---
 
@@ -10,7 +10,7 @@ updated: 2026-08-05
 
 ## Scope
 
-- Pin Petrus exactly to `ceb36d5db5b3bc9ed13ebc02a9971708d9461b20`.
+- Pin Petrus exactly to `aa5a9152f0c9b36358c0a3019716f47511f64802`.
 - Register and explicitly enable the exact Pi native A2 Local topology in a
   host-owned Catalog, retain its provider-neutral immutable snapshot, and bind
   Anthropic `claude-sonnet-4-5` as separately validated profile metadata.
@@ -28,32 +28,41 @@ updated: 2026-08-05
   non-ready probe remains fail-closed and never selects legacy Amp.
 - Keep `PI_NATIVE_A2_LOCAL` distinct from `AGENT_AS_NET_A5_LOCAL` and its
   AgentNetRunner Program, Hands, and Continuation topology.
+- Compose the public Petrus `PiA2RuntimeHost` behind immutable host policy, a
+  stable direct-key connection identity, persistent authenticated key
+  operations, and an erasable one-shot supplier. Production passes neither the
+  provider nor client-factory conformance seam.
+- Accept unchanged coding output only with its published workspace archive and
+  reject changed coding before Git publication until the receiving host can
+  safely reconcile that archive against the current PR tree.
 
 ## Local evidence
 
-Focused adapter, host composition, Activity, runtime, architecture, application,
-and service suites pass 105 tests. The full project gate passes formatting,
-Ruff, ty, nine Bun relay tests, source and wheel builds, and 285 Python tests
+Focused adapter, owned-factory, host composition, Activity, runtime,
+architecture, application, and service suites pass 116 tests. The full project
+gate passes formatting, Ruff, ty, nine Bun relay tests, source and wheel builds,
+and 296 Python tests
 with the one opt-in provider test skipped. No provider authority or paid/live
 operation was run.
 
 ## Limits
 
-The selected Catalog snapshot and READY probe prove deterministic compatibility
-and installation only. Production startup deliberately remains fail-closed
-because no Petrus-owned A2 host factory is injected. This slice does not read an
-Anthropic key, start a real provider operation, materialize connection custody,
-create territory, run Hands, manage Attachment or Continuation lifecycle, or
-claim live support. Route custody and Petrus History are separate stores joined
-by ordering and startup repair rather than a cross-store transaction. A live
-runtime also requires Petrus-owned lookup-first recovery when a process restarts
-after a completed Pi operation was closed but before terminal Activity History.
+The owned factory is deterministically qualified with synthetic conformance
+seams only. Production has no authority loader and remains fail-closed before a
+real provider call. No Anthropic key was read and no paid or live operation ran.
+The Local provider classifies active process death as indeterminate but cannot
+reconcile a lease whose process-memory registry died. This is not exactly-once
+execution, forensic erasure, complete migration, or live-support evidence.
+Route custody and canonical History remain Hamsterdan-owned. Changed workspace
+application is blocked because `load_workspace_archive` returns a verified
+opaque archive but no public operation transactionally reconciles it with the
+current host tree and unchanged `CodingResult` patch contract.
 
 ## Next slice
 
-Petrus should first expose one supported A2 host factory that owns connection
-custody, Motus binding, EpisodeAttachment, Hands gateway, continuation/turn
-stores, and verified teardown behind a credential-free start request. Its probe
-must not consult authority and its start must materialize authority at most once.
-After Hamsterdan consumes and deterministically qualifies that factory, request
-a separate explicitly bounded live-authority gate.
+Design and qualify the smallest receiving-host archive-to-patch reconciliation
+boundary: extract only into private staging, prove the exact input/current tree,
+derive and validate the canonical binary patch, and retain the existing
+claim/fence/idempotent publication path. Only after that deterministic coding
+gate passes should the source thread authorize a separately bounded direct
+API-key live gate.

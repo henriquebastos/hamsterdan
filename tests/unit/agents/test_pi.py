@@ -7,8 +7,9 @@ import pytest
 from petrus.agenticus.runtime.operation import (
     RuntimeCleanupDisposition,
     RuntimeOperationCleanup,
+    RuntimeProtocolError,
 )
-from petrus.agenticus.runtime.pi import PiRuntimeInvocation
+from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeStart
 from petrus.agenticus.runtime.result import RuntimeTurnSettlement
 from petrus.agenticus.thread.identity import EpisodeId, TurnId
 from petrus.agenticus.thread.lifecycle import CancellationDisposition, TurnOutcome
@@ -69,15 +70,6 @@ def test_prompts_are_exact_canonical_and_bounded(kind: str, agent_request: objec
     assert len(prompt.encode()) <= 64 * 1024
 
 
-def invocation(operation: str, prompt: str) -> PiRuntimeInvocation:
-    value = object.__new__(PiRuntimeInvocation)
-    object.__setattr__(value, "operation_id", operation)
-    object.__setattr__(value, "episode_id", EpisodeId(f"episode:{operation}"))
-    object.__setattr__(value, "turn_id", TurnId(f"turn:{operation}"))
-    object.__setattr__(value, "prompt", prompt)
-    return value
-
-
 class Operation:
     def __init__(self, operation: str, *, outcome: TurnOutcome = TurnOutcome.COMPLETED, clean: bool = True):
         self.operation_id = operation
@@ -85,12 +77,14 @@ class Operation:
         self.waits = 0
         self.cancellations: list[str] = []
         self.closed = 0
+        self.episode_id = EpisodeId("unset")
+        self.turn_id = TurnId("unset")
 
     def wait(self, timeout=None):
         self.waits += 1
         return RuntimeTurnSettlement(
-            EpisodeId(f"episode:{self.operation_id}"),
-            TurnId(f"turn:{self.operation_id}"),
+            self.episode_id,
+            self.turn_id,
             self.outcome,
             1 if self.outcome is TurnOutcome.COMPLETED else 0,
             "turn-completed" if self.outcome is TurnOutcome.COMPLETED else "runtime-failed",
@@ -111,19 +105,33 @@ class Operation:
 
 
 class Runtime:
-    def __init__(self, operation: Operation):
+    def __init__(self, operation: Operation, output: str = "{}", archive: bytes = b"archive"):
         self.operation = operation
-        self.started: list[PiRuntimeInvocation] = []
+        self.output = output
+        self.archive = archive
+        self.started: list[PiA2RuntimeStart] = []
+        self.loaded_outputs: list[str] = []
+        self.loaded_archives: list[str] = []
 
     def start(self, value):
         self.started.append(value)
+        self.operation.episode_id = value.episode_id
+        self.operation.turn_id = value.turn_id
         return self.operation
+
+    def load_output(self, reference: str) -> str:
+        self.loaded_outputs.append(reference)
+        return self.output
+
+    def load_workspace_archive(self, operation_id: str) -> bytes:
+        self.loaded_archives.append(operation_id)
+        return self.archive
 
 
 def runner(result: dict[str, object], operation: Operation | None = None) -> tuple[PiNativeRunner, Runtime]:
     selected = operation or Operation("review:one")
-    runtime = Runtime(selected)
-    value = PiNativeRunner(runtime, invocation, lambda reference: json.dumps(result))
+    runtime = Runtime(selected, json.dumps(result))
+    value = PiNativeRunner(runtime)  # type: ignore[arg-type]
     value.route_operation(selected.operation_id)
     return value, runtime
 
@@ -140,6 +148,7 @@ def test_review_waits_reads_strict_result_and_closes_verified_operation() -> Non
 
     assert subject.review(URL, request).status == "clear"
     assert len(runtime.started) == 1
+    assert runtime.started[0].prompt == encode_prompt("review", URL, request)
     assert runtime.operation.waits == 1 and runtime.operation.closed == 1
 
 
@@ -185,7 +194,8 @@ def test_malformed_output_and_operation_identity_mismatch_fail_closed() -> None:
     request = review_request()
     malformed_operation = Operation("review:malformed")
     runtime = Runtime(malformed_operation)
-    malformed = PiNativeRunner(runtime, invocation, lambda reference: "not-json")
+    runtime.output = "not-json"
+    malformed = PiNativeRunner(runtime)  # type: ignore[arg-type]
     malformed.route_operation(malformed_operation.operation_id)
     with pytest.raises(AgentProtocolError, match="malformed JSON"):
         malformed.review(URL, request)
@@ -193,7 +203,7 @@ def test_malformed_output_and_operation_identity_mismatch_fail_closed() -> None:
 
     mismatched_operation = Operation("review:other")
     runtime = Runtime(mismatched_operation)
-    mismatched = PiNativeRunner(runtime, invocation, lambda reference: "{}")
+    mismatched = PiNativeRunner(runtime)  # type: ignore[arg-type]
     mismatched.route_operation("review:expected")
     with pytest.raises(AgentProtocolError, match="identity mismatched"):
         mismatched.review(URL, request)
@@ -203,7 +213,7 @@ def test_malformed_output_and_operation_identity_mismatch_fail_closed() -> None:
 
 def test_runtime_never_starts_without_a_claimed_route() -> None:
     runtime = Runtime(Operation("review:unclaimed"))
-    subject = PiNativeRunner(runtime, invocation, lambda reference: "{}")
+    subject = PiNativeRunner(runtime)  # type: ignore[arg-type]
 
     with pytest.raises(AgentProtocolError, match="route was not selected"):
         subject.review(URL, review_request())
@@ -211,21 +221,32 @@ def test_runtime_never_starts_without_a_claimed_route() -> None:
     assert runtime.started == []
 
 
-def test_invocation_mismatch_and_failed_preflight_cannot_start_or_reuse_route() -> None:
+def test_stable_start_identity_and_failed_preflight_cannot_start_or_reuse_route() -> None:
     runtime = Runtime(Operation("review:expected"))
-    mismatched = PiNativeRunner(runtime, lambda operation, prompt: invocation("review:other", prompt), lambda ref: "{}")
-    mismatched.route_operation("review:expected")
-    with pytest.raises(AgentProtocolError, match="invocation correlation"):
-        mismatched.review(URL, review_request())
-    assert runtime.started == []
+    subject = PiNativeRunner(runtime)  # type: ignore[arg-type]
+    subject.route_operation("review:expected")
+    with pytest.raises(AgentProtocolError):
+        subject.review(URL, review_request())
+    first = runtime.started[0]
+    replay_runtime = Runtime(Operation("review:expected"))
+    replay = PiNativeRunner(replay_runtime)  # type: ignore[arg-type]
+    replay.route_operation("review:expected")
+    with pytest.raises(AgentProtocolError):
+        replay.review(URL, review_request())
+    second = replay_runtime.started[0]
+    assert (first.operation_id, first.episode_id, first.turn_id) == (
+        second.operation_id,
+        second.episode_id,
+        second.turn_id,
+    )
 
-    subject = PiNativeRunner(runtime, invocation, lambda ref: "{}")
+    subject = PiNativeRunner(runtime)  # type: ignore[arg-type]
     subject.route_operation("review:preflight")
     with pytest.raises(AgentProtocolError, match="repository URL"):
         subject.review("https://user@example.invalid/repo", review_request())
     with pytest.raises(AgentProtocolError, match="route was not selected"):
         subject.review(URL, review_request())
-    assert runtime.started == []
+    assert len(runtime.started) == 1
 
 
 def test_stale_timeout_failure_and_unverified_cleanup_fail_safe() -> None:
@@ -261,13 +282,7 @@ def test_timeout_cancels_before_verified_close() -> None:
     operation.wait = lambda timeout=None: (_ for _ in ()).throw(TimeoutError())  # type: ignore[method-assign]
     runtime = Runtime(operation)
     clock = iter((0.0, 2.0))
-    subject = PiNativeRunner(
-        runtime,
-        invocation,
-        lambda reference: "{}",
-        timeout=1,
-        clock=lambda: next(clock),
-    )
+    subject = PiNativeRunner(runtime, timeout=1, clock=lambda: next(clock))  # type: ignore[arg-type]
     subject.route_operation(operation.operation_id)
 
     with pytest.raises(AgentProtocolError) as caught:
@@ -276,3 +291,51 @@ def test_timeout_cancels_before_verified_close() -> None:
     assert caught.value.timed_out
     assert operation.cancellations == ["host-timeout"]
     assert operation.closed == 1
+
+
+def test_coding_archive_policy_passes_unchanged_and_rejects_changed_or_missing_archive() -> None:
+    request = coding_request()
+    base = {
+        **{
+            name: getattr(request, name)
+            for name in ("kind", "repository", "pull_request", "epoch", "head", "base", "ref")
+        },
+        "reproduction_status": "not_attempted",
+        "diff": "",
+        "changed_files": [],
+        "validation_evidence": [],
+        "proposed_commit_message": "",
+    }
+    subject, runtime = runner(dict(base, status="unchanged"), Operation("code:archive"))
+    assert subject.code(URL, request).status == "unchanged"
+    assert runtime.loaded_archives == ["code:archive"]
+
+    subject, runtime = runner(
+        dict(
+            base,
+            status="changed",
+            diff="synthetic",
+            changed_files=["x.py"],
+            validation_evidence=[{"command": "synthetic", "result": "passed"}],
+            proposed_commit_message="Apply synthetic change",
+        ),
+        Operation("code:changed"),
+    )
+    with pytest.raises(AgentProtocolError, match="cannot be safely applied") as caught:
+        subject.code(URL, request)
+    assert caught.value.canceled
+    assert runtime.loaded_archives == ["code:changed"]
+
+    subject, runtime = runner(dict(base, status="unchanged"), Operation("code:missing"))
+    runtime.archive = b""
+    with pytest.raises(AgentProtocolError, match="archive is unavailable") as caught:
+        subject.code(URL, request)
+    assert caught.value.canceled
+
+    subject, runtime = runner(dict(base, status="unchanged"), Operation("code:invalid-archive"))
+    runtime.load_workspace_archive = lambda operation_id: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        RuntimeProtocolError("workspace-archive-corrupt")
+    )
+    with pytest.raises(AgentProtocolError, match="archive is unavailable") as caught:
+        subject.code(URL, request)
+    assert caught.value.canceled

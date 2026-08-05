@@ -47,11 +47,15 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
 
 - The hard-coded Amp runner default is removed from `HostService`.
 - Agenticus execution is selected only after an exact READY Pi installation
-  probe and injected A2 lifecycle collaborators; production remains fail-closed
-  until Petrus supplies the supported authority-capable host factory.
+  probe on the Petrus-owned A2 host. Composition and probe do not consult
+  authority; production's supplier remains unavailable until a bounded live gate.
 - Legacy rollback requires explicit mode selection and an explicit isolation
   waiver; no failure can select it automatically.
 - Route custody and Petrus History remain separate durable stores with strict
   claim-before-dispatch, History-before-settlement ordering and startup repair.
 - No connection custody, runtime supervision, Hands gateway, Attachment,
   territory lifecycle, or effect-fencing implementation is copied from Petrus.
+- A settled Pi workspace archive is continuation custody, not host-tree mutation
+  authority. Unchanged coding requires the archive to exist; changed coding is
+  non-retryably refused until Hamsterdan can reconcile a private staged archive
+  with the exact current PR tree and existing publication fence.

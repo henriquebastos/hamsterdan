@@ -12,6 +12,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
+
 from hamsterdan.agents import AgentProtocolError, AgentRunner, OperationRoutedRunner
 from hamsterdan.github_app.auth import GitHubAppClients
 from hamsterdan.github_app.config import HostConfig
@@ -155,6 +157,7 @@ class HostService:
         runner: AgentRunner,
         agent_composition: AgentComposition,
         agent_routes: AgentRouteStore,
+        agent_runtime: PiA2RuntimeHost | None = None,
         application_factory: ApplicationFactory = PrReadinessApplication,
         workflow_path: str = ".github/workflows/ci.yml",
         reminder_delay: float = 259200,
@@ -172,7 +175,7 @@ class HostService:
         _, secret = config._credentials()
         self.custody = WebhookCustody(self.root / "webhooks.sqlite3", webhook_secret=secret, registry=self.registry)
         self.runner, self.application_factory = runner, application_factory
-        self.agent_composition, self.agent_routes = agent_composition, agent_routes
+        self.agent_composition, self.agent_routes, self.agent_runtime = agent_composition, agent_routes, agent_runtime
         self.workflow_path, self.reminder_delay, self.poll_interval = workflow_path, reminder_delay, poll_interval
         self.sweep_interval = sweep_interval
         self.qualification_fault = qualification_fault
@@ -495,7 +498,8 @@ class HostService:
             return
         self._closed = True
         failure: Exception | None = None
-        for resource in (*self._apps.values(), self.custody, self.registry, self.clients, self.agent_routes):
+        runtime = () if self.agent_runtime is None else (self.agent_runtime,)
+        for resource in (*self._apps.values(), self.custody, self.registry, self.clients, *runtime, self.agent_routes):
             try:
                 resource.close()
             except Exception as error:  # noqa: BLE001 -- every owned resource must still receive exactly one close

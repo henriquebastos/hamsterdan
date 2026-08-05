@@ -7,11 +7,13 @@ import time
 from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import asdict
+from hashlib import sha256
 from typing import Protocol, cast, runtime_checkable
 from urllib.parse import urlsplit, urlunsplit
 
 from petrus.agenticus.runtime.operation import RuntimeOperation, RuntimeProtocolError
-from petrus.agenticus.runtime.pi import PiRuntimeInvocation
+from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost, PiA2RuntimeStart
+from petrus.agenticus.thread.identity import EpisodeId, TurnId
 from petrus.agenticus.thread.lifecycle import TurnOutcome
 
 from .protocol import (
@@ -33,12 +35,6 @@ from .protocol import (
 )
 
 MAX_RESULT_BYTES = 1_000_000
-InvocationFactory = Callable[[str, str], PiRuntimeInvocation]
-OutputLoader = Callable[[str], str]
-
-
-class PiRuntimeLifecycle(Protocol):
-    def start(self, invocation: PiRuntimeInvocation) -> RuntimeOperation: ...
 
 
 @runtime_checkable
@@ -91,9 +87,7 @@ class PiNativeRunner:
 
     def __init__(
         self,
-        runtime: PiRuntimeLifecycle,
-        invocation_factory: InvocationFactory,
-        output_loader: OutputLoader,
+        runtime: PiA2RuntimeHost,
         *,
         timeout: float = 300,
         poll_interval: float = 0.1,
@@ -101,7 +95,7 @@ class PiNativeRunner:
     ) -> None:
         if timeout <= 0 or poll_interval <= 0 or poll_interval > timeout:
             raise ValueError("Pi runner timeout and poll interval must be positive and ordered")
-        self._runtime, self._invocation_factory, self._output_loader = runtime, invocation_factory, output_loader
+        self._runtime = runtime
         self._timeout, self._poll_interval, self._clock = timeout, poll_interval, clock
 
     def route_operation(self, operation: str) -> None:
@@ -133,10 +127,14 @@ class PiNativeRunner:
         if is_current is not None and not is_current():
             raise AgentProtocolError("agent attempt superseded", canceled=True)
         try:
-            invocation = self._invocation_factory(operation_id, prompt)
-            if invocation.operation_id != operation_id or invocation.prompt != prompt:
-                raise AgentProtocolError("Pi invocation correlation mismatched its route")
-            operation = self._runtime.start(invocation)
+            identity = sha256(operation_id.encode()).hexdigest()
+            start = PiA2RuntimeStart(
+                operation_id,
+                EpisodeId(f"episode-{identity}"),
+                TurnId(f"turn-{identity}"),
+                prompt,
+            )
+            operation = self._runtime.start(start)
         except AgentProtocolError:
             raise
         except Exception:  # noqa: BLE001 - sanitize injected lifecycle/factory failures at the protocol boundary
@@ -148,8 +146,8 @@ class PiNativeRunner:
                 raise AgentProtocolError("Pi operation identity mismatched its route")
             settlement = self._wait(operation, is_current)
             if (
-                settlement.episode_id != invocation.episode_id
-                or settlement.turn_id != invocation.turn_id
+                settlement.episode_id != start.episode_id
+                or settlement.turn_id != start.turn_id
                 or settlement.outcome is not TurnOutcome.COMPLETED
                 or settlement.accepted_appends != 1
                 or settlement.output_reference is None
@@ -157,15 +155,28 @@ class PiNativeRunner:
                 if settlement.outcome is TurnOutcome.CANCELLED:
                     raise AgentProtocolError("agent attempt canceled", canceled=True)
                 raise AgentProtocolError("Pi operation did not produce a completed result")
-            raw = self._output_loader(settlement.output_reference)
+            raw = self._runtime.load_output(settlement.output_reference)
             data = _parse_result(raw)
             changed = data.get("changed_files") if kind == "coding" else None
-            return _validate_result(
+            result = _validate_result(
                 kind,
                 data,
                 request,
                 cast(list[str], changed) if isinstance(changed, list) else None,
             )
+            if kind == "coding":
+                try:
+                    archive = self._runtime.load_workspace_archive(operation_id)
+                except RuntimeProtocolError:
+                    raise AgentProtocolError("Pi coding workspace archive is unavailable", canceled=True) from None
+                if not archive:
+                    raise AgentProtocolError("Pi coding workspace archive is unavailable", canceled=True)
+                if cast(CodingResult, result).status == "changed":
+                    raise AgentProtocolError(
+                        "Pi changed workspace cannot be safely applied by this host",
+                        canceled=True,
+                    )
+            return result
         except AgentProtocolError:
             raise
         except RuntimeProtocolError:

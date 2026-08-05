@@ -13,8 +13,9 @@ import uvicorn
 
 from hamsterdan.github_app.config import ConfigurationError, HostConfig
 
-from .agenticus import AgentConfig, AgentRouteStore, compose_agent, select_agent_runner
+from .agenticus import AgentConfig, AgentMode, AgentRouteStore, compose_agent, select_agent_runner
 from .api import create_app
+from .pi_a2 import compose_owned_pi_a2
 from .service import HostService, QualificationFault
 
 MAX_HISTORY_BYTES = 16 * 1024 * 1024
@@ -175,6 +176,7 @@ def main() -> int:
         parser().error("inspect-instance requires --installation, --repository, and --pr")
     service: HostService | None = None
     route_store: AgentRouteStore | None = None
+    pi_runtime = None
     try:
         config = HostConfig.from_environment()
         if args.command == "inspect-instance":
@@ -187,11 +189,14 @@ def main() -> int:
         agent = compose_agent(AgentConfig.from_environment(dict(os.environ)))
         route_store = AgentRouteStore(config.state_path / "agent-routes.sqlite3")
         route_store.activate(agent, config.state_path / "applications")
+        if agent.mode is AgentMode.AGENTICUS:
+            pi_runtime = compose_owned_pi_a2(config.state_path)
         service = HostService(
             config,
-            runner=select_agent_runner(agent),
+            runner=select_agent_runner(agent, pi_runtime=pi_runtime),
             agent_composition=agent,
             agent_routes=route_store,
+            agent_runtime=pi_runtime,
             workflow_path=os.getenv("HAMSTERDAN_WORKFLOW_PATH", ".github/workflows/ci.yml"),
             reminder_delay=float(os.getenv("HAMSTERDAN_REMINDER_SECONDS", "259200")),
             qualification_fault=QualificationFault.from_environment(),
@@ -216,8 +221,11 @@ def main() -> int:
     except (ConfigurationError, RuntimeError, ValueError) as error:
         if service is not None:
             service.close()
-        elif route_store is not None:
-            route_store.close()
+        else:
+            if pi_runtime is not None:
+                pi_runtime.close()
+            if route_store is not None:
+                route_store.close()
         parser().error(str(error))
         return 2
 

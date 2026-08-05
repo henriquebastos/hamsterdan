@@ -10,12 +10,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Protocol
 
 from petrus.agenticus.catalog.descriptor import CapabilityDescriptor, DescriptorIdentity, DescriptorKind
 from petrus.agenticus.catalog.resolution import Catalog, ResolutionRequest, ResolutionSnapshot
-from petrus.agenticus.runtime.installation import ProbeDisposition, RuntimeProbeResult
-from petrus.agenticus.runtime.operation import RuntimeOperation
+from petrus.agenticus.runtime.installation import ProbeDisposition
 from petrus.agenticus.runtime.pi import (
     PI_API_KEY_CATALOG,
     PI_COLLOCATED_HANDS,
@@ -23,8 +21,8 @@ from petrus.agenticus.runtime.pi import (
     PI_CONTINUATION_CAPABILITIES,
     PI_LOCAL_TERRITORY,
     PI_PROGRAM_CAPABILITIES,
-    PiRuntimeInvocation,
 )
+from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
 from petrus.agenticus.runtime.profiles import AGENT_AS_NET_A5_LOCAL, AMP_A1, PI_NATIVE_A2_LOCAL
 from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested
 from petrus.impetus.history.codec import decode_record
@@ -35,7 +33,6 @@ from hamsterdan.agents import (
     PiNativeRunner,
     UnavailablePiRunner,
 )
-from hamsterdan.agents.pi import InvocationFactory, OutputLoader
 
 PI_PROVIDER = "anthropic"
 PI_MODEL = "claude-sonnet-4-5"
@@ -97,11 +94,6 @@ class AgentComposition:
             raise ValueError("legacy Amp composition requires its rollback profile without an Agenticus snapshot")
 
 
-class PiProbeRuntime(Protocol):
-    def probe(self) -> RuntimeProbeResult: ...
-    def start(self, invocation: PiRuntimeInvocation) -> RuntimeOperation: ...
-
-
 def resolve_agenticus(
     *,
     descriptors: Iterable[CapabilityDescriptor] = AGENTICUS_DESCRIPTORS,
@@ -143,9 +135,7 @@ def compose_agent(config: AgentConfig) -> AgentComposition:
 def select_agent_runner(
     composition: AgentComposition,
     *,
-    pi_runtime: PiProbeRuntime | None = None,
-    invocation_factory: InvocationFactory | None = None,
-    output_loader: OutputLoader | None = None,
+    pi_runtime: PiA2RuntimeHost | None = None,
 ) -> AgentRunner:
     """Select execution only after an exact READY probe; never substitute a fallback."""
 
@@ -166,11 +156,9 @@ def select_agent_runner(
         or installation.runtime != PI_NATIVE_A2_LOCAL.identity
         or installation.adapter_contract_version != 1
         or not required <= installation.capabilities
-        or invocation_factory is None
-        or output_loader is None
     ):
         return UnavailablePiRunner()
-    return PiNativeRunner(pi_runtime, invocation_factory, output_loader)
+    return PiNativeRunner(pi_runtime)
 
 
 @dataclass(frozen=True)

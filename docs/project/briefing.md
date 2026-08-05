@@ -33,8 +33,9 @@ evidence, not a Hamsterdan package dependency.
 
 CV16.DS11 resolves a host-owned Pi native A2 Local Agenticus profile, fences
 every operation to its persisted mode/profile/snapshot, and adapts the unchanged
-product protocol to an injected probe-qualified Pi lifecycle. AgentNetRunner is
-explicitly excluded because its A5 topology is not the selected A2 route.
-Production provider execution remains fail-closed pending a supported
-Petrus-owned A2 host factory and separately bounded live gate; explicit
-`legacy-amp` is rollback only.
+product protocol to the Petrus-owned probe-qualified A2 host. AgentNetRunner is
+excluded because its A5 topology is not the selected A2 route. Composition,
+probe, continuation workspace/session chaining, replay, conflicts, cancellation,
+rollback, restart indeterminacy, and teardown are qualified without authority.
+Changed coding remains fail-closed pending safe archive-to-current-tree
+reconciliation; `legacy-amp` is rollback only and live authority is deferred.
