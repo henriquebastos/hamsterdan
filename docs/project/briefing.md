@@ -50,4 +50,8 @@ therefore remains unaccepted and no fallback profile is permitted. A subsequent
 credential-free diagnostic proved the complete canonical-patch publication and
 replay path against a bounded local authority, but also proved that the live
 harness overwrote the original rejected fence with a secondary empty-replay
-error. The original cause is therefore unclassified rather than inferred.
+error. The original cause is therefore unclassified rather than inferred. A
+closed publication-category contract now retains the first cause before replay,
+suppresses publication assertions after zero publication, and keeps replay and
+cleanup failures separate. The deterministic code is eligible to request a
+fresh bounded live authorization; none is implied or exercised.

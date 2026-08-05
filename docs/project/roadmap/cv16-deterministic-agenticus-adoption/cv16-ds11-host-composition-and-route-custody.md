@@ -49,7 +49,7 @@ Focused direct-key custody, receiver, adapter, owned-factory, host composition,
 Activity, runtime, architecture, application, Git publication, and service
 suites pass 101 tests.
 The full project gate passes formatting, Ruff, ty, nine Bun relay tests, source
-and wheel builds, and 333 Python tests
+and wheel builds, and 343 Python tests
 with the one opt-in provider test skipped. No provider authority or paid/live
 operation was run.
 
@@ -91,6 +91,19 @@ erased logging. Classification is therefore C: not deterministically
 reproducible from retained safe evidence. This result proves neither a production
 publisher defect nor a synthetic-authority defect.
 
+The follow-up qualification-observation slice adds a closed publication-stage
+vocabulary covering correlation, repository/ref admission, patch admission,
+local Git operations, idempotency, current authority, object writes, exact CAS,
+and unavailable boundaries. Production Activity retains only that category in
+canonical `EffectResult`; exception prose remains ephemeral. A one-shot
+qualification state machine rejects arbitrary strings and non-boolean evidence,
+skips schema/tree/replay after zero or failed publication, and records replay
+and cleanup independently. The local receiver-to-publisher fixture proves the
+successful path still advances once and recovers replay without another ref
+advance. Focused qualification, publisher, Activity, Net, and Application tests
+pass 110 tests; the full gate passes 343 Python tests with one explicit provider
+test skipped, nine Bun tests, formatting, Ruff, ty, and source/wheel builds.
+
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
@@ -109,12 +122,9 @@ repositories remain a host resource-trust boundary.
 
 ## Next slice
 
-Diagnose the sanitized publication-boundary rejection without provider work,
-first add a credential-free qualification observation point that retains a
-stable publisher stage/error category before attempting replay, and prove that
-the harness stops replay assertions after zero publication. Dispose of the
-orphaned qualification repository through an identity with repository-deletion
-authority. The code is not yet eligible to request a fresh provider attempt; a
-new attempt requires both deterministic observation qualification and fresh
-bounded authorization. Native subscription and extra usage remain excluded. Do
-not begin DS12 before the live gate passes.
+The deterministic code is eligible to request a fresh, separately bounded
+provider attempt because its first-cause observation contract is now qualified.
+No such attempt is authorized by this slice. Separately dispose of the orphaned
+qualification repository only through an explicitly approved exact-target
+administration identity. Native subscription and extra usage remain excluded.
+Do not begin DS12 before the live gate passes.

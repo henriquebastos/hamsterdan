@@ -27,7 +27,7 @@ from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import ActionsRunSnapshot, GitHubBoundaryError
 
-from .git_publish import GitPublishError, HostGitPublisher, payload_digest
+from .git_publish import GitPublishError, HostGitPublisher, PublicationCategory, payload_digest
 
 CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]
@@ -423,6 +423,24 @@ class PrReadinessActivities:
             )
         try:
             self._fence(work)
+        except GitHubBoundaryError:
+            LOG.warning(
+                "agent coding result rejected kind=%s category=publication_boundary epoch=%s head=%s operation=%s",
+                kind,
+                work.epoch,
+                work.head,
+                work.operation,
+            )
+            return EffectResult(
+                kind,
+                work.epoch,
+                work.head,
+                False,
+                fingerprint=request.fingerprint,
+                lineage=work.operation,
+                operation=work.operation,
+                publication_category=PublicationCategory.BOUNDARY_UNAVAILABLE.value,
+            )
         except RuntimeError:
             LOG.warning(
                 "agent coding result rejected kind=%s category=stale_authority epoch=%s head=%s operation=%s",
@@ -439,6 +457,7 @@ class PrReadinessActivities:
                 fingerprint=request.fingerprint,
                 lineage=work.operation,
                 operation=work.operation,
+                publication_category=PublicationCategory.CURRENT_AUTHORITY.value,
             )
         try:
             published = self.git_publisher.publish(
@@ -466,6 +485,7 @@ class PrReadinessActivities:
                 fingerprint=request.fingerprint,
                 lineage=work.operation,
                 operation=work.operation,
+                publication_category=error.category.value,
             )
         except RuntimeError as error:
             LOG.warning(
@@ -485,6 +505,7 @@ class PrReadinessActivities:
                 fingerprint=request.fingerprint,
                 lineage=work.operation,
                 operation=work.operation,
+                publication_category=PublicationCategory.BOUNDARY_UNAVAILABLE.value,
             )
         return EffectResult(
             kind, work.epoch, work.head, True, published.head, request.fingerprint, work.operation, work.operation

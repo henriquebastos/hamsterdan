@@ -25,3 +25,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-05 — Direct-key production wiring qualified; live gate blocked before attempt](entries/2026-08-05T1947Z-direct-key-production-wiring-qualified-live-gate-blocked.md)
 - [2026-08-05 — Direct-key live attempt failed closed at Git publication](entries/2026-08-05T2315Z-direct-key-live-attempt-failed-closed.md)
 - [2026-08-05 — DS11 publication rejection classified as unrepeatable from retained evidence](entries/2026-08-05T2350Z-ds11-publication-diagnostic-classified-c.md)
+- [2026-08-05 — DS11 publication observation gap closed deterministically](entries/2026-08-05T2358Z-ds11-publication-observation-gap-closed.md)

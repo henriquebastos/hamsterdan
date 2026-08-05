@@ -4,13 +4,15 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
+
 from hamsterdan.agents import AgentProtocolError, AmpExecuteRunner, CodingResult
 from hamsterdan.agents import ConversationResult as AgentConversationResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.activities import PrReadinessActivities, _confirmation_text, _intent_digest, activity_definitions
-from hamsterdan.host.git_publish import GitPublishError, GitPublishResult, payload_digest
+from hamsterdan.host.git_publish import GitPublishError, GitPublishResult, PublicationCategory, payload_digest
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
 
 
@@ -145,7 +147,7 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
 
     class Publisher:
         def publish(self, *args, **kwargs):
-            raise GitPublishError("provider refused the publication")
+            raise GitPublishError(PublicationCategory.REF_CAS, "provider refused the publication")
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
@@ -161,6 +163,7 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
 
     assert result.kind == "repair" and result.ok is False
     assert result.operation == "repair-operation"
+    assert result.publication_category == PublicationCategory.REF_CAS
     assert "category=publication" in caplog.text
     assert "reason=provider refused the publication" in caplog.text
 
@@ -423,7 +426,16 @@ def test_stale_authority_between_coding_attempts_stops_before_retry_and_publicat
     assert "category=stale_authority attempt=2" in caplog.text
 
 
-def test_stale_final_fence_after_changed_retry_prevents_publication(caplog) -> None:
+@pytest.mark.parametrize(
+    ("failure", "category", "log_category"),
+    [
+        (RuntimeError("stale authority"), PublicationCategory.CURRENT_AUTHORITY, "stale_authority"),
+        (GitHubBoundaryError("unavailable"), PublicationCategory.BOUNDARY_UNAVAILABLE, "publication_boundary"),
+    ],
+)
+def test_final_fence_failure_retains_closed_category_before_publication(
+    caplog, failure: RuntimeError, category: PublicationCategory, log_category: str
+) -> None:
     operations = object.__new__(PrReadinessActivities)
     dispatched: list[tuple[str, int]] = []
     operations.repository = "owner/repo"
@@ -437,7 +449,7 @@ def test_stale_final_fence_after_changed_retry_prevents_publication(caplog) -> N
         nonlocal fence_calls
         fence_calls += 1
         if fence_calls == 3:
-            raise RuntimeError("stale authority")
+            raise failure
 
     operations.current_fence = fence
 
@@ -480,12 +492,14 @@ def test_stale_final_fence_after_changed_retry_prevents_publication(caplog) -> N
         payload={"base_head": "b" * 40, "policy_digest": "policy", "intent": {}},
     )
 
-    assert operations.change(work).ok is False
+    result = operations.change(work)
+    assert result.ok is False
+    assert result.publication_category == category
     assert operations.runner.calls == 2
     assert dispatched == [("change-operation", 1), ("change-operation", 2)]
     assert operations.git_publisher.calls == 0
     assert fence_calls == 3
-    assert "coding result rejected kind=change category=stale_authority" in caplog.text
+    assert f"coding result rejected kind=change category={log_category}" in caplog.text
 
 
 def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(tmp_path: Path) -> None:

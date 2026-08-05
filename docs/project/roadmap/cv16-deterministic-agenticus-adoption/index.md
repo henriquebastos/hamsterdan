@@ -52,3 +52,9 @@ original failure had already been folded into a product outcome. Because the
 original sanitized reason was not retained, the live rejection is classification
 C: neither a production defect nor a synthetic-authority mismatch can be
 claimed from safe evidence.
+
+The qualification observation slice now retains only a closed, coordinate-free
+publication stage in canonical Activity results. Zero or failed publication
+suppresses schema/tree/replay checks; successful publication runs them once;
+replay and cleanup failures cannot replace the original cause. This closes the
+deterministic evidence gap without changing AgentRunner or publication fences.

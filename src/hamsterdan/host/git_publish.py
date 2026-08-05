@@ -7,7 +7,10 @@ import hashlib
 import re
 import subprocess
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
 from hamsterdan.agents import CodingResult
@@ -17,8 +20,28 @@ from hamsterdan.github_app.models import GitHubBoundaryError
 _SAFE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}\Z")
 
 
+class PublicationCategory(StrEnum):
+    """Closed, coordinate-free publication stage retained by canonical History."""
+
+    CORRELATION = "correlation"
+    REPOSITORY_REF = "repository_ref"
+    PATCH_ADMISSION = "patch_admission"
+    GIT_OPERATION = "git_operation"
+    IDEMPOTENCY = "idempotency"
+    CURRENT_AUTHORITY = "current_authority"
+    OBJECT_WRITE = "object_write"
+    REF_CAS = "ref_cas"
+    BOUNDARY_UNAVAILABLE = "boundary_unavailable"
+
+
 class GitPublishError(RuntimeError):
-    """A deliberately credential-free publishing failure."""
+    """A deliberately credential-free publishing failure with a stable category."""
+
+    def __init__(self, category: PublicationCategory, reason: str):
+        if not isinstance(category, PublicationCategory):
+            raise TypeError("publication category must use the closed vocabulary")
+        super().__init__(reason)
+        self.category = category
 
 
 @dataclass(frozen=True)
@@ -59,17 +82,22 @@ class HostGitPublisher:
         _validate_commit_message(result.proposed_commit_message)
         pull = self.authority.pull_request()
         if result.head != expected_head or result.base != base_head:
-            raise GitPublishError("stale or incorrectly correlated Git publication")
+            raise GitPublishError(PublicationCategory.CORRELATION, "stale or incorrectly correlated Git publication")
         if (
             not _same_repository(pull.repository, self.authority.repository)
             or not _same_repository(pull.head_repository, self.authority.repository)
             or not _safe_branch(pull.head_ref)
         ):
-            raise GitPublishError("fork or unsafe pull-request ref is not publishable")
+            raise GitPublishError(
+                PublicationCategory.REPOSITORY_REF, "fork or unsafe pull-request ref is not publishable"
+            )
         if result.status != "changed" or not result.diff.strip() or _has_conflict_markers(result.diff):
-            raise GitPublishError("empty, unchanged, or conflicted agent patch is not publishable")
-        with tempfile.TemporaryDirectory(prefix="hamsterdan-git-") as temporary:
-            root = Path(temporary) / "repository"
+            raise GitPublishError(
+                PublicationCategory.PATCH_ADMISSION,
+                "empty, unchanged, or conflicted agent patch is not publishable",
+            )
+        with _publication_directory() as temporary:
+            root = temporary / "repository"
             self._git("clone", "--quiet", "--no-checkout", "--", self.clone_url, str(root))
             self._git("-C", str(root), "checkout", "--quiet", "--detach", expected_head)
             parents = [expected_head, *([base_head] if merge_base else [])]
@@ -79,18 +107,24 @@ class HostGitPublisher:
                 # GitHub after the remote lookup before treating replay as success.
                 verified = self.authority.pull_request()
                 if not _same_pull(verified, pull) or verified.head != recovered:
-                    raise GitPublishError("recovered operation is not the verified PR head")
+                    raise GitPublishError(
+                        PublicationCategory.IDEMPOTENCY, "recovered operation is not the verified PR head"
+                    )
                 return GitPublishResult(recovered, True)
             if pull.head != expected_head or pull.base != base_head:
-                raise GitPublishError("stale or incorrectly correlated Git publication")
+                raise GitPublishError(
+                    PublicationCategory.CURRENT_AUTHORITY, "stale or incorrectly correlated Git publication"
+                )
             if merge_base:
                 self._git("-C", str(root), "cat-file", "-e", f"{base_head}^{{commit}}")
-            patch = Path(temporary) / "change.patch"
+            patch = temporary / "change.patch"
             patch.write_text(result.diff, encoding="utf-8")
             self._git("-C", str(root), "apply", "--binary", "--index", "--", str(patch))
             changed = self._validate_staged_tree(root)
             if changed != result.changed_files or not changed:
-                raise GitPublishError("agent patch files differ from its declared result")
+                raise GitPublishError(
+                    PublicationCategory.PATCH_ADMISSION, "agent patch files differ from its declared result"
+                )
             tree = self._git("-C", str(root), "write-tree", capture=True).strip()
             base_tree = self._git("-C", str(root), "rev-parse", f"{expected_head}^{{tree}}", capture=True).strip()
             message = (
@@ -103,7 +137,9 @@ class HostGitPublisher:
             # irreversible ref update.
             current = self.authority.pull_request()
             if not _same_pull(current, pull) or current.head != expected_head or current.base != base_head:
-                raise GitPublishError("pull request changed before Git publication")
+                raise GitPublishError(
+                    PublicationCategory.CURRENT_AUTHORITY, "pull request changed before Git publication"
+                )
             self._advance_ref(pull.head_ref, expected_head, commit)
             verified = self.authority.pull_request()
             if (
@@ -111,7 +147,9 @@ class HostGitPublisher:
                 or verified.head not in {expected_head, commit}
                 or verified.base != base_head
             ):
-                raise GitPublishError("ref advance succeeded without a coherent PR projection")
+                raise GitPublishError(
+                    PublicationCategory.REF_CAS, "ref advance succeeded without a coherent PR projection"
+                )
             return GitPublishResult(commit)
 
     def _validate_staged_tree(self, root: Path) -> list[str]:
@@ -126,14 +164,18 @@ class HostGitPublisher:
             metadata, separator, path = entry.partition("\t")
             fields = metadata.split()
             if not separator or len(fields) != 3:
-                raise GitPublishError("staged tree contains an unsafe mode or unmerged entry")
+                raise GitPublishError(
+                    PublicationCategory.PATCH_ADMISSION, "staged tree contains an unsafe mode or unmerged entry"
+                )
             entries.setdefault(path, []).append((fields[0], fields[2]))
         for path in changed_paths:
             # A deletion has no index entry.  Every present changed entry must be
             # one ordinary stage-zero blob, never a symlink, gitlink, or conflict.
             values = entries.get(path, [])
             if values and (len(values) != 1 or values[0][0] not in {"100644", "100755"} or values[0][1] != "0"):
-                raise GitPublishError("staged tree contains an unsafe mode or unmerged entry")
+                raise GitPublishError(
+                    PublicationCategory.PATCH_ADMISSION, "staged tree contains an unsafe mode or unmerged entry"
+                )
         return changed_paths
 
     def _recover(self, root: Path, ref: str, operation: str, digest: str, expected_parents: list[str]) -> str:
@@ -148,10 +190,12 @@ class HostGitPublisher:
         if operation_line not in trailers:
             return ""
         if trailers.count(operation_line) != 1 or trailers.count(f"Hamsterdan-Payload-Digest: {digest}") != 1:
-            raise GitPublishError("stable operation was reused with a different payload")
+            raise GitPublishError(
+                PublicationCategory.IDEMPOTENCY, "stable operation was reused with a different payload"
+            )
         parents = self._git("-C", str(root), "show", "-s", "--format=%P", head, capture=True).split()
         if parents != expected_parents:
-            raise GitPublishError("recovered operation has unexpected commit parents")
+            raise GitPublishError(PublicationCategory.IDEMPOTENCY, "recovered operation has unexpected commit parents")
         return head
 
     def _create_commit(
@@ -172,7 +216,9 @@ class HostGitPublisher:
             metadata, separator, observed = index.removesuffix("\0").partition("\t")
             fields = metadata.split()
             if not separator or observed != path or len(fields) != 3 or fields[2] != "0":
-                raise GitPublishError("staged tree contains an unsafe mode or unmerged entry")
+                raise GitPublishError(
+                    PublicationCategory.PATCH_ADMISSION, "staged tree contains an unsafe mode or unmerged entry"
+                )
             mode = fields[0]
             response = self.authority.transport.request(
                 "POST",
@@ -187,7 +233,9 @@ class HostGitPublisher:
         )
         created_tree = _created_sha(tree_response, "tree")
         if created_tree != expected_tree:
-            raise GitPublishError("GitHub-created tree differs from the host-validated tree")
+            raise GitPublishError(
+                PublicationCategory.OBJECT_WRITE, "GitHub-created tree differs from the host-validated tree"
+            )
         commit_response = self.authority.transport.request(
             "POST",
             f"{self.authority.root}/git/commits",
@@ -204,11 +252,13 @@ class HostGitPublisher:
     def _advance_ref(self, ref: str, expected_head: str, commit: str) -> None:
         destination = f"refs/heads/{ref}"
         if self.authority.graphql is None:
-            raise GitPublishError("GitHub exact ref compare-and-swap is unavailable")
+            raise GitPublishError(PublicationCategory.REF_CAS, "GitHub exact ref compare-and-swap is unavailable")
         try:
             self.authority.graphql.compare_and_swap_ref(self.authority.repository, destination, expected_head, commit)
         except GitHubBoundaryError:
-            raise GitPublishError("GitHub rejected or did not prove the exact ref compare-and-swap") from None
+            raise GitPublishError(
+                PublicationCategory.REF_CAS, "GitHub rejected or did not prove the exact ref compare-and-swap"
+            ) from None
 
     @staticmethod
     def _git(
@@ -218,13 +268,22 @@ class HostGitPublisher:
             completed = subprocess.run(
                 ("git", *arguments), input=input_text, text=True, capture_output=True, env=env, check=True, timeout=60
             )
-        except subprocess.CalledProcessError:
-            raise GitPublishError("Git operation failed") from None
+        except OSError, subprocess.SubprocessError:
+            raise GitPublishError(PublicationCategory.GIT_OPERATION, "Git operation failed") from None
         return completed.stdout if capture else ""
 
 
 def _safe_branch(value: str) -> bool:
     return bool(_SAFE_REF.fullmatch(value)) and ".." not in value and "@{" not in value and not value.startswith("-")
+
+
+@contextmanager
+def _publication_directory() -> Iterator[Path]:
+    try:
+        with tempfile.TemporaryDirectory(prefix="hamsterdan-git-") as temporary:
+            yield Path(temporary)
+    except OSError:
+        raise GitPublishError(PublicationCategory.GIT_OPERATION, "Git operation failed") from None
 
 
 def _same_repository(left: str, right: str) -> bool:
@@ -253,7 +312,7 @@ def _validate_declared_paths(paths: list[str]) -> None:
         or len(paths) != len(set(paths))
         or any(not isinstance(path, str) or not _safe_path(path) for path in paths)
     ):
-        raise GitPublishError("declared or staged paths are unsafe")
+        raise GitPublishError(PublicationCategory.PATCH_ADMISSION, "declared or staged paths are unsafe")
 
 
 def _validate_commit_message(message: str) -> None:
@@ -261,7 +320,9 @@ def _validate_commit_message(message: str) -> None:
     if not isinstance(message, str) or any(
         line.strip().casefold().startswith(reserved) for line in message.splitlines()
     ):
-        raise GitPublishError("proposed commit message contains a reserved publication trailer")
+        raise GitPublishError(
+            PublicationCategory.PATCH_ADMISSION, "proposed commit message contains a reserved publication trailer"
+        )
 
 
 def _same_pull(current: object, original: object) -> bool:
@@ -288,7 +349,7 @@ def _created_sha(response: object, kind: str) -> str:
     status, body = getattr(response, "status", None), getattr(response, "body", None)
     sha = body.get("sha") if isinstance(body, dict) else None
     if status != 201 or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
-        raise GitPublishError(f"GitHub did not prove {kind} creation")
+        raise GitPublishError(PublicationCategory.OBJECT_WRITE, f"GitHub did not prove {kind} creation")
     return sha
 
 

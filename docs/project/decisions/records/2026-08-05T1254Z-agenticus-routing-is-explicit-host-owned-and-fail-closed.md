@@ -72,3 +72,9 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
   the host Git publication boundary before ref mutation. That result does not
   change the selected profile or authorize fallback; live support remains
   unaccepted pending deterministic diagnosis and a separately bounded rerun.
+- Publication qualification retains only a closed, coordinate-free stage
+  category in canonical Activity results. Publication-dependent assertions run
+  once only after one successful original publication; replay and cleanup
+  categories remain separate and cannot overwrite the first cause. This
+  evidence contract does not change the AgentRunner protocol or weaken current
+  authority, object identity, exact CAS, or idempotency fences.

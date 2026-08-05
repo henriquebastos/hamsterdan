@@ -222,6 +222,7 @@ class EffectResult:
     operation: str = ""
     capability_available: bool = True
     references: list[dict] = field(default_factory=list)
+    publication_category: str = ""
 
 
 @dataclass(frozen=True)

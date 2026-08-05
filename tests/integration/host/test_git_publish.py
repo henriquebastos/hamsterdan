@@ -9,15 +9,19 @@ import pytest
 from petrus.motus.execution.archive import extract_workspace_archive, workspace_archive
 
 from hamsterdan.agents import CodingRequest, CodingResult
+from hamsterdan.contracts.readiness import EffectResult
 from hamsterdan.github_app.models import PullRequestSnapshot, WireResponse
 from hamsterdan.host.git_publish import (
     GitPublishError,
     HostGitPublisher,
+    PublicationCategory,
+    _publication_directory,
     _same_repository,
     _validate_commit_message,
     _validate_declared_paths,
 )
 from hamsterdan.host.pi_workspace import GitPiWorkspaceProvider
+from hamsterdan.host.publication_qualification import PublicationQualification
 
 
 def git(root: Path, *arguments: str, input_text: str | None = None) -> str:
@@ -226,6 +230,18 @@ def test_ref_advance_uses_github_exact_compare_and_swap(tmp_path: Path) -> None:
         subject._advance_ref("topic/branch", expected, commit)
 
 
+def test_local_publication_io_failure_has_closed_sanitized_category(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "hamsterdan.host.git_publish.tempfile.TemporaryDirectory",
+        lambda **kwargs: (_ for _ in ()).throw(OSError("private path")),
+    )
+
+    with pytest.raises(GitPublishError, match="Git operation failed") as caught, _publication_directory():
+        raise AssertionError("unavailable directory must not yield")
+
+    assert caught.value.category is PublicationCategory.GIT_OPERATION
+
+
 def test_same_repository_identity_is_case_insensitive_but_still_rejects_forks() -> None:
     assert _same_repository("HBNetwork/demo-pr-readiness", "hbnetwork/demo-pr-readiness")
     assert not _same_repository("fork/demo-pr-readiness", "hbnetwork/demo-pr-readiness")
@@ -388,16 +404,29 @@ def test_host_derived_patch_publishes_and_replays_through_complete_local_authori
         expected_head=head,
         base_head=head,
     )
-    recovered = subject.publish(
-        result,
-        operation="change:diagnostic",
-        payload_digest="d" * 64,
-        expected_head=head,
-        base_head=head,
+    evidence = PublicationQualification()
+    evidence.record_original(EffectResult("change", 2, head, True, published.head), 1)
+    recovered = None
+
+    def replay() -> bool:
+        nonlocal recovered
+        recovered = subject.publish(
+            result,
+            operation="change:diagnostic",
+            payload_digest="d" * 64,
+            expected_head=head,
+            base_head=head,
+        )
+        return recovered.recovered
+
+    evidence.run_publication_assertions(
+        schema=lambda: True,
+        tree=lambda: git(work, "show", f"{published.head}:bounded.txt") == "qualified",
+        replay=replay,
     )
+    evidence.record_cleanup(not list(receiver.root.iterdir()))
 
     assert published.head == authority.head
-    assert recovered.head == published.head and recovered.recovered
+    assert recovered is not None and recovered.head == published.head
     assert authority.graphql.calls == 1
-    assert git(work, "show", f"{published.head}:bounded.txt") == "qualified"
-    assert list(receiver.root.iterdir()) == []
+    assert evidence.accepted
