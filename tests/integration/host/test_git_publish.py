@@ -1,11 +1,15 @@
 """Privileged Git publication boundary tests; all remotes are local."""
 
+import base64
+import os
 import subprocess
 from pathlib import Path
 
 import pytest
+from petrus.motus.execution.archive import extract_workspace_archive, workspace_archive
 
-from hamsterdan.github_app.models import WireResponse
+from hamsterdan.agents import CodingRequest, CodingResult
+from hamsterdan.github_app.models import PullRequestSnapshot, WireResponse
 from hamsterdan.host.git_publish import (
     GitPublishError,
     HostGitPublisher,
@@ -13,6 +17,7 @@ from hamsterdan.host.git_publish import (
     _validate_commit_message,
     _validate_declared_paths,
 )
+from hamsterdan.host.pi_workspace import GitPiWorkspaceProvider
 
 
 def git(root: Path, *arguments: str, input_text: str | None = None) -> str:
@@ -74,6 +79,132 @@ class GraphQL:
             from hamsterdan.github_app.models import GitHubBoundaryError
 
             raise GitHubBoundaryError("stale")
+
+
+class LocalObjectTransport:
+    """GitHub object-write subset backed by one credential-free local repository."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.created: set[str] = set()
+
+    def request(self, method: str, path: str, body=None) -> WireResponse:
+        assert method == "POST" and isinstance(body, dict)
+        if path.endswith("/git/blobs"):
+            content = base64.b64decode(body["content"])
+            completed = subprocess.run(
+                ("git", "-C", str(self.root), "hash-object", "-w", "--stdin"),
+                input=content,
+                check=True,
+                capture_output=True,
+            )
+            sha = completed.stdout.decode().strip()
+        elif path.endswith("/git/trees"):
+            index = self.root / ".git" / "publication-index"
+            index.unlink(missing_ok=True)
+            environment = os.environ | {"GIT_INDEX_FILE": str(index)}
+            subprocess.run(
+                ("git", "-C", str(self.root), "read-tree", body["base_tree"]),
+                check=True,
+                capture_output=True,
+                env=environment,
+            )
+            for entry in body["tree"]:
+                if entry["sha"] is None:
+                    command = ("git", "-C", str(self.root), "update-index", "--force-remove", "--", entry["path"])
+                else:
+                    command = (
+                        "git",
+                        "-C",
+                        str(self.root),
+                        "update-index",
+                        "--add",
+                        "--cacheinfo",
+                        f"{entry['mode']},{entry['sha']},{entry['path']}",
+                    )
+                subprocess.run(command, check=True, capture_output=True, env=environment)
+            completed = subprocess.run(
+                ("git", "-C", str(self.root), "write-tree"),
+                check=True,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            sha = completed.stdout.strip()
+            index.unlink()
+        elif path.endswith("/git/commits"):
+            environment = os.environ | {
+                "GIT_AUTHOR_NAME": body["author"]["name"],
+                "GIT_AUTHOR_EMAIL": body["author"]["email"],
+                "GIT_COMMITTER_NAME": body["committer"]["name"],
+                "GIT_COMMITTER_EMAIL": body["committer"]["email"],
+                "GIT_AUTHOR_DATE": "2001-01-01T00:00:00Z",
+                "GIT_COMMITTER_DATE": "2001-01-01T00:00:00Z",
+            }
+            command = ["git", "-C", str(self.root), "commit-tree", body["tree"]]
+            for parent in body["parents"]:
+                command.extend(("-p", parent))
+            completed = subprocess.run(
+                command,
+                input=body["message"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            sha = completed.stdout.strip()
+        else:
+            raise AssertionError("unexpected local authority request")
+        self.created.add(sha)
+        return WireResponse(201, {"sha": sha})
+
+
+class LocalRefCAS:
+    def __init__(self, authority: LocalPublicationAuthority, root: Path, remote: Path):
+        self.authority, self.root, self.remote = authority, root, remote
+        self.calls = 0
+
+    def compare_and_swap_ref(self, repository: str, ref: str, expected_head: str, commit: str) -> None:
+        assert repository == self.authority.repository
+        assert ref == "refs/heads/topic"
+        assert expected_head == self.authority.head
+        assert commit in self.authority.transport.created
+        subprocess.run(
+            ("git", "-C", str(self.root), "push", "--quiet", str(self.remote), f"{commit}:{ref}"),
+            check=True,
+            capture_output=True,
+        )
+        self.authority.head = commit
+        self.calls += 1
+
+
+class LocalPublicationAuthority:
+    repository = "owner/repo"
+    root = "/repos/owner/repo"
+
+    def __init__(self, work: Path, remote: Path, head: str):
+        self.head = self.base = head
+        self.transport = LocalObjectTransport(work)
+        self.graphql = LocalRefCAS(self, work, remote)
+
+    def pull_request(self) -> PullRequestSnapshot:
+        return PullRequestSnapshot(
+            self.repository,
+            7,
+            "open",
+            False,
+            self.head,
+            self.base,
+            "topic",
+            "main",
+            True,
+            False,
+            False,
+            "qualifier",
+            "clean",
+            "https://example.invalid/pull/7",
+            self.repository,
+        )
 
 
 def publisher(remote: Path, authority: Authority | None = None) -> HostGitPublisher:
@@ -217,3 +348,56 @@ def test_recovery_rejects_digest_mismatch_and_commit_tree_preserves_parent_order
     assert git(root, "show", "-s", "--format=%P", recovered).split() == [first, second]
     with pytest.raises(GitPublishError, match="different payload"):
         subject._recover(root, "topic", "op", "expected", [first, second])
+
+
+def test_host_derived_patch_publishes_and_replays_through_complete_local_authority(
+    tmp_path: Path, repository: tuple[Path, Path, str, str]
+) -> None:
+    work, remote, head, _ = repository
+    receiver = GitPiWorkspaceProvider(tmp_path / "receiver")
+    request = CodingRequest("change", "owner/repo", 7, 2, head, head, "hamsterdan/change/diagnostic")
+    result_root = tmp_path / "settled"
+
+    with receiver.open("coding", str(remote), request, "change:diagnostic:1") as prepared:
+        extract_workspace_archive(prepared.archive, result_root)
+        (result_root / "bounded.txt").write_text("qualified\n")
+        diff, changed = prepared.reconcile(workspace_archive(result_root))
+
+    result = CodingResult(
+        "change",
+        request.repository,
+        request.pull_request,
+        request.epoch,
+        request.head,
+        request.base,
+        request.ref,
+        "changed",
+        "not_attempted",
+        diff,
+        changed,
+        [{"command": "credential-free", "status": "passed"}],
+        "Apply bounded diagnostic change",
+    )
+    authority = LocalPublicationAuthority(work, remote, head)
+    subject = HostGitPublisher(authority, str(remote))  # type: ignore[arg-type]
+
+    published = subject.publish(
+        result,
+        operation="change:diagnostic",
+        payload_digest="d" * 64,
+        expected_head=head,
+        base_head=head,
+    )
+    recovered = subject.publish(
+        result,
+        operation="change:diagnostic",
+        payload_digest="d" * 64,
+        expected_head=head,
+        base_head=head,
+    )
+
+    assert published.head == authority.head
+    assert recovered.head == published.head and recovered.recovered
+    assert authority.graphql.calls == 1
+    assert git(work, "show", f"{published.head}:bounded.txt") == "qualified"
+    assert list(receiver.root.iterdir()) == []

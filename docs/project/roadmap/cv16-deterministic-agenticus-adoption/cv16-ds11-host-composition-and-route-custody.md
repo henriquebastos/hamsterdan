@@ -49,7 +49,7 @@ Focused direct-key custody, receiver, adapter, owned-factory, host composition,
 Activity, runtime, architecture, application, Git publication, and service
 suites pass 101 tests.
 The full project gate passes formatting, Ruff, ty, nine Bun relay tests, source
-and wheel builds, and 332 Python tests
+and wheel builds, and 333 Python tests
 with the one opt-in provider test skipped. No provider authority or paid/live
 operation was run.
 
@@ -77,6 +77,20 @@ qualification and handoff roots were erased. The disposable remote repository
 could not be deleted, made private, or archived with the available qualification
 identity, so remote cleanup is unresolved and recorded as debt.
 
+The next credential-free diagnostic composed a canonical patch from the real
+workspace receiver and published it through the production `HostGitPublisher`
+to a local bare remote using complete object-write, current-PR, exact-CAS, and
+idempotent-recovery collaborators. Initial publication and replay both passed,
+with exactly one ref advance and private receiver cleanup. Existing tests also
+prove that Activity folds a publisher rejection into a failed typed result.
+Reconstructing the live harness control flow showed its later replay assertion
+used unchanged refs after zero publication, built an empty patch, and raised the
+retained `GitPublishError`; that secondary error replaced the original rejection
+category. The original reason existed only in deliberately suppressed and now
+erased logging. Classification is therefore C: not deterministically
+reproducible from retained safe evidence. This result proves neither a production
+publisher defect nor a synthetic-authority defect.
+
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
@@ -96,8 +110,11 @@ repositories remain a host resource-trust boundary.
 ## Next slice
 
 Diagnose the sanitized publication-boundary rejection without provider work,
-add a deterministic regression for any confirmed defect, and dispose of the
+first add a credential-free qualification observation point that retains a
+stable publisher stage/error category before attempting replay, and prove that
+the harness stops replay assertions after zero publication. Dispose of the
 orphaned qualification repository through an identity with repository-deletion
-authority. A new provider attempt requires a fresh bounded authorization after
-that deterministic correction. Native subscription and extra usage remain
-excluded. Do not begin DS12 before the live gate passes.
+authority. The code is not yet eligible to request a fresh provider attempt; a
+new attempt requires both deterministic observation qualification and fresh
+bounded authorization. Native subscription and extra usage remain excluded. Do
+not begin DS12 before the live gate passes.

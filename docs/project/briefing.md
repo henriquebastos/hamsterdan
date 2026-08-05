@@ -46,4 +46,8 @@ one-shot supplier. `legacy-amp` remains rollback only. The first
 authority-bearing live attempt proved one-shot direct-key custody and
 fail-closed rejection but did not publish: the real host publisher rejected the
 controlled coding candidate at its Git publication boundary. Live support
-therefore remains unaccepted and no fallback profile is permitted.
+therefore remains unaccepted and no fallback profile is permitted. A subsequent
+credential-free diagnostic proved the complete canonical-patch publication and
+replay path against a bounded local authority, but also proved that the live
+harness overwrote the original rejected fence with a secondary empty-replay
+error. The original cause is therefore unclassified rather than inferred.

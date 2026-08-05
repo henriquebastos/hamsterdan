@@ -22,4 +22,5 @@ is accepted live through the closed-unmerged PR47 journey.
 Active runtime adoption: [CV16 — Deterministic Agenticus adoption](cv16-deterministic-agenticus-adoption/index.md).
 [CV16.DS11 — Host composition and operation-route custody](cv16-deterministic-agenticus-adoption/cv16-ds11-host-composition-and-route-custody.md)
 is qualified locally; its first direct-key live attempt failed closed before Git
-publication, so live support remains unaccepted.
+publication, and credential-free diagnosis classified the erased original cause
+as not deterministically reproducible, so live support remains unaccepted.

@@ -43,3 +43,12 @@ returned to the production host, but the real `HostGitPublisher` rejected it
 before ref advancement. No publication occurred and the deterministic-stop rule
 forbade retry. CV16 and DS11 remain active/Qualified Locally until that boundary
 is diagnosed and a fresh separately authorized gate passes.
+
+Credential-free follow-up proved a complete host-derived patch can publish and
+replay idempotently through the production publisher against a local bare remote
+and complete bounded authority. It also proved the retained live
+`GitPublishError` came from the harness's secondary empty replay after the
+original failure had already been folded into a product outcome. Because the
+original sanitized reason was not retained, the live rejection is classification
+C: neither a production defect nor a synthetic-authority mismatch can be
+claimed from safe evidence.
