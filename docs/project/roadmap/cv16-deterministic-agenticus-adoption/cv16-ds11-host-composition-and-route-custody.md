@@ -2,7 +2,7 @@
 code: CV16.DS11
 level: Delivery Story
 status: Qualified Locally
-status_reason: Exact schema-2 Pi workspaces, host-derived canonical patches, replay, recovery, and publication fences pass without provider authority
+status_reason: Production direct-key composition and all deterministic gates pass; the authorized live gate is blocked before attempt because direct Anthropic authority is unavailable
 updated: 2026-08-05
 ---
 
@@ -30,8 +30,9 @@ updated: 2026-08-05
   AgentNetRunner Program, Hands, and Continuation topology.
 - Compose the public Petrus `PiA2RuntimeHost` behind immutable host policy, a
   stable direct-key connection identity, persistent authenticated key
-  operations, and an erasable one-shot supplier. Production passes neither the
-  provider nor client-factory conformance seam.
+  operations, and an erasable one-shot supplier loaded lazily from an explicit
+  owned, bounded `0600` file. Production requires absolute exact Pi/Node/package
+  paths and passes neither the provider nor client-factory conformance seam.
 - Bind each operation to a canonical exact-head input archive, SHA-256 identity,
   route/PR correlation, and immutable per-start policy in Petrus schema-2 replay
   identity. Coding may write only inside its fresh Episode workspace; review and
@@ -44,18 +45,29 @@ updated: 2026-08-05
 
 ## Local evidence
 
-Focused receiver, adapter, owned-factory, host composition, Activity, runtime,
-architecture, application, Git publication, and service suites pass 151 tests.
+Focused direct-key custody, receiver, adapter, owned-factory, host composition,
+Activity, runtime, architecture, application, Git publication, and service
+suites pass 101 tests.
 The full project gate passes formatting, Ruff, ty, nine Bun relay tests, source
-and wheel builds, and 316 Python tests
+and wheel builds, and 332 Python tests
 with the one opt-in provider test skipped. No provider authority or paid/live
 operation was run.
 
+Production composition commit `c368fefab686840c557150833c77ce0acf1c7382`
+was pushed before live preflight. A fresh isolated clone matched local and
+remote `main`, installed the frozen project, and selected the exact READY A2
+runtime with no authority request. The first authorized authority check found
+no direct Anthropic key configuration, so the attempt ledger remains zero for
+attempts, retries, provider calls, operations, Hands calls, mutations, and
+publications. The qualification roots were then removed.
+
 ## Limits
 
-The owned factory is deterministically qualified with synthetic conformance
-seams only. Production has no authority loader and remains fail-closed before a
-real provider call. No Anthropic key was read and no paid or live operation ran.
+The owned factory and production direct-key loader are deterministically
+qualified, but provider execution remains unaccepted because direct authority
+was unavailable at the binding live gate. No Anthropic key was read and no paid
+or live operation ran. DS11 therefore remains Qualified Locally rather than
+Done.
 The Local provider classifies active process death as indeterminate but cannot
 reconcile a lease whose process-memory registry died. This is not exactly-once
 execution, forensic erasure, complete migration, or live-support evidence.
@@ -68,6 +80,7 @@ repositories remain a host resource-trust boundary.
 
 ## Next slice
 
-Ask the source thread to define and authorize a separately bounded direct
-API-key live gate. Native subscription and extra usage remain excluded; this
-deterministic slice does not itself authorize provider authority.
+Provision one direct Anthropic API-key file through the explicit production
+configuration and rerun the already-authorized bounded live gate from the exact
+pushed revision. Native subscription and extra usage remain excluded. Do not
+begin DS12 before this live gate passes.

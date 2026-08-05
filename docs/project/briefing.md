@@ -40,4 +40,8 @@ rollback, restart indeterminacy, and teardown are qualified without authority.
 Schema-2 binds every operation to its exact PR-head archive and effective policy.
 A private host receiver now rejects unsafe settled archives and replaces model
 patch claims with a reproduced canonical binary patch before the existing
-publication fences. `legacy-amp` is rollback only and live authority is deferred.
+publication fences. Production now requires explicit absolute Pi installation
+paths and lazily transfers a direct key from an owned `0600` file through the
+one-shot supplier. `legacy-amp` remains rollback only. Live acceptance is
+blocked before its first attempt because direct Anthropic authority is not
+configured; no fallback profile is permitted.

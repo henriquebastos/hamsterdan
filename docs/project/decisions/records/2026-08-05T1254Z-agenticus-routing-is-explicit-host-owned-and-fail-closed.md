@@ -14,9 +14,11 @@ related:
 ## Decision
 
 Hamsterdan's first Agenticus profile is Pi native A2 Local using the direct
-Anthropic API-key catalog entry for `claude-sonnet-4-5`. This is static
-composition evidence only: it neither reads authority nor claims installation,
-provider availability, runtime qualification, or live support.
+Anthropic API-key catalog entry for `claude-sonnet-4-5`. Production accepts
+authority only through an explicit absolute path to an owned, bounded `0600`
+regular file and exact absolute Pi CLI, Node, and package-root paths. Parsing,
+composition, probe, and replay do not read key material. Live support still
+requires accepted provider evidence.
 
 The selected route is exactly `PI_NATIVE_A2_LOCAL`. `AgentNetRunner` is not an
 implementation of that route: it belongs to `AGENT_AS_NET_A5_LOCAL` with a
@@ -48,7 +50,8 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
 - The hard-coded Amp runner default is removed from `HostService`.
 - Agenticus execution is selected only after an exact READY Pi installation
   probe on the Petrus-owned A2 host. Composition and probe do not consult
-  authority; production's supplier remains unavailable until a bounded live gate.
+  authority; a one-shot supplier reads into an erasable buffer only when Petrus
+  begins a fresh operation.
 - Legacy rollback requires explicit mode selection and an explicit isolation
   waiver; no failure can select it automatically.
 - Route custody and Petrus History remain separate durable stores with strict
@@ -62,3 +65,6 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
   the exact requested head, and only then enters the existing publication fence.
 - Model-authored diff and path claims are never mutation authority. Reserved
   publication trailers are also refused before idempotency recovery or mutation.
+- Startup and FastAPI lifespan failures close every already-owned runtime
+  resource so Petrus can revoke connection custody and erase persistent key
+  operations. Cleanup uncertainty remains fail-closed.

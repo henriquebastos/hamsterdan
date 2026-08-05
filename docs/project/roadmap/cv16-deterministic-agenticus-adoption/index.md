@@ -2,7 +2,7 @@
 code: CV16
 level: Value
 status: Active
-status_reason: Schema-2 A2 workspaces and host-derived canonical patches are deterministically qualified; authority and live gates remain
+status_reason: Direct-key production composition is qualified and pushed; live acceptance is blocked before attempt because direct Anthropic authority is unavailable
 updated: 2026-08-05
 ---
 
@@ -19,7 +19,8 @@ custody, operation identity, or recovery guarantees.
 [CV16.DS11 — Host composition and operation-route custody](cv16-ds11-host-composition-and-route-custody.md)
 owns the deterministic A2 profile, explicit rollback mode, immutable Catalog
 snapshot, restart/cutover fence, credential-free Pi lifecycle adapter, and the
-Petrus-owned A2 host boundary, and private archive-to-canonical-patch proof.
+Petrus-owned A2 host boundary, private archive-to-canonical-patch proof, and
+fail-closed direct-key installation composition.
 
 ## Done condition
 
