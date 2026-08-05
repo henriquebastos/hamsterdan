@@ -8,7 +8,7 @@
 - Qualified workflow source: `examples/pr_readiness_next/` and
   `tests/examples/pr_readiness_next/` at that commit.
 - Petrus Agenticus adoption dependency:
-  `henriquebastos/petrus@aa5a9152f0c9b36358c0a3019716f47511f64802`,
+  `henriquebastos/petrus@750c4321bb51563666ce43e88f753ebe1f068520`,
   inspected 2026-08-05. Hamsterdan consumes the exact Git revision and does not
   assume package publication.
 

@@ -5,7 +5,9 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -18,18 +20,26 @@ from petrus.agenticus.runtime.pi_a2_host import (
     PiA2DirectAuthority,
     PiA2RuntimeHost,
     PiA2RuntimeHostConfig,
+    PiA2RuntimePolicy,
     PiA2RuntimeStart,
     compose_pi_a2_runtime,
 )
 from petrus.agenticus.thread.continuation import Continuation
 from petrus.agenticus.thread.identity import ContinuationId, EpisodeId, ThreadId, TurnId
 from petrus.agenticus.thread.lifecycle import CancellationDisposition, TurnOutcome
+from petrus.motus.execution.archive import workspace_archive
 from petrus.motus.execution.providers import LocalProcessEnvironment
 
 from hamsterdan.agents import PiNativeRunner, ReviewRequest
 from hamsterdan.host.pi_a2 import OneShotApiKeySupplier, PersistentKeyOperations
 
 _SESSION = "11111111-1111-4111-8111-111111111111"
+_READ_POLICY = PiA2RuntimePolicy(frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH}), max_tool_calls=8)
+_CODE_POLICY = PiA2RuntimePolicy(
+    frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH, ToolMethod.WORKSPACE_WRITE}),
+    max_tool_calls=8,
+    writable_roots=frozenset({"."}),
+)
 
 
 @dataclass
@@ -150,7 +160,6 @@ def _config(root: Path) -> PiA2RuntimeHostConfig:
         model="claude-sonnet-4-5",
         host_id="hamsterdan-test",
         capabilities=frozenset(ToolMethod),
-        writable_paths=frozenset({"output.txt"}),
         allowed_argv=frozenset({("/bin/true",)}),
         test_command=("/bin/true",),
         max_tool_calls=8,
@@ -187,8 +196,45 @@ def _host(
     return host
 
 
-def _start(name: str, *, prompt: str = "prompt", continuation: Continuation | None = None) -> PiA2RuntimeStart:
-    return PiA2RuntimeStart(name, EpisodeId(f"episode-{name}"), TurnId(f"turn-{name}"), prompt, continuation)
+def _start(
+    name: str,
+    *,
+    archive: bytes,
+    prompt: str = "prompt",
+    continuation: Continuation | None = None,
+    policy: PiA2RuntimePolicy = _CODE_POLICY,
+) -> PiA2RuntimeStart:
+    return PiA2RuntimeStart(
+        name,
+        EpisodeId(f"episode-{name}"),
+        TurnId(f"turn-{name}"),
+        prompt,
+        archive,
+        sha256(archive).hexdigest(),
+        f"synthetic:{name}",
+        policy,
+        continuation,
+    )
+
+
+class RunnerWorkspace:
+    def __init__(self, archive: bytes) -> None:
+        self.archive = archive
+        self.digest = sha256(archive).hexdigest()
+        self.correlation = "synthetic:runner"
+        self.policy = _READ_POLICY
+
+    def reconcile(self, archive: bytes) -> tuple[str, list[str]]:
+        return "", []
+
+
+class RunnerWorkspaces:
+    def __init__(self, archive: bytes) -> None:
+        self.workspace = RunnerWorkspace(archive)
+
+    @contextmanager
+    def open(self, kind, repository_url, request, operation_id):
+        yield self.workspace
 
 
 def test_fresh_start_continuation_workspace_output_and_close(tmp_path: Path) -> None:
@@ -196,8 +242,9 @@ def test_fresh_start_continuation_workspace_output_and_close(tmp_path: Path) -> 
     supplier = OneShotApiKeySupplier(lambda: supplied)
     factory = Factory(Plan("first", write=True), Plan("second", read="output.txt"))
     host = _host(tmp_path, factory, supplier)
+    initial = workspace_archive(_config(tmp_path).working_directory)
 
-    first_operation = host.start(_start("one"))
+    first_operation = host.start(_start("one", archive=initial))
     first = first_operation.wait(1)
     assert first.outcome is TurnOutcome.COMPLETED
     assert host.load_output(first.output_reference or "") == "first"
@@ -209,7 +256,7 @@ def test_fresh_start_continuation_workspace_output_and_close(tmp_path: Path) -> 
         pi.PI_CONTINUATION_DESCRIPTOR,
         first.continuation_reference,
     ).claim()
-    second = host.start(_start("two", continuation=continuation)).wait(1)
+    second = host.start(_start("two", archive=host.load_workspace_archive("one"), continuation=continuation)).wait(1)
 
     assert host.load_output(second.output_reference or "") == "second"
     assert factory.calls[1]["prior"].session_id == _SESSION  # type: ignore[union-attr]
@@ -222,7 +269,7 @@ def test_fresh_start_continuation_workspace_output_and_close(tmp_path: Path) -> 
 def test_terminal_replay_and_changed_work_conflict_use_no_authority(tmp_path: Path) -> None:
     supplier = OneShotApiKeySupplier(lambda: bytearray(b"fixture"))
     host = _host(tmp_path, Factory(), supplier)
-    start = _start("stable")
+    start = _start("stable", archive=workspace_archive(_config(tmp_path).working_directory))
     expected = host.start(start).wait(1)
     assert host.close()
 
@@ -245,7 +292,26 @@ def test_terminal_replay_and_changed_work_conflict_use_no_authority(tmp_path: Pa
     )
     assert replay.start(start).wait() == expected
     with pytest.raises(RuntimeProtocolError, match="operation-conflict"):
-        replay.start(_start("stable", prompt="changed"))
+        replay.start(_start("stable", archive=start.workspace_archive, prompt="changed"))
+    changed_workspace = tmp_path / "changed-workspace"
+    changed_workspace.mkdir()
+    (changed_workspace / "different.txt").write_text("different")
+    with pytest.raises(RuntimeProtocolError, match="operation-conflict"):
+        replay.start(_start("stable", archive=workspace_archive(changed_workspace)))
+    changed_correlation = PiA2RuntimeStart(
+        start.operation_id,
+        start.episode_id,
+        start.turn_id,
+        start.prompt,
+        start.workspace_archive,
+        start.workspace_digest,
+        "synthetic:different-route",
+        start.policy,
+    )
+    with pytest.raises(RuntimeProtocolError, match="operation-conflict"):
+        replay.start(changed_correlation)
+    with pytest.raises(RuntimeProtocolError, match="operation-conflict"):
+        replay.start(_start("stable", archive=start.workspace_archive, policy=_READ_POLICY))
     assert calls == 0
     assert replay.close()
 
@@ -278,7 +344,8 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
         Factory(Plan(output)),
         OneShotApiKeySupplier(lambda: bytearray(b"fixture")),
     )
-    runner = PiNativeRunner(original)
+    archive = workspace_archive(_config(tmp_path).working_directory)
+    runner = PiNativeRunner(original, RunnerWorkspaces(archive))
     runner.route_operation(operation_id)
     assert runner.review("https://example.invalid/owner/repo.git", request).status == "clear"
     assert original.close()
@@ -298,7 +365,7 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
             OneShotApiKeySupplier(supply),
         ),
     )
-    replay_runner = PiNativeRunner(replay)
+    replay_runner = PiNativeRunner(replay, RunnerWorkspaces(archive))
     replay_runner.route_operation(operation_id)
     assert replay_runner.review("https://example.invalid/owner/repo.git", request).status == "clear"
     assert calls == 0
@@ -311,7 +378,7 @@ def test_cancellation_partial_rollback_and_idempotent_close(tmp_path: Path) -> N
         Factory(Plan(block=True)),
         OneShotApiKeySupplier(lambda: bytearray(b"fixture")),
     )
-    operation = host.start(_start("cancel"))
+    operation = host.start(_start("cancel", archive=workspace_archive(_config(tmp_path / "cancel").working_directory)))
     assert operation.cancel("host-request") is CancellationDisposition.REQUESTED
     assert operation.wait(1).outcome is TurnOutcome.CANCELLED
     assert operation.close().verified
@@ -324,8 +391,8 @@ def test_cancellation_partial_rollback_and_idempotent_close(tmp_path: Path) -> N
         provider=AttachFailure(),
     )
     with pytest.raises(RuntimeProtocolError, match="runtime-start-failed"):
-        failed.start(_start("failed"))
-    replay = failed.start(_start("failed"))
+        failed.start(_start("failed", archive=workspace_archive(_config(tmp_path / "failure").working_directory)))
+    replay = failed.start(_start("failed", archive=workspace_archive(_config(tmp_path / "failure").working_directory)))
     assert replay.wait().outcome is TurnOutcome.FAILED
     assert replay.close().verified
     assert failed.close()
@@ -339,10 +406,12 @@ def test_restarted_executing_operation_is_indeterminate_without_authority(tmp_pa
 import sys
 import time
 from pathlib import Path
+from hashlib import sha256
 from petrus.agenticus.connection.custody import ConnectionIdentity
 from petrus.agenticus.hands.contract import ToolMethod
-from petrus.agenticus.runtime.pi_a2_host import PiA2DirectAuthority, PiA2RuntimeHostConfig, PiA2RuntimeStart, compose_pi_a2_runtime
+from petrus.agenticus.runtime.pi_a2_host import PiA2DirectAuthority, PiA2RuntimeHostConfig, PiA2RuntimePolicy, PiA2RuntimeStart, compose_pi_a2_runtime
 from petrus.agenticus.thread.identity import EpisodeId, TurnId
+from petrus.motus.execution.archive import workspace_archive
 from hamsterdan.host.pi_a2 import PersistentKeyOperations
 
 class Client:
@@ -358,7 +427,7 @@ class Factory:
 root, working, cli, node, package = map(Path, sys.argv[1:])
 config = PiA2RuntimeHostConfig(
     state_root=root, working_directory=working, provider="anthropic", model="claude-sonnet-4-5",
-    host_id="hamsterdan-test", capabilities=frozenset(ToolMethod), writable_paths=frozenset({"output.txt"}),
+    host_id="hamsterdan-test", capabilities=frozenset(ToolMethod),
     allowed_argv=frozenset({("/bin/true",)}), test_command=("/bin/true",), max_tool_calls=8,
     attachment_timeout=2, command_timeout=1, credential_ttl=1, wall_timeout=.5, cancellation_grace=.05,
     cli_path=str(cli), node_path=str(node), package_root=str(package),
@@ -369,7 +438,12 @@ authority = PiA2DirectAuthority(
 )
 host = compose_pi_a2_runtime(config=config, authority=authority, client_factory=Factory())
 host.probe()
-host.start(PiA2RuntimeStart("crashed", EpisodeId("episode-crashed"), TurnId("turn-crashed"), "prompt"))
+archive = workspace_archive(working)
+host.start(PiA2RuntimeStart(
+    "crashed", EpisodeId("episode-crashed"), TurnId("turn-crashed"), "prompt",
+    archive, sha256(archive).hexdigest(), "synthetic:crashed",
+    PiA2RuntimePolicy(frozenset({ToolMethod.WORKSPACE_READ}), max_tool_calls=8),
+))
 os._exit(0)
 """
     )
@@ -405,6 +479,12 @@ os._exit(0)
     assert len(recovered.recovered_settlements) == 1
     assert recovered.recovered_settlements[0].outcome is TurnOutcome.INDETERMINATE
     with pytest.raises(RuntimeProtocolError, match="operation-indeterminate"):
-        recovered.start(_start("crashed"))
+        recovered.start(
+            _start(
+                "crashed",
+                archive=workspace_archive(_config(tmp_path).working_directory),
+                policy=PiA2RuntimePolicy(frozenset({ToolMethod.WORKSPACE_READ}), max_tool_calls=8),
+            )
+        )
     assert calls == 0
     assert recovered.close()

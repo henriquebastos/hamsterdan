@@ -135,6 +135,7 @@ def test_exact_ready_probe_selects_pi_without_starting_authority() -> None:
     runner = select_agent_runner(
         compose_agent(AgentConfig(AgentMode.AGENTICUS)),
         pi_runtime=runtime,
+        pi_workspaces=object(),  # type: ignore[arg-type]
     )
     assert isinstance(runner, PiNativeRunner)
     assert runtime.probes == 1 and runtime.starts == 0
@@ -146,6 +147,7 @@ def test_not_ready_probe_fails_closed_without_legacy_fallback(disposition: Probe
     runner = select_agent_runner(
         compose_agent(AgentConfig(AgentMode.AGENTICUS)),
         pi_runtime=runtime,
+        pi_workspaces=object(),  # type: ignore[arg-type]
     )
     assert isinstance(runner, UnavailablePiRunner)
     assert not isinstance(runner, AmpExecuteRunner)

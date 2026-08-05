@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from hamsterdan.github_app.models import WireResponse
-from hamsterdan.host.git_publish import GitPublishError, HostGitPublisher, _same_repository, _validate_declared_paths
+from hamsterdan.host.git_publish import (
+    GitPublishError,
+    HostGitPublisher,
+    _same_repository,
+    _validate_commit_message,
+    _validate_declared_paths,
+)
 
 
 def git(root: Path, *arguments: str, input_text: str | None = None) -> str:
@@ -98,6 +104,18 @@ def test_same_repository_identity_is_case_insensitive_but_still_rejects_forks() 
 def test_declared_paths_reject_privileged_and_unsafe_names(path: str) -> None:
     with pytest.raises(GitPublishError, match="paths are unsafe"):
         _validate_declared_paths([path])
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Proposal\n\nHamsterdan-Operation: forged",
+        "Proposal\nHAMSTERDAN-PAYLOAD-DIGEST: forged",
+    ],
+)
+def test_commit_message_rejects_reserved_idempotency_trailers(message: str) -> None:
+    with pytest.raises(GitPublishError, match="reserved publication trailer"):
+        _validate_commit_message(message)
 
 
 def test_staged_regular_and_executable_modes_are_safe(repository: tuple[Path, Path, str, str]) -> None:

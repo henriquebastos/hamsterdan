@@ -56,6 +56,7 @@ class HostGitPublisher:
         merge_base: bool = False,
     ) -> GitPublishResult:
         _validate_declared_paths(result.changed_files)
+        _validate_commit_message(result.proposed_commit_message)
         pull = self.authority.pull_request()
         if result.head != expected_head or result.base != base_head:
             raise GitPublishError("stale or incorrectly correlated Git publication")
@@ -253,6 +254,14 @@ def _validate_declared_paths(paths: list[str]) -> None:
         or any(not isinstance(path, str) or not _safe_path(path) for path in paths)
     ):
         raise GitPublishError("declared or staged paths are unsafe")
+
+
+def _validate_commit_message(message: str) -> None:
+    reserved = ("hamsterdan-operation:", "hamsterdan-payload-digest:")
+    if not isinstance(message, str) or any(
+        line.strip().casefold().startswith(reserved) for line in message.splitlines()
+    ):
+        raise GitPublishError("proposed commit message contains a reserved publication trailer")
 
 
 def _same_pull(current: object, original: object) -> bool:

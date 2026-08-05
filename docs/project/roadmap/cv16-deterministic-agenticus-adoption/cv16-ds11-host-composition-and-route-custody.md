@@ -2,7 +2,7 @@
 code: CV16.DS11
 level: Delivery Story
 status: Qualified Locally
-status_reason: The exact Pi native A2 Local owned host, adapter, replay, and recovery gates pass without provider authority; changed-work application remains fail-closed
+status_reason: Exact schema-2 Pi workspaces, host-derived canonical patches, replay, recovery, and publication fences pass without provider authority
 updated: 2026-08-05
 ---
 
@@ -10,7 +10,7 @@ updated: 2026-08-05
 
 ## Scope
 
-- Pin Petrus exactly to `aa5a9152f0c9b36358c0a3019716f47511f64802`.
+- Pin Petrus exactly to `750c4321bb51563666ce43e88f753ebe1f068520`.
 - Register and explicitly enable the exact Pi native A2 Local topology in a
   host-owned Catalog, retain its provider-neutral immutable snapshot, and bind
   Anthropic `claude-sonnet-4-5` as separately validated profile metadata.
@@ -32,16 +32,22 @@ updated: 2026-08-05
   stable direct-key connection identity, persistent authenticated key
   operations, and an erasable one-shot supplier. Production passes neither the
   provider nor client-factory conformance seam.
-- Accept unchanged coding output only with its published workspace archive and
-  reject changed coding before Git publication until the receiving host can
-  safely reconcile that archive against the current PR tree.
+- Bind each operation to a canonical exact-head input archive, SHA-256 identity,
+  route/PR correlation, and immutable per-start policy in Petrus schema-2 replay
+  identity. Coding may write only inside its fresh Episode workspace; review and
+  conversation retain read/search-only policy.
+- Treat settled archives as opaque until a private receiver rejects unsafe
+  members and modes, re-proves canonical bytes, derives one indexed binary
+  patch, and reproduces its exact result tree against the requested head.
+- Replace model-authored diff/path claims with that host-derived result before
+  the existing current-authority and idempotent Git publication boundary.
 
 ## Local evidence
 
-Focused adapter, owned-factory, host composition, Activity, runtime,
-architecture, application, and service suites pass 116 tests. The full project
-gate passes formatting, Ruff, ty, nine Bun relay tests, source and wheel builds,
-and 296 Python tests
+Focused receiver, adapter, owned-factory, host composition, Activity, runtime,
+architecture, application, Git publication, and service suites pass 151 tests.
+The full project gate passes formatting, Ruff, ty, nine Bun relay tests, source
+and wheel builds, and 316 Python tests
 with the one opt-in provider test skipped. No provider authority or paid/live
 operation was run.
 
@@ -53,16 +59,15 @@ real provider call. No Anthropic key was read and no paid or live operation ran.
 The Local provider classifies active process death as indeterminate but cannot
 reconcile a lease whose process-memory registry died. This is not exactly-once
 execution, forensic erasure, complete migration, or live-support evidence.
-Route custody and canonical History remain Hamsterdan-owned. Changed workspace
-application is blocked because `load_workspace_archive` returns a verified
-opaque archive but no public operation transactionally reconciles it with the
-current host tree and unchanged `CodingResult` patch contract.
+Route custody and canonical History remain Hamsterdan-owned. Input/result
+workspaces reject links, submodules, repository/control roots, special files,
+unsupported modes, more than 20,000 entries, more than 64 MiB expanded content,
+more than 1,000 changed paths, or a patch beyond 4 MB. Repository fetch is time
+bounded but not byte-quota bounded before tracked-tree admission; admitted
+repositories remain a host resource-trust boundary.
 
 ## Next slice
 
-Design and qualify the smallest receiving-host archive-to-patch reconciliation
-boundary: extract only into private staging, prove the exact input/current tree,
-derive and validate the canonical binary patch, and retain the existing
-claim/fence/idempotent publication path. Only after that deterministic coding
-gate passes should the source thread authorize a separately bounded direct
-API-key live gate.
+Ask the source thread to define and authorize a separately bounded direct
+API-key live gate. Native subscription and extra usage remain excluded; this
+deterministic slice does not itself authorize provider authority.

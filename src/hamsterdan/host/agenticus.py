@@ -33,6 +33,7 @@ from hamsterdan.agents import (
     PiNativeRunner,
     UnavailablePiRunner,
 )
+from hamsterdan.agents.pi import PiWorkspaceProvider
 
 PI_PROVIDER = "anthropic"
 PI_MODEL = "claude-sonnet-4-5"
@@ -136,12 +137,13 @@ def select_agent_runner(
     composition: AgentComposition,
     *,
     pi_runtime: PiA2RuntimeHost | None = None,
+    pi_workspaces: PiWorkspaceProvider | None = None,
 ) -> AgentRunner:
     """Select execution only after an exact READY probe; never substitute a fallback."""
 
     if composition.mode is AgentMode.LEGACY_AMP:
         return AmpExecuteRunner()
-    if pi_runtime is None:
+    if pi_runtime is None or pi_workspaces is None:
         return UnavailablePiRunner()
     try:
         probe = pi_runtime.probe()
@@ -158,7 +160,7 @@ def select_agent_runner(
         or not required <= installation.capabilities
     ):
         return UnavailablePiRunner()
-    return PiNativeRunner(pi_runtime)
+    return PiNativeRunner(pi_runtime, pi_workspaces)
 
 
 @dataclass(frozen=True)

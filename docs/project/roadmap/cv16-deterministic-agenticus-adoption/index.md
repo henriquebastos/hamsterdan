@@ -2,7 +2,7 @@
 code: CV16
 level: Value
 status: Active
-status_reason: The Petrus-owned A2 host is consumed and deterministically qualified; changed-work application, authority, and live gates remain
+status_reason: Schema-2 A2 workspaces and host-derived canonical patches are deterministically qualified; authority and live gates remain
 updated: 2026-08-05
 ---
 
@@ -19,7 +19,7 @@ custody, operation identity, or recovery guarantees.
 [CV16.DS11 — Host composition and operation-route custody](cv16-ds11-host-composition-and-route-custody.md)
 owns the deterministic A2 profile, explicit rollback mode, immutable Catalog
 snapshot, restart/cutover fence, credential-free Pi lifecycle adapter, and the
-Petrus-owned A2 host boundary.
+Petrus-owned A2 host boundary, and private archive-to-canonical-patch proof.
 
 ## Done condition
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from contextvars import ContextVar
 from dataclasses import asdict
 from hashlib import sha256
@@ -12,7 +13,7 @@ from typing import Protocol, cast, runtime_checkable
 from urllib.parse import urlsplit, urlunsplit
 
 from petrus.agenticus.runtime.operation import RuntimeOperation, RuntimeProtocolError
-from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost, PiA2RuntimeStart
+from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost, PiA2RuntimePolicy, PiA2RuntimeStart
 from petrus.agenticus.thread.identity import EpisodeId, TurnId
 from petrus.agenticus.thread.lifecycle import TurnOutcome
 
@@ -35,6 +36,29 @@ from .protocol import (
 )
 
 MAX_RESULT_BYTES = 1_000_000
+
+
+class PiWorkspaceError(RuntimeError):
+    """A secret-safe deterministic failure at the receiving-host workspace boundary."""
+
+
+class PreparedPiWorkspace(Protocol):
+    archive: bytes
+    digest: str
+    correlation: str
+    policy: PiA2RuntimePolicy
+
+    def reconcile(self, archive: bytes) -> tuple[str, list[str]]: ...
+
+
+class PiWorkspaceProvider(Protocol):
+    def open(
+        self,
+        kind: str,
+        repository_url: str,
+        request: AgentRequest,
+        operation_id: str,
+    ) -> AbstractContextManager[PreparedPiWorkspace]: ...
 
 
 @runtime_checkable
@@ -88,6 +112,7 @@ class PiNativeRunner:
     def __init__(
         self,
         runtime: PiA2RuntimeHost,
+        workspaces: PiWorkspaceProvider,
         *,
         timeout: float = 300,
         poll_interval: float = 0.1,
@@ -95,7 +120,7 @@ class PiNativeRunner:
     ) -> None:
         if timeout <= 0 or poll_interval <= 0 or poll_interval > timeout:
             raise ValueError("Pi runner timeout and poll interval must be positive and ordered")
-        self._runtime = runtime
+        self._runtime, self._workspaces = runtime, workspaces
         self._timeout, self._poll_interval, self._clock = timeout, poll_interval, clock
 
     def route_operation(self, operation: str) -> None:
@@ -127,12 +152,33 @@ class PiNativeRunner:
         if is_current is not None and not is_current():
             raise AgentProtocolError("agent attempt superseded", canceled=True)
         try:
+            with self._workspaces.open(kind, repository_url, request, operation_id) as workspace:
+                if is_current is not None and not is_current():
+                    raise AgentProtocolError("agent attempt superseded", canceled=True)
+                return self._run_workspace(kind, prompt, request, operation_id, is_current, workspace)
+        except PiWorkspaceError:
+            raise AgentProtocolError("Pi workspace proof failed", canceled=True) from None
+
+    def _run_workspace(
+        self,
+        kind: str,
+        prompt: str,
+        request: AgentRequest,
+        operation_id: str,
+        is_current: CURRENT | None,
+        workspace: PreparedPiWorkspace,
+    ) -> AgentResult:
+        try:
             identity = sha256(operation_id.encode()).hexdigest()
             start = PiA2RuntimeStart(
                 operation_id,
                 EpisodeId(f"episode-{identity}"),
                 TurnId(f"turn-{identity}"),
                 prompt,
+                workspace.archive,
+                workspace.digest,
+                workspace.correlation,
+                workspace.policy,
             )
             operation = self._runtime.start(start)
         except AgentProtocolError:
@@ -157,13 +203,7 @@ class PiNativeRunner:
                 raise AgentProtocolError("Pi operation did not produce a completed result")
             raw = self._runtime.load_output(settlement.output_reference)
             data = _parse_result(raw)
-            changed = data.get("changed_files") if kind == "coding" else None
-            result = _validate_result(
-                kind,
-                data,
-                request,
-                cast(list[str], changed) if isinstance(changed, list) else None,
-            )
+            changed: list[str] | None = None
             if kind == "coding":
                 try:
                     archive = self._runtime.load_workspace_archive(operation_id)
@@ -171,13 +211,19 @@ class PiNativeRunner:
                     raise AgentProtocolError("Pi coding workspace archive is unavailable", canceled=True) from None
                 if not archive:
                     raise AgentProtocolError("Pi coding workspace archive is unavailable", canceled=True)
-                if cast(CodingResult, result).status == "changed":
-                    raise AgentProtocolError(
-                        "Pi changed workspace cannot be safely applied by this host",
-                        canceled=True,
-                    )
+                diff, changed = workspace.reconcile(archive)
+                data = dict(data)
+                data["diff"], data["changed_files"] = diff, changed
+            result = _validate_result(
+                kind,
+                data,
+                request,
+                changed,
+            )
             return result
         except AgentProtocolError:
+            raise
+        except PiWorkspaceError:
             raise
         except RuntimeProtocolError:
             raise AgentProtocolError("Pi operation lifecycle failed") from None

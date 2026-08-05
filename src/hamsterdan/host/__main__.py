@@ -16,6 +16,7 @@ from hamsterdan.github_app.config import ConfigurationError, HostConfig
 from .agenticus import AgentConfig, AgentMode, AgentRouteStore, compose_agent, select_agent_runner
 from .api import create_app
 from .pi_a2 import compose_owned_pi_a2
+from .pi_workspace import GitPiWorkspaceProvider
 from .service import HostService, QualificationFault
 
 MAX_HISTORY_BYTES = 16 * 1024 * 1024
@@ -177,6 +178,7 @@ def main() -> int:
     service: HostService | None = None
     route_store: AgentRouteStore | None = None
     pi_runtime = None
+    pi_workspaces = None
     try:
         config = HostConfig.from_environment()
         if args.command == "inspect-instance":
@@ -191,9 +193,10 @@ def main() -> int:
         route_store.activate(agent, config.state_path / "applications")
         if agent.mode is AgentMode.AGENTICUS:
             pi_runtime = compose_owned_pi_a2(config.state_path)
+            pi_workspaces = GitPiWorkspaceProvider(config.state_path / "pi-workspaces")
         service = HostService(
             config,
-            runner=select_agent_runner(agent, pi_runtime=pi_runtime),
+            runner=select_agent_runner(agent, pi_runtime=pi_runtime, pi_workspaces=pi_workspaces),
             agent_composition=agent,
             agent_routes=route_store,
             agent_runtime=pi_runtime,

@@ -56,6 +56,9 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
 - No connection custody, runtime supervision, Hands gateway, Attachment,
   territory lifecycle, or effect-fencing implementation is copied from Petrus.
 - A settled Pi workspace archive is continuation custody, not host-tree mutation
-  authority. Unchanged coding requires the archive to exist; changed coding is
-  non-retryably refused until Hamsterdan can reconcile a private staged archive
-  with the exact current PR tree and existing publication fence.
+  authority. Schema-2 binds exact input archive, route correlation, and effective
+  attachment policy to replay identity. Hamsterdan privately validates and
+  canonicalizes the settled archive, derives and reproduces its patch against
+  the exact requested head, and only then enters the existing publication fence.
+- Model-authored diff and path claims are never mutation authority. Reserved
+  publication trailers are also refused before idempotency recovery or mutation.

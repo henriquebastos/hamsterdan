@@ -28,7 +28,7 @@ _KEY_BYTES = 32
 _NONCE_BYTES = 12
 _CONNECTION_ID = "hamsterdan-pi-a2-direct-v1"
 _ACCOUNT_FINGERPRINT = "hamsterdan-direct-authority-unconfigured-v1"
-_CAPABILITIES = frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH})
+_CAPABILITIES = frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH, ToolMethod.WORKSPACE_WRITE})
 
 
 class OneShotApiKeySupplier:

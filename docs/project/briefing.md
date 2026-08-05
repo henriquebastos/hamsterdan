@@ -37,5 +37,7 @@ product protocol to the Petrus-owned probe-qualified A2 host. AgentNetRunner is
 excluded because its A5 topology is not the selected A2 route. Composition,
 probe, continuation workspace/session chaining, replay, conflicts, cancellation,
 rollback, restart indeterminacy, and teardown are qualified without authority.
-Changed coding remains fail-closed pending safe archive-to-current-tree
-reconciliation; `legacy-amp` is rollback only and live authority is deferred.
+Schema-2 binds every operation to its exact PR-head archive and effective policy.
+A private host receiver now rejects unsafe settled archives and replaces model
+patch claims with a reproduced canonical binary patch before the existing
+publication fences. `legacy-amp` is rollback only and live authority is deferred.
