@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -11,7 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from hamsterdan.agents import AgentProtocolError, AgentRunner
+from hamsterdan.agents import AgentProtocolError, AgentRunner, OperationRoutedRunner
 from hamsterdan.github_app.auth import GitHubAppClients
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.gateway import GitHubAuthority
@@ -319,7 +320,13 @@ class HostService:
             root = self.root / "applications" / str(installation_id) / str(repository_id) / str(pull_request_number)
             qualification_fault = self.qualification_fault
             routes, composition = self.agent_routes, self.agent_composition
-            agent_dispatch = lambda operation: routes.claim(operation, composition)
+
+            def agent_dispatch(operation: str, attempt: int) -> None:
+                routes.claim(operation, composition)
+                if isinstance(self.runner, OperationRoutedRunner):
+                    digest = hashlib.sha256(f"{operation}\0{attempt}".encode()).hexdigest()
+                    self.runner.route_operation(f"pi:{digest}")
+
             self._apps[key] = self.application_factory(
                 root,
                 f"github:{installation_id}:{repository_id}:pr:{pull_request_number}",

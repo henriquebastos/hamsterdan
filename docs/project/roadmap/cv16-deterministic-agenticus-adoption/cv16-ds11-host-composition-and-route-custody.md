@@ -2,7 +2,7 @@
 code: CV16.DS11
 level: Delivery Story
 status: Qualified Locally
-status_reason: Exact Pi native A2 Local composition and durable same-route lifecycle gates pass the full project check without provider authority
+status_reason: Exact Pi native A2 Local composition, probe-gated adapter, and durable same-route lifecycle gates pass without provider authority
 updated: 2026-08-05
 ---
 
@@ -19,31 +19,41 @@ updated: 2026-08-05
 - Claim each operation's complete route before dispatch, reconstruct only that
   route on retry, settle after durable terminal History, repair the terminal
   crash window on startup, and refuse cutover with unresolved prior-route work.
+- Derive a distinct deterministic Pi runtime-operation identity for each coding
+  attempt while keeping every attempt fenced to that one durable Activity route.
 - Preserve the existing request/result protocol and all readiness business and
   effect policy.
+- Adapt the unchanged protocol to an injected public Pi A2 operation lifecycle,
+  selecting it only after an exact READY installation probe. A missing or
+  non-ready probe remains fail-closed and never selects legacy Amp.
+- Keep `PI_NATIVE_A2_LOCAL` distinct from `AGENT_AS_NET_A5_LOCAL` and its
+  AgentNetRunner Program, Hands, and Continuation topology.
 
 ## Local evidence
 
-Focused host composition, Activity, runtime, architecture, application, and
-service suites pass 89 tests. The full project gate passes formatting, Ruff, ty,
-nine Bun relay tests, source and wheel builds, and 269 Python tests with the one
-opt-in provider test skipped. No provider authority or paid/live operation was
-run.
+Focused adapter, host composition, Activity, runtime, architecture, application,
+and service suites pass 105 tests. The full project gate passes formatting,
+Ruff, ty, nine Bun relay tests, source and wheel builds, and 285 Python tests
+with the one opt-in provider test skipped. No provider authority or paid/live
+operation was run.
 
 ## Limits
 
-The selected Catalog snapshot proves static compatibility and explicit
-enablement only. The `agenticus` runner deliberately fails closed. This slice
-does not probe a Pi installation, read an Anthropic key, instantiate the Pi
-adapter, materialize connection custody, create territory, run Hands, manage
-Attachment or Continuation lifecycle, or claim live support. Route custody and
-Petrus History are separate stores joined by ordering and startup repair rather
-than a cross-store transaction.
+The selected Catalog snapshot and READY probe prove deterministic compatibility
+and installation only. Production startup deliberately remains fail-closed
+because no Petrus-owned A2 host factory is injected. This slice does not read an
+Anthropic key, start a real provider operation, materialize connection custody,
+create territory, run Hands, manage Attachment or Continuation lifecycle, or
+claim live support. Route custody and Petrus History are separate stores joined
+by ordering and startup repair rather than a cross-store transaction. A live
+runtime also requires Petrus-owned lookup-first recovery when a process restarts
+after a completed Pi operation was closed but before terminal Activity History.
 
 ## Next slice
 
-Add the smallest host adapter that maps the unchanged Hamsterdan `AgentRunner`
-protocol onto the qualified Pi runtime lifecycle, including installation probe,
-Petrus-owned custody/Hands/Attachment/Motus composition, candidate admission,
-and deterministic recovery tests. Only after those gates pass should a separate,
-explicitly bounded live-authority qualification be requested.
+Petrus should first expose one supported A2 host factory that owns connection
+custody, Motus binding, EpisodeAttachment, Hands gateway, continuation/turn
+stores, and verified teardown behind a credential-free start request. Its probe
+must not consult authority and its start must materialize authority at most once.
+After Hamsterdan consumes and deterministically qualifies that factory, request
+a separate explicitly bounded live-authority gate.

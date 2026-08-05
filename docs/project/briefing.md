@@ -31,8 +31,10 @@ restart/redelivery behavior, and a passing private-source CI path to the pinned
 Petrus repository. The qualified Petrus CV9 application remains behavioral
 evidence, not a Hamsterdan package dependency.
 
-The first CV16.DS11 adoption slice resolves a host-owned Pi native A2 Local
-Agenticus profile deterministically and fences every agent operation to its
-persisted mode, profile, and Catalog snapshot. Provider execution remains
-deliberately unavailable pending a separately bounded live gate; explicit
+CV16.DS11 resolves a host-owned Pi native A2 Local Agenticus profile, fences
+every operation to its persisted mode/profile/snapshot, and adapts the unchanged
+product protocol to an injected probe-qualified Pi lifecycle. AgentNetRunner is
+explicitly excluded because its A5 topology is not the selected A2 route.
+Production provider execution remains fail-closed pending a supported
+Petrus-owned A2 host factory and separately bounded live gate; explicit
 `legacy-amp` is rollback only.

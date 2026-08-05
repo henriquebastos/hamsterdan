@@ -2,7 +2,7 @@
 code: CV16
 level: Value
 status: Active
-status_reason: The first deterministic host-adoption slice is qualified locally; runtime adapter and live gates remain
+status_reason: Deterministic A2 composition, probe, adapter, and recovery gates are qualified locally; authority and live gates remain
 updated: 2026-08-05
 ---
 
@@ -17,8 +17,8 @@ custody, operation identity, or recovery guarantees.
 ## Delivery
 
 [CV16.DS11 — Host composition and operation-route custody](cv16-ds11-host-composition-and-route-custody.md)
-owns the first deterministic profile, explicit rollback mode, immutable Catalog
-snapshot, and restart/cutover fence.
+owns the deterministic A2 profile, explicit rollback mode, immutable Catalog
+snapshot, restart/cutover fence, and the credential-free Pi lifecycle adapter.
 
 ## Done condition
 

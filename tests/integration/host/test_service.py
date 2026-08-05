@@ -117,6 +117,50 @@ def test_host_service_requires_agent_route_custody(tmp_path: Path) -> None:
         HostService(config(tmp_path), runner=object())  # type: ignore[call-arg, arg-type]
 
 
+def test_agent_route_is_claimed_before_runner_routing_and_start(tmp_path: Path) -> None:
+    events: list[str] = []
+
+    class RoutedRunner:
+        def route_operation(self, operation: str) -> None:
+            events.append(f"route:{operation}")
+
+        def review(self, *args: object, **kwargs: object) -> None:
+            events.append("start")
+
+    class RecordingRoutes(AgentRouteStore):
+        def claim(self, operation, composition):
+            events.append(f"claim:{operation}")
+            return super().claim(operation, composition)
+
+    composition = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+    routes = RecordingRoutes(tmp_path / "test-agent-routes.sqlite3")
+    routes.activate(composition, tmp_path / "applications")
+    runner = RoutedRunner()
+    host = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=runner,  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        application_factory=Application,
+    )
+    host.registry.reconcile(44, ((31, "owner/one"),))
+    app = host._application(44, 31, 7)
+
+    dispatch = app.kwargs["agent_dispatch"]
+    dispatch("review:one", 1)
+    runner.review()
+    dispatch("review:one", 2)
+    runner.review()
+
+    assert events[0] == "claim:review:one"
+    assert events[1].startswith("route:pi:")
+    assert events[2] == "start"
+    assert events[3] == "claim:review:one"
+    assert events[4].startswith("route:pi:") and events[4] != events[1]
+    assert events[5] == "start"
+
+
 def observation(delivery: str, repository: int = 31, pr: int = 7, **values: object) -> Observation:
     data: dict[str, object] = {
         "delivery_id": delivery,

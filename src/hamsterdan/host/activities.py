@@ -32,7 +32,7 @@ from .git_publish import GitPublishError, HostGitPublisher, payload_digest
 CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]
 AgentFault = Callable[[str, str], None]
-AgentDispatch = Callable[[str], None]
+AgentDispatch = Callable[[str, int], None]
 _MUTATIONS = {"change", "update_base", "resolve_conflict"}
 _ALLOWED = ("reply", "status", "acknowledge", "dismiss", "defer", "snooze", "resume", "reassign", *_MUTATIONS)
 MAX_CODING_ATTEMPTS = 3
@@ -105,7 +105,7 @@ class PrReadinessActivities:
             applied_changes=list(payload.get("prior_lineage", []))[:100],
         )
         try:
-            self.agent_dispatch(work.operation)
+            self.agent_dispatch(work.operation, 1)
             fault = getattr(self, "agent_fault", None)
             if fault is not None:
                 fault("review", work.operation)
@@ -221,7 +221,7 @@ class PrReadinessActivities:
             declarations,
         )
         try:
-            self.agent_dispatch(work.operation)
+            self.agent_dispatch(work.operation, 1)
             fault = getattr(self, "agent_fault", None)
             if fault is not None:
                 fault("conversation", work.operation)
@@ -390,7 +390,7 @@ class PrReadinessActivities:
                 )
                 break
             try:
-                self.agent_dispatch(work.operation)
+                self.agent_dispatch(work.operation, attempt)
                 fault = getattr(self, "agent_fault", None)
                 if fault is not None:
                     fault(kind, work.operation)

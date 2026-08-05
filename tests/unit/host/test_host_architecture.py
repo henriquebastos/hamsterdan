@@ -28,6 +28,10 @@ def test_only_host_composes_agent_and_github_siblings() -> None:
     assert {"hamsterdan.agents", "hamsterdan.github_app.gateway", "hamsterdan.readiness.net"} <= imports
     assert not any(name.startswith("examples") for name in imports)
 
+    for path in source.rglob("*.py"):
+        if any(name.startswith("petrus.agenticus") for name in _imports(path)):
+            assert path.is_relative_to(source / "agents") or path.is_relative_to(source / "host")
+
 
 def test_agent_requests_are_credential_free_and_mentions_are_exact() -> None:
     request_fields = {

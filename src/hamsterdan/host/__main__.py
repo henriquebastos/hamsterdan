@@ -13,7 +13,7 @@ import uvicorn
 
 from hamsterdan.github_app.config import ConfigurationError, HostConfig
 
-from .agenticus import AgentConfig, AgentRouteStore, compose_agent
+from .agenticus import AgentConfig, AgentRouteStore, compose_agent, select_agent_runner
 from .api import create_app
 from .service import HostService, QualificationFault
 
@@ -189,7 +189,7 @@ def main() -> int:
         route_store.activate(agent, config.state_path / "applications")
         service = HostService(
             config,
-            runner=agent.runner(),
+            runner=select_agent_runner(agent),
             agent_composition=agent,
             agent_routes=route_store,
             workflow_path=os.getenv("HAMSTERDAN_WORKFLOW_PATH", ".github/workflows/ci.yml"),

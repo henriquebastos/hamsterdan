@@ -6,13 +6,21 @@ from pathlib import Path
 import pytest
 from petrus.agenticus.catalog.descriptor import CapabilityDescriptor, DescriptorKind
 from petrus.agenticus.catalog.resolution import ResolutionSnapshot
+from petrus.agenticus.runtime.installation import (
+    InstalledComponent,
+    ProbeDisposition,
+    ProbeIssue,
+    RuntimeInstallation,
+    RuntimeProbeResult,
+)
 from petrus.agenticus.runtime.pi import PI_API_KEY_CATALOG
-from petrus.agenticus.runtime.profiles import AMP_A1
+from petrus.agenticus.runtime.profiles import AGENT_AS_NET_A5_LOCAL, AMP_A1, PI_NATIVE_A2_LOCAL
 from petrus.impetus.history import ActivityCompleted, ActivityRequested
 from petrus.impetus.history.codec import encode_record
 from petrus.impetus.petrinet import NetPath
 from petrus.motus.activity import ExecutionPolicy
 
+from hamsterdan.agents import AmpExecuteRunner, PiNativeRunner, UnavailablePiRunner
 from hamsterdan.host.agenticus import (
     AGENTICUS_DESCRIPTORS,
     HOST_FENCED_EFFECT,
@@ -23,6 +31,7 @@ from hamsterdan.host.agenticus import (
     AgentRouteStore,
     compose_agent,
     resolve_agenticus,
+    select_agent_runner,
 )
 
 
@@ -69,6 +78,15 @@ def test_amp_a1_and_legacy_amp_are_not_isolation() -> None:
         compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=True))
 
 
+def test_agent_net_runner_a5_topology_is_explicitly_rejected() -> None:
+    descriptors = tuple(
+        AGENT_AS_NET_A5_LOCAL if item.identity.kind is DescriptorKind.RUNTIME else item
+        for item in AGENTICUS_DESCRIPTORS
+    )
+    with pytest.raises(AgentCompositionError, match="A5 topology"):
+        resolve_agenticus(descriptors=descriptors)
+
+
 def test_modes_are_explicit_and_legacy_never_implicit_fallback() -> None:
     with pytest.raises(AgentCompositionError, match="must be exactly"):
         AgentConfig.from_environment({})
@@ -81,6 +99,66 @@ def test_modes_are_explicit_and_legacy_never_implicit_fallback() -> None:
         )
     )
     assert legacy.mode is AgentMode.LEGACY_AMP and legacy.snapshot is None
+
+
+class ProbeRuntime:
+    def __init__(self, result: RuntimeProbeResult):
+        self.result = result
+        self.probes = 0
+        self.starts = 0
+
+    def probe(self):
+        self.probes += 1
+        return self.result
+
+    def start(self, invocation):
+        self.starts += 1
+        raise AssertionError("runner selection must not start provider work")
+
+
+def probe_result(disposition: ProbeDisposition, *, runtime=PI_NATIVE_A2_LOCAL.identity) -> RuntimeProbeResult:
+    if disposition is ProbeDisposition.READY:
+        installation = RuntimeInstallation(
+            runtime,
+            1,
+            (InstalledComponent("pi", "1", "qualified:test"),),
+            "linux",
+            "x86_64",
+            frozenset({"runtime.cancel", "runtime.continue", "runtime.harness-owned", "runtime.local"}),
+        )
+        return RuntimeProbeResult(runtime, disposition, installation)
+    return RuntimeProbeResult(runtime, disposition, issues=(ProbeIssue("runtime-unavailable", "pi"),))
+
+
+def test_exact_ready_probe_selects_pi_without_starting_authority() -> None:
+    runtime = ProbeRuntime(probe_result(ProbeDisposition.READY))
+    runner = select_agent_runner(
+        compose_agent(AgentConfig(AgentMode.AGENTICUS)),
+        pi_runtime=runtime,
+        invocation_factory=lambda operation, prompt: object(),  # type: ignore[arg-type, return-value]
+        output_loader=lambda reference: "{}",
+    )
+    assert isinstance(runner, PiNativeRunner)
+    assert runtime.probes == 1 and runtime.starts == 0
+
+
+@pytest.mark.parametrize("disposition", [ProbeDisposition.NOT_INSTALLED, ProbeDisposition.UNAVAILABLE])
+def test_not_ready_probe_fails_closed_without_legacy_fallback(disposition: ProbeDisposition) -> None:
+    runtime = ProbeRuntime(probe_result(disposition))
+    runner = select_agent_runner(
+        compose_agent(AgentConfig(AgentMode.AGENTICUS)),
+        pi_runtime=runtime,
+        invocation_factory=lambda operation, prompt: object(),  # type: ignore[arg-type, return-value]
+        output_loader=lambda reference: "{}",
+    )
+    assert isinstance(runner, UnavailablePiRunner)
+    assert not isinstance(runner, AmpExecuteRunner)
+    assert runtime.probes == 1 and runtime.starts == 0
+
+
+def test_legacy_amp_is_selected_only_by_explicit_legacy_composition() -> None:
+    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+    assert isinstance(select_agent_runner(legacy), AmpExecuteRunner)
 
 
 def test_snapshot_persists_and_same_route_is_reconstructed_before_redispatch(tmp_path: Path) -> None:

@@ -40,7 +40,7 @@ class PrReadinessApplication:
         authority: GitHubAuthority,
         runner: AgentRunner,
         *,
-        agent_dispatch: Callable[[str], None],
+        agent_dispatch: Callable[[str, int], None],
         agent_settle: Callable[[set[str]], None],
         bot_login: str,
         public_clone_url: str,

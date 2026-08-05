@@ -5,14 +5,17 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Protocol
 
 from petrus.agenticus.catalog.descriptor import CapabilityDescriptor, DescriptorIdentity, DescriptorKind
 from petrus.agenticus.catalog.resolution import Catalog, ResolutionRequest, ResolutionSnapshot
+from petrus.agenticus.runtime.installation import ProbeDisposition, RuntimeProbeResult
+from petrus.agenticus.runtime.operation import RuntimeOperation
 from petrus.agenticus.runtime.pi import (
     PI_API_KEY_CATALOG,
     PI_COLLOCATED_HANDS,
@@ -20,22 +23,19 @@ from petrus.agenticus.runtime.pi import (
     PI_CONTINUATION_CAPABILITIES,
     PI_LOCAL_TERRITORY,
     PI_PROGRAM_CAPABILITIES,
+    PiRuntimeInvocation,
 )
-from petrus.agenticus.runtime.profiles import AMP_A1, PI_NATIVE_A2_LOCAL
+from petrus.agenticus.runtime.profiles import AGENT_AS_NET_A5_LOCAL, AMP_A1, PI_NATIVE_A2_LOCAL
 from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested
 from petrus.impetus.history.codec import decode_record
 
 from hamsterdan.agents import (
-    AgentProtocolError,
     AgentRunner,
     AmpExecuteRunner,
-    CodingRequest,
-    CodingResult,
-    ConversationRequest,
-    ConversationResult,
-    ReviewRequest,
-    ReviewResult,
+    PiNativeRunner,
+    UnavailablePiRunner,
 )
+from hamsterdan.agents.pi import InvocationFactory, OutputLoader
 
 PI_PROVIDER = "anthropic"
 PI_MODEL = "claude-sonnet-4-5"
@@ -96,29 +96,10 @@ class AgentComposition:
         if self.mode is AgentMode.LEGACY_AMP and (self.profile != LEGACY_PROFILE or self.snapshot is not None):
             raise ValueError("legacy Amp composition requires its rollback profile without an Agenticus snapshot")
 
-    def runner(self) -> AgentRunner:
-        if self.mode is AgentMode.LEGACY_AMP:
-            return AmpExecuteRunner()
-        return _DeterministicOnlyRunner()
 
-
-class _DeterministicOnlyRunner:
-    """Fail closed until the later bounded runtime-adapter slice is qualified."""
-
-    def review(
-        self, repository_url: str, request: ReviewRequest, *, is_current: Callable[[], bool] | None = None
-    ) -> ReviewResult:
-        raise AgentProtocolError("Agenticus provider authority is not enabled in this deterministic slice")
-
-    def converse(
-        self, repository_url: str, request: ConversationRequest, *, is_current: Callable[[], bool] | None = None
-    ) -> ConversationResult:
-        raise AgentProtocolError("Agenticus provider authority is not enabled in this deterministic slice")
-
-    def code(
-        self, repository_url: str, request: CodingRequest, *, is_current: Callable[[], bool] | None = None
-    ) -> CodingResult:
-        raise AgentProtocolError("Agenticus provider authority is not enabled in this deterministic slice")
+class PiProbeRuntime(Protocol):
+    def probe(self) -> RuntimeProbeResult: ...
+    def start(self, invocation: PiRuntimeInvocation) -> RuntimeOperation: ...
 
 
 def resolve_agenticus(
@@ -131,6 +112,8 @@ def resolve_agenticus(
 
     selected = tuple(descriptors)
     runtime_identities = tuple(item.identity for item in selected if item.identity.kind is DescriptorKind.RUNTIME)
+    if AGENT_AS_NET_A5_LOCAL.identity in runtime_identities:
+        raise AgentCompositionError("AgentNetRunner A5 topology cannot satisfy the selected Pi native A2 route")
     if isolation_required and AMP_A1.identity in runtime_identities:
         raise AgentCompositionError("Amp A1 provider-managed territory is not agent isolation")
     catalog = Catalog()
@@ -155,6 +138,39 @@ def compose_agent(config: AgentConfig) -> AgentComposition:
         raise AgentCompositionError("the exact Pi direct API-key provider and model are not qualified")
     snapshot = resolve_agenticus(isolation_required=config.isolation_required)
     return AgentComposition(config.mode, PI_PROFILE, snapshot)
+
+
+def select_agent_runner(
+    composition: AgentComposition,
+    *,
+    pi_runtime: PiProbeRuntime | None = None,
+    invocation_factory: InvocationFactory | None = None,
+    output_loader: OutputLoader | None = None,
+) -> AgentRunner:
+    """Select execution only after an exact READY probe; never substitute a fallback."""
+
+    if composition.mode is AgentMode.LEGACY_AMP:
+        return AmpExecuteRunner()
+    if pi_runtime is None:
+        return UnavailablePiRunner()
+    try:
+        probe = pi_runtime.probe()
+    except Exception:  # noqa: BLE001 - a probe failure selects only the fail-closed runner
+        return UnavailablePiRunner()
+    installation = probe.installation
+    required = {"runtime.cancel", "runtime.continue", "runtime.harness-owned", "runtime.local"}
+    if (
+        probe.disposition is not ProbeDisposition.READY
+        or probe.runtime != PI_NATIVE_A2_LOCAL.identity
+        or installation is None
+        or installation.runtime != PI_NATIVE_A2_LOCAL.identity
+        or installation.adapter_contract_version != 1
+        or not required <= installation.capabilities
+        or invocation_factory is None
+        or output_loader is None
+    ):
+        return UnavailablePiRunner()
+    return PiNativeRunner(pi_runtime, invocation_factory, output_loader)
 
 
 @dataclass(frozen=True)

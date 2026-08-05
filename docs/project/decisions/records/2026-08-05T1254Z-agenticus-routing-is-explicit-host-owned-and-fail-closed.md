@@ -18,6 +18,11 @@ Anthropic API-key catalog entry for `claude-sonnet-4-5`. This is static
 composition evidence only: it neither reads authority nor claims installation,
 provider availability, runtime qualification, or live support.
 
+The selected route is exactly `PI_NATIVE_A2_LOCAL`. `AgentNetRunner` is not an
+implementation of that route: it belongs to `AGENT_AS_NET_A5_LOCAL` with a
+different Program, Hands, and Continuation topology and must be rejected rather
+than substituted.
+
 The host owns two explicit modes: `agenticus` and `legacy-amp`. Agenticus is the
 configured adoption route. Legacy Amp exists only for deliberate rollback,
 never implicit fallback, and cannot be selected while isolation is required.
@@ -41,7 +46,9 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
 ## Consequences
 
 - The hard-coded Amp runner default is removed from `HostService`.
-- Agenticus execution fails closed until a later adapter and authority slice.
+- Agenticus execution is selected only after an exact READY Pi installation
+  probe and injected A2 lifecycle collaborators; production remains fail-closed
+  until Petrus supplies the supported authority-capable host factory.
 - Legacy rollback requires explicit mode selection and an explicit isolation
   waiver; no failure can select it automatically.
 - Route custody and Petrus History remain separate durable stores with strict
