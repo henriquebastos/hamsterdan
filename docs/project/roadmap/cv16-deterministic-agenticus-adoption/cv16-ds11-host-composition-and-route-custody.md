@@ -2,8 +2,8 @@
 code: CV16.DS11
 level: Delivery Story
 status: Qualified Locally
-status_reason: Deterministic gates pass; the first authority-bearing live attempt failed closed at HostGitPublisher before any ref mutation
-updated: 2026-08-05
+status_reason: Deterministic gates pass; the second bounded live attempt stopped before changed-result admission and publication
+updated: 2026-08-07
 ---
 
 # CV16.DS11 — Host composition and operation-route custody
@@ -104,12 +104,37 @@ advance. Focused qualification, publisher, Activity, Net, and Application tests
 pass 110 tests; the full gate passes 343 Python tests with one explicit provider
 test skipped, nine Bun tests, formatting, Ruff, ty, and source/wheel builds.
 
+The separately authorized second live attempt started from exact Hamsterdan
+`965a5be45c8a8bb232ea7737bc626789718a355f` and the exact Petrus pin. A fresh
+isolated install selected `PI_NATIVE_A2_LOCAL`, direct Anthropic API-key
+authority, and `claude-sonnet-4-5` using explicit absolute Pi and Node paths.
+Production `HostService`, Application, Activity, unchanged AgentRunner adapter,
+`PiNativeRunner`, `PiA2RuntimeHost`, and private workspace receiver completed
+one operation. The sanitized ledger is fresh attempt one, cumulative
+authority-bearing attempt two, zero retries, one authority materialization, one
+provider operation, six Hands calls, one accepted output append, zero changed
+mutation candidates, zero publications, and zero replays.
+
+No changed `CodingResult` crossed admission, so the real `HostGitPublisher` was
+not called and `PublicationQualification` correctly suppressed schema, tree,
+and replay assertions. The first safe category is `agent_result_unaccepted`.
+Raw model output and provider diagnostics were neither retained nor inspected,
+so the evidence cannot distinguish unchanged output from schema, correlation,
+or workspace-result rejection. Operation cleanup preceded terminal History;
+terminal History preceded exact-route settlement. Direct-key removal,
+reauthorization-required custody, zero live leases, persistent key erasure,
+runtime/process, Attachment, workspace, Hands stage, handoff, and qualification
+root absence all passed. The Navigator deleted the exact disposable target and
+qualification verified not-found without repository enumeration; coordinate
+custody was then erased.
+
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
-qualified, and one-shot custody was exercised once, but the complete provider
-route remains unaccepted because the controlled result did not cross the Git
-publication proof. DS11 therefore remains Qualified Locally rather than Done.
+qualified, and one-shot custody has been exercised twice, but the complete
+provider route remains unaccepted because neither controlled attempt crossed
+the Git publication proof. DS11 therefore remains Qualified Locally rather than
+Done.
 The Local provider classifies active process death as indeterminate but cannot
 reconcile a lease whose process-memory registry died. This is not exactly-once
 execution, forensic erasure, complete migration, or live-support evidence.
@@ -122,9 +147,11 @@ repositories remain a host resource-trust boundary.
 
 ## Next slice
 
-The deterministic code is eligible to request a fresh, separately bounded
-provider attempt because its first-cause observation contract is now qualified.
-No such attempt is authorized by this slice. Separately dispose of the orphaned
-qualification repository only through an explicitly approved exact-target
-administration identity. Native subscription and extra usage remain excluded.
-Do not begin DS12 before the live gate passes.
+Do not request another provider attempt from this evidence. First add a
+credential-free, closed agent-result admission category at the adapter/Activity
+boundary that distinguishes runtime lifecycle failure, output parse/schema or
+correlation rejection, unchanged result, and workspace reconciliation failure
+without retaining arbitrary strings, model output, or provider diagnostics.
+Prove first-cause preservation and no retry/publication after each category.
+Native subscription and extra usage remain excluded. Do not begin DS12 before
+the live gate passes.

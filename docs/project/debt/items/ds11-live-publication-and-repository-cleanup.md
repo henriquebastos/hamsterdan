@@ -1,12 +1,13 @@
 ---
-status: Open
+status: Resolved
 raised: 2026-08-05
+resolved: 2026-08-07
 related:
   - CV16
   - CV16.DS11
 ---
 
-# DS11 publication observation resolved; disposable repository cleanup remains
+# DS11 publication observation and disposable repository cleanup resolved
 
 The first authority-bearing Pi native A2 Local qualification returned one
 controlled mutation candidate to the production host, but the real
@@ -30,13 +31,14 @@ separately authorized attempt; the erased first-attempt reason remains
 classification C and is not retroactively inferred.
 
 The qualification identity could still read the disposable repository after
-the attempt but could not delete it, change it to private, or archive it. Local
-coordinates and identity material were erased as required, leaving no authority
-in this executor to complete remote disposal. A separately authorized identity
-with repository administration/deletion authority must remove that repository
-without disclosing its coordinate into durable evidence.
+the attempt but could not delete it, change it to private, or archive it. The
+Navigator later authorized and performed exact-target deletion. Qualification
+checked only that target, observed not-found, erased the mode-`0600` coordinate
+handoff, and did not enumerate or mutate another repository.
 
-The remaining remote cleanup debt does not weaken publication fencing, authorize
-another provider attempt, or expand support beyond the selected direct-key Pi
-native A2 Local profile. DS11 live acceptance remains blocked until a later
-authorized route passes.
+The later authorized provider attempt completed one production operation but no
+changed coding result crossed admission, so publication assertions remained
+suppressed. That live-admission gap is delivery evidence rather than orphaned
+remote cleanup debt. This item is resolved; it does not mark DS11 Done,
+authorize another provider attempt, or expand support beyond the selected
+direct-key Pi native A2 Local profile.

@@ -53,5 +53,12 @@ harness overwrote the original rejected fence with a secondary empty-replay
 error. The original cause is therefore unclassified rather than inferred. A
 closed publication-category contract now retains the first cause before replay,
 suppresses publication assertions after zero publication, and keeps replay and
-cleanup failures separate. The deterministic code is eligible to request a
-fresh bounded live authorization; none is implied or exercised.
+cleanup failures separate. A separately authorized second attempt completed one
+production runtime operation with one accepted output append and six Hands
+calls, but no changed coding result crossed admission. It therefore produced no
+mutation candidate, publisher call, publication, or replay. The retained safe
+category is `agent_result_unaccepted`; the exact subcause is deliberately not
+inferred from erased provider output. Direct-key, DS2, runtime, workspace, and
+remote qualification cleanup all passed. DS11 remains Qualified Locally, and
+the next deterministic work is closed agent-result admission evidence rather
+than another live attempt.

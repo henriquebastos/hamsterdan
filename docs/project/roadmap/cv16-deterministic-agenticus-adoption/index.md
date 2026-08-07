@@ -2,8 +2,8 @@
 code: CV16
 level: Value
 status: Active
-status_reason: Direct-key production composition is qualified; the first authority-bearing live attempt failed closed at Git publication with no ref mutation
-updated: 2026-08-05
+status_reason: Direct-key production composition is qualified; two bounded authority attempts stopped before publication, most recently at changed-result admission
+updated: 2026-08-07
 ---
 
 # CV16 — Deterministic Agenticus adoption
@@ -58,3 +58,12 @@ publication stage in canonical Activity results. Zero or failed publication
 suppresses schema/tree/replay checks; successful publication runs them once;
 replay and cleanup failures cannot replace the original cause. This closes the
 deterministic evidence gap without changing AgentRunner or publication fences.
+
+A separately authorized second attempt used the exact production A2 route and
+completed one runtime operation with one accepted output append and six Hands
+calls. No changed coding result crossed the adapter/Activity admission boundary,
+so no mutation candidate reached `HostGitPublisher`; publication and replay both
+remained zero. The safe category is `agent_result_unaccepted`. Provider output
+and diagnostics were erased as required, so no narrower cause is claimed. All
+local authority/runtime state and the exact disposable remote were removed.
+CV16 remains active and no further live attempt is authorized.

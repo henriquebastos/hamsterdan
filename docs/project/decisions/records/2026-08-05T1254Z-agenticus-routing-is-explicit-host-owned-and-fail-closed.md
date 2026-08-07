@@ -70,11 +70,19 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
   operations. Cleanup uncertainty remains fail-closed.
 - The first direct-key live attempt exercised authority once but was rejected by
   the host Git publication boundary before ref mutation. That result does not
-  change the selected profile or authorize fallback; live support remains
-  unaccepted pending deterministic diagnosis and a separately bounded rerun.
+  change the selected profile or authorize fallback. Deterministic diagnosis
+  and the separately bounded second attempt below still did not establish live
+  support.
 - Publication qualification retains only a closed, coordinate-free stage
   category in canonical Activity results. Publication-dependent assertions run
   once only after one successful original publication; replay and cleanup
   categories remain separate and cannot overwrite the first cause. This
   evidence contract does not change the AgentRunner protocol or weaken current
   authority, object identity, exact CAS, or idempotency fences.
+- The separately authorized second attempt completed one production runtime
+  operation but admitted no changed `CodingResult`. The safe boundary is
+  `agent_result_unaccepted`; absent a closed adapter/Activity category, the host
+  must not infer whether output was unchanged or failed schema, correlation, or
+  workspace admission. No fallback or retry follows. A future deterministic
+  evidence slice may add only provider-neutral closed admission categories; it
+  must not retain model output, provider diagnostics, or exception prose.
