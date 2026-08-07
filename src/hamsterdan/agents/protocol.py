@@ -9,6 +9,7 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import PurePosixPath
 from typing import Never, Protocol, cast
 
@@ -22,10 +23,54 @@ _MAX_ITEMS, _MAX_TEXT, _MAX_PATH, _MAX_FILE = 100, 20_000, 1024, 2_000_000
 _SECRET_WORDS = ("TOKEN", "PASSWORD", "PASSWD", "SECRET", "CREDENTIAL", "PRIVATE_KEY", "API_KEY")
 
 
+class AgentResultCategory(StrEnum):
+    """Closed, provider-neutral coding-result admission outcomes."""
+
+    RUNTIME_LIFECYCLE = "runtime_lifecycle"
+    OUTPUT_SCHEMA = "output_schema"
+    CORRELATION = "correlation"
+    UNCHANGED = "unchanged"
+    UNABLE = "unable"
+    WORKSPACE_RECONCILIATION = "workspace_reconciliation"
+
+
+class AgentCleanupCategory(StrEnum):
+    """Closed cleanup uncertainty retained separately from result admission."""
+
+    UNVERIFIED = "cleanup_unverified"
+
+
 class AgentProtocolError(RuntimeError):
-    def __init__(self, reason: str, *, canceled: bool = False, timed_out: bool = False):
+    def __init__(
+        self,
+        reason: str,
+        *,
+        canceled: bool = False,
+        timed_out: bool = False,
+        result_category: AgentResultCategory | None = None,
+        cleanup_category: AgentCleanupCategory | None = None,
+    ):
+        if result_category is not None and not isinstance(result_category, AgentResultCategory):
+            raise TypeError("agent result category must use the closed vocabulary")
+        if cleanup_category is not None and not isinstance(cleanup_category, AgentCleanupCategory):
+            raise TypeError("agent cleanup category must use the closed vocabulary")
         super().__init__(reason)
         self.canceled, self.timed_out = canceled, timed_out
+        self.result_category, self.cleanup_category = result_category, cleanup_category
+
+    def retain_result_category(self, category: AgentResultCategory) -> AgentProtocolError:
+        if not isinstance(category, AgentResultCategory):
+            raise TypeError("agent result category must use the closed vocabulary")
+        if self.result_category is None:
+            self.result_category = category
+        return self
+
+    def retain_cleanup_category(self, category: AgentCleanupCategory) -> AgentProtocolError:
+        if not isinstance(category, AgentCleanupCategory):
+            raise TypeError("agent cleanup category must use the closed vocabulary")
+        if self.cleanup_category is None:
+            self.cleanup_category = category
+        return self
 
 
 @dataclass(frozen=True)
@@ -165,8 +210,13 @@ def _exact(data: JSONDict, names: set[str]) -> None:
 
 def _correlate(data: JSONDict, request: object, fields: tuple[str, ...]) -> None:
     for name in fields:
-        if type(data.get(name)) is not type(getattr(request, name)) or data.get(name) != getattr(request, name):
+        expected = getattr(request, name)
+        if name not in data or type(data[name]) is not type(expected):
             _fail(f"result correlation mismatch: {name}")
+        if data[name] != expected:
+            raise AgentProtocolError(
+                f"result correlation mismatch: {name}", result_category=AgentResultCategory.CORRELATION
+            )
 
 
 def _confidence(value: object) -> bool:
@@ -372,7 +422,10 @@ def _validate_coding(data: JSONDict, request: CodingRequest, changed: list[str])
     }:
         _fail("invalid coding status/reproduction status")
     if (data["status"] == "changed") != bool(changed) or data["status"] == "unchanged" and changed:
-        _fail("coding status differs from host worktree")
+        raise AgentProtocolError(
+            "coding status differs from host worktree",
+            result_category=AgentResultCategory.WORKSPACE_RECONCILIATION,
+        )
     if request.kind == "repair" and changed and data["reproduction_status"] != "confirmed":
         _fail("repair changed result requires confirmed reproduction")
     _text(data["diff"], "diff", empty=True, limit=4_000_000)
@@ -421,7 +474,9 @@ def _validate_result(kind: str, data: object, request: AgentRequest, changed: li
     if kind == "conversation":
         _exact(data, set(common) | {"intents"})
         if not isinstance(request, ConversationRequest):
-            _fail("request kind differs from result kind")
+            raise AgentProtocolError(
+                "request kind differs from result kind", result_category=AgentResultCategory.CORRELATION
+            )
         return _validate_conversation(data, request)
     fields = set(common) | {
         "kind",
@@ -436,5 +491,7 @@ def _validate_result(kind: str, data: object, request: AgentRequest, changed: li
     _exact(data, fields)
     _correlate(data, request, ("kind", "ref"))
     if not isinstance(request, CodingRequest):
-        _fail("request kind differs from result kind")
+        raise AgentProtocolError(
+            "request kind differs from result kind", result_category=AgentResultCategory.CORRELATION
+        )
     return _validate_coding(data, request, changed or [])

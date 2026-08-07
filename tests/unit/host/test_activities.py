@@ -6,7 +6,7 @@ from typing import ClassVar
 
 import pytest
 
-from hamsterdan.agents import AgentProtocolError, AmpExecuteRunner, CodingResult
+from hamsterdan.agents import AgentProtocolError, AgentResultCategory, AmpExecuteRunner, CodingResult
 from hamsterdan.agents import ConversationResult as AgentConversationResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
@@ -168,7 +168,7 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
     assert "reason=provider refused the publication" in caplog.text
 
 
-def test_coding_retries_nonchanging_agent_result_before_one_publication() -> None:
+def test_coding_unchanged_result_is_terminal_without_publication_or_retry() -> None:
     operations = object.__new__(PrReadinessActivities)
     dispatched: list[str] = []
     operations.repository = "owner/repo"
@@ -184,7 +184,6 @@ def test_coding_retries_nonchanging_agent_result_before_one_publication() -> Non
 
         def code(self, repository_url, request, *, is_current=None):
             self.calls += 1
-            changed = self.calls == 3
             return CodingResult(
                 request.kind,
                 request.repository,
@@ -193,12 +192,12 @@ def test_coding_retries_nonchanging_agent_result_before_one_publication() -> Non
                 request.head,
                 request.base,
                 request.ref,
-                "changed" if changed else "unchanged",
+                "unchanged",
                 "not_attempted",
-                "diff" if changed else "",
-                ["file.txt"] if changed else [],
-                [{"check": "passed"}] if changed else [],
-                "Apply requested change" if changed else "",
+                "",
+                [],
+                [],
+                "",
             )
 
     class Publisher:
@@ -220,14 +219,15 @@ def test_coding_retries_nonchanging_agent_result_before_one_publication() -> Non
 
     result = operations.change(work)
 
-    assert result.ok is True
-    assert operations.runner.calls == 3
-    assert operations.git_publisher.calls == 1
-    assert dispatched == ["change-operation"] * 3
-    assert len(fences) == 4
+    assert result.ok is False
+    assert result.agent_result_category == AgentResultCategory.UNCHANGED
+    assert operations.runner.calls == 1
+    assert operations.git_publisher.calls == 0
+    assert dispatched == ["change-operation"]
+    assert len(fences) == 1
 
 
-def test_coding_stops_after_three_nonchanging_agent_results() -> None:
+def test_coding_unable_result_is_terminal_without_publication_or_retry() -> None:
     operations = object.__new__(PrReadinessActivities)
     operations.repository = "owner/repo"
     operations.pr_number = 7
@@ -274,7 +274,8 @@ def test_coding_stops_after_three_nonchanging_agent_results() -> None:
     result = operations.change(work)
 
     assert result.ok is False
-    assert operations.runner.calls == 3
+    assert result.agent_result_category == AgentResultCategory.UNABLE
+    assert operations.runner.calls == 1
 
 
 def test_coding_retries_protocol_error_with_identical_request_then_publishes_once() -> None:
@@ -390,21 +391,7 @@ def test_stale_authority_between_coding_attempts_stops_before_retry_and_publicat
 
         def code(self, repository_url, request, *, is_current=None):
             self.calls += 1
-            return CodingResult(
-                request.kind,
-                request.repository,
-                request.pull_request,
-                request.epoch,
-                request.head,
-                request.base,
-                request.ref,
-                "unchanged",
-                "not_attempted",
-                "",
-                [],
-                [],
-                "",
-            )
+            raise AgentProtocolError("retryable protocol failure")
 
     class Publisher:
         def publish(self, *args, **kwargs):
@@ -448,7 +435,7 @@ def test_final_fence_failure_retains_closed_category_before_publication(
     def fence(*args):
         nonlocal fence_calls
         fence_calls += 1
-        if fence_calls == 3:
+        if fence_calls == 2:
             raise failure
 
     operations.current_fence = fence
@@ -458,7 +445,6 @@ def test_final_fence_failure_retains_closed_category_before_publication(
 
         def code(self, repository_url, request, *, is_current=None):
             self.calls += 1
-            changed = self.calls == 2
             return CodingResult(
                 request.kind,
                 request.repository,
@@ -467,12 +453,12 @@ def test_final_fence_failure_retains_closed_category_before_publication(
                 request.head,
                 request.base,
                 request.ref,
-                "changed" if changed else "unchanged",
+                "changed",
                 "not_attempted",
-                "diff" if changed else "",
-                ["file.txt"] if changed else [],
-                [{"check": "passed"}] if changed else [],
-                "Apply requested change" if changed else "",
+                "diff",
+                ["file.txt"],
+                [{"check": "passed"}],
+                "Apply requested change",
             )
 
     class Publisher:
@@ -495,10 +481,10 @@ def test_final_fence_failure_retains_closed_category_before_publication(
     result = operations.change(work)
     assert result.ok is False
     assert result.publication_category == category
-    assert operations.runner.calls == 2
-    assert dispatched == [("change-operation", 1), ("change-operation", 2)]
+    assert operations.runner.calls == 1
+    assert dispatched == [("change-operation", 1)]
     assert operations.git_publisher.calls == 0
-    assert fence_calls == 3
+    assert fence_calls == 2
     assert f"coding result rejected kind=change category={log_category}" in caplog.text
 
 

@@ -42,3 +42,8 @@ suppressed. That live-admission gap is delivery evidence rather than orphaned
 remote cleanup debt. This item is resolved; it does not mark DS11 Done,
 authorize another provider attempt, or expand support beyond the selected
 direct-key Pi native A2 Local profile.
+
+The subsequent credential-free agent-result observation slice does not reopen
+this debt. It records future admission and cleanup causes independently while
+leaving both historical attempts unchanged. No qualification repository or
+remote cleanup obligation was created, and the orphan cleanup remains resolved.

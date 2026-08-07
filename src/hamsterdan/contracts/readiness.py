@@ -223,6 +223,8 @@ class EffectResult:
     capability_available: bool = True
     references: list[dict] = field(default_factory=list)
     publication_category: str = ""
+    agent_result_category: str = ""
+    agent_cleanup_category: str = ""
 
 
 @dataclass(frozen=True)

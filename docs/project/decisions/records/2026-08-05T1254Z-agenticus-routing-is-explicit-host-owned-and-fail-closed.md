@@ -81,8 +81,13 @@ not own durable Pi/Amp operation routing, so that fence belongs in the host.
   authority, object identity, exact CAS, or idempotency fences.
 - The separately authorized second attempt completed one production runtime
   operation but admitted no changed `CodingResult`. The safe boundary is
-  `agent_result_unaccepted`; absent a closed adapter/Activity category, the host
-  must not infer whether output was unchanged or failed schema, correlation, or
-  workspace admission. No fallback or retry follows. A future deterministic
-  evidence slice may add only provider-neutral closed admission categories; it
-  must not retain model output, provider diagnostics, or exception prose.
+  `agent_result_unaccepted`; the host must not retroactively infer whether output
+  was unchanged or failed schema, correlation, or workspace admission.
+- Future coding outcomes retain only a closed adapter/Activity category for
+  runtime lifecycle, output schema, correlation, unchanged, unable, or workspace
+  reconciliation. Operation/workspace cleanup uncertainty remains a separate
+  closed field and cannot replace the first cause. Categorized outcomes are
+  terminal without retry or publication; generic unclassified failures retain
+  same-route retry fencing. This evidence contains no model output, provider
+  diagnostics, coordinates, patches, or exception prose and does not weaken the
+  canonical workspace or publication fences.

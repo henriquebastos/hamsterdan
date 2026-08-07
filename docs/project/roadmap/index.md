@@ -24,5 +24,6 @@ Active runtime adoption: [CV16 — Deterministic Agenticus adoption](cv16-determ
 is qualified locally. Its first direct-key attempt stopped at Git publication;
 its second completed one production operation but admitted no changed coding
 result. Publication observation now fails closed, all qualification repositories
-are removed, and live support remains unaccepted pending deterministic
-agent-result admission evidence.
+are removed, and closed agent-result admission evidence is qualified locally.
+The historical live cause remains unclassified and live support remains
+unaccepted pending a separately authorized bounded attempt.

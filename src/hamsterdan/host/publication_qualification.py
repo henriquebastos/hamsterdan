@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from hamsterdan.agents import AgentCleanupCategory, AgentResultCategory
 from hamsterdan.contracts.readiness import EffectResult
 
 from .git_publish import GitPublishError, PublicationCategory
@@ -23,6 +24,8 @@ class PublicationQualification:
     """First-cause-preserving state for one qualification publication."""
 
     original_publications: int | None = None
+    agent_result_category: AgentResultCategory | None = None
+    agent_cleanup_category: AgentCleanupCategory | None = None
     original_category: PublicationCategory | None = None
     schema_assertion: bool | None = None
     tree_assertion: bool | None = None
@@ -40,15 +43,22 @@ class PublicationQualification:
             or publications not in {0, 1}
         ):
             raise ValueError("original publication evidence is inconsistent")
-        try:
-            category = PublicationCategory(result.publication_category) if result.publication_category else None
-        except ValueError:
-            raise ValueError("original publication category is outside the closed vocabulary") from None
-        if result.ok and (publications != 1 or category is not None):
+        category = _category(result.publication_category, PublicationCategory, "original publication")
+        result_category = _category(result.agent_result_category, AgentResultCategory, "agent result")
+        cleanup_category = _category(result.agent_cleanup_category, AgentCleanupCategory, "agent cleanup")
+        if category is not None and result_category is not None:
+            raise ValueError("agent admission and publication causes cannot overlap")
+        if result.ok and (
+            publications != 1 or category is not None or result_category is not None or cleanup_category is not None
+        ):
             raise ValueError("successful publication evidence is inconsistent")
-        if not result.ok and category is None:
+        if not result.ok and (
+            publications != 0 or category is None and result_category is None and cleanup_category is None
+        ):
             raise ValueError("failed publication lacks a closed category")
-        self.original_publications, self.original_category = publications, category
+        self.original_publications = publications
+        self.agent_result_category, self.agent_cleanup_category = result_category, cleanup_category
+        self.original_category = category
 
     @property
     def publication_assertions_allowed(self) -> bool:
@@ -104,6 +114,10 @@ class PublicationQualification:
         return {
             "accepted": self.accepted,
             "original_publications": self.original_publications,
+            "agent_result_category": ("" if self.agent_result_category is None else self.agent_result_category.value),
+            "agent_cleanup_category": (
+                "" if self.agent_cleanup_category is None else self.agent_cleanup_category.value
+            ),
             "original_category": "" if self.original_category is None else self.original_category.value,
             "publication_assertions_allowed": self.publication_assertions_allowed,
             "schema_assertion": self.schema_assertion,
@@ -119,3 +133,14 @@ def _strict_assertion(value: object) -> bool:
     if type(value) is not bool:
         raise ValueError("qualification assertion must be boolean")
     return value
+
+
+def _category[Category: StrEnum](value: object, vocabulary: type[Category], name: str) -> Category | None:
+    if not isinstance(value, str):
+        raise TypeError(f"{name} category is outside the closed vocabulary")
+    if value == "":
+        return None
+    try:
+        return vocabulary(value)
+    except ValueError:
+        raise ValueError(f"{name} category is outside the closed vocabulary") from None

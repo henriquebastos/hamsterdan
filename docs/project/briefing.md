@@ -60,5 +60,10 @@ mutation candidate, publisher call, publication, or replay. The retained safe
 category is `agent_result_unaccepted`; the exact subcause is deliberately not
 inferred from erased provider output. Direct-key, DS2, runtime, workspace, and
 remote qualification cleanup all passed. DS11 remains Qualified Locally, and
-the next deterministic work is closed agent-result admission evidence rather
-than another live attempt.
+closed future agent-result evidence now distinguishes runtime lifecycle, output
+schema, correlation, unchanged, unable, and workspace reconciliation outcomes
+without retaining prose or coordinates. Cleanup uncertainty remains separate;
+categorized outcomes cannot retry or publish, while accepted changed results
+retain the existing canonical publication path. This does not reclassify the
+historical attempt. The code may request a fresh separately bounded provider
+attempt, but none is authorized by this qualification and DS12 remains excluded.

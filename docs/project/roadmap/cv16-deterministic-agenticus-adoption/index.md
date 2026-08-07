@@ -67,3 +67,13 @@ remained zero. The safe category is `agent_result_unaccepted`. Provider output
 and diagnostics were erased as required, so no narrower cause is claimed. All
 local authority/runtime state and the exact disposable remote were removed.
 CV16 remains active and no further live attempt is authorized.
+
+The next credential-free observation slice now retains one closed first result
+outcome at the adapter/Activity boundary: runtime lifecycle, output schema,
+correlation, unchanged, unable, or workspace reconciliation. Cleanup uncertainty
+is separate and cannot overwrite the first cause. Categorized failures and
+valid non-mutations stop after one dispatch with no publisher call; an accepted
+changed result still enters the unchanged canonical receiver and publication
+fences. This does not retroactively classify either blocked attempt. The code is
+eligible only to request a fresh separately bounded provider attempt; none is
+authorized here, and DS12 remains out of scope.

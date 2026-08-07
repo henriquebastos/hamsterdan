@@ -18,13 +18,19 @@ from petrus.agenticus.thread.identity import EpisodeId, TurnId
 from petrus.agenticus.thread.lifecycle import CancellationDisposition, TurnOutcome
 
 from hamsterdan.agents import (
+    AgentCleanupCategory,
     AgentProtocolError,
+    AgentResultCategory,
     CodingRequest,
     ConversationRequest,
     PiNativeRunner,
     ReviewRequest,
     encode_prompt,
 )
+from hamsterdan.agents.pi import PiWorkspaceCleanupError
+from hamsterdan.contracts.readiness import Work
+from hamsterdan.host.activities import PrReadinessActivities
+from hamsterdan.host.git_publish import GitPublishResult
 
 HEAD, BASE = "a" * 40, "b" * 40
 URL = "https://example.invalid/owner/repo.git"
@@ -82,6 +88,57 @@ def coding_request() -> CodingRequest:
     return CodingRequest("change", "owner/repo", 7, 2, HEAD, BASE, "hamsterdan/change/one")
 
 
+def activity_coding_result(operation: str, *, status: str = "unchanged", head: str = HEAD) -> dict[str, object]:
+    changed = status == "changed"
+    return {
+        "kind": "change",
+        "repository": "owner/repo",
+        "pull_request": 7,
+        "epoch": 2,
+        "head": head,
+        "base": BASE,
+        "ref": f"hamsterdan/change/{operation[-16:]}",
+        "status": status,
+        "reproduction_status": "not_attempted",
+        "diff": "untrusted" if changed else "",
+        "changed_files": ["bounded.txt"] if changed else [],
+        "validation_evidence": [{"check": "passed"}] if changed else [],
+        "proposed_commit_message": "Apply bounded change" if changed else "",
+    }
+
+
+class ActivityPublisher:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.result = None
+
+    def publish(self, result, **kwargs):
+        self.calls += 1
+        self.result = result
+        return GitPublishResult("c" * 40)
+
+
+def run_coding_activity(subject: PiNativeRunner, runtime: Runtime, operation: str):
+    publisher = ActivityPublisher()
+    activities = object.__new__(PrReadinessActivities)
+    activities.repository = "owner/repo"
+    activities.pr_number = 7
+    activities.public_clone_url = URL
+    activities.current = None
+    activities.current_fence = lambda *args: None
+    activities.agent_dispatch = lambda claimed, attempt: subject.route_operation(runtime.operation.operation_id)
+    activities.runner = subject
+    activities.git_publisher = publisher
+    work = Work(
+        "change",
+        2,
+        HEAD,
+        operation,
+        payload={"base_head": BASE, "policy_digest": "policy", "intent": {}},
+    )
+    return activities.change(work), publisher
+
+
 @pytest.mark.parametrize(
     ("kind", "agent_request"),
     [("review", review_request()), ("conversation", conversation_request()), ("coding", coding_request())],
@@ -132,6 +189,31 @@ class Operation:
             self.operation_id,
             RuntimeCleanupDisposition.CLEAN if self.clean else RuntimeCleanupDisposition.UNVERIFIED,
             "client-closed" if self.clean else "cleanup-uncertain",
+        )
+
+
+class BrokenIdentityOperation(Operation):
+    def __init__(self, operation: str) -> None:
+        self._operation_id = operation
+        self.identity_broken = False
+        super().__init__(operation)
+
+    @property
+    def operation_id(self) -> str:
+        if self.identity_broken:
+            raise RuntimeError("private runtime identity diagnostic")
+        return self._operation_id
+
+    @operation_id.setter
+    def operation_id(self, value: str) -> None:
+        self._operation_id = value
+
+    def close(self):
+        self.closed += 1
+        return RuntimeOperationCleanup(
+            self._operation_id,
+            RuntimeCleanupDisposition.CLEAN,
+            "client-closed",
         )
 
 
@@ -381,7 +463,7 @@ def test_coding_archive_policy_derives_unchanged_and_changed_or_rejects_missing_
     runtime.archive = b""
     with pytest.raises(AgentProtocolError, match="archive is unavailable") as caught:
         subject.code(URL, request)
-    assert caught.value.canceled
+    assert caught.value.result_category is AgentResultCategory.WORKSPACE_RECONCILIATION
 
     subject, runtime = runner(dict(base, status="unchanged"), Operation("code:invalid-archive"))
     runtime.load_workspace_archive = lambda operation_id: (_ for _ in ()).throw(  # type: ignore[method-assign]
@@ -389,4 +471,169 @@ def test_coding_archive_policy_derives_unchanged_and_changed_or_rejects_missing_
     )
     with pytest.raises(AgentProtocolError, match="archive is unavailable") as caught:
         subject.code(URL, request)
-    assert caught.value.canceled
+    assert caught.value.result_category is AgentResultCategory.WORKSPACE_RECONCILIATION
+
+
+@pytest.mark.parametrize(
+    ("case", "category"),
+    [
+        ("runtime", AgentResultCategory.RUNTIME_LIFECYCLE),
+        ("schema", AgentResultCategory.OUTPUT_SCHEMA),
+        ("correlation", AgentResultCategory.CORRELATION),
+        ("workspace", AgentResultCategory.WORKSPACE_RECONCILIATION),
+    ],
+)
+def test_coding_activity_retains_each_adapter_admission_failure_without_retry_or_publication(
+    case: str, category: AgentResultCategory
+) -> None:
+    operation_id = f"change:admission-{case}"
+    output = activity_coding_result(
+        operation_id,
+        head="c" * 40 if case == "correlation" else HEAD,
+    )
+    operation = Operation(
+        operation_id,
+        outcome=TurnOutcome.FAILED if case == "runtime" else TurnOutcome.COMPLETED,
+    )
+    subject, runtime = runner(output, operation)
+    if case == "schema":
+        runtime.output = "not-json private model prose"
+    if case == "workspace":
+        runtime.archive = b""
+
+    effect, publisher = run_coding_activity(subject, runtime, operation_id)
+
+    assert not effect.ok
+    assert effect.agent_result_category == category
+    assert effect.agent_cleanup_category == ""
+    assert effect.publication_category == ""
+    assert len(runtime.started) == 1
+    assert publisher.calls == 0
+
+
+@pytest.mark.parametrize(
+    ("status", "category"),
+    [
+        ("unchanged", AgentResultCategory.UNCHANGED),
+        ("unable", AgentResultCategory.UNABLE),
+    ],
+)
+def test_coding_activity_retains_valid_nonmutation_outcome_without_retry_or_publication(
+    status: str, category: AgentResultCategory
+) -> None:
+    operation_id = f"change:admission-{status}"
+    subject, runtime = runner(activity_coding_result(operation_id, status=status), Operation(operation_id))
+
+    effect, publisher = run_coding_activity(subject, runtime, operation_id)
+
+    assert not effect.ok
+    assert effect.agent_result_category == category
+    assert effect.agent_cleanup_category == ""
+    assert len(runtime.started) == 1
+    assert publisher.calls == 0
+
+
+def test_coding_activity_passes_accepted_changed_result_to_existing_publisher() -> None:
+    operation_id = "change:admission-changed"
+    subject, runtime = runner(activity_coding_result(operation_id, status="changed"), Operation(operation_id))
+
+    effect, publisher = run_coding_activity(subject, runtime, operation_id)
+
+    assert effect.ok
+    assert effect.agent_result_category == "" and effect.agent_cleanup_category == ""
+    assert publisher.calls == 1
+    assert publisher.result is not None
+    assert publisher.result.diff == "canonical diff"
+    assert publisher.result.changed_files == ["bounded.txt"]
+    assert len(runtime.started) == 1
+
+
+def test_operation_cleanup_failure_cannot_overwrite_first_output_admission_cause() -> None:
+    operation_id = "change:admission-cleanup"
+    subject, runtime = runner(activity_coding_result(operation_id), Operation(operation_id, clean=False))
+    runtime.output = "not-json private model prose"
+
+    effect, publisher = run_coding_activity(subject, runtime, operation_id)
+
+    assert not effect.ok
+    assert effect.agent_result_category == AgentResultCategory.OUTPUT_SCHEMA
+    assert effect.agent_cleanup_category == AgentCleanupCategory.UNVERIFIED
+    assert publisher.calls == 0
+    assert len(runtime.started) == 1
+
+
+def test_agent_failure_categories_are_closed_and_first_cause_is_one_shot() -> None:
+    with pytest.raises(TypeError, match="closed vocabulary"):
+        AgentProtocolError("private diagnostic", result_category="owner/private")  # type: ignore[arg-type]
+    error = AgentProtocolError("private diagnostic", result_category=AgentResultCategory.OUTPUT_SCHEMA)
+
+    error.retain_result_category(AgentResultCategory.CORRELATION)
+    error.retain_cleanup_category(AgentCleanupCategory.UNVERIFIED)
+
+    assert error.result_category is AgentResultCategory.OUTPUT_SCHEMA
+    assert error.cleanup_category is AgentCleanupCategory.UNVERIFIED
+
+
+def test_workspace_preparation_and_cleanup_failure_retains_both_closed_causes() -> None:
+    operation_id = "change:admission-preparation"
+    runtime = Runtime(Operation(operation_id), json.dumps(activity_coding_result(operation_id)))
+
+    class FailedWorkspaces:
+        @contextmanager
+        def open(self, kind, repository_url, request, operation):
+            if False:
+                yield
+            raise PiWorkspaceCleanupError(preparation_failed=True)
+
+    subject = PiNativeRunner(runtime, FailedWorkspaces())  # type: ignore[arg-type]
+
+    effect, publisher = run_coding_activity(subject, runtime, operation_id)
+
+    assert effect.agent_result_category == AgentResultCategory.WORKSPACE_RECONCILIATION
+    assert effect.agent_cleanup_category == AgentCleanupCategory.UNVERIFIED
+    assert runtime.started == []
+    assert publisher.calls == 0
+
+
+def test_throwing_runtime_identity_is_sanitized_and_still_closes() -> None:
+    operation_id = "code:broken-identity"
+    operation = BrokenIdentityOperation(operation_id)
+    runtime = Runtime(operation)
+    subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
+    subject.route_operation(operation_id)
+    operation.identity_broken = True
+
+    with pytest.raises(AgentProtocolError) as caught:
+        subject.code(URL, coding_request())
+
+    assert caught.value.result_category is AgentResultCategory.RUNTIME_LIFECYCLE
+    assert caught.value.cleanup_category is AgentCleanupCategory.UNVERIFIED
+    assert operation.closed == 1
+
+
+def test_throwing_cancel_cannot_replace_correlation_or_stale_authority() -> None:
+    request = coding_request()
+    mismatch = Operation("code:actual")
+    mismatch.cancel = lambda reason: (_ for _ in ()).throw(RuntimeError("private cancel diagnostic"))  # type: ignore[method-assign]
+    runtime = Runtime(mismatch)
+    subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
+    subject.route_operation("code:expected")
+
+    with pytest.raises(AgentProtocolError) as caught:
+        subject.code(URL, request)
+
+    assert caught.value.result_category is AgentResultCategory.CORRELATION
+    assert mismatch.closed == 1
+
+    stale = Operation("code:stale")
+    stale.cancel = lambda reason: (_ for _ in ()).throw(RuntimeError("private cancel diagnostic"))  # type: ignore[method-assign]
+    runtime = Runtime(stale)
+    subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
+    subject.route_operation(stale.operation_id)
+    current = iter((True, True, False))
+
+    with pytest.raises(AgentProtocolError) as caught:
+        subject.code(URL, request, is_current=lambda: next(current))
+
+    assert caught.value.canceled and caught.value.result_category is None
+    assert stale.closed == 1

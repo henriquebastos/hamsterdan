@@ -3,7 +3,9 @@
 from .amp import AmpExecuteRunner
 from .pi import OperationRoutedRunner, PiNativeRunner, UnavailablePiRunner, encode_prompt
 from .protocol import (
+    AgentCleanupCategory,
     AgentProtocolError,
+    AgentResultCategory,
     AgentRunner,
     ChangeRequest,
     ChangeResult,
@@ -18,7 +20,9 @@ from .protocol import (
 )
 
 __all__ = [
+    "AgentCleanupCategory",
     "AgentProtocolError",
+    "AgentResultCategory",
     "AgentRunner",
     "AmpExecuteRunner",
     "ChangeRequest",

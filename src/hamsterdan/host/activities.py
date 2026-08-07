@@ -397,19 +397,45 @@ class PrReadinessActivities:
                 result = self.runner.code(self.public_clone_url, request, is_current=lambda: self._is_current(work))
             except agents.AgentProtocolError as error:
                 self._log_agent_error(kind, work, error)
+                if error.result_category is not None or error.cleanup_category is not None:
+                    return EffectResult(
+                        kind,
+                        work.epoch,
+                        work.head,
+                        False,
+                        fingerprint=request.fingerprint,
+                        lineage=work.operation,
+                        operation=work.operation,
+                        agent_result_category=("" if error.result_category is None else error.result_category.value),
+                        agent_cleanup_category=("" if error.cleanup_category is None else error.cleanup_category.value),
+                    )
                 if error.canceled:
                     break
                 continue
             if result.status == "changed":
                 break
+            category = {
+                "unchanged": agents.AgentResultCategory.UNCHANGED,
+                "unable": agents.AgentResultCategory.UNABLE,
+            }.get(result.status, agents.AgentResultCategory.OUTPUT_SCHEMA)
             LOG.warning(
-                "agent coding attempt produced no change kind=%s status=%s attempt=%s epoch=%s head=%s operation=%s",
+                "agent coding attempt produced no change kind=%s category=%s attempt=%s epoch=%s head=%s operation=%s",
                 kind,
-                result.status,
+                category.value,
                 attempt,
                 work.epoch,
                 work.head,
                 work.operation,
+            )
+            return EffectResult(
+                kind,
+                work.epoch,
+                work.head,
+                False,
+                fingerprint=request.fingerprint,
+                lineage=work.operation,
+                operation=work.operation,
+                agent_result_category=category.value,
             )
         if result is None or result.status != "changed":
             return EffectResult(
@@ -674,11 +700,21 @@ class PrReadinessActivities:
 
     @staticmethod
     def _log_agent_error(kind: str, work: Work, error: agents.AgentProtocolError) -> None:
-        category = "canceled" if error.canceled else "timed_out" if error.timed_out else "protocol"
+        category = (
+            error.result_category.value
+            if error.result_category is not None
+            else "canceled"
+            if error.canceled
+            else "timed_out"
+            if error.timed_out
+            else "protocol"
+        )
+        cleanup = "" if error.cleanup_category is None else error.cleanup_category.value
         LOG.warning(
-            "agent activity unavailable kind=%s category=%s epoch=%s head=%s operation=%s",
+            "agent activity unavailable kind=%s category=%s cleanup=%s epoch=%s head=%s operation=%s",
             kind,
             category,
+            cleanup,
             work.epoch,
             work.head,
             work.operation,

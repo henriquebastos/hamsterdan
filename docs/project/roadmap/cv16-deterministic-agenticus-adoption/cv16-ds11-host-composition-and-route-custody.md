@@ -47,9 +47,10 @@ updated: 2026-08-07
 
 Focused direct-key custody, receiver, adapter, owned-factory, host composition,
 Activity, runtime, architecture, application, Git publication, and service
-suites pass 101 tests.
+suites pass. The agent-result observation slice's focused adapter, Activity,
+qualification, and Application suites pass 91 tests.
 The full project gate passes formatting, Ruff, ty, nine Bun relay tests, source
-and wheel builds, and 343 Python tests
+and wheel builds, and 369 Python tests
 with the one opt-in provider test skipped. No provider authority or paid/live
 operation was run.
 
@@ -128,6 +129,28 @@ root absence all passed. The Navigator deleted the exact disposable target and
 qualification verified not-found without repository enumeration; coordinate
 custody was then erased.
 
+The credential-free follow-up now replaces that broad future evidence boundary
+with a closed `AgentResultCategory`: `runtime_lifecycle`, `output_schema`,
+`correlation`, `unchanged`, `unable`, or `workspace_reconciliation`. The narrow
+Pi adapter assigns the category; canonical `EffectResult` carries only its enum
+value. Runtime-operation and workspace cleanup uncertainty use a separate
+closed field and cannot overwrite an earlier cause. Missing/wrongly typed
+correlation fields remain schema rejection, while well-typed differing identity
+is correlation rejection. Categorized failures and valid non-mutations stop
+after one Activity dispatch with zero publisher call; generic unclassified
+transport failures retain bounded same-route retry fencing. Accepted changed
+results still carry the host-reconciled canonical patch through the unchanged
+publisher, current-authority, object, exact-CAS, and idempotency fences.
+
+Deterministic tests exercise every category through the Pi adapter/Activity
+boundary, valid unchanged and unable outcomes, accepted changed pass-through,
+first-cause retention across operation/workspace cleanup failure, throwing
+runtime identity/cancel collaborators, closed-vocabulary sanitation, zero
+publication assertion/replay after pre-publication outcomes, and successful
+one-advance replay. The historical second attempt remains only
+`agent_result_unaccepted`; no erased output or diagnostic is reconstructed or
+reclassified.
+
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
@@ -147,11 +170,10 @@ repositories remain a host resource-trust boundary.
 
 ## Next slice
 
-Do not request another provider attempt from this evidence. First add a
-credential-free, closed agent-result admission category at the adapter/Activity
-boundary that distinguishes runtime lifecycle failure, output parse/schema or
-correlation rejection, unchanged result, and workspace reconciliation failure
-without retaining arbitrary strings, model output, or provider diagnostics.
-Prove first-cause preservation and no retry/publication after each category.
+The deterministic code is eligible to request a fresh, separately bounded
+provider attempt using the existing exact production route and the new closed
+evidence. This qualification does not request, authorize, or run that attempt.
+If separately authorized, any non-success must stop without retry and use the
+retained closed first cause to select the next credential-free diagnostic.
 Native subscription and extra usage remain excluded. Do not begin DS12 before
 the live gate passes.

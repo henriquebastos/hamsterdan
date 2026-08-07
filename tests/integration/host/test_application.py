@@ -334,14 +334,14 @@ def test_mention_conversation_uses_current_dashboard_and_exact_two_comment_confi
         text=f"@hamster-dan Confirm the pending change mutation with digest {control.pending_intent_digest}",
         **common,
     )
-    assert runner.codes == 3
+    assert runner.codes == 1
     subject.route_comment(
         delivery_id="duplicate-confirmation",
         comment_id=36,
         text=f"@hamster-dan Confirm the pending change mutation with digest {control.pending_intent_digest}",
         **common,
     )
-    assert runner.codes == 3
+    assert runner.codes == 1
     subject.close()
 
 
@@ -389,7 +389,7 @@ def test_failed_rerun_reproduces_after_running_observation(tmp_path: Path) -> No
     authority.run = replace(authority.run, attempt=2, status="in_progress", conclusion=None)
     assert subject.reconcile("running")["actions"] == "running"
     authority.run = replace(authority.run, status="completed", conclusion="failure")
-    assert subject.reconcile("failed")["actions"] == "reproduced" and runner.codes == 3
+    assert subject.reconcile("failed")["actions"] == "reproduced" and runner.codes == 1
     subject.close()
 
 
@@ -402,7 +402,7 @@ def test_first_later_attempt_failure_still_reruns_before_repair(tmp_path: Path) 
     subject.reconcile("same")
     assert runner.codes == 0
     authority.run = replace(authority.run, attempt=3)
-    assert subject.reconcile("failed")["actions"] == "reproduced" and runner.codes == 3
+    assert subject.reconcile("failed")["actions"] == "reproduced" and runner.codes == 1
     subject.close()
 
 

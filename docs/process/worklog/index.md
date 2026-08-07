@@ -27,3 +27,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-05 — DS11 publication rejection classified as unrepeatable from retained evidence](entries/2026-08-05T2350Z-ds11-publication-diagnostic-classified-c.md)
 - [2026-08-05 — DS11 publication observation gap closed deterministically](entries/2026-08-05T2358Z-ds11-publication-observation-gap-closed.md)
 - [2026-08-07 — Second DS11 live attempt blocked before changed-result admission](entries/2026-08-07T0903Z-second-ds11-live-attempt-blocked-before-result-admission.md)
+- [2026-08-07 — DS11 agent-result admission observation qualified locally](entries/2026-08-07T0934Z-ds11-agent-result-admission-observation-qualified.md)

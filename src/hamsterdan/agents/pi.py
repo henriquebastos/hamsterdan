@@ -19,9 +19,11 @@ from petrus.agenticus.thread.lifecycle import TurnOutcome
 
 from .protocol import (
     CURRENT,
+    AgentCleanupCategory,
     AgentProtocolError,
     AgentRequest,
     AgentResult,
+    AgentResultCategory,
     CodingRequest,
     CodingResult,
     ConversationRequest,
@@ -40,6 +42,14 @@ MAX_RESULT_BYTES = 1_000_000
 
 class PiWorkspaceError(RuntimeError):
     """A secret-safe deterministic failure at the receiving-host workspace boundary."""
+
+
+class PiWorkspaceCleanupError(PiWorkspaceError):
+    """Workspace cleanup uncertainty kept separate from result admission."""
+
+    def __init__(self, *, preparation_failed: bool = False) -> None:
+        self.preparation_failed = preparation_failed
+        super().__init__("Pi workspace cleanup is unverified")
 
 
 class PreparedPiWorkspace(Protocol):
@@ -147,17 +157,49 @@ class PiNativeRunner:
         operation_id = _OPERATION.get()
         _OPERATION.set(None)
         if operation_id is None:
-            raise AgentProtocolError("Pi operation route was not selected")
-        prompt = encode_prompt(kind, repository_url, request)
+            raise AgentProtocolError(
+                "Pi operation route was not selected", result_category=AgentResultCategory.CORRELATION
+            )
+        try:
+            prompt = encode_prompt(kind, repository_url, request)
+        except AgentProtocolError as error:
+            raise error.retain_result_category(AgentResultCategory.CORRELATION)
         if is_current is not None and not is_current():
             raise AgentProtocolError("agent attempt superseded", canceled=True)
+        result: AgentResult | None = None
+        failure: AgentProtocolError | None = None
         try:
             with self._workspaces.open(kind, repository_url, request, operation_id) as workspace:
-                if is_current is not None and not is_current():
-                    raise AgentProtocolError("agent attempt superseded", canceled=True)
-                return self._run_workspace(kind, prompt, request, operation_id, is_current, workspace)
+                try:
+                    if is_current is not None and not is_current():
+                        raise AgentProtocolError("agent attempt superseded", canceled=True)
+                    result = self._run_workspace(kind, prompt, request, operation_id, is_current, workspace)
+                except AgentProtocolError as error:
+                    failure = error
+        except PiWorkspaceCleanupError as error:
+            if failure is None:
+                failure = AgentProtocolError(
+                    "Pi workspace cleanup is unverified",
+                    result_category=(
+                        AgentResultCategory.WORKSPACE_RECONCILIATION if error.preparation_failed else None
+                    ),
+                    cleanup_category=AgentCleanupCategory.UNVERIFIED,
+                )
+            else:
+                failure.retain_cleanup_category(AgentCleanupCategory.UNVERIFIED)
         except PiWorkspaceError:
-            raise AgentProtocolError("Pi workspace proof failed", canceled=True) from None
+            if failure is None:
+                failure = AgentProtocolError(
+                    "Pi workspace proof failed",
+                    result_category=AgentResultCategory.WORKSPACE_RECONCILIATION,
+                )
+        if failure is not None:
+            raise failure
+        if result is None:
+            raise AgentProtocolError(
+                "Pi operation result is unavailable", result_category=AgentResultCategory.RUNTIME_LIFECYCLE
+            )
+        return result
 
     def _run_workspace(
         self,
@@ -184,73 +226,141 @@ class PiNativeRunner:
         except AgentProtocolError:
             raise
         except Exception:  # noqa: BLE001 - sanitize injected lifecycle/factory failures at the protocol boundary
-            raise AgentProtocolError("Pi operation could not start") from None
-        started_operation_id = operation.operation_id
+            raise AgentProtocolError(
+                "Pi operation could not start", result_category=AgentResultCategory.RUNTIME_LIFECYCLE
+            ) from None
+        started_operation_id: str | None = None
+        result: AgentResult | None = None
+        failure: AgentProtocolError | None = None
         try:
+            started_operation_id = operation.operation_id
             if started_operation_id != operation_id:
-                operation.cancel("operation-mismatch")
-                raise AgentProtocolError("Pi operation identity mismatched its route")
+                self._cancel(operation, "operation-mismatch")
+                raise AgentProtocolError(
+                    "Pi operation identity mismatched its route",
+                    result_category=AgentResultCategory.CORRELATION,
+                )
             settlement = self._wait(operation, is_current)
+            if settlement.episode_id != start.episode_id or settlement.turn_id != start.turn_id:
+                raise AgentProtocolError(
+                    "Pi settlement identity mismatched its route",
+                    result_category=AgentResultCategory.CORRELATION,
+                )
             if (
-                settlement.episode_id != start.episode_id
-                or settlement.turn_id != start.turn_id
-                or settlement.outcome is not TurnOutcome.COMPLETED
+                settlement.outcome is not TurnOutcome.COMPLETED
                 or settlement.accepted_appends != 1
                 or settlement.output_reference is None
             ):
                 if settlement.outcome is TurnOutcome.CANCELLED:
-                    raise AgentProtocolError("agent attempt canceled", canceled=True)
-                raise AgentProtocolError("Pi operation did not produce a completed result")
+                    raise AgentProtocolError(
+                        "agent attempt canceled",
+                        canceled=True,
+                        result_category=AgentResultCategory.RUNTIME_LIFECYCLE,
+                    )
+                raise AgentProtocolError(
+                    "Pi operation did not produce a completed result",
+                    result_category=AgentResultCategory.RUNTIME_LIFECYCLE,
+                )
             raw = self._runtime.load_output(settlement.output_reference)
-            data = _parse_result(raw)
+            try:
+                data = _parse_result(raw)
+            except AgentProtocolError as error:
+                raise error.retain_result_category(AgentResultCategory.OUTPUT_SCHEMA)
             changed: list[str] | None = None
             if kind == "coding":
                 try:
                     archive = self._runtime.load_workspace_archive(operation_id)
                 except RuntimeProtocolError:
-                    raise AgentProtocolError("Pi coding workspace archive is unavailable", canceled=True) from None
+                    raise AgentProtocolError(
+                        "Pi coding workspace archive is unavailable",
+                        result_category=AgentResultCategory.WORKSPACE_RECONCILIATION,
+                    ) from None
                 if not archive:
-                    raise AgentProtocolError("Pi coding workspace archive is unavailable", canceled=True)
-                diff, changed = workspace.reconcile(archive)
+                    raise AgentProtocolError(
+                        "Pi coding workspace archive is unavailable",
+                        result_category=AgentResultCategory.WORKSPACE_RECONCILIATION,
+                    )
+                try:
+                    diff, changed = workspace.reconcile(archive)
+                except PiWorkspaceError:
+                    raise AgentProtocolError(
+                        "Pi workspace proof failed",
+                        result_category=AgentResultCategory.WORKSPACE_RECONCILIATION,
+                    ) from None
                 data = dict(data)
                 data["diff"], data["changed_files"] = diff, changed
-            result = _validate_result(
-                kind,
-                data,
-                request,
-                changed,
-            )
-            return result
-        except AgentProtocolError:
-            raise
-        except PiWorkspaceError:
-            raise
-        except RuntimeProtocolError:
-            raise AgentProtocolError("Pi operation lifecycle failed") from None
-        except Exception:  # noqa: BLE001 - sanitize output collaborator failures at the protocol boundary
-            raise AgentProtocolError("Pi operation result is unavailable") from None
-        finally:
             try:
-                cleanup = operation.close()
-            except Exception:  # noqa: BLE001 - cleanup uncertainty must fail closed without leaking internals
-                raise AgentProtocolError("Pi operation cleanup is unverified") from None
-            if not cleanup.verified or cleanup.operation_id != started_operation_id:
-                raise AgentProtocolError("Pi operation cleanup is unverified")
+                result = _validate_result(
+                    kind,
+                    data,
+                    request,
+                    changed,
+                )
+            except AgentProtocolError as error:
+                raise error.retain_result_category(AgentResultCategory.OUTPUT_SCHEMA)
+        except AgentProtocolError as error:
+            failure = error
+        except PiWorkspaceError:
+            failure = AgentProtocolError(
+                "Pi workspace proof failed",
+                result_category=AgentResultCategory.WORKSPACE_RECONCILIATION,
+            )
+        except RuntimeProtocolError:
+            failure = AgentProtocolError(
+                "Pi operation lifecycle failed", result_category=AgentResultCategory.RUNTIME_LIFECYCLE
+            )
+        except Exception:  # noqa: BLE001 - sanitize output collaborator failures at the protocol boundary
+            failure = AgentProtocolError(
+                "Pi operation result is unavailable", result_category=AgentResultCategory.RUNTIME_LIFECYCLE
+            )
+        try:
+            cleanup = operation.close()
+            cleanup_verified = (
+                started_operation_id is not None and cleanup.verified and cleanup.operation_id == started_operation_id
+            )
+        except Exception:  # noqa: BLE001 - cleanup uncertainty must fail closed without leaking internals
+            cleanup_verified = False
+        if not cleanup_verified:
+            if failure is None:
+                failure = AgentProtocolError(
+                    "Pi operation cleanup is unverified",
+                    cleanup_category=AgentCleanupCategory.UNVERIFIED,
+                )
+            else:
+                failure.retain_cleanup_category(AgentCleanupCategory.UNVERIFIED)
+        if failure is not None:
+            raise failure
+        if result is None:
+            raise AgentProtocolError(
+                "Pi operation result is unavailable", result_category=AgentResultCategory.RUNTIME_LIFECYCLE
+            )
+        return result
 
     def _wait(self, operation: RuntimeOperation, is_current: CURRENT | None):
         deadline = self._clock() + self._timeout
         while True:
             if is_current is not None and not is_current():
-                operation.cancel("stale-authority")
+                self._cancel(operation, "stale-authority")
                 raise AgentProtocolError("agent attempt superseded", canceled=True)
             remaining = deadline - self._clock()
             if remaining <= 0:
-                operation.cancel("host-timeout")
-                raise AgentProtocolError("agent execution timed out", timed_out=True)
+                self._cancel(operation, "host-timeout")
+                raise AgentProtocolError(
+                    "agent execution timed out",
+                    timed_out=True,
+                    result_category=AgentResultCategory.RUNTIME_LIFECYCLE,
+                )
             try:
                 return operation.wait(min(self._poll_interval, remaining))
             except TimeoutError:
                 continue
+
+    @staticmethod
+    def _cancel(operation: RuntimeOperation, reason: str) -> None:
+        try:
+            operation.cancel(reason)
+        except Exception:  # noqa: BLE001 - close remains the authoritative cleanup proof
+            return
 
 
 class UnavailablePiRunner:

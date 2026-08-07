@@ -19,7 +19,7 @@ from petrus.agenticus.hands.contract import ToolMethod
 from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimePolicy
 from petrus.motus.execution.archive import workspace_archive
 
-from hamsterdan.agents.pi import PiWorkspaceError
+from hamsterdan.agents.pi import PiWorkspaceCleanupError, PiWorkspaceError
 from hamsterdan.agents.protocol import AgentRequest
 
 from .git_publish import _safe_path
@@ -102,6 +102,7 @@ class GitPiWorkspaceProvider:
         except OSError:
             raise PiWorkspaceError("private Pi workspace preparation failed") from None
         operation_root = Path(temporary)
+        preparation_failed = False
         try:
             try:
                 checkout = operation_root / "source"
@@ -131,15 +132,17 @@ class GitPiWorkspaceProvider:
                     request.head,
                 )
             except PiWorkspaceError:
+                preparation_failed = True
                 raise
             except Exception:  # noqa: BLE001 - sanitize every private staging implementation failure
+                preparation_failed = True
                 raise PiWorkspaceError("private Pi workspace preparation failed") from None
             yield prepared
         finally:
             try:
                 shutil.rmtree(operation_root)
             except OSError:
-                raise PiWorkspaceError("private Pi workspace cleanup is unverified") from None
+                raise PiWorkspaceCleanupError(preparation_failed=preparation_failed) from None
 
 
 def _clone_exact(repository_url: str, destination: Path, head: str) -> None:
