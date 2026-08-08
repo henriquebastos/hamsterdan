@@ -67,3 +67,15 @@ categorized outcomes cannot retry or publish, while accepted changed results
 retain the existing canonical publication path. This does not reclassify the
 historical attempt. The code may request a fresh separately bounded provider
 attempt, but none is authorized by this qualification and DS12 remains excluded.
+
+A later clean-slate qualification cycle prepared one new public empty disposable
+target but never reached provider authority. Its first setup stopped at the
+closed `base_object_write` boundary; a one-call exact blob diagnostic retained
+only `validation`. GitHub's documented empty-repository Git Database restriction
+explains that result without recovering discarded diagnostics, and the earlier
+token-permission hypothesis is withdrawn. A corrected atomic smart-HTTP
+two-ref setup passed credential-free local rehearsal, then was cancelled before
+secret access or remote mutation. All setup and unopened direct-key material was
+retired. Exact-target deletion and not-found verification are externally
+deferred to the Puck custody workflow. No setup, provider, or cleanup authority
+survives clean-slate finalization.

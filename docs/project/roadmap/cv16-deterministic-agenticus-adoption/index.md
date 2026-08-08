@@ -2,8 +2,8 @@
 code: CV16
 level: Value
 status: Active
-status_reason: Direct-key production composition is qualified; two bounded authority attempts stopped before publication, most recently at changed-result admission
-updated: 2026-08-07
+status_reason: Direct-key production composition is qualified; clean-slate finalization cancelled a later empty-target setup before remote mutation or provider authority
+updated: 2026-08-08
 ---
 
 # CV16 — Deterministic Agenticus adoption
@@ -77,3 +77,14 @@ changed result still enters the unchanged canonical receiver and publication
 fences. This does not retroactively classify either blocked attempt. The code is
 eligible only to request a fresh separately bounded provider attempt; none is
 authorized here, and DS12 remains out of scope.
+
+A later qualification cycle created one exact public empty target. The first
+credential-free setup stopped at closed `base_object_write`; one exact blob POST
+then retained closed `validation`. GitHub's documented empty-repository Git
+Database restriction explains that evidence without changing it or recovering
+discarded provider prose. The corrected one-push atomic smart-HTTP route passed
+local two-ref and rejection rehearsal, but clean-slate finalization superseded
+its authorization before secret access or remote mutation. No ref, PR, CAS,
+direct-key, or provider operation began. All setup material was retired. The
+empty target remains an externally deferred Puck cleanup obligation, and no
+setup, provider, or cleanup authority survives.

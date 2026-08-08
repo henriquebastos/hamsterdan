@@ -2,8 +2,8 @@
 code: CV16.DS11
 level: Delivery Story
 status: Qualified Locally
-status_reason: Deterministic gates pass; the second bounded live attempt stopped before changed-result admission and publication
-updated: 2026-08-07
+status_reason: Deterministic gates pass; clean-slate finalization cancelled a later empty-target setup before remote mutation or provider authority
+updated: 2026-08-08
 ---
 
 # CV16.DS11 — Host composition and operation-route custody
@@ -151,6 +151,40 @@ one-advance replay. The historical second attempt remains only
 `agent_result_unaccepted`; no erased output or diagnostic is reconstructed or
 reclassified.
 
+## Clean-slate qualification checkpoint
+
+A later credential-free cycle prepared one Navigator-created public empty
+target from exact Hamsterdan
+`e78d38c88a0fa2dde921906c5e441f1559035c4f` and the unchanged Petrus pin.
+Stale-sensitive focused gates passed 151 tests; the full gate passed 369 Python
+tests with one explicit provider skip, nine Bun tests, formatting, Ruff, ty, and
+source/wheel builds.
+
+The first exact-target setup admitted one fresh raw GitHub credential and then
+stopped before any ref at closed category `base_object_write`. A separately
+bounded diagnostic performed exactly one deterministic base-blob POST and
+retained only `validation`; it read no response body and made zero identity,
+readback, ref, branch, PR, CAS, direct-key, or provider calls. GitHub's official
+empty-repository Git Database restriction explains the result without changing
+the category or reconstructing erased diagnostics. The prior token-permission
+hypothesis is withdrawn.
+
+The corrected route constructs an exact local base commit containing only
+`qualification.txt` and its child adding only `requested-change.txt`, then sends
+both declared refs in one non-forced atomic smart-HTTP push. Local rehearsal
+proved all-or-nothing acceptance and credential non-disclosure. Although the
+Navigator authorized one remote setup, clean-slate finalization superseded it
+before secret access, GitHub access, or provider work. Counts are zero remote
+pushes, refs, PRs, readbacks, CAS calls, direct-key materializations, and provider
+operations. All aborted setup and unopened direct-key material was retired
+without retry.
+
+The target's last admitted state is public, active, empty, and zero-branch.
+Deletion is a distinct mutation and was not authorized by finalization. Its
+coordinate must not enter project history or evidence. Exact-target deletion and
+not-found verification are externally deferred to the Puck custody workflow;
+no cleanup authority remains in Hamsterdan.
+
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
@@ -170,10 +204,14 @@ repositories remain a host resource-trust boundary.
 
 ## Next slice
 
-The deterministic code is eligible to request a fresh, separately bounded
-provider attempt using the existing exact production route and the new closed
-evidence. This qualification does not request, authorize, or run that attempt.
-If separately authorized, any non-success must stop without retry and use the
-retained closed first cause to select the next credential-free diagnostic.
-Native subscription and extra usage remain excluded. Do not begin DS12 before
-the live gate passes.
+Clean-slate finalization leaves two explicit choices and authorizes neither.
+A future separately authorized cleanup may delete only the exact disposable
+target and must verify not-found through the external Puck custody workflow. A
+qualification restart must begin from exact clean revisions, recheck the target,
+recreate and rehearse the deterministic fixture, use a fresh GitHub credential
+handoff, and make at most one atomic two-ref push before the one PR and
+current/stale CAS checks. Any closed or uncertain outcome stops without retry.
+Either path requires fresh authorization; none remains. Provider authority
+remains separate and may be requested only after setup passes. Native
+subscription and extra usage remain excluded, and DS12 must not begin before the
+live gate.

@@ -26,6 +26,7 @@ Authoritative GitHub documentation inspected 2026-08-01:
 - <https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks>
 - <https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps>
 - <https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api#resource-not-accessible>
+- <https://docs.github.com/en/rest/guides/using-the-rest-api-to-interact-with-your-git-database>
 - <https://docs.github.com/en/webhooks/webhook-events-and-payloads>
 
 ## Runtime libraries and deployment contracts

@@ -23,7 +23,10 @@ Active runtime adoption: [CV16 — Deterministic Agenticus adoption](cv16-determ
 [CV16.DS11 — Host composition and operation-route custody](cv16-deterministic-agenticus-adoption/cv16-ds11-host-composition-and-route-custody.md)
 is qualified locally. Its first direct-key attempt stopped at Git publication;
 its second completed one production operation but admitted no changed coding
-result. Publication observation now fails closed, all qualification repositories
-are removed, and closed agent-result admission evidence is qualified locally.
-The historical live cause remains unclassified and live support remains
-unaccepted pending a separately authorized bounded attempt.
+result. Publication and agent-result observation now fail closed. A later
+credential-free setup cycle diagnosed the empty-target Git Database restriction
+and was cancelled before its corrected atomic push or provider authority began.
+That exact disposable target remains an explicit cleanup obligation externally
+deferred to the Puck custody workflow. The historical live causes remain
+unchanged and live support remains unaccepted; clean-slate finalization leaves
+no setup, provider, or cleanup authority.

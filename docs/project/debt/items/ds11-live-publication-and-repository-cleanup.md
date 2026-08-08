@@ -1,13 +1,14 @@
 ---
-status: Resolved
+status: Open
 raised: 2026-08-05
 resolved: 2026-08-07
+reopened: 2026-08-08
 related:
   - CV16
   - CV16.DS11
 ---
 
-# DS11 publication observation and disposable repository cleanup resolved
+# DS11 publication observation resolved; new disposable cleanup open
 
 The first authority-bearing Pi native A2 Local qualification returned one
 controlled mutation candidate to the production host, but the real
@@ -47,3 +48,17 @@ The subsequent credential-free agent-result observation slice does not reopen
 this debt. It records future admission and cleanup causes independently while
 leaving both historical attempts unchanged. No qualification repository or
 remote cleanup obligation was created, and the orphan cleanup remains resolved.
+
+A later clean-slate qualification cycle created a different exact public empty
+disposable target. No accepted setup operation changed it: one object setup
+stopped at closed `base_object_write`, one exact diagnostic retained closed
+`validation`, and the corrected atomic push was cancelled before secret access
+or remote mutation. Exact-target deletion was not included in clean-slate
+finalization, so this new cleanup obligation reopens the item without reopening
+the already-resolved historical orphan.
+
+The target coordinate must not enter Git history or evidence. Resolution is
+externally deferred to the Puck custody workflow and requires separately
+authorized exact-target deletion followed by exact-target not-found verification,
+without repository enumeration or unrelated mutation. No cleanup, setup,
+provider, or DS12 authority remains in Hamsterdan.
