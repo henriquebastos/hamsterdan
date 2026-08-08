@@ -18,8 +18,8 @@ acceptance proves App-authored commits and comments, durable App webhook
 ingress, first-failure observation, exact bot-authorized rerun brokerage,
 second-attempt success, readiness publication, restart/remint recovery, and
 delivery deduplication on `HBNetwork/demo-pr-readiness`. The private source CI
-also passes against the exact private Petrus revision through a repository-
-scoped read-only deploy key.
+also passes against the exact public Petrus baseline without special dependency
+credentials.
 
 ## Architecture
 
@@ -50,7 +50,7 @@ uv sync --frozen
 scripts/check full
 ```
 
-The Petrus dependency is pinned to the exact Agenticus-adoption revision.
+The Petrus dependency is pinned to the exact accepted clean-root baseline.
 Canonical environments never float on Petrus `main`, assume package
 publication, or depend on a local checkout.
 

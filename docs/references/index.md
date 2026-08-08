@@ -2,15 +2,18 @@
 
 ## Petrus provenance
 
-- Petrus namespace migration and accepted application dependency:
+- Historical Petrus namespace migration and accepted application dependency:
   `henriquebastos/petrus@cd1187e44926d6a80e4a3538ad79762618d32a8b`,
   inspected 2026-08-01.
 - Qualified workflow source: `examples/pr_readiness_next/` and
   `tests/examples/pr_readiness_next/` at that commit.
-- Petrus Agenticus adoption dependency:
+- Historical Petrus Agenticus adoption dependency:
   `henriquebastos/petrus@750c4321bb51563666ce43e88f753ebe1f068520`,
-  inspected 2026-08-05. Hamsterdan consumes the exact Git revision and does not
-  assume package publication.
+  inspected 2026-08-05.
+- Accepted Petrus clean-root dependency baseline:
+  `henriquebastos/petrus@116b0ddc460c0e04d4ad40c077158bd3498a4860`,
+  inspected and accepted 2026-08-08. Hamsterdan consumes this exact Git revision
+  and does not assume package publication.
 
 ## GitHub documentation
 

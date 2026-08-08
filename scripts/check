@@ -13,7 +13,7 @@ case "$profile" in
         bun test ./tests/amp_webhook_relay.test.ts
         rm -rf dist
         uv build
-        uv run --frozen pytest -q
+        uv run --frozen pytest -q -m "not real_provider_acceptance"
         ;;
     *)
         echo "usage: scripts/check [quick|full]" >&2

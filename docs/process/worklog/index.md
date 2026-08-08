@@ -29,3 +29,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-07 — Second DS11 live attempt blocked before changed-result admission](entries/2026-08-07T0903Z-second-ds11-live-attempt-blocked-before-result-admission.md)
 - [2026-08-07 — DS11 agent-result admission observation qualified locally](entries/2026-08-07T0934Z-ds11-agent-result-admission-observation-qualified.md)
 - [2026-08-08 — DS11 v4 qualification finalized clean-slate before remote setup](entries/2026-08-08T0221Z-ds11-v4-qualification-finalized-clean-slate.md)
+- [2026-08-08 — Petrus clean-root re-baseline accepted technically](entries/2026-08-08T1423Z-petrus-clean-root-rebaseline-accepted.md)

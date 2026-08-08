@@ -332,7 +332,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=46,<51" },
     { name = "fastapi", specifier = ">=0.116,<1" },
     { name = "githubkit", extras = ["auth-app"], specifier = "==0.16.0" },
-    { name = "petrus", git = "ssh://git@github.com/henriquebastos/petrus.git?rev=750c4321bb51563666ce43e88f753ebe1f068520" },
+    { name = "petrus", git = "https://github.com/henriquebastos/petrus.git?rev=116b0ddc460c0e04d4ad40c077158bd3498a4860" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
 ]
 
@@ -528,7 +528,7 @@ wheels = [
 [[package]]
 name = "petrus"
 version = "0.0.0"
-source = { git = "ssh://git@github.com/henriquebastos/petrus.git?rev=750c4321bb51563666ce43e88f753ebe1f068520#750c4321bb51563666ce43e88f753ebe1f068520" }
+source = { git = "https://github.com/henriquebastos/petrus.git?rev=116b0ddc460c0e04d4ad40c077158bd3498a4860#116b0ddc460c0e04d4ad40c077158bd3498a4860" }
 dependencies = [
     { name = "cel-python" },
     { name = "pydantic" },
