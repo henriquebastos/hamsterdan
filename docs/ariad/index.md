@@ -19,6 +19,10 @@ indexes: `docs/project/briefing.md`, `docs/process/development-guide.md`,
 Canonical lifecycle detail belongs in the installed skill; local documents own
 project truth and deliberate adaptations.
 
+Before ending, pausing, compacting, interrupting, or handing off context, follow
+the canonical `method/memory-closure` reference. Fold it into existing closure
+surfaces; do not create transcript or session-summary files.
+
 If the skill cannot be loaded, use this safe kernel: read relevant local
 context before editing; plan non-trivial work; bound scope; test and give a
 concrete validation route; update documentation when project truth changes;

@@ -3,13 +3,13 @@
 ## Ariad provenance
 
 - Vendored `using-ariad` package from <https://github.com/henriquebastos/ariad>
-  at Git revision `940b061a2cea319790092fd14e1031cce35f47af`: package version
-  `0.1.0`, method digest
-  `8cd1daf45b9f4590159b64130e89ef8db36029d8549a524f10bf151393bffe45`,
+  at Git revision `9222ffeb0711634db367676d5911eaa8f0030daa`: package version
+  `0.2.0`, method digest
+  `55dd4fc024fba15769ef354e783f68235e33fef766e950886bcecb535224ed19`,
   package digest
-  `5f0afc0f62c1be054a0eaf8e647009e52e6afe9e38be12fc4156c946e522e76b`,
+  `ef362ad80254ac1b9615c420116da1e7844043a82bc6dfa7307e0e5d0f41be65`,
   copied complete from `skills/using-ariad` to
-  `.agents/skills/using-ariad` on 2026-08-08.
+  `.agents/skills/using-ariad` on 2026-08-09.
 
 ## Petrus provenance
 
