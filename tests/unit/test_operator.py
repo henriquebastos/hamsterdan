@@ -41,6 +41,56 @@ marker = re.fullmatch(r\"<!-- impetus-rerun run=([1-9][0-9]*) head=x operation=x
 CURRENT = LEGACY.replace("impetus-rerun", "hamsterdan-rerun").replace(
     operator.LEGACY_BROKER_AUTHORIZATION, operator.APP_BROKER_AUTHORIZATION
 )
+DELEGATED_WORKFLOW = f"""jobs:
+  rerun-broker:
+    if: >-
+      github.event.issue.pull_request != null &&
+      {operator.APP_BROKER_AUTHORIZATION}
+      startsWith(github.event.comment.body, '<!-- hamsterdan-rerun ')
+    steps:
+      - name: Validate and request exact PR run rerun
+        run: |
+          request_output="$(
+            python tools/rerun_broker.py parse-marker --marker "$COMMENT_BODY"
+          )"
+          readarray -t request <<<"$request_output"
+          [[ "${{#request[@]}}" -eq 3 ]]
+          run_id="${{request[0]}}"
+          expected_head="${{request[1]}}"
+          operation="${{request[2]}}"
+          run="$(gh api "repos/${{REPOSITORY}}/actions/runs/${{run_id}}")"
+          python tools/rerun_broker.py validate-run \\
+            --run-id "$run_id" \\
+            --head "$expected_head" \\
+            --operation "$operation" \\
+            --repository "$REPOSITORY" \\
+            --pr-number "$PR_NUMBER" \\
+            <<<"$run"
+          gh api --method POST "repos/${{REPOSITORY}}/actions/runs/${{run_id}}/rerun"
+"""
+DELEGATED_VALIDATOR = """MARKER = re.compile(
+    r"<!-- hamsterdan-rerun run=([1-9][0-9]{0,19}) head=([0-9a-f]{40}) "
+    r"operation=([A-Za-z0-9][A-Za-z0-9._:-]{0,127}) -->"
+)
+WORKFLOW = ".github/workflows/ci.yml"
+match = MARKER.fullmatch(marker)
+valid_pull_request = (
+    and pull_request["number"] == pr_number
+)
+valid = (
+    and run["id"] == request.run_id
+    and run_repository.get("full_name") == repository
+    and run.get("event") == "pull_request"
+    and run.get("path") == WORKFLOW
+    and run.get("head_sha") == request.head_sha
+)
+"""
+
+
+@pytest.fixture(autouse=True)
+def delegated_contract_digests(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(operator, "DELEGATED_BROKER_DIGEST", operator._broker_digest(DELEGATED_WORKFLOW))
+    monkeypatch.setattr(operator, "DELEGATED_VALIDATOR_DIGEST", operator._broker_digest(DELEGATED_VALIDATOR))
 
 
 @pytest.mark.parametrize(("value", "expected"), [(LEGACY, "legacy"), (CURRENT, "hamsterdan"), ("x", "malformed")])
@@ -53,6 +103,45 @@ def test_broker_cutover_replaces_human_association_with_exact_app_bot() -> None:
     assert "author_association" not in CURRENT
     assert "github.event.comment.user.type == 'Bot'" in CURRENT
     assert "github.event.comment.user.login == 'hamster-dan[bot]'" in CURRENT
+
+
+def test_delegated_broker_requires_exact_workflow_and_validator_contract() -> None:
+    assert operator.broker_status(DELEGATED_WORKFLOW, DELEGATED_VALIDATOR) == "hamsterdan"
+    assert operator.broker_status(DELEGATED_WORKFLOW) == "malformed"
+
+
+@pytest.mark.parametrize(
+    ("workflow_change", "validator_change"),
+    (
+        (("hamster-dan[bot]", "other[bot]"), None),
+        (("hamsterdan-rerun", "other-rerun"), None),
+        (("parse-marker", "parse-other"), None),
+        (("${REPOSITORY}/actions/runs/${run_id}", "${REPOSITORY}/actions/runs/1"), None),
+        (('--repository "$REPOSITORY"', "--repository other/repository"), None),
+        (('--pr-number "$PR_NUMBER"', "--pr-number 1"), None),
+        (None, ("MARKER.fullmatch(marker)", "MARKER.search(marker)")),
+        (None, ('run.get("path") == WORKFLOW', 'run.get("path") == "other"')),
+        (None, ('run.get("head_sha") == request.head_sha', 'run.get("head_sha") == "other"')),
+        (None, ('pull_request["number"] == pr_number', 'pull_request["number"] == 1')),
+    ),
+)
+def test_delegated_broker_rejects_weakened_binding(workflow_change, validator_change) -> None:
+    workflow, validator = DELEGATED_WORKFLOW, DELEGATED_VALIDATOR
+    if workflow_change is not None:
+        workflow = workflow.replace(*workflow_change)
+    if validator_change is not None:
+        validator = validator.replace(*validator_change)
+    assert operator.broker_status(workflow, validator) == "malformed"
+
+
+def test_delegated_broker_requires_one_post_after_validation() -> None:
+    post = 'gh api --method POST "repos/${REPOSITORY}/actions/runs/${run_id}/rerun"'
+    assert operator.broker_status(DELEGATED_WORKFLOW + post, DELEGATED_VALIDATOR) == "malformed"
+    without_post = DELEGATED_WORKFLOW.replace(post, "")
+    early_post = without_post.replace(
+        "python tools/rerun_broker.py parse-marker", post + "\npython tools/rerun_broker.py parse-marker"
+    )
+    assert operator.broker_status(early_post, DELEGATED_VALIDATOR) == "malformed"
 
 
 def test_scenarios_are_the_fixture_closed_schema() -> None:
@@ -92,6 +181,31 @@ def test_preflight_exact_inventory_and_legacy_status_pass() -> None:
     assert all("token" not in json.dumps(item).casefold() for item in result["checks"])
 
 
+def test_preflight_accepts_current_delegated_broker_contract() -> None:
+    fake = FakeRunner(
+        {
+            "gh auth status": "",
+            "/orgs/HBNetwork": {"id": operator.ORG_ID},
+            f"/repos/{operator.REPOSITORY}": {
+                "id": operator.REPOSITORY_ID,
+                "private": False,
+                "default_branch": "main",
+            },
+            f"/repos/{operator.REPOSITORY}/actions/workflows?per_page=100": {
+                "workflows": [{"name": "ci"}, {"name": "rerun-broker"}]
+            },
+            f"/repos/{operator.REPOSITORY}/contents/{operator.BROKER_PATH}?ref=main": DELEGATED_WORKFLOW,
+            f"/repos/{operator.REPOSITORY}/contents/{operator.BROKER_VALIDATOR_PATH}?ref=main": DELEGATED_VALIDATOR,
+        }
+    )
+
+    result = operator.preflight(fake)
+
+    assert result["ok"] is True
+    assert next(item for item in result["checks"] if item["name"] == "default_broker")["observed"] == "hamsterdan"
+    assert any(str(operator.BROKER_VALIDATOR_PATH) in " ".join(call[0]) for call in fake.calls)
+
+
 def test_preflight_malformed_broker_and_wrong_repository_fail() -> None:
     fake = FakeRunner(
         {
@@ -120,6 +234,29 @@ def test_prepared_broker_is_detected_without_clone_or_mutation() -> None:
     result = operator.prepare_broker(fake)
     assert result["status"] == "prepared" and result["changed"] is False
     assert len(fake.calls) == 1
+
+
+def test_delegated_current_broker_is_detected_after_clone_without_mutation(tmp_path: Path, monkeypatch) -> None:
+    checkout = tmp_path / "demo-pr-readiness"
+    (checkout / operator.BROKER_PATH).parent.mkdir(parents=True)
+    (checkout / operator.BROKER_VALIDATOR_PATH).parent.mkdir(parents=True)
+    (checkout / operator.BROKER_PATH).write_text(DELEGATED_WORKFLOW)
+    (checkout / operator.BROKER_VALIDATOR_PATH).write_text(DELEGATED_VALIDATOR)
+    fake = FakeRunner(
+        {
+            "gh pr list --repo HBNetwork/demo-pr-readiness --state open --search in:title Hamsterdan broker identity cutover --json number,url,headRefName --limit 10": [],
+            f"git clone --origin origin https://github.com/{operator.REPOSITORY}.git {checkout}": "",
+            "git fetch origin main": "",
+        }
+    )
+    monkeypatch.setattr(operator.tempfile, "TemporaryDirectory", lambda **kwargs: nullcontext(tmp_path))
+
+    result = operator.prepare_broker(fake)
+
+    assert result == {"command": "prepare-broker", "ok": True, "status": "current", "changed": False}
+    commands = [call[0] for call in fake.calls]
+    assert not any(command[:2] in {("git", "switch"), ("git", "commit"), ("git", "push")} for command in commands)
+    assert not any(command[:3] == ("gh", "pr", "create") for command in commands)
 
 
 def test_operator_mutation_commands_contain_no_force_merge_or_bypass() -> None:
