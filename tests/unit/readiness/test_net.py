@@ -1,6 +1,6 @@
 """Executable contract tests for the replacement PR-readiness topology."""
 
-from dataclasses import asdict, replace
+from dataclasses import replace
 from types import SimpleNamespace
 
 from petrus.engine import Engine, SimulatedClock
@@ -8,27 +8,43 @@ from petrus.impetus.binding import DerivedActivityHandler
 from petrus.impetus.history import ActivityCompleted, ActivityRequested
 from petrus.impetus.history_store import InMemoryHistoryStore
 from petrus.impetus.petrinet import Marking, NetPath, Token
-from petrus.motus.activity import DataclassPayloadConverter, activity
+from petrus.motus.activity import activity
 from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
 
 from hamsterdan.contracts.readiness import (
+    ActionsDiscoveryRequest,
     ActionsObservation,
+    ActionsRerunRequest,
     Admission,
+    ChangeRequest,
+    ChangeResult,
     Control,
+    ConversationClassificationRequest,
     ConversationObservation,
-    EffectResult,
+    ConversationPublicationRequest,
+    ConversationPublicationResult,
+    DashboardPublicationRequest,
+    DashboardPublicationResult,
+    FindingPublicationRequest,
+    FindingPublicationResult,
     HumanObservation,
     Intent,
     IntentBatch,
     Lifecycle,
     ReadinessCommand,
+    ReadinessPublicationResult,
     Reminder,
+    ReminderPublicationRequest,
+    ReminderPublicationResult,
+    RepairRequest,
+    RepairResult,
+    ReviewRequest,
     ReviewResult,
     Seed,
-    Work,
     workflow_gates_ready,
     workflow_wait,
 )
+from hamsterdan.host.payloads import PydanticPayloadConverter
 from hamsterdan.readiness.net.topology import (
     ACTIVITY_TRANSITIONS,
     DASHBOARD_FORMAT,
@@ -50,58 +66,93 @@ from hamsterdan.readiness.net.topology import (
     ready,
 )
 
+REQUEST_TYPES = {
+    "review": ReviewRequest,
+    "actions_discovery": ActionsDiscoveryRequest,
+    "actions_rerun": ActionsRerunRequest,
+    "conversation": ConversationPublicationRequest,
+    "change": ChangeRequest,
+    "repair": RepairRequest,
+    "finding": FindingPublicationRequest,
+    "dashboard": DashboardPublicationRequest,
+    "reminder": ReminderPublicationRequest,
+}
+RESULT_TYPES = {
+    "conversation": ConversationPublicationResult,
+    "change": ChangeResult,
+    "repair": RepairResult,
+    "finding": FindingPublicationResult,
+    "dashboard": DashboardPublicationResult,
+    "reminder": ReminderPublicationResult,
+    "readiness": ReadinessPublicationResult,
+}
+
+
+def request(kind, epoch, head, operation="", sequence=0, payload=None):
+    values = dict(payload or {})
+    values.setdefault("base_head", "base")
+    values.setdefault("policy_digest", "policy")
+    if kind == "conversation":
+        values.setdefault("intent", Intent(epoch, head, "reply", "digest", True, False))
+    return REQUEST_TYPES[kind](epoch=epoch, head=head, operation=operation, **values)
+
+
+def effect_result(kind, epoch, head, ok, *args, **kwargs):
+    return RESULT_TYPES[kind](epoch, head, ok, *args, **kwargs)
+
 
 def token(value) -> Token:
-    return Token(type(value).__name__, asdict(value))
+    return Token(type(value).__name__, value.dump())
 
 
-@activity(name="review", converter=DataclassPayloadConverter())
-def review(work: Work) -> ReviewResult:
+@activity(name="review", converter=PydanticPayloadConverter())
+def review(work: ReviewRequest) -> ReviewResult:
     return ReviewResult(work.epoch, work.head, "clear", [], [], work.operation)
 
 
-@activity(name="actions_discovery", converter=DataclassPayloadConverter())
-def actions_discovery(work: Work) -> ActionsObservation:
+@activity(name="actions_discovery", converter=PydanticPayloadConverter())
+def actions_discovery(work: ActionsDiscoveryRequest) -> ActionsObservation:
     return action_result(work, "run", 1, "success")
 
 
-@activity(name="actions_rerun", converter=DataclassPayloadConverter())
-def actions_rerun(work: Work) -> ActionsObservation:
+@activity(name="actions_rerun", converter=PydanticPayloadConverter())
+def actions_rerun(work: ActionsRerunRequest) -> ActionsObservation:
     return action_result(work, "rerun", 2, "success")
 
 
-@activity(name="conversation", converter=DataclassPayloadConverter())
-def conversation(work: Work) -> IntentBatch:
+@activity(name="conversation", converter=PydanticPayloadConverter())
+def conversation(work: ConversationClassificationRequest) -> IntentBatch:
     intent = Intent(epoch=work.epoch, head=work.head, kind="reply", digest="digest", authorized=True, blocking=False)
-    return IntentBatch(work.epoch, work.head, [asdict(intent)])
+    return IntentBatch(work.epoch, work.head, [intent])
 
 
-def _effect(name: str):
-    @activity(name=name, converter=DataclassPayloadConverter())
-    def perform(work: Work) -> EffectResult:
-        return EffectResult(
+def _effect(name: str, request_type, result_type):
+    def perform(work):
+        extra = {"provisional_head": "next"} if name in {"change", "repair"} else {}
+        return effect_result(
             name.removesuffix("_publish"),
             work.epoch,
             work.head,
             True,
-            provisional_head="next" if name in {"change", "repair"} else "",
             operation=work.operation,
+            **extra,
         )
 
-    return perform
+    perform.__annotations__ = {"work": request_type, "return": result_type}
+    return activity(name=name, converter=PydanticPayloadConverter())(perform)
 
 
-repair = _effect("repair")
-change = _effect("change")
-conversation_publish = _effect("conversation_publish")
-finding_publish = _effect("finding_publish")
-dashboard_publish = _effect("dashboard_publish")
-reminder_publish = _effect("reminder_publish")
+repair = _effect("repair", RepairRequest, RepairResult)
+change = _effect("change", ChangeRequest, ChangeResult)
+conversation_publish = _effect("conversation_publish", ConversationPublicationRequest, ConversationPublicationResult)
+finding_publish = _effect("finding_publish", FindingPublicationRequest, FindingPublicationResult)
+dashboard_publish = _effect("dashboard_publish", DashboardPublicationRequest, DashboardPublicationResult)
+reminder_publish = _effect("reminder_publish", ReminderPublicationRequest, ReminderPublicationResult)
 
 
-@activity(name="readiness_publish", converter=DataclassPayloadConverter())
-def readiness_publish(command: ReadinessCommand) -> EffectResult:
-    return EffectResult("readiness", command.epoch, command.head, True, operation=command.operation)
+@activity(name="readiness_publish", converter=PydanticPayloadConverter())
+def readiness_publish(command: ReadinessCommand) -> ReadinessPublicationResult:
+    return effect_result("readiness", command.epoch, command.head, True, operation=command.operation)
 
 
 ACTIVITIES = (
@@ -190,16 +241,17 @@ def pending_all(dispatch: InMemoryDispatch, activity_name: str) -> list[tuple[in
 
 def complete(dispatch: InMemoryDispatch, activity_name: str, result) -> int:
     occurrence, _ = pending(dispatch, activity_name)
-    dispatch.complete(occurrence, asdict(result))
+    dispatch.complete(occurrence, result.dump())
     return occurrence
 
 
-def work_input(invocation) -> Work:
-    return Work(**invocation.input["work"])
+def work_input(invocation):
+    input_type = ACTIVITY_TRANSITIONS[f"execute.{invocation.activity}"][0]
+    return PydanticPayloadConverter().decode(invocation.input["work"], input_type)
 
 
 def action_result(
-    work: Work,
+    work,
     run_id: str,
     attempt: int,
     conclusion: str,
@@ -216,8 +268,8 @@ def action_result(
         fingerprint,
         observation=observation,
         operation=work.operation,
-        base_head=str(work.payload["base_head"]),
-        policy_digest=str(work.payload["policy_digest"]),
+        base_head=str(work.base_head),
+        policy_digest=str(work.policy_digest),
     )
 
 
@@ -267,8 +319,8 @@ def drive_until_activity(subject: Engine, dispatch: InMemoryDispatch, activity_n
                 result = IntentBatch(work.epoch, work.head, [])
             else:
                 kind = invocation.activity.removesuffix("_publish")
-                result = EffectResult(kind, work.epoch, work.head, True, operation=work.operation)
-            dispatch.complete(occurrence, asdict(result))
+                result = effect_result(kind, work.epoch, work.head, True, operation=work.operation)
+            dispatch.complete(occurrence, result.dump())
     raise AssertionError(f"{activity_name} was not requested")
 
 
@@ -339,7 +391,18 @@ def test_every_obligation_is_a_real_typed_activity_and_readiness_is_end_to_end()
     assert not values(subject, "command.readiness")
     assert all(
         NetPath(path) in build_net(2).net.places
-        for path in ("review_result", "actions_result", "intent_result", "effect_result")
+        for path in (
+            "review_result",
+            "actions_result",
+            "intent_result",
+            "conversation_result",
+            "change_result",
+            "repair_result",
+            "finding_result",
+            "dashboard_result",
+            "reminder_result",
+            "readiness_result",
+        )
     )
 
 
@@ -429,7 +492,7 @@ def test_review_retry_atomically_refreshes_admission_authority() -> None:
     work = routed[outputs[1].target][0].data
     assert changed["base_current"] is True
     assert changed["review_attempts"] == 2
-    assert work["payload"]["base_current"] is True
+    assert work["base_current"] is True
     assert len(routed[outputs[1].target]) == 1
 
 
@@ -500,23 +563,21 @@ def test_failed_conversation_publication_reissues_the_same_fenced_operation() ->
         arguments={"message": "Safe status"},
         base_head="base",
     )
-    dispatch.complete(conversation_occurrence, asdict(IntentBatch(1, "h1", [asdict(reply)])))
+    dispatch.complete(conversation_occurrence, IntentBatch(1, "h1", [reply]).dump())
     drive_bounded(subject)
 
     first_occurrence, first_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
     first_work = work_input(first_invocation)
     dispatch.complete(
         first_occurrence,
-        asdict(
-            EffectResult(
-                "conversation",
-                first_work.epoch,
-                first_work.head,
-                False,
-                operation=first_work.operation,
-                capability_available=False,
-            )
-        ),
+        effect_result(
+            "conversation",
+            first_work.epoch,
+            first_work.head,
+            False,
+            operation=first_work.operation,
+            capability_available=False,
+        ).dump(),
     )
     drive_bounded(subject)
 
@@ -530,7 +591,7 @@ def test_failed_conversation_publication_reissues_the_same_fenced_operation() ->
 
     dispatch.complete(
         second_occurrence,
-        asdict(EffectResult("conversation", 1, "h1", True, operation=second_work.operation)),
+        effect_result("conversation", 1, "h1", True, operation=second_work.operation).dump(),
     )
     drive_bounded(subject)
     control = values(subject, "current")[0]
@@ -561,7 +622,7 @@ def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -
         arguments={"message": "Safe status"},
         base_head="base",
     )
-    dispatch.complete(conversation_occurrence, asdict(IntentBatch(1, "h1", [asdict(reply)])))
+    dispatch.complete(conversation_occurrence, IntentBatch(1, "h1", [reply]).dump())
     drive_bounded(subject)
 
     first_work = None
@@ -572,16 +633,14 @@ def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -
         assert work == first_work
         dispatch.complete(
             occurrence,
-            asdict(
-                EffectResult(
-                    "conversation",
-                    work.epoch,
-                    work.head,
-                    False,
-                    operation=work.operation,
-                    capability_available=False,
-                )
-            ),
+            effect_result(
+                "conversation",
+                work.epoch,
+                work.head,
+                False,
+                operation=work.operation,
+                capability_available=False,
+            ).dump(),
         )
         drive_bounded(subject)
         if attempt < 3:
@@ -691,10 +750,10 @@ def test_actions_basis_cannot_retire_before_a_current_observation_is_folded() ->
 
 
 def test_advanced_guards_hydrate_defaults_for_replayed_control_tokens() -> None:
-    old_control = asdict(Control("repo", 7, 1, "h", "base", True, True))
+    old_control = Control("repo", 7, 1, "h", "base", True, True).dump()
     old_control.pop("rerun_attempt")
     old_control.pop("review_attempts")
-    companion = asdict(ActionsObservation(1, "h", "run", 1, "failure"))
+    companion = ActionsObservation(1, "h", "run", 1, "failure").dump()
     binding = SimpleNamespace(
         consumed=(("actions", (Token("ActionsObservation", companion),)),),
         read=(("current", (Token("Control", old_control),)),),
@@ -728,9 +787,9 @@ def test_failed_repair_spends_the_automatic_budget() -> None:
         repair_in_flight=True,
         mutation_operation="repair",
     )
-    failed = fold_effect.implementation(
+    failed = fold_effect(
         control,
-        EffectResult("repair", 1, "h", False, fingerprint="fp", lineage="repair", operation="repair"),
+        effect_result("repair", 1, "h", False, fingerprint="fp", lineage="repair", operation="repair"),
     )
     assert failed.repair_used is True
     assert failed.repair_fingerprint == "fp"
@@ -821,31 +880,31 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
         dashboard_requested=True,
         dashboard_operation="dashboard:1:4",
     )
-    stale = EffectResult("dashboard", 1, "h1", True, operation="dashboard:1:3")
+    stale = effect_result("dashboard", 1, "h1", True, operation="dashboard:1:3")
     assert _effect_matches(requested, stale) is False
 
     conversation = replace(
         requested,
-        conversation_pending=asdict(Work("conversation", 1, "h1", "conversation:1")),
+        conversation_pending=request("conversation", 1, "h1", "conversation:1").dump(),
     )
     assert (
         _effect_matches(
             conversation,
-            EffectResult("conversation", 1, "h1", True, operation="conversation:stale"),
+            effect_result("conversation", 1, "h1", True, operation="conversation:stale"),
         )
         is False
     )
     assert (
         _effect_matches(
             conversation,
-            EffectResult("conversation", 1, "h1", True, operation="conversation:1"),
+            effect_result("conversation", 1, "h1", True, operation="conversation:1"),
         )
         is True
     )
     assert (
         _effect_matches(
             replace(conversation, conversation_pending={}),
-            EffectResult("conversation", 1, "h1", True, operation="conversation:1"),
+            effect_result("conversation", 1, "h1", True, operation="conversation:1"),
         )
         is False
     )
@@ -910,11 +969,11 @@ def test_intent_arguments_are_isolated_and_only_authorized_settled_controls_fold
 
 
 def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None:
-    @activity(name="conversation", converter=DataclassPayloadConverter())
-    def reminder_intent(work: Work) -> IntentBatch:
-        kind = work.payload["comment"]["text"]
+    @activity(name="conversation", converter=PydanticPayloadConverter())
+    def reminder_intent(work: ConversationClassificationRequest) -> IntentBatch:
+        kind = work.comment.text
         intent = Intent(epoch=work.epoch, head=work.head, kind=kind, digest=kind, authorized=True, blocking=False)
-        return IntentBatch(work.epoch, work.head, [asdict(intent)])
+        return IntentBatch(work.epoch, work.head, [intent])
 
     definitions = tuple(reminder_intent if item.declaration.name == "conversation" else item for item in ACTIVITIES)
     subject, dispatch = asynchronous_engine(reminder_delay=5, definitions=definitions)
@@ -926,7 +985,7 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
     drive_until_activity(subject, dispatch, "dashboard_publish")
     occurrence, invocation = pending(dispatch, "dashboard_publish")
     work = work_input(invocation)
-    dispatch.complete(occurrence, asdict(EffectResult("dashboard", 1, "h1", True, operation=work.operation)))
+    dispatch.complete(occurrence, effect_result("dashboard", 1, "h1", True, operation=work.operation).dump())
     drive_bounded(subject)
     subject.deliver(
         "human_observation",
@@ -945,7 +1004,7 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
         raise AssertionError("reminder did not mature")
     first_occurrence, first_invocation = pending(dispatch, "reminder_publish")
     assert work_input(first_invocation).sequence == 0
-    dispatch.complete(first_occurrence, asdict(EffectResult("reminder", 1, "h1", True)))
+    dispatch.complete(first_occurrence, effect_result("reminder", 1, "h1", True).dump())
     subject.deliver(
         "human_observation",
         token(HumanObservation(1, "h1", True, True, False, 0, False, False, True, False, True)),
@@ -965,16 +1024,14 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
     drive_until_activity(subject, dispatch, "reminder_publish")
     assert work_input(pending(dispatch, "reminder_publish")[1]).sequence == 1
     occurrence, _ = pending(dispatch, "reminder_publish")
-    dispatch.complete(occurrence, asdict(EffectResult("reminder", 1, "h1", True)))
+    dispatch.complete(occurrence, effect_result("reminder", 1, "h1", True).dump())
     subject.deliver("conversation_observation", token(ConversationObservation(1, "h1", True, "snooze")), identity="s")
     drive_bounded(subject)
     drive_until_activity(subject, dispatch, "conversation")
     complete(
         dispatch,
         "conversation",
-        IntentBatch(
-            1, "h1", [asdict(Intent(epoch=1, head="h1", kind="snooze", digest="s", authorized=True, blocking=False))]
-        ),
+        IntentBatch(1, "h1", [Intent(epoch=1, head="h1", kind="snooze", digest="s", authorized=True, blocking=False)]),
     )
     drive_bounded(subject)
     for _ in range(10):
@@ -986,9 +1043,7 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
     complete(
         dispatch,
         "conversation",
-        IntentBatch(
-            1, "h1", [asdict(Intent(epoch=1, head="h1", kind="resume", digest="r", authorized=True, blocking=False))]
-        ),
+        IntentBatch(1, "h1", [Intent(epoch=1, head="h1", kind="resume", digest="r", authorized=True, blocking=False)]),
     )
     drive_bounded(subject)
     drive_until_activity(subject, dispatch, "reminder_publish")
@@ -1061,16 +1116,14 @@ def test_late_review_and_dashboard_results_retire_after_supersession_and_termina
     )
     dispatch.complete(
         old_review,
-        asdict(
-            ReviewResult(
-                1,
-                "h1",
-                "blocking",
-                [{"id": "old", "blocking": True}],
-                [],
-                work_input(review_invocation).operation,
-            )
-        ),
+        ReviewResult(
+            1,
+            "h1",
+            "blocking",
+            [{"id": "old", "blocking": True}],
+            [],
+            work_input(review_invocation).operation,
+        ).dump(),
     )
     drive_bounded(subject)
     control = values(subject, "current")[0]
@@ -1098,16 +1151,16 @@ def test_late_review_and_dashboard_results_retire_after_supersession_and_termina
             elif invocation.activity == "conversation":
                 result = IntentBatch(work.epoch, work.head, [])
             else:
-                result = EffectResult(
+                result = effect_result(
                     invocation.activity.removesuffix("_publish"), work.epoch, work.head, True, operation=work.operation
                 )
-            dispatch.complete(occurrence, asdict(result))
+            dispatch.complete(occurrence, result.dump())
     assert values(subject, "terminal")[0]["status"] == "abort" and not values(subject, "review_result")
 
 
 def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> None:
-    @activity(name="conversation", converter=DataclassPayloadConverter())
-    def change_intent(work: Work) -> IntentBatch:
+    @activity(name="conversation", converter=PydanticPayloadConverter())
+    def change_intent(work: ConversationClassificationRequest) -> IntentBatch:
         intent = Intent(
             epoch=work.epoch,
             head=work.head,
@@ -1115,10 +1168,10 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
             digest="authorized",
             authorized=True,
             blocking=True,
-            base_head=str(work.payload["base_head"]),
-            policy_digest=str(work.payload["policy_digest"]),
+            base_head=str(work.base_head),
+            policy_digest=str(work.policy_digest),
         )
-        return IntentBatch(work.epoch, work.head, [asdict(intent)])
+        return IntentBatch(work.epoch, work.head, [intent])
 
     definitions = tuple(change_intent if item.declaration.name == "conversation" else item for item in ACTIVITIES)
     subject, dispatch = asynchronous_engine(definitions=definitions)
@@ -1136,16 +1189,14 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
             1,
             "h1",
             [
-                asdict(
-                    Intent(
-                        epoch=1,
-                        head="h1",
-                        kind="change",
-                        digest="authorized",
-                        authorized=True,
-                        blocking=True,
-                        base_head="base",
-                    )
+                Intent(
+                    epoch=1,
+                    head="h1",
+                    kind="change",
+                    digest="authorized",
+                    authorized=True,
+                    blocking=True,
+                    base_head="base",
                 )
             ],
         ),
@@ -1156,11 +1207,9 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
     drive_bounded(subject)
     dispatch.complete(
         occurrence,
-        asdict(
-            EffectResult(
-                "change", 1, "h1", True, provisional_head="agent-head", operation=work_input(invocation).operation
-            )
-        ),
+        effect_result(
+            "change", 1, "h1", True, provisional_head="agent-head", operation=work_input(invocation).operation
+        ).dump(),
     )
     drive_bounded(subject)
     control = values(subject, "current")[0]
@@ -1175,7 +1224,7 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
     dashboard_work = work_input(dashboard_invocation)
     dispatch.complete(
         dashboard_occurrence,
-        asdict(EffectResult("dashboard", 1, "h1", True, operation=dashboard_work.operation)),
+        effect_result("dashboard", 1, "h1", True, operation=dashboard_work.operation).dump(),
     )
     drive_bounded(subject)
     first = observed_actions(subject, "external", 1, "failure", "fp", observation="failure-1")
@@ -1183,22 +1232,20 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
     drive_bounded(subject)
     rerun_occurrence, rerun_invocation = drive_until_activity(subject, dispatch, "actions_rerun")
     second = action_result(work_input(rerun_invocation), "rerun", 2, "failure", "fp", observation="failure-2")
-    dispatch.complete(rerun_occurrence, asdict(second))
+    dispatch.complete(rerun_occurrence, second.dump())
     drive_bounded(subject)
     repair_occurrence, repair_invocation = pending(dispatch, "repair")
     dispatch.complete(
         repair_occurrence,
-        asdict(
-            EffectResult(
-                "repair",
-                1,
-                "h1",
-                True,
-                provisional_head="h2",
-                fingerprint="fp",
-                operation=work_input(repair_invocation).operation,
-            )
-        ),
+        effect_result(
+            "repair",
+            1,
+            "h1",
+            True,
+            provisional_head="h2",
+            fingerprint="fp",
+            operation=work_input(repair_invocation).operation,
+        ).dump(),
     )
     drive_bounded(subject)
     assert values(subject, "current")[0]["provisional_head"] == "h2"
@@ -1219,17 +1266,17 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
             elif invocation.activity == "conversation":
                 result = IntentBatch(work.epoch, work.head, [])
             else:
-                result = EffectResult(
+                result = effect_result(
                     invocation.activity.removesuffix("_publish"), work.epoch, work.head, True, operation=work.operation
                 )
-            dispatch.complete(occurrence, asdict(result))
+            dispatch.complete(occurrence, result.dump())
     else:
         raise AssertionError("new generation did not finish initial review and discovery")
     for dashboard_occurrence, dashboard_invocation in pending_all(dispatch, "dashboard_publish"):
         dashboard_work = work_input(dashboard_invocation)
         dispatch.complete(
             dashboard_occurrence,
-            asdict(EffectResult("dashboard", 2, "h2", True, operation=dashboard_work.operation)),
+            effect_result("dashboard", 2, "h2", True, operation=dashboard_work.operation).dump(),
         )
         drive_bounded(subject)
 
@@ -1242,7 +1289,7 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
     rerun_occurrence, rerun_invocation = drive_until_activity(subject, dispatch, "actions_rerun")
     dispatch.complete(
         rerun_occurrence,
-        asdict(action_result(work_input(rerun_invocation), "rerun-2", 2, "failure", "fp", observation="new-2")),
+        action_result(work_input(rerun_invocation), "rerun-2", 2, "failure", "fp", observation="new-2").dump(),
     )
     drive_bounded(subject)
     assert not pending_all(dispatch, "repair")
@@ -1260,10 +1307,10 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
             elif invocation.activity == "conversation":
                 result = IntentBatch(work.epoch, work.head, [])
             else:
-                result = EffectResult(
+                result = effect_result(
                     invocation.activity.removesuffix("_publish"), work.epoch, work.head, True, operation=work.operation
                 )
-            dispatch.complete(occurrence, asdict(result))
+            dispatch.complete(occurrence, result.dump())
         drive_bounded(subject)
     assert not values(subject, "work.repair") and not values(subject, "actions_basis")
     assert values(subject, "current")[0]["wait"] == "human repair authorization"
@@ -1289,7 +1336,8 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
             assert any(name.startswith("retire.terminal_") for name in names)
             if result:
                 assert any(
-                    name in {"accept_review", "accept_actions", "accept_intent", "accept_effect", "unpack_intents"}
+                    name in {"accept_review", "accept_actions", "accept_intent", "unpack_intents"}
+                    or name.startswith("accept_effect_")
                     or name in {"authorize_rerun", "authorize_repair", "authorize_change"}
                     or name.startswith("retire.")
                     and any(word in name for word in ("operation", "duplicate"))
@@ -1353,15 +1401,15 @@ def test_dashboard_capability_denial_is_an_explicit_blocker_not_success() -> Non
         dashboard_requested=True,
         dashboard_operation="dashboard",
     )
-    result = EffectResult("dashboard", 1, "h1", False, operation="dashboard", capability_available=False)
-    blocked = fold_effect.implementation(control, result)
+    result = effect_result("dashboard", 1, "h1", False, operation="dashboard", capability_available=False)
+    blocked = fold_effect(control, result)
     assert blocked.dashboard_current is False
     assert blocked.dashboard_capability_blocking is True
     assert blocked.wait == "dashboard update capability"
 
 
 def test_non_capability_conversation_failure_clears_pending_without_retry() -> None:
-    work = Work("conversation", 1, "h1", "conversation:1")
+    work = request("conversation", 1, "h1", "conversation:1")
     control = Control(
         "repo",
         7,
@@ -1370,13 +1418,13 @@ def test_non_capability_conversation_failure_clears_pending_without_retry() -> N
         "base",
         True,
         True,
-        conversation_pending=asdict(work),
+        conversation_pending=work.dump(),
         conversation_attempts=1,
     )
 
-    cleared = fold_effect.implementation(
+    cleared = fold_effect(
         control,
-        EffectResult("conversation", 1, "h1", False, operation=work.operation),
+        effect_result("conversation", 1, "h1", False, operation=work.operation),
     )
 
     assert cleared.conversation_pending == {}
@@ -1403,9 +1451,9 @@ def test_readiness_ack_invalidates_dashboard_before_latching_announcement() -> N
         readiness_operation="readiness",
     )
     assert ready(control) is False
-    acknowledged = fold_effect.implementation(
+    acknowledged = fold_effect(
         control,
-        EffectResult("readiness", 1, "h1", True, operation="readiness"),
+        effect_result("readiness", 1, "h1", True, operation="readiness"),
     )
     assert acknowledged.announced is True
     assert acknowledged.dashboard_current is False
@@ -1440,14 +1488,15 @@ def test_same_generation_stale_dashboard_ack_cannot_ack_newer_projection() -> No
     assert dashboards == [(old_occurrence, old_invocation)]
     dispatch.complete(
         old_occurrence,
-        asdict(EffectResult("dashboard", 1, "h1", True, operation=work_input(old_invocation).operation)),
+        effect_result("dashboard", 1, "h1", True, operation=work_input(old_invocation).operation).dump(),
     )
     drive_bounded(subject)
     assert values(subject, "current")[0]["dashboard_current"] is False
+    assert not values(subject, "dashboard_result")
     current_occurrence, current_invocation = pending(dispatch, "dashboard_publish")
     dispatch.complete(
         current_occurrence,
-        asdict(EffectResult("dashboard", 1, "h1", True, operation=work_input(current_invocation).operation)),
+        effect_result("dashboard", 1, "h1", True, operation=work_input(current_invocation).operation).dump(),
     )
     drive_bounded(subject)
     assert values(subject, "current")[0]["dashboard_current"] is True

@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from hamsterdan.agents import AgentCleanupCategory, AgentResultCategory
-from hamsterdan.contracts.readiness import EffectResult
+from hamsterdan.contracts.readiness import ChangeResult, RepairResult
 
 from .git_publish import GitPublishError, PublicationCategory
 
@@ -204,7 +204,7 @@ class PublicationQualification:
     cleanup_category: QualificationCategory | None = None
     _assertions_started: bool = False
 
-    def record_original(self, result: EffectResult, publications: int) -> None:
+    def record_original(self, result: ChangeResult | RepairResult, publications: int) -> None:
         if (
             self.original_publications is not None
             or type(result.ok) is not bool

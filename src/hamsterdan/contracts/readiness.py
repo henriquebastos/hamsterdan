@@ -1,5 +1,7 @@
 """JSON-faithful values for the replacement PR-readiness workflow."""
 
+from __future__ import annotations
+
 from dataclasses import field
 from typing import Any, Literal
 
@@ -144,27 +146,38 @@ class Terminal(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
-class Work(WorkflowModel):
-    kind: Literal[
-        "review",
-        "actions_discovery",
-        "actions_rerun",
-        "finding",
-        "conversation",
-        "change",
-        "repair",
-        "dashboard",
-        "reminder",
-    ]
+class ReviewRequest(WorkflowModel):
     epoch: int
     head: str
-    operation: str = ""
+    operation: str
+    base_head: str
+    policy_digest: str
+    strict_base: bool
+    base_current: bool
+    policy: dict
+    prior_findings: list[dict]
+    prior_lineage: list[dict]
     sequence: int = 0
-    payload: dict = field(default_factory=dict)
+    review_attempt: int = 0
 
-    def __post_init__(self) -> None:
-        if not self.operation:
-            object.__setattr__(self, "operation", f"{self.kind}:{self.epoch}:{self.head}:{self.sequence}")
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ActionsDiscoveryRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ActionsRerunRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+    actions: ActionsObservation
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -257,12 +270,106 @@ class Intent(WorkflowModel):
 class IntentBatch(WorkflowModel):
     epoch: int
     head: str
-    intents: list[dict]
+    intents: list[Intent]
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
-class EffectResult(WorkflowModel):
-    kind: Literal["finding", "conversation", "change", "repair", "dashboard", "reminder", "readiness"]
+class ConversationClassificationRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+    comment: ConversationObservation
+    control: Control
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ConversationPublicationRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+    intent: Intent
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class FindingPublicationRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+    findings: list[dict]
+    lineage: list[dict]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ChangeRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+    intent: Intent
+    lineage: list[dict] = field(default_factory=list)
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RepairRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+    actions: ActionsObservation
+    lineage: list[dict] = field(default_factory=list)
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashboardPublicationRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+    control: Control
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReminderPublicationRequest(WorkflowModel):
+    epoch: int
+    head: str
+    operation: str
+    base_head: str
+    policy_digest: str
+    sequence: int
+    reviewer: str
+    author: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ConversationPublicationResult(WorkflowModel):
+    epoch: int
+    head: str
+    ok: bool
+    operation: str = ""
+    capability_available: bool = True
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class FindingPublicationResult(WorkflowModel):
+    epoch: int
+    head: str
+    ok: bool
+    operation: str = ""
+    capability_available: bool = True
+    references: list[dict] = field(default_factory=list)
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ChangeResult(WorkflowModel):
     epoch: int
     head: str
     ok: bool
@@ -270,11 +377,50 @@ class EffectResult(WorkflowModel):
     fingerprint: str = ""
     lineage: str = ""
     operation: str = ""
-    capability_available: bool = True
-    references: list[dict] = field(default_factory=list)
     publication_category: str = ""
     agent_result_category: str = ""
     agent_cleanup_category: str = ""
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RepairResult(WorkflowModel):
+    epoch: int
+    head: str
+    ok: bool
+    provisional_head: str = ""
+    fingerprint: str = ""
+    lineage: str = ""
+    operation: str = ""
+    publication_category: str = ""
+    agent_result_category: str = ""
+    agent_cleanup_category: str = ""
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashboardPublicationResult(WorkflowModel):
+    epoch: int
+    head: str
+    ok: bool
+    operation: str = ""
+    capability_available: bool = True
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReminderPublicationResult(WorkflowModel):
+    epoch: int
+    head: str
+    ok: bool
+    operation: str = ""
+    capability_available: bool = True
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReadinessPublicationResult(WorkflowModel):
+    epoch: int
+    head: str
+    ok: bool
+    operation: str = ""
+    capability_available: bool = True
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))

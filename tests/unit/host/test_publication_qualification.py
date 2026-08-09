@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from hamsterdan.agents import AgentCleanupCategory, AgentResultCategory
-from hamsterdan.contracts.readiness import EffectResult
+from hamsterdan.contracts.readiness import ChangeResult
 from hamsterdan.host.git_publish import GitPublishError, PublicationCategory
 from hamsterdan.host.publication_qualification import (
     AtomicSetupPush,
@@ -23,9 +23,8 @@ def result(
     category: str = "",
     agent_result: str = "",
     agent_cleanup: str = "",
-) -> EffectResult:
-    return EffectResult(
-        kind="change",
+) -> ChangeResult:
+    return ChangeResult(
         epoch=2,
         head="a" * 40,
         ok=ok,
@@ -147,7 +146,7 @@ def test_replay_and_cleanup_failures_are_separate_and_do_not_replace_original() 
         result(ok=False, agent_cleanup="raw cleanup prose"),
     ],
 )
-def test_arbitrary_or_private_diagnostics_cannot_enter_retained_evidence(effect: EffectResult) -> None:
+def test_arbitrary_or_private_diagnostics_cannot_enter_retained_evidence(effect: ChangeResult) -> None:
     with pytest.raises((TypeError, ValueError), match="closed vocabulary"):
         PublicationQualification().record_original(effect, 0)
 

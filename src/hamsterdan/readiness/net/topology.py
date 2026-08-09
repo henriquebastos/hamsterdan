@@ -1,7 +1,6 @@
 """Executable topology for one PR-readiness Instance.
 
-Work is deliberately internal: every obligation crosses a named Activity
-transition and returns a typed result envelope before control can change.
+Every obligation crosses a named Activity transition with an exact request and result contract.
 """
 
 from __future__ import annotations
@@ -14,22 +13,37 @@ from petrus.impetus.dsl import BuiltNet, NetSpec, arc, direct, petri_guard, petr
 from petrus.impetus.petrinet import Delay, Token
 
 from hamsterdan.contracts.readiness import (
+    ActionsDiscoveryRequest,
     ActionsObservation,
+    ActionsRerunRequest,
     Admission,
+    ChangeRequest,
+    ChangeResult,
     Control,
+    ConversationClassificationRequest,
     ConversationObservation,
+    ConversationPublicationRequest,
+    ConversationPublicationResult,
+    DashboardPublicationRequest,
+    DashboardPublicationResult,
     Dormant,
-    EffectResult,
+    FindingPublicationRequest,
+    FindingPublicationResult,
     HumanObservation,
     Intent,
     IntentBatch,
     Lifecycle,
     ReadinessCommand,
+    ReadinessPublicationResult,
     Reminder,
+    ReminderPublicationRequest,
+    ReminderPublicationResult,
+    RepairRequest,
+    RepairResult,
+    ReviewRequest,
     ReviewResult,
     Seed,
     Terminal,
-    Work,
     update,
     workflow_gates_ready,
 )
@@ -41,17 +55,17 @@ MAX_REVIEW_ATTEMPTS = 3
 # Public composition surface: path -> (typed input, typed output).  A host binds
 # each path to a same-signature ActivityDefinition with DerivedActivityHandler.
 ACTIVITY_TRANSITIONS = {
-    "execute.review": (Work, ReviewResult),
-    "execute.actions_discovery": (Work, ActionsObservation),
-    "execute.actions_rerun": (Work, ActionsObservation),
-    "execute.conversation": (Work, IntentBatch),
-    "execute.conversation_publish": (Work, EffectResult),
-    "execute.repair": (Work, EffectResult),
-    "execute.change": (Work, EffectResult),
-    "execute.finding_publish": (Work, EffectResult),
-    "execute.dashboard_publish": (Work, EffectResult),
-    "execute.reminder_publish": (Work, EffectResult),
-    "execute.readiness_publish": (ReadinessCommand, EffectResult),
+    "execute.review": (ReviewRequest, ReviewResult),
+    "execute.actions_discovery": (ActionsDiscoveryRequest, ActionsObservation),
+    "execute.actions_rerun": (ActionsRerunRequest, ActionsObservation),
+    "execute.conversation": (ConversationClassificationRequest, IntentBatch),
+    "execute.conversation_publish": (ConversationPublicationRequest, ConversationPublicationResult),
+    "execute.repair": (RepairRequest, RepairResult),
+    "execute.change": (ChangeRequest, ChangeResult),
+    "execute.finding_publish": (FindingPublicationRequest, FindingPublicationResult),
+    "execute.dashboard_publish": (DashboardPublicationRequest, DashboardPublicationResult),
+    "execute.reminder_publish": (ReminderPublicationRequest, ReminderPublicationResult),
+    "execute.readiness_publish": (ReadinessCommand, ReadinessPublicationResult),
 }
 
 
@@ -87,11 +101,29 @@ def _guard(predicate):
 
     def evaluate(binding):
         selections = (*binding.read, *binding.consumed)
-        values = [
-            Control(**token.data) if "revision" in token.data else SimpleNamespace(**token.data)
-            for _, selected in selections
-            for token in selected
-        ]
+        result_types = {
+            value.__name__: value
+            for value in (
+                ConversationPublicationResult,
+                RepairResult,
+                ChangeResult,
+                FindingPublicationResult,
+                DashboardPublicationResult,
+                ReminderPublicationResult,
+                ReadinessPublicationResult,
+            )
+        }
+        values = []
+        for _, selected in selections:
+            for token in selected:
+                value_type = result_types.get(token.color)
+                values.append(
+                    Control(**token.data)
+                    if "revision" in token.data
+                    else value_type(**token.data)
+                    if value_type is not None
+                    else SimpleNamespace(**token.data)
+                )
         return predicate(*values)
 
     return petri_guard(evaluate)
@@ -141,22 +173,26 @@ def _duplicate_actions(control: Control, value: ActionsObservation) -> bool:
     )
 
 
-def _effect_matches(control: Control, value: EffectResult) -> bool:
-    expected = {
-        "dashboard": control.dashboard_operation,
-        "finding": control.finding_operation,
-        "change": control.mutation_operation,
-        "repair": control.mutation_operation,
-        "readiness": control.readiness_operation,
-    }.get(value.kind)
-    if value.kind == "conversation":
+def _effect_matches(control: Control, value) -> bool:
+    if isinstance(value, ConversationPublicationResult):
         return (
             bool(control.conversation_pending)
             and _current(control, value)
             and value.operation == control.conversation_pending.get("operation")
         )
-    if value.kind == "reminder":
+    if isinstance(value, ReminderPublicationResult):
         return _current(control, value)
+    expected = (
+        control.dashboard_operation
+        if isinstance(value, DashboardPublicationResult)
+        else control.finding_operation
+        if isinstance(value, FindingPublicationResult)
+        else control.mutation_operation
+        if isinstance(value, (ChangeResult, RepairResult))
+        else control.readiness_operation
+        if isinstance(value, ReadinessPublicationResult)
+        else None
+    )
     return _current(control, value) and expected is not None and value.operation == expected
 
 
@@ -238,23 +274,27 @@ def _admit(binding, outputs):
         "prior_findings": prior.get("findings", []),
         "prior_lineage": prior.get("finding_lineage", []),
     }
-    review_work = Work(
-        "review",
-        epoch,
-        admission.head,
-        operation("review", control, payload=review_payload),
-        payload=review_payload,
+    review_work = ReviewRequest(
+        epoch=epoch,
+        head=admission.head,
+        operation=operation("review", control, payload=review_payload),
+        base_head=admission.base_head,
+        policy_digest=admission.policy_digest,
+        strict_base=admission.strict_base,
+        base_current=admission.base_current,
+        policy=review_payload["policy"],
+        prior_findings=prior.get("findings", []),
+        prior_lineage=prior.get("finding_lineage", []),
     )
     actions_payload = {
         "base_head": admission.base_head,
         "policy_digest": admission.policy_digest,
     }
-    actions_work = Work(
-        "actions_discovery",
-        epoch,
-        admission.head,
-        operation("actions_discovery", control, payload=actions_payload),
-        payload=actions_payload,
+    actions_work = ActionsDiscoveryRequest(
+        epoch=epoch,
+        head=admission.head,
+        operation=operation("actions_discovery", control, payload=actions_payload),
+        **actions_payload,
     )
     control = update(
         control,
@@ -312,13 +352,19 @@ def _retry_review(binding, outputs):
             "review_attempt": attempt,
         },
     )
-    work = Work(
-        "review",
-        control.epoch,
-        control.head,
-        operation("review", control, payload=payload, sequence=attempt),
+    work = ReviewRequest(
+        epoch=control.epoch,
+        head=control.head,
+        operation=operation("review", control, payload=payload, sequence=attempt),
         sequence=attempt,
-        payload=payload,
+        base_head=control.base_head,
+        policy_digest=control.policy_digest,
+        strict_base=admission.strict_base,
+        base_current=admission.base_current,
+        policy=payload["policy"],
+        prior_findings=control.findings,
+        prior_lineage=control.finding_lineage,
+        review_attempt=attempt,
     )
     changed = update(
         control,
@@ -384,20 +430,24 @@ def _refresh_basis(binding, outputs):
             },
         },
     )
-    review = Work(
-        "review",
-        changed.epoch,
-        changed.head,
-        operation("review", changed, payload=review_payload),
-        payload=review_payload,
+    review = ReviewRequest(
+        epoch=changed.epoch,
+        head=changed.head,
+        operation=operation("review", changed, payload=review_payload),
+        base_head=changed.base_head,
+        policy_digest=changed.policy_digest,
+        strict_base=admission.strict_base,
+        base_current=admission.base_current,
+        policy=review_payload["policy"],
+        prior_findings=control.findings,
+        prior_lineage=control.finding_lineage,
     )
     actions_payload = effect_payload(changed)
-    actions = Work(
-        "actions_discovery",
-        changed.epoch,
-        changed.head,
-        operation("actions_discovery", changed, payload=actions_payload),
-        payload=actions_payload,
+    actions = ActionsDiscoveryRequest(
+        epoch=changed.epoch,
+        head=changed.head,
+        operation=operation("actions_discovery", changed, payload=actions_payload),
+        **actions_payload,
     )
     changed = update(
         changed,
@@ -440,12 +490,14 @@ def _accept_review(binding, outputs):
     if publishable:
         out = outputs[1]
         payload = effect_payload(folded, {"findings": publishable, "lineage": result.lineage})
-        work = Work(
-            "finding",
-            control.epoch,
-            control.head,
-            operation("finding", folded, payload=payload),
-            payload=payload,
+        work = FindingPublicationRequest(
+            epoch=control.epoch,
+            head=control.head,
+            operation=operation("finding", folded, payload=payload),
+            findings=publishable,
+            lineage=result.lineage,
+            base_head=folded.base_head,
+            policy_digest=folded.policy_digest,
         )
         folded = update(folded, finding_operation=work.operation)
         routed[outputs[0].target] = (Token(outputs[0].color, (folded).dump()),)
@@ -571,25 +623,25 @@ def fold_intent(control: Control, value: Intent) -> Control:
     return control
 
 
-@direct
-def fold_effect(control: Control, result: EffectResult) -> Control:
-    if result.kind == "conversation" and result.ok:
+def fold_effect(control: Control, result) -> Control:
+    if isinstance(result, ConversationPublicationResult) and result.ok:
         return update(
             control,
             conversation_pending={},
             conversation_attempts=0,
             conversation_capability_blocking=False,
         )
-    if result.kind == "conversation" and not result.capability_available:
+    if isinstance(result, ConversationPublicationResult) and not result.capability_available:
         return update(control, conversation_capability_blocking=True, wait="conversation reply capability")
-    if result.kind == "conversation":
+    if isinstance(result, ConversationPublicationResult):
         return update(
             control,
             conversation_pending={},
             conversation_attempts=0,
             conversation_capability_blocking=False,
         )
-    if result.kind in {"change", "repair"}:
+    if isinstance(result, (ChangeResult, RepairResult)):
+        repair = isinstance(result, RepairResult)
         if result.ok:
             return update(
                 control,
@@ -598,10 +650,8 @@ def fold_effect(control: Control, result: EffectResult) -> Control:
                 change_in_flight=False,
                 repair_in_flight=False,
                 repair_recovery_required=False,
-                repair_used=control.repair_used or result.kind == "repair",
-                repair_fingerprint=result.fingerprint or control.fingerprint
-                if result.kind == "repair"
-                else control.repair_fingerprint,
+                repair_used=control.repair_used or repair,
+                repair_fingerprint=result.fingerprint or control.fingerprint if repair else control.repair_fingerprint,
                 repair_lineage=result.lineage or control.repair_lineage,
                 wait="verified head admission",
             )
@@ -609,15 +659,13 @@ def fold_effect(control: Control, result: EffectResult) -> Control:
             control,
             change_in_flight=False,
             repair_in_flight=False,
-            repair_recovery_required=result.kind == "repair",
-            repair_used=control.repair_used or result.kind == "repair",
-            repair_fingerprint=(result.fingerprint or control.fingerprint)
-            if result.kind == "repair"
-            else control.repair_fingerprint,
+            repair_recovery_required=repair,
+            repair_used=control.repair_used or repair,
+            repair_fingerprint=(result.fingerprint or control.fingerprint) if repair else control.repair_fingerprint,
             repair_lineage=result.lineage or control.repair_lineage,
-            wait=f"{result.kind} recovery",
+            wait=f"{'repair' if repair else 'change'} recovery",
         )
-    if result.kind == "finding" and result.ok:
+    if isinstance(result, FindingPublicationResult) and result.ok:
         references = {item.get("finding_id"): item.get("url", "") for item in result.references}
         findings = [
             {**finding, "comment_url": references.get(finding.get("id"), finding.get("comment_url", ""))}
@@ -631,9 +679,9 @@ def fold_effect(control: Control, result: EffectResult) -> Control:
             finding_operation="",
             finding_capability_blocking=False,
         )
-    if result.kind == "finding" and not result.capability_available:
+    if isinstance(result, FindingPublicationResult) and not result.capability_available:
         return update(control, finding_capability_blocking=True, wait="finding publication capability")
-    if result.kind == "dashboard" and result.ok:
+    if isinstance(result, DashboardPublicationResult) and result.ok:
         return update(
             control,
             preserve_dashboard_request=True,
@@ -644,16 +692,16 @@ def fold_effect(control: Control, result: EffectResult) -> Control:
             dashboard_format=DASHBOARD_FORMAT,
             dashboard_capability_blocking=False,
         )
-    if result.kind == "dashboard" and not result.capability_available:
+    if isinstance(result, DashboardPublicationResult) and not result.capability_available:
         return update(
             control,
             preserve_dashboard_request=True,
             dashboard_capability_blocking=True,
             wait="dashboard update capability",
         )
-    if result.kind == "readiness" and not result.capability_available:
+    if isinstance(result, ReadinessPublicationResult) and not result.capability_available:
         return update(control, readiness_capability_blocking=True, wait="readiness publication capability")
-    if result.kind == "readiness" and result.ok:
+    if isinstance(result, ReadinessPublicationResult) and result.ok:
         return update(
             control,
             readiness_requested=False,
@@ -663,6 +711,41 @@ def fold_effect(control: Control, result: EffectResult) -> Control:
         )
     # Reminder and readiness acknowledgements are audit facts, not gate changes.
     return control
+
+
+@direct
+def fold_conversation_effect(control: Control, result: ConversationPublicationResult) -> Control:
+    return fold_effect(control, result)
+
+
+@direct
+def fold_repair_effect(control: Control, result: RepairResult) -> Control:
+    return fold_effect(control, result)
+
+
+@direct
+def fold_change_effect(control: Control, result: ChangeResult) -> Control:
+    return fold_effect(control, result)
+
+
+@direct
+def fold_finding_effect(control: Control, result: FindingPublicationResult) -> Control:
+    return fold_effect(control, result)
+
+
+@direct
+def fold_dashboard_effect(control: Control, result: DashboardPublicationResult) -> Control:
+    return fold_effect(control, result)
+
+
+@direct
+def fold_reminder_effect(control: Control, result: ReminderPublicationResult) -> Control:
+    return fold_effect(control, result)
+
+
+@direct
+def fold_readiness_effect(control: Control, result: ReadinessPublicationResult) -> Control:
+    return fold_effect(control, result)
 
 
 def _first_failure(c: Control, value: ActionsObservation) -> bool:
@@ -707,20 +790,28 @@ def _basis_done(c: Control, value: ActionsObservation) -> bool:
 
 
 @direct
-def rerun_work(c: Control, value: ActionsObservation) -> Work:
-    del c
-    return Work(kind="actions_rerun", epoch=value.epoch, head=value.head)
+def rerun_work(c: Control, value: ActionsObservation) -> ActionsRerunRequest:
+    payload = effect_payload(c, {"actions": value.dump()})
+    return ActionsRerunRequest(
+        epoch=value.epoch,
+        head=value.head,
+        operation=operation("actions-rerun", c, payload=payload),
+        base_head=c.base_head,
+        policy_digest=c.policy_digest,
+        actions=value,
+    )
 
 
 def _rerun(binding, outputs):
     c, value = _control_value(binding, ActionsObservation)
     payload = effect_payload(c, {"actions": (value).dump()})
-    work = Work(
-        kind="actions_rerun",
+    work = ActionsRerunRequest(
         epoch=value.epoch,
         head=value.head,
         operation=operation("actions-rerun", c, payload=payload),
-        payload=payload,
+        base_head=c.base_head,
+        policy_digest=c.policy_digest,
+        actions=value,
     )
     changed = update(
         c,
@@ -746,14 +837,13 @@ def _repair(binding, outputs):
         outputs[1].target: (
             Token(
                 outputs[1].color,
-                (
-                    Work(
-                        kind="repair",
-                        epoch=value.epoch,
-                        head=value.head,
-                        operation=operation_id,
-                        payload=payload,
-                    )
+                RepairRequest(
+                    epoch=value.epoch,
+                    head=value.head,
+                    operation=operation_id,
+                    base_head=c.base_head,
+                    policy_digest=c.policy_digest,
+                    actions=value,
                 ).dump(),
             ),
         ),
@@ -785,8 +875,13 @@ def _authorize_change(binding, outputs):
         outputs[1].target: (
             Token(
                 outputs[1].color,
-                (
-                    Work(kind="change", epoch=value.epoch, head=value.head, operation=operation_id, payload=payload)
+                ChangeRequest(
+                    epoch=value.epoch,
+                    head=value.head,
+                    operation=operation_id,
+                    base_head=c.base_head,
+                    policy_digest=c.policy_digest,
+                    intent=value,
                 ).dump(),
             ),
         ),
@@ -800,12 +895,13 @@ def _replyable(c: Control, value: Intent) -> bool:
 def _authorize_reply(binding, outputs):
     c, value = _control_value(binding, Intent)
     payload = effect_payload(c, {"intent": (value).dump()})
-    work = Work(
-        "conversation",
-        value.epoch,
-        value.head,
-        operation("conversation-reply", c, payload=payload),
-        payload=payload,
+    work = ConversationPublicationRequest(
+        epoch=value.epoch,
+        head=value.head,
+        operation=operation("conversation-reply", c, payload=payload),
+        base_head=c.base_head,
+        policy_digest=c.policy_digest,
+        intent=value,
     )
     changed = update(
         c,
@@ -829,7 +925,9 @@ def _retry_reply(c: Control) -> bool:
 
 def _reissue_reply(binding, outputs):
     c = Control(**binding.tokens[0].data)
-    work = Work(**c.conversation_pending)
+    pending = dict(c.conversation_pending)
+    pending["intent"] = Intent(**pending["intent"])
+    work = ConversationPublicationRequest(**pending)
     changed = update(
         c,
         conversation_attempts=c.conversation_attempts + 1,
@@ -847,19 +945,22 @@ def _conversation(c: Control, value: ConversationObservation) -> bool:
 
 
 def _unpack_intents(binding, outputs):
-    batch = IntentBatch(**binding.tokens[0].data)
-    return {output.target: tuple(Token(output.color, item) for item in batch.intents) for output in outputs}
+    raw = binding.tokens[0].data
+    batch = IntentBatch(raw["epoch"], raw["head"], [Intent(**item) for item in raw["intents"]])
+    return {output.target: tuple(Token(output.color, item.dump()) for item in batch.intents) for output in outputs}
 
 
 @direct
-def conversation_work(c: Control, value: ConversationObservation) -> Work:
+def conversation_work(c: Control, value: ConversationObservation) -> ConversationClassificationRequest:
     payload = effect_payload(c, {"comment": (value).dump(), "control": (c).dump()})
-    return Work(
-        kind="conversation",
+    return ConversationClassificationRequest(
         epoch=value.epoch,
         head=value.head,
         operation=operation("conversation", c, payload=payload),
-        payload=payload,
+        base_head=c.base_head,
+        policy_digest=c.policy_digest,
+        comment=value,
+        control=c,
     )
 
 
@@ -889,12 +990,13 @@ def _dashboard(binding, outputs):
             Token(
                 outputs[1].color,
                 (
-                    Work(
-                        kind="dashboard",
+                    DashboardPublicationRequest(
                         epoch=c.epoch,
                         head=c.head,
                         operation=operation_id,
-                        payload=effect_payload(changed, {"control": changed.dump()}),
+                        base_head=changed.base_head,
+                        policy_digest=changed.policy_digest,
+                        control=changed,
                     )
                 ).dump(),
             ),
@@ -1003,13 +1105,15 @@ def _remind(binding, outputs):
             "author": control.author,
         },
     )
-    work = Work(
-        "reminder",
-        timer.epoch,
-        timer.head,
-        operation("reminder", control, payload=payload, sequence=timer.sequence),
-        timer.sequence,
-        payload,
+    work = ReminderPublicationRequest(
+        epoch=timer.epoch,
+        head=timer.head,
+        operation=operation("reminder", control, payload=payload, sequence=timer.sequence),
+        base_head=control.base_head,
+        policy_digest=control.policy_digest,
+        sequence=timer.sequence,
+        reviewer=control.reminder_recipient,
+        author=control.author,
     )
     return {
         outputs[0].target: (Token(outputs[0].color, (nxt).dump()),),
@@ -1034,28 +1138,49 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     t.conversation_observation >> p.conversation_basis(ConversationObservation)
 
     # Named Activity transitions. No result place is an ingress/source.
-    work.p.review(Work) >> execute.t.review(handler="review") >> p.review_result(ReviewResult)
+    work.p.review(ReviewRequest) >> execute.t.review(handler="review") >> p.review_result(ReviewResult)
     (
-        work.p.actions_discovery(Work)
+        work.p.actions_discovery(ActionsDiscoveryRequest)
         >> execute.t.actions_discovery(handler="actions_discovery")
         >> (p.actions_result(ActionsObservation), p.actions_basis(ActionsObservation))
     )
     (
-        work.p.actions_rerun(Work)
+        work.p.actions_rerun(ActionsRerunRequest)
         >> execute.t.actions_rerun(handler="actions_rerun")
         >> (p.actions_result, p.actions_basis)
     )
-    (work.p.conversation(Work) >> execute.t.conversation(handler="conversation") >> p.intent_batch(IntentBatch))
-    work.p.conversation_reply(Work) >> execute.t.conversation_publish(handler="conversation_publish") >> p.effect_result
-    for name in ("repair", "change"):
-        getattr(work.p, name)(Work) >> getattr(execute.t, name)(handler=name) >> p.effect_result(EffectResult)
-    for name in ("finding", "dashboard", "reminder"):
-        (
-            getattr(work.p, name)(Work)
-            >> getattr(execute.t, f"{name}_publish")(handler=f"{name}_publish")
-            >> p.effect_result
-        )
-    command.p.readiness(ReadinessCommand) >> execute.t.readiness_publish(handler="readiness_publish") >> p.effect_result
+    (
+        work.p.conversation(ConversationClassificationRequest)
+        >> execute.t.conversation(handler="conversation")
+        >> p.intent_batch(IntentBatch)
+    )
+    (
+        work.p.conversation_reply(ConversationPublicationRequest)
+        >> execute.t.conversation_publish(handler="conversation_publish")
+        >> p.conversation_result(ConversationPublicationResult)
+    )
+    work.p.repair(RepairRequest) >> execute.t.repair(handler="repair") >> p.repair_result(RepairResult)
+    work.p.change(ChangeRequest) >> execute.t.change(handler="change") >> p.change_result(ChangeResult)
+    (
+        work.p.finding(FindingPublicationRequest)
+        >> execute.t.finding_publish(handler="finding_publish")
+        >> p.finding_result(FindingPublicationResult)
+    )
+    (
+        work.p.dashboard(DashboardPublicationRequest)
+        >> execute.t.dashboard_publish(handler="dashboard_publish")
+        >> p.dashboard_result(DashboardPublicationResult)
+    )
+    (
+        work.p.reminder(ReminderPublicationRequest)
+        >> execute.t.reminder_publish(handler="reminder_publish")
+        >> p.reminder_result(ReminderPublicationResult)
+    )
+    (
+        command.p.readiness(ReadinessCommand)
+        >> execute.t.readiness_publish(handler="readiness_publish")
+        >> p.readiness_result(ReadinessPublicationResult)
+    )
 
     # Admission is atomic; same-head verification refreshes mutable base facts.
     for name, prior, guard in (
@@ -1085,7 +1210,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     (
         (p.current, p.review_result)
         >> t.accept_review(handler=petri_handler(_accept_review), guards=_guard(_review_matches))
-        >> (p.current, work.p.finding(Work))
+        >> (p.current, work.p.finding)
     )
     (
         (p.current, p.actions_result)
@@ -1097,7 +1222,30 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     (p.current, p.human_result) >> t.accept_human(handler=fold_human, guards=_guard(_current)) >> p.current
     (p.current, p.intent_result) >> t.accept_intent(handler=fold_intent, guards=_guard(_current)) >> p.current
-    (p.current, p.effect_result) >> t.accept_effect(handler=fold_effect, guards=_guard(_effect_matches)) >> p.current
+    effect_places = (
+        p.conversation_result,
+        p.repair_result,
+        p.change_result,
+        p.finding_result,
+        p.dashboard_result,
+        p.reminder_result,
+        p.readiness_result,
+    )
+    effect_folders = (
+        fold_conversation_effect,
+        fold_repair_effect,
+        fold_change_effect,
+        fold_finding_effect,
+        fold_dashboard_effect,
+        fold_reminder_effect,
+        fold_readiness_effect,
+    )
+    for index, (place, folder) in enumerate(zip(effect_places, effect_folders, strict=True)):
+        (
+            (p.current, place)
+            >> getattr(t, f"accept_effect_{index}")(handler=folder, guards=_guard(_effect_matches))
+            >> p.current
+        )
 
     (
         (p.current, p.actions_basis)
@@ -1180,7 +1328,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         p.human_result,
         p.intent_result,
         p.intent_batch,
-        p.effect_result,
+        *effect_places,
         p.actions_basis,
         p.change_basis,
         p.reply_basis,
@@ -1211,7 +1359,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     # Same-generation duplicate or superseded operation envelopes are stale too.
     for name, place, guard in (
         ("review_operation", p.review_result, lambda c, x: not _review_matches(c, x)),
-        ("effect_operation", p.effect_result, lambda c, x: not _effect_matches(c, x)),
         (
             "actions_duplicate",
             p.actions_result,
@@ -1219,6 +1366,12 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         ),
     ):
         tr = getattr(retire.t, name)(guards=_guard(guard))
+        p.current >> arc.read() >> tr
+        place >> tr
+    for index, place in enumerate(effect_places):
+        if place == p.reminder_result:
+            continue
+        tr = getattr(retire.t, f"effect_operation_{index}")(guards=_guard(lambda c, x: not _effect_matches(c, x)))
         p.current >> arc.read() >> tr
         place >> tr
     p.dormant >> arc.read() >> retire.t.dormant_admission(guards=_guard(lambda d, a: not _subject(d, a)))
@@ -1238,7 +1391,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
             p.actions_result,
             p.review_result,
             p.intent_result,
-            p.effect_result,
+            *effect_places,
         )
     ):
         tr = getattr(retire.t, f"terminal_fact_{index}")

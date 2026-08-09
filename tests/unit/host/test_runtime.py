@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -9,7 +8,7 @@ from petrus.impetus.history import ActivityFailed, ActivityRequested, FiringFail
 from petrus.impetus.petrinet import NetPath, Token
 from petrus.motus.activity import ExecutionPolicy
 
-from hamsterdan.contracts.readiness import Control, Work
+from hamsterdan.contracts.readiness import Control, ReviewRequest
 from hamsterdan.host.activities import PrReadinessActivities
 from hamsterdan.host.runtime import AuthorityLease, PrReadinessHost
 
@@ -29,7 +28,7 @@ class ProviderAuthority:
 
 class Marking:
     def __init__(self, control: Control) -> None:
-        self.token = Token("control", asdict(control))
+        self.token = Token("control", control.dump())
 
     def place(self, path: NetPath):
         assert path == NetPath("current")
@@ -52,7 +51,7 @@ def test_agent_polling_predicate_does_not_invoke_provider_fence() -> None:
     activities = object.__new__(PrReadinessActivities)
     activities.current = lambda epoch, head: (epoch, head) == (2, "head")
     activities.current_fence = lambda *args: (_ for _ in ()).throw(AssertionError("provider fence used while polling"))
-    work = Work("review", 2, "head", "review:operation")
+    work = ReviewRequest(2, "head", "review:operation", "base", "policy", True, True, {}, [], [])
 
     assert all(activities._is_current(work) for _ in range(1_000))
 

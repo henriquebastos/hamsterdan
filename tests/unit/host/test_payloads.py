@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from hamsterdan.contracts.readiness import ActionsObservation, Control
+from hamsterdan.contracts.readiness import ActionsObservation, ChangeResult, Control, RepairResult
 from hamsterdan.host.payloads import PydanticPayloadConverter
 
 
@@ -58,3 +58,11 @@ def test_closed_workflow_vocabulary_rejects_unknown_actions_state() -> None:
             base_current=True,
             actions="provider-private",
         )
+
+
+def test_converter_rejects_a_different_nominal_result_contract() -> None:
+    repair = RepairResult(epoch=1, head="head", ok=True)
+
+    assert not isinstance(repair, ChangeResult)
+    with pytest.raises(TypeError, match="must be ChangeResult"):
+        PydanticPayloadConverter().encode(repair, ChangeResult)

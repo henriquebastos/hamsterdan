@@ -28,7 +28,7 @@ from hamsterdan.agents import (
     encode_prompt,
 )
 from hamsterdan.agents.pi import PiWorkspaceCleanupError
-from hamsterdan.contracts.readiness import Work
+from hamsterdan.contracts.readiness import ChangeRequest, Intent
 from hamsterdan.host.activities import PrReadinessActivities
 from hamsterdan.host.git_publish import GitPublishResult
 
@@ -129,13 +129,7 @@ def run_coding_activity(subject: PiNativeRunner, runtime: Runtime, operation: st
     activities.agent_dispatch = lambda claimed, attempt: subject.route_operation(runtime.operation.operation_id)
     activities.runner = subject
     activities.git_publisher = publisher
-    work = Work(
-        "change",
-        2,
-        HEAD,
-        operation,
-        payload={"base_head": BASE, "policy_digest": "policy", "intent": {}},
-    )
+    work = ChangeRequest(2, HEAD, operation, BASE, "policy", Intent(2, HEAD, "change", "digest", True, True))
     return activities.change(work), publisher
 
 

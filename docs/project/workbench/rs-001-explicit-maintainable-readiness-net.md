@@ -48,6 +48,16 @@ never merges remain required.
   across concern tokens; full-cohort movement is reserved for generation and
   lifecycle boundaries.
 
+### 2026-08-09 — Specialized Activity contracts
+
+- Every readiness Activity now has one exact strict request/result pair. The
+  generic `Work.kind`/`payload` and `EffectResult.kind` envelopes were removed.
+- The Net exposes distinct typed work and result places; host methods consume
+  typed fields directly and nominal result classes determine effect folding.
+- Operation hashes and coding publication identities retain their established
+  payload projections, while same-generation superseded result tokens are
+  explicitly retired.
+
 ## Change Requests
 
 | Change Request | Outcome |
@@ -55,10 +65,10 @@ never merges remain required.
 | CR-001 Characterize behavior and map state ownership | Complete |
 | CR-002 Establish Pydantic workflow contracts | Complete |
 | CR-003 Close domain vocabularies | Complete |
-| CR-004 Specialize Activity requests and results | Active |
+| CR-004 Specialize Activity requests and results | Complete |
 | CR-005 Simplify explicit conversational mutations | Complete |
 | CR-006 Compare active-token decomposition strategies | Complete |
-| CR-007 Replace `Control` with independent state tokens | Candidate |
+| CR-007 Replace `Control` with independent state tokens | Active |
 | CR-008 Make dashboard and readiness projection relational | Candidate |
 | CR-009 Reduce retirement to proven invariants | Candidate |
 | CR-010 Restructure the Net around workflow continuity | Candidate |

@@ -9,7 +9,7 @@ import pytest
 from petrus.motus.execution.archive import extract_workspace_archive, workspace_archive
 
 from hamsterdan.agents import CodingRequest, CodingResult
-from hamsterdan.contracts.readiness import EffectResult
+from hamsterdan.contracts.readiness import ChangeResult
 from hamsterdan.github_app.models import PullRequestSnapshot, WireResponse
 from hamsterdan.host.git_publish import (
     GitPublishError,
@@ -405,7 +405,7 @@ def test_host_derived_patch_publishes_and_replays_through_complete_local_authori
         base_head=head,
     )
     evidence = PublicationQualification()
-    evidence.record_original(EffectResult("change", 2, head, True, published.head), 1)
+    evidence.record_original(ChangeResult(2, head, True, published.head), 1)
     recovered = None
 
     def replay() -> bool:

@@ -1,6 +1,6 @@
 import subprocess
 import sys
-from dataclasses import asdict, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import ClassVar
 
@@ -9,11 +9,108 @@ import pytest
 from hamsterdan.agents import AgentProtocolError, AgentResultCategory, AmpExecuteRunner, CodingResult
 from hamsterdan.agents import ConversationResult as AgentConversationResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
-from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
+from hamsterdan.contracts.readiness import (
+    ActionsDiscoveryRequest,
+    ActionsObservation,
+    ActionsRerunRequest,
+    ChangeRequest,
+    Control,
+    ConversationClassificationRequest,
+    ConversationObservation,
+    ConversationPublicationRequest,
+    ConversationPublicationResult,
+    DashboardPublicationRequest,
+    FindingPublicationRequest,
+    FindingPublicationResult,
+    Intent,
+    ReadinessCommand,
+    ReminderPublicationRequest,
+    RepairRequest,
+    RepairResult,
+    ReviewRequest,
+)
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.activities import PrReadinessActivities, activity_definitions
 from hamsterdan.host.git_publish import GitPublishError, GitPublishResult, PublicationCategory, payload_digest
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
+
+REQUEST_TYPES = {
+    "review": ReviewRequest,
+    "actions_discovery": ActionsDiscoveryRequest,
+    "actions_rerun": ActionsRerunRequest,
+    "conversation": ConversationPublicationRequest,
+    "change": ChangeRequest,
+    "repair": RepairRequest,
+    "finding": FindingPublicationRequest,
+    "dashboard": DashboardPublicationRequest,
+    "reminder": ReminderPublicationRequest,
+}
+
+
+def request(kind, epoch, head, operation="", sequence=0, payload=None):
+    values = dict(payload or {})
+    values.setdefault("base_head", "base")
+    values.setdefault("policy_digest", "policy")
+    if kind == "dashboard":
+        values.setdefault("control", Control("repo", 1, epoch, head, values["base_head"], True, True))
+    if kind == "review":
+        values = {
+            "strict_base": True,
+            "base_current": True,
+            "policy": {},
+            "prior_findings": [],
+            "prior_lineage": [],
+            **values,
+        }
+    if kind == "finding":
+        values.setdefault("lineage", [])
+    if kind == "repair" and not values.get("actions"):
+        values["actions"] = ActionsObservation(epoch, head, "", 0, "unavailable")
+    if kind == "change" and not values.get("intent"):
+        values["intent"] = Intent(epoch, head, "change", "digest", True, True)
+    elif kind == "change" and isinstance(values.get("intent"), dict):
+        intent = values["intent"]
+        values["intent"] = {
+            "epoch": epoch,
+            "head": head,
+            "digest": "digest",
+            "authorized": True,
+            "blocking": True,
+            **intent,
+        }
+    if kind == "conversation" and ("comment" in values or "control" in values):
+        request_type = ConversationClassificationRequest
+        comment = values.get("comment", {})
+        values["comment"] = ConversationObservation(
+            epoch,
+            head,
+            True,
+            str(comment.get("text", "")),
+            actor_id=int(comment.get("actor_id", 0)),
+            actor_login=str(comment.get("actor_login", "")),
+        )
+    elif kind == "conversation":
+        request_type = ConversationPublicationRequest
+        intent = values.get("intent", {})
+        values["intent"] = (
+            Intent(
+                epoch,
+                head,
+                "reply",
+                "digest",
+                True,
+                False,
+                dict(intent.get("arguments", {})) if isinstance(intent, dict) else {},
+            )
+            if isinstance(intent, dict)
+            else intent
+        )
+    else:
+        request_type = REQUEST_TYPES[kind]
+    for key, value_type in (("actions", ActionsObservation), ("intent", Intent), ("control", Control)):
+        if key in values and isinstance(values[key], dict):
+            values[key] = value_type(**values[key])
+    return request_type(epoch=epoch, head=head, operation=operation, **values)
 
 
 def test_activity_definitions_are_the_exact_typed_net_mapping() -> None:
@@ -32,7 +129,7 @@ def test_complete_fence_uses_effect_payload_and_readiness_command() -> None:
     calls: list[tuple] = []
     operations.current_fence = lambda *values: calls.append(values)
 
-    operations._fence(Work("dashboard", 2, "h", "op", payload={"base_head": "b", "policy_digest": "p"}))
+    operations._fence(request("dashboard", 2, "h", "op", payload={"base_head": "b", "policy_digest": "p"}))
     operations._fence(ReadinessCommand(3, "h2", "op2", "b2", "p2"))
 
     assert calls == [(2, "h", "op", "b", "p"), (3, "h2", "op2", "b2", "p2")]
@@ -81,14 +178,14 @@ def test_dashboard_projects_current_gates_instead_of_latched_announcement() -> N
         human_approved=True,
         mergeable=True,
     )
-    dashboard = PrReadinessActivities._dashboard(asdict(ready))
+    dashboard = PrReadinessActivities._dashboard(ready.dump())
     assert "Readiness: **ready**" in dashboard
     assert "Coordinating agent review: **clear**" in dashboard
     assert "Base policy: **strict / update required**" in dashboard
     assert "Observed base: `base` · Base current: True" in dashboard
 
     no_longer_ready = replace(ready, human_approved=False, announced=True)
-    assert "Readiness: **not ready**" in PrReadinessActivities._dashboard(asdict(no_longer_ready))
+    assert "Readiness: **not ready**" in PrReadinessActivities._dashboard(no_longer_ready.dump())
 
 
 def test_conversation_gate_projection_and_status_override_latched_lifecycle_details() -> None:
@@ -109,11 +206,11 @@ def test_conversation_gate_projection_and_status_override_latched_lifecycle_deta
         wait="terminal lifecycle",
     )
 
-    gates = {gate["name"]: gate for gate in PrReadinessActivities._conversation_gates(asdict(ready))}
+    gates = {gate["name"]: gate for gate in PrReadinessActivities._conversation_gates(ready.dump())}
 
     assert gates["overall"] == {"name": "overall", "ready": True, "blocker": ""}
     assert gates["actions"] == {"name": "actions", "ready": True, "state": "flaky_green"}
-    assert PrReadinessActivities._status(asdict(ready)) == (
+    assert PrReadinessActivities._status(ready.dump()) == (
         "Ready: every observed gate is clear. Clean. I'll keep one paw on the wheel."
     )
 
@@ -151,7 +248,7 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
-    work = Work(
+    work = request(
         "repair",
         2,
         "a" * 40,
@@ -161,7 +258,7 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
 
     result = operations.repair(work)
 
-    assert result.kind == "repair" and result.ok is False
+    assert isinstance(result, RepairResult) and result.ok is False
     assert result.operation == "repair-operation"
     assert result.publication_category == PublicationCategory.REF_CAS
     assert "category=publication" in caplog.text
@@ -209,7 +306,7 @@ def test_coding_unchanged_result_is_terminal_without_publication_or_retry() -> N
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
-    work = Work(
+    work = request(
         "change",
         2,
         "a" * 40,
@@ -263,7 +360,7 @@ def test_coding_unable_result_is_terminal_without_publication_or_retry() -> None
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
-    work = Work(
+    work = request(
         "change",
         2,
         "a" * 40,
@@ -319,7 +416,7 @@ def test_coding_retries_protocol_error_with_identical_request_then_publishes_onc
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
-    work = Work(
+    work = request(
         "change",
         2,
         "a" * 40,
@@ -356,7 +453,7 @@ def test_canceled_coding_attempt_does_not_retry_or_publish() -> None:
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
-    work = Work(
+    work = request(
         "change",
         2,
         "a" * 40,
@@ -399,7 +496,7 @@ def test_stale_authority_between_coding_attempts_stops_before_retry_and_publicat
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
-    work = Work(
+    work = request(
         "change",
         2,
         "a" * 40,
@@ -470,7 +567,7 @@ def test_final_fence_failure_retains_closed_category_before_publication(
 
     operations.runner = Runner()
     operations.git_publisher = Publisher()
-    work = Work(
+    work = request(
         "change",
         2,
         "a" * 40,
@@ -516,7 +613,19 @@ def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(t
         "root = pathlib.Path.cwd()\n"
         "request = json.loads((root / '.impetus/request.json').read_text())\n"
         "assert request['selected_work'] == "
-        + repr([{"kind": "change", "arguments": {"request": "update the tracked fixture"}}])
+        + repr(
+            [
+                Intent(
+                    3,
+                    requested_head,
+                    "change",
+                    "digest",
+                    True,
+                    True,
+                    {"request": "update the tracked fixture"},
+                ).dump()
+            ]
+        )
         + "\n"
         "observed = subprocess.run(['git', 'rev-parse', 'HEAD'], check=True, text=True, capture_output=True).stdout.strip()\n"
         "reflog = subprocess.run(['git', 'reflog', '--format=%gs'], check=True, text=True, capture_output=True).stdout\n"
@@ -549,7 +658,7 @@ def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(t
     operations.current_fence = lambda *args: fences.append(args)
     intent = {"kind": "change", "arguments": {"request": "update the tracked fixture"}}
     payload = {"base_head": requested_head, "policy_digest": "policy", "intent": intent}
-    work = Work("change", 3, requested_head, "confirmed-change-operation", payload=payload)
+    work = request("change", 3, requested_head, "confirmed-change-operation", payload=payload)
 
     result = operations.change(work)
 
@@ -564,7 +673,13 @@ def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(t
     assert coding_result.validation_evidence == [{"detached_at_request_head": True, "head": requested_head}]
     assert publication == {
         "operation": work.operation,
-        "payload_digest": payload_digest(payload),
+        "payload_digest": payload_digest(
+            {
+                "base_head": requested_head,
+                "policy_digest": "policy",
+                "intent": work.intent.dump(),
+            }
+        ),
         "expected_head": requested_head,
         "base_head": requested_head,
         "merge_base": False,
@@ -577,7 +692,7 @@ def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(t
 def test_stale_finding_publication_becomes_typed_effect_result() -> None:
     operations = object.__new__(PrReadinessActivities)
     operations.current_fence = lambda *args: (_ for _ in ()).throw(RuntimeError("stale"))
-    work = Work(
+    work = request(
         "finding",
         2,
         "a" * 40,
@@ -587,14 +702,14 @@ def test_stale_finding_publication_becomes_typed_effect_result() -> None:
 
     result = operations.finding_publish(work)
 
-    assert result.kind == "finding" and result.ok is False
+    assert isinstance(result, FindingPublicationResult) and result.ok is False
     assert result.operation == "finding-operation"
 
 
 def test_conversation_provider_failure_becomes_a_retryable_typed_result() -> None:
     operations = object.__new__(PrReadinessActivities)
     operations._immutable = lambda *args: (_ for _ in ()).throw(GitHubBoundaryError("transient provider failure"))
-    work = Work(
+    work = request(
         "conversation",
         2,
         "a" * 40,
@@ -604,7 +719,7 @@ def test_conversation_provider_failure_becomes_a_retryable_typed_result() -> Non
 
     result = operations.conversation_publish(work)
 
-    assert result.kind == "conversation" and result.ok is False
+    assert isinstance(result, ConversationPublicationResult) and result.ok is False
     assert result.operation == "conversation-operation"
     assert result.capability_available is False
 
@@ -643,7 +758,7 @@ def test_one_coordinated_review_publishes_multiple_findings_with_one_authority_l
         }
         for index, identity in enumerate(("one", "two"), 1)
     ]
-    work = Work(
+    work = request(
         "finding",
         2,
         "a" * 40,
@@ -682,12 +797,12 @@ def test_stale_actions_rerun_becomes_a_typed_canceled_observation() -> None:
     operations.authority = Authority()
     operations.reruns = Reruns()
     basis = ActionsObservation(1, "a" * 40, "17", 1, "failure")
-    work = Work(
+    work = request(
         "actions_rerun",
         1,
         "a" * 40,
         "rerun-operation",
-        payload={"base_head": "b" * 40, "policy_digest": "policy", "actions": asdict(basis)},
+        payload={"base_head": "b" * 40, "policy_digest": "policy", "actions": basis.dump()},
     )
 
     result = operations.actions_rerun(work)
@@ -731,7 +846,7 @@ def test_review_preserves_terminal_prior_finding_detail_for_dashboard_lineage() 
 
     operations.authority = Authority()
     operations.runner = Runner()
-    work = Work(
+    work = request(
         "review",
         2,
         "a" * 40,
@@ -807,7 +922,7 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
             )
 
     operations.runner = Runner()
-    work = Work(
+    work = request(
         "conversation",
         2,
         "a" * 40,
@@ -816,7 +931,7 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
             "base_head": "b" * 40,
             "policy_digest": "policy",
             "comment": {"text": "explain the blockers", "actor_id": 1, "actor_login": "human"},
-            "control": asdict(Control("owner/repo", 7, 2, "a" * 40, "b" * 40, False, True)),
+            "control": Control("owner/repo", 7, 2, "a" * 40, "b" * 40, False, True).dump(),
         },
     )
 
@@ -824,16 +939,16 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
 
     assert dispatched == ["conversation-operation"]
     assert len(result.intents) == 1
-    assert result.intents[0]["kind"] == "reply"
-    assert "couldn't interpret" in result.intents[0]["arguments"]["message"]
-    assert "no workflow change" in result.intents[0]["arguments"]["message"]
+    assert result.intents[0].kind == "reply"
+    assert "couldn't interpret" in result.intents[0].arguments["message"]
+    assert "no workflow change" in result.intents[0].arguments["message"]
 
 
 def test_explicit_mutation_intent_is_immediately_authorized() -> None:
     operations = object.__new__(PrReadinessActivities)
     operations.repository = "owner/repo"
     operations.pr_number = 7
-    work = Work(
+    work = request(
         "conversation",
         2,
         "a" * 40,

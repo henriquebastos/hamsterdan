@@ -7,20 +7,35 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 from petrus.motus.activity import ActivityDefinition, activity
 
 from hamsterdan import agents
 from hamsterdan.contracts.readiness import (
+    ActionsDiscoveryRequest,
     ActionsObservation,
+    ActionsRerunRequest,
+    ChangeRequest,
+    ChangeResult,
     Control,
-    EffectResult,
+    ConversationClassificationRequest,
+    ConversationPublicationRequest,
+    ConversationPublicationResult,
+    DashboardPublicationRequest,
+    DashboardPublicationResult,
+    FindingPublicationRequest,
+    FindingPublicationResult,
     Intent,
     IntentBatch,
     ReadinessCommand,
+    ReadinessPublicationResult,
+    ReminderPublicationRequest,
+    ReminderPublicationResult,
+    RepairRequest,
+    RepairResult,
+    ReviewRequest,
     ReviewResult,
-    Work,
     workflow_gates_ready,
     workflow_wait,
 )
@@ -39,6 +54,35 @@ _MUTATIONS = {"change", "update_base", "resolve_conflict"}
 _ALLOWED = ("reply", "status", "acknowledge", "dismiss", "defer", "snooze", "resume", "reassign", *_MUTATIONS)
 MAX_CODING_ATTEMPTS = 3
 LOG = logging.getLogger(__name__)
+CodeRequest = ChangeRequest | RepairRequest
+PublicationRequest = (
+    ConversationPublicationRequest
+    | FindingPublicationRequest
+    | DashboardPublicationRequest
+    | ReminderPublicationRequest
+    | ReadinessCommand
+)
+CodeResult = TypeVar("CodeResult", ChangeResult, RepairResult)
+
+
+def _publication_identity(request: CodeRequest) -> dict[str, Any]:
+    """Project a typed coding request to its canonical publication identity payload."""
+    value: dict[str, Any] = (
+        {
+            "base_head": request.base_head,
+            "policy_digest": request.policy_digest,
+            "intent": request.intent.dump(),
+        }
+        if isinstance(request, ChangeRequest)
+        else {
+            "base_head": request.base_head,
+            "policy_digest": request.policy_digest,
+            "actions": request.actions.dump(),
+        }
+    )
+    if request.lineage:
+        value["lineage"] = request.lineage
+    return value
 
 
 class PrReadinessActivities:
@@ -69,17 +113,22 @@ class PrReadinessActivities:
         self.current = is_current
         self.agent_fault, self.agent_dispatch = agent_fault, agent_dispatch
 
-    def _fence(self, value: Work | ReadinessCommand) -> None:
-        base = value.base_head if isinstance(value, ReadinessCommand) else str(value.payload.get("base_head", ""))
-        policy = (
-            value.policy_digest if isinstance(value, ReadinessCommand) else str(value.payload.get("policy_digest", ""))
-        )
+    def _fence(
+        self,
+        value: CodeRequest
+        | PublicationRequest
+        | ReviewRequest
+        | ActionsDiscoveryRequest
+        | ActionsRerunRequest
+        | ConversationClassificationRequest,
+    ) -> None:
+        base = value.base_head
+        policy = value.policy_digest
         if not base or not policy:
             raise ValueError("effect lacks its complete authority fence")
         self.current_fence(value.epoch, value.head, value.operation, base, policy)
 
-    def review(self, work: Work) -> ReviewResult:
-        payload = work.payload
+    def review(self, work: ReviewRequest) -> ReviewResult:
         comments = [
             {
                 "id": item.get("id"),
@@ -96,15 +145,15 @@ class PrReadinessActivities:
             self.pr_number,
             work.epoch,
             work.head,
-            str(payload["base_head"]),
+            work.base_head,
             "diff.patch",
-            policy=dict(payload.get("policy", {})),
+            policy=work.policy,
             review_lenses=["correctness", "security", "tests", "maintainability", "developer experience"],
             actions_evidence=actions_evidence,
-            prior_findings=list(payload.get("prior_findings", []))[:100],
+            prior_findings=work.prior_findings[:100],
             prior_comments=comments,
-            prior_replies=list(payload.get("prior_replies", []))[:100],
-            applied_changes=list(payload.get("prior_lineage", []))[:100],
+            prior_replies=[],
+            applied_changes=work.prior_lineage[:100],
         )
         try:
             self.agent_dispatch(work.operation, 1)
@@ -133,7 +182,7 @@ class PrReadinessActivities:
             work.operation,
         )
 
-    def actions_discovery(self, work: Work) -> ActionsObservation:
+    def actions_discovery(self, work: ActionsDiscoveryRequest) -> ActionsObservation:
         self._fence(work)
         run = self.authority.select_run(self.workflow_path, work.head)
         if run is None:
@@ -146,8 +195,8 @@ class PrReadinessActivities:
                 capability_available=False,
                 observation=f"absent:{self.workflow_path}:{work.head}",
                 operation=work.operation,
-                base_head=str(work.payload["base_head"]),
-                policy_digest=str(work.payload["policy_digest"]),
+                base_head=work.base_head,
+                policy_digest=work.policy_digest,
             )
         policy = self.authority.policy(self.authority.pull_request().base_ref)
         run = self.authority.jobs(run, policy.required_checks)
@@ -163,18 +212,18 @@ class PrReadinessActivities:
             cast(Any, conclusion),
             fingerprint,
             operation=work.operation,
-            base_head=str(work.payload["base_head"]),
-            policy_digest=str(work.payload["policy_digest"]),
+            base_head=work.base_head,
+            policy_digest=work.policy_digest,
         )
 
-    def actions_rerun(self, work: Work) -> ActionsObservation:
-        value = work.payload["actions"]
+    def actions_rerun(self, work: ActionsRerunRequest) -> ActionsObservation:
+        value = work.actions
         try:
             run = next(
                 (
                     item
                     for item in self.authority.workflow_runs(self.workflow_path, work.head)
-                    if str(item.id) == str(value["run_id"]) and item.attempt == value["attempt"]
+                    if str(item.id) == value.run_id and item.attempt == value.attempt
                 ),
                 None,
             )
@@ -186,13 +235,13 @@ class PrReadinessActivities:
             return ActionsObservation(
                 work.epoch,
                 work.head,
-                str(value["run_id"]),
-                int(value["attempt"]),
+                value.run_id,
+                value.attempt,
                 "canceled",
-                observation=f"{value['run_id']}:{value['attempt']}:canceled",
+                observation=f"{value.run_id}:{value.attempt}:canceled",
                 operation=work.operation,
-                base_head=str(work.payload["base_head"]),
-                policy_digest=str(work.payload["policy_digest"]),
+                base_head=work.base_head,
+                policy_digest=work.policy_digest,
             )
         return ActionsObservation(
             work.epoch,
@@ -202,19 +251,19 @@ class PrReadinessActivities:
             "requested",
             observation=f"{run.id}:{run.attempt}:requested",
             operation=work.operation,
-            base_head=str(work.payload["base_head"]),
-            policy_digest=str(work.payload["policy_digest"]),
+            base_head=work.base_head,
+            policy_digest=work.policy_digest,
         )
 
-    def conversation(self, work: Work) -> IntentBatch:
-        comment, control = work.payload["comment"], work.payload["control"]
+    def conversation(self, work: ConversationClassificationRequest) -> IntentBatch:
+        comment, control = work.comment.dump(), work.control.dump()
         declarations = self._intent_declarations(control)
         request = agents.ConversationRequest(
             self.repository,
             self.pr_number,
             work.epoch,
             work.head,
-            str(work.payload["base_head"]),
+            work.base_head,
             comment,
             {"id": comment.get("actor_id", 0), "login": comment.get("actor_login", "")},
             control,
@@ -246,17 +295,16 @@ class PrReadinessActivities:
                     "confidence": 1,
                 }
             ]
-        intents = [(self._intent(item, work, control)).dump() for item in raw]
+        intents = [self._intent(item, work, control) for item in raw]
         self._fence(work)
         return IntentBatch(work.epoch, work.head, intents)
 
-    def conversation_publish(self, work: Work) -> EffectResult:
-        message = str(work.payload.get("intent", {}).get("arguments", {}).get("message", "Status acknowledged."))
+    def conversation_publish(self, work: ConversationPublicationRequest) -> ConversationPublicationResult:
+        message = str(work.intent.arguments.get("message", "Status acknowledged."))
         try:
             self._immutable("conversation", work, message)
         except GitHubBoundaryError:
-            return EffectResult(
-                "conversation",
+            return ConversationPublicationResult(
                 work.epoch,
                 work.head,
                 False,
@@ -264,17 +312,17 @@ class PrReadinessActivities:
                 capability_available=False,
             )
         except RuntimeError:
-            return EffectResult("conversation", work.epoch, work.head, False, operation=work.operation)
-        return self._effect("conversation", work)
+            return ConversationPublicationResult(work.epoch, work.head, False, operation=work.operation)
+        return ConversationPublicationResult(work.epoch, work.head, True, operation=work.operation)
 
-    def finding_publish(self, work: Work) -> EffectResult:
+    def finding_publish(self, work: FindingPublicationRequest) -> FindingPublicationResult:
         try:
             self._fence(work)
             references: list[dict] = []
-            for finding in work.payload.get("findings", []):
+            for finding in work.findings:
                 identity = str(finding.get("id", "unknown"))
                 operation = f"{work.operation}:{identity}"
-                lineage = next((x for x in work.payload.get("lineage", []) if x.get("finding_id") == identity), {})
+                lineage = next((x for x in work.lineage if x.get("finding_id") == identity), {})
                 body = (
                     f"### {finding.get('title', identity)}\n\n{finding.get('body', '')}\n\n"
                     f"Generation: `{work.epoch}` · Head: `{work.head}`\n\nEvidence: {finding.get('evidence', '')}\n\n"
@@ -300,34 +348,46 @@ class PrReadinessActivities:
                     raise RuntimeError("GitHub did not return a finding reference")
                 references.append({"finding_id": identity, "url": published.reference.url, "inline": published.inline})
         except RuntimeError:
-            return EffectResult("finding", work.epoch, work.head, False, operation=work.operation)
-        return EffectResult("finding", work.epoch, work.head, True, operation=work.operation, references=references)
+            return FindingPublicationResult(work.epoch, work.head, False, operation=work.operation)
+        return FindingPublicationResult(work.epoch, work.head, True, operation=work.operation, references=references)
 
-    def dashboard_publish(self, work: Work) -> EffectResult:
-        control = work.payload["control"]
+    def dashboard_publish(self, work: DashboardPublicationRequest) -> DashboardPublicationResult:
+        control = work.control.dump()
         body = self._dashboard(control)
         try:
             self._fence(work)
             result = self.publisher.dashboard(work.operation, work.epoch, work.head, body)
         except RuntimeError:
-            return EffectResult("dashboard", work.epoch, work.head, False, operation=work.operation)
-        return self._effect("dashboard", work, capability_available=result.capability_available)
+            return DashboardPublicationResult(work.epoch, work.head, False, operation=work.operation)
+        return DashboardPublicationResult(
+            work.epoch,
+            work.head,
+            result.capability_available,
+            operation=work.operation,
+            capability_available=result.capability_available,
+        )
 
-    def reminder_publish(self, work: Work) -> EffectResult:
+    def reminder_publish(self, work: ReminderPublicationRequest) -> ReminderPublicationResult:
         try:
             self._fence(work)
             result = self.publisher.reminder(
                 work.operation,
                 work.epoch,
                 work.head,
-                reviewer=work.payload.get("reviewer") or None,
-                author=str(work.payload.get("author", "")),
+                reviewer=work.reviewer or None,
+                author=work.author,
             )
         except RuntimeError:
-            return EffectResult("reminder", work.epoch, work.head, False, operation=work.operation)
-        return self._effect("reminder", work, capability_available=result.capability_available)
+            return ReminderPublicationResult(work.epoch, work.head, False, operation=work.operation)
+        return ReminderPublicationResult(
+            work.epoch,
+            work.head,
+            result.capability_available,
+            operation=work.operation,
+            capability_available=result.capability_available,
+        )
 
-    def readiness_publish(self, command: ReadinessCommand) -> EffectResult:
+    def readiness_publish(self, command: ReadinessCommand) -> ReadinessPublicationResult:
         legacy = "## Hamsterdan readiness advisory\n\nAll observed gates are ready. Advisory only; Hamsterdan does not merge PRs."
         try:
             result = self._immutable(
@@ -338,9 +398,8 @@ class PrReadinessActivities:
                 compatible_bodies=(legacy,),
             )
         except RuntimeError:
-            return EffectResult("readiness", command.epoch, command.head, False, operation=command.operation)
-        return EffectResult(
-            "readiness",
+            return ReadinessPublicationResult(command.epoch, command.head, False, operation=command.operation)
+        return ReadinessPublicationResult(
             command.epoch,
             command.head,
             result.capability_available,
@@ -348,31 +407,30 @@ class PrReadinessActivities:
             capability_available=result.capability_available,
         )
 
-    def repair(self, work: Work) -> EffectResult:
-        return self._code(work, "repair")
+    def repair(self, work: RepairRequest) -> RepairResult:
+        return self._code(work, "repair", RepairResult)
 
-    def change(self, work: Work) -> EffectResult:
-        return self._code(work, "change")
+    def change(self, work: ChangeRequest) -> ChangeResult:
+        return self._code(work, "change", ChangeResult)
 
-    def _code(self, work: Work, kind: str) -> EffectResult:
-        kind = cast(Any, kind)
+    def _code(self, work: CodeRequest, kind: str, result_type: type[CodeResult]) -> CodeResult:
         if self.git_publisher is None:
             raise RuntimeError("host Git publishing is not configured")
-        intent = work.payload.get("intent", {})
+        intent = work.intent.dump() if isinstance(work, ChangeRequest) else {}
         intent_kind = str(intent.get("kind", kind))
-        actions = work.payload.get("actions", {})
+        actions = work.actions.dump() if isinstance(work, RepairRequest) else {}
         request = agents.CodingRequest(
             kind,
             self.repository,
             self.pr_number,
             work.epoch,
             work.head,
-            str(work.payload["base_head"]),
+            work.base_head,
             f"hamsterdan/{kind}/{work.operation[-16:]}",
             selected_work=[intent] if intent else [],
             failure_evidence=[actions] if actions else [],
             fingerprint=str(actions.get("fingerprint", "")),
-            lineage=list(work.payload.get("lineage", [])),
+            lineage=work.lineage,
             reproduction_status="unknown",
             merge_base=intent_kind in {"update_base", "resolve_conflict"},
         )
@@ -399,8 +457,7 @@ class PrReadinessActivities:
             except agents.AgentProtocolError as error:
                 self._log_agent_error(kind, work, error)
                 if error.result_category is not None or error.cleanup_category is not None:
-                    return EffectResult(
-                        kind,
+                    return result_type(
                         work.epoch,
                         work.head,
                         False,
@@ -428,8 +485,7 @@ class PrReadinessActivities:
                 work.head,
                 work.operation,
             )
-            return EffectResult(
-                kind,
+            return result_type(
                 work.epoch,
                 work.head,
                 False,
@@ -439,8 +495,7 @@ class PrReadinessActivities:
                 agent_result_category=category.value,
             )
         if result is None or result.status != "changed":
-            return EffectResult(
-                kind,
+            return result_type(
                 work.epoch,
                 work.head,
                 False,
@@ -458,8 +513,7 @@ class PrReadinessActivities:
                 work.head,
                 work.operation,
             )
-            return EffectResult(
-                kind,
+            return result_type(
                 work.epoch,
                 work.head,
                 False,
@@ -476,8 +530,7 @@ class PrReadinessActivities:
                 work.head,
                 work.operation,
             )
-            return EffectResult(
-                kind,
+            return result_type(
                 work.epoch,
                 work.head,
                 False,
@@ -490,7 +543,7 @@ class PrReadinessActivities:
             published = self.git_publisher.publish(
                 result,
                 operation=work.operation,
-                payload_digest=payload_digest(work.payload),
+                payload_digest=payload_digest(_publication_identity(work)),
                 expected_head=work.head,
                 base_head=request.base,
                 merge_base=request.merge_base,
@@ -504,8 +557,7 @@ class PrReadinessActivities:
                 work.head,
                 work.operation,
             )
-            return EffectResult(
-                kind,
+            return result_type(
                 work.epoch,
                 work.head,
                 False,
@@ -524,8 +576,7 @@ class PrReadinessActivities:
                 work.head,
                 work.operation,
             )
-            return EffectResult(
-                kind,
+            return result_type(
                 work.epoch,
                 work.head,
                 False,
@@ -534,18 +585,18 @@ class PrReadinessActivities:
                 operation=work.operation,
                 publication_category=PublicationCategory.BOUNDARY_UNAVAILABLE.value,
             )
-        return EffectResult(
-            kind, work.epoch, work.head, True, published.head, request.fingerprint, work.operation, work.operation
+        return result_type(
+            work.epoch, work.head, True, published.head, request.fingerprint, work.operation, work.operation
         )
 
-    def _is_current(self, work: Work) -> bool:
+    def _is_current(self, work) -> bool:
         return self.current is None or self.current(work.epoch, work.head)
 
     def _failure_fingerprint(self, run: ActionsRunSnapshot) -> str:
         failed = sorted((job.name, job.conclusion) for job in run.jobs if job.required and job.conclusion != "success")
         return hashlib.sha256(json.dumps(failed, separators=(",", ":")).encode()).hexdigest()
 
-    def _intent(self, raw: dict, work: Work, control: dict) -> Intent:
+    def _intent(self, raw: dict, work: ConversationClassificationRequest, control: dict) -> Intent:
         kind, arguments = cast(Any, str(raw["type"])), dict(raw.get("arguments", {}))
         digest = _intent_digest(self.repository, self.pr_number, work, kind, arguments)
         return Intent(
@@ -556,8 +607,8 @@ class PrReadinessActivities:
             True,
             kind in _MUTATIONS,
             arguments,
-            str(work.payload["base_head"]),
-            str(work.payload["policy_digest"]),
+            work.base_head,
+            work.policy_digest,
         )
 
     def _intent_declarations(self, control: dict) -> list[dict]:
@@ -655,7 +706,11 @@ class PrReadinessActivities:
         )
 
     @staticmethod
-    def _log_agent_error(kind: str, work: Work, error: agents.AgentProtocolError) -> None:
+    def _log_agent_error(
+        kind: str,
+        work: CodeRequest | ReviewRequest | ConversationClassificationRequest,
+        error: agents.AgentProtocolError,
+    ) -> None:
         category = (
             error.result_category.value
             if error.result_category is not None
@@ -676,22 +731,10 @@ class PrReadinessActivities:
             work.operation,
         )
 
-    @staticmethod
-    def _effect(kind: str, work: Work, *, capability_available: bool = True) -> EffectResult:
-        kind = cast(Any, kind)
-        return EffectResult(
-            kind,
-            work.epoch,
-            work.head,
-            capability_available,
-            operation=work.operation,
-            capability_available=capability_available,
-        )
-
     def _immutable(
         self,
         kind: str,
-        value: Work | ReadinessCommand,
+        value: ConversationPublicationRequest | ReadinessCommand,
         body: str,
         *,
         compatible_bodies: tuple[str, ...] = (),
@@ -713,14 +756,20 @@ class PrReadinessActivities:
         )
 
 
-def _intent_digest(repository: str, pr: int, work: Work, kind: str, arguments: dict) -> str:
+def _intent_digest(
+    repository: str,
+    pr: int,
+    work: ConversationClassificationRequest,
+    kind: str,
+    arguments: dict,
+) -> str:
     value = {
         "repository": repository,
         "pr": pr,
         "epoch": work.epoch,
         "head": work.head,
-        "base": work.payload["base_head"],
-        "policy": work.payload["policy_digest"],
+        "base": work.base_head,
+        "policy": work.policy_digest,
         "type": kind,
         "arguments": arguments,
     }
