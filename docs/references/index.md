@@ -3,11 +3,11 @@
 ## Ariad provenance
 
 - Vendored `using-ariad` package from <https://github.com/henriquebastos/ariad>
-  at Git revision `9222ffeb0711634db367676d5911eaa8f0030daa`: package version
-  `0.2.0`, method digest
-  `55dd4fc024fba15769ef354e783f68235e33fef766e950886bcecb535224ed19`,
+  at Git revision `7521d53983039bd808051d34bdcc56faec3277da`: package version
+  `0.2.1`, method digest
+  `9257e4a6b9542dc5536af2bd17e7d60a9784711faaaa926591278f4be7f8371f`,
   package digest
-  `ef362ad80254ac1b9615c420116da1e7844043a82bc6dfa7307e0e5d0f41be65`,
+  `82abd3545b6d456649bc33fddb19671939ab512dd0249050a25fe7600df25572`,
   copied complete from `skills/using-ariad` to
   `.agents/skills/using-ariad` on 2026-08-09.
 
