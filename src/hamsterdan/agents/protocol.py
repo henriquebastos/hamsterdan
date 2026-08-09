@@ -380,7 +380,7 @@ def _validate_conversation(data: JSONDict, request: ConversationRequest) -> Conv
         if not isinstance(intent, dict):
             _fail("intent must be an object")
         intent = cast(JSONDict, intent)
-        _exact(intent, {"type", "arguments", "mutation", "explicit", "confidence", "confirmation"})
+        _exact(intent, {"type", "arguments", "mutation", "explicit", "confidence"})
         declared = allowed.get(intent["type"])
         if declared is None or not isinstance(intent["arguments"], dict) or len(intent["arguments"]) > _MAX_ITEMS:
             _fail("unauthorized intent or arguments")
@@ -392,16 +392,12 @@ def _validate_conversation(data: JSONDict, request: ConversationRequest) -> Conv
             _fail("intent arguments differ from declaration")
         if isinstance(expected_arguments, dict) and set(intent["arguments"]) != set(expected_arguments):
             _fail("intent arguments differ from declaration")
-        if type(intent["explicit"]) is not bool or type(intent["confirmation"]) is not bool:
+        if type(intent["explicit"]) is not bool:
             _fail("invalid intent authorization flags")
         if mutation and not intent["explicit"]:
             _fail("mutation intent was not explicit")
-        if intent["confirmation"] and not declared.get("confirmation_available", False):
-            _fail("mutation confirmation is not currently available")
         if declared.get("requires_explicit", False) and not intent["explicit"]:
             _fail("intent requires explicit request")
-        if declared.get("requires_confirmation", False) and not mutation:
-            _fail("only mutation intents can require confirmation")
         json.dumps(intent["arguments"])
     return ConversationResult(
         repository=cast(str, data["repository"]),

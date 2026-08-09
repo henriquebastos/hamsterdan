@@ -1,16 +1,32 @@
 """JSON-faithful values for the replacement PR-readiness workflow."""
 
-from dataclasses import dataclass, field, replace
+from dataclasses import field
+from typing import Any, Literal
+
+from pydantic import ConfigDict, TypeAdapter
+from pydantic.dataclasses import dataclass
 
 
-@dataclass(frozen=True)
-class Seed:
+class WorkflowModel:
+    """Strict, frozen, JSON-faithful workflow value."""
+
+    def dump(self) -> dict[str, Any]:
+        """Return the canonical JSON payload for a workflow value."""
+        return TypeAdapter(type(self)).dump_python(self, mode="json")
+
+    def validated_update(self, **changes: object):
+        """Return a fully revalidated update rather than an unchecked model copy."""
+        return type(self)(**(self.dump() | changes))
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Seed(WorkflowModel):
     repository_id: str
     pr_number: int
 
 
-@dataclass(frozen=True)
-class Admission:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Admission(WorkflowModel):
     repository_id: str
     pr_number: int
     head: str
@@ -23,14 +39,14 @@ class Admission:
     conversation_resolution: bool = False
 
 
-@dataclass(frozen=True)
-class Lifecycle:
-    status: str
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Lifecycle(WorkflowModel):
+    status: Literal["draft", "merged", "closed"]
     head: str
 
 
-@dataclass(frozen=True)
-class Control:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Control(WorkflowModel):
     repository_id: str
     pr_number: int
     epoch: int
@@ -43,9 +59,23 @@ class Control:
     required_approvals: int = 0
     conversation_resolution: bool = False
     revision: int = 0
-    admission_relation: str = "new"
+    admission_relation: Literal["new", "confirmed", "superseded", "same_head", "same_head_basis_changed"] = "new"
     provisional_head: str = ""
-    actions: str = "discovering"
+    actions: Literal[
+        "discovering",
+        "capability_unavailable",
+        "running",
+        "waiting",
+        "green",
+        "flaky_green",
+        "failed",
+        "reproduced",
+        "rerun_requested",
+        "queued",
+        "requested",
+        "canceled",
+        "unavailable",
+    ] = "discovering"
     run_id: str = ""
     attempt: int = 0
     rerun_requested: bool = False
@@ -55,7 +85,7 @@ class Control:
     repair_used: bool = False
     repair_fingerprint: str = ""
     actions_observation: str = ""
-    review: str = "pending"
+    review: Literal["pending", "clear", "blocking", "unable"] = "pending"
     findings: list[dict] = field(default_factory=list)
     finding_lineage: list[dict] = field(default_factory=list)
     findings_published: bool = False
@@ -69,9 +99,6 @@ class Control:
     mergeable: bool = False
     conflict: bool = False
     provisional: bool = False
-    mutation_pending: bool = False
-    pending_intent_digest: str = ""
-    pending_intent: dict = field(default_factory=dict)
     change_in_flight: bool = False
     repair_in_flight: bool = False
     repair_recovery_required: bool = False
@@ -101,24 +128,34 @@ class Control:
     wait: str = "actions, coordinating review, and human review"
 
 
-@dataclass(frozen=True)
-class Dormant:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Dormant(WorkflowModel):
     repository_id: str
     pr_number: int
     last_epoch: int
     head: str
 
 
-@dataclass(frozen=True)
-class Terminal:
-    status: str
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Terminal(WorkflowModel):
+    status: Literal["success", "abort"]
     last_epoch: int
     head: str
 
 
-@dataclass(frozen=True)
-class Work:
-    kind: str
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Work(WorkflowModel):
+    kind: Literal[
+        "review",
+        "actions_discovery",
+        "actions_rerun",
+        "finding",
+        "conversation",
+        "change",
+        "repair",
+        "dashboard",
+        "reminder",
+    ]
     epoch: int
     head: str
     operation: str = ""
@@ -130,23 +167,25 @@ class Work:
             object.__setattr__(self, "operation", f"{self.kind}:{self.epoch}:{self.head}:{self.sequence}")
 
 
-@dataclass(frozen=True)
-class ReviewResult:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewResult(WorkflowModel):
     epoch: int
     head: str
-    status: str
+    status: Literal["clear", "blocking", "unable"]
     findings: list[dict]
     lineage: list[dict]
     operation: str = ""
 
 
-@dataclass(frozen=True)
-class ActionsObservation:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ActionsObservation(WorkflowModel):
     epoch: int
     head: str
     run_id: str
     attempt: int
-    conclusion: str
+    conclusion: Literal[
+        "unavailable", "queued", "requested", "waiting", "in_progress", "success", "failure", "canceled"
+    ]
     fingerprint: str = ""
     capability_available: bool = True
     observation: str = ""
@@ -159,8 +198,8 @@ class ActionsObservation:
             object.__setattr__(self, "observation", f"{self.run_id}:{self.attempt}:{self.conclusion}")
 
 
-@dataclass(frozen=True)
-class HumanObservation:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class HumanObservation(WorkflowModel):
     epoch: int
     head: str
     requested: bool
@@ -177,8 +216,8 @@ class HumanObservation:
     capability_available: bool = True
 
 
-@dataclass(frozen=True)
-class ConversationObservation:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ConversationObservation(WorkflowModel):
     epoch: int
     head: str
     authorized: bool
@@ -189,30 +228,41 @@ class ConversationObservation:
     association: str = ""
 
 
-@dataclass(frozen=True)
-class Intent:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Intent(WorkflowModel):
     epoch: int
     head: str
-    kind: str
+    kind: Literal[
+        "reply",
+        "status",
+        "acknowledge",
+        "dismiss",
+        "defer",
+        "snooze",
+        "resume",
+        "reassign",
+        "change",
+        "update_base",
+        "resolve_conflict",
+    ]
     digest: str
     authorized: bool
-    confirmed: bool
     blocking: bool
     arguments: dict = field(default_factory=dict)
     base_head: str = ""
     policy_digest: str = ""
 
 
-@dataclass(frozen=True)
-class IntentBatch:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class IntentBatch(WorkflowModel):
     epoch: int
     head: str
     intents: list[dict]
 
 
-@dataclass(frozen=True)
-class EffectResult:
-    kind: str
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class EffectResult(WorkflowModel):
+    kind: Literal["finding", "conversation", "change", "repair", "dashboard", "reminder", "readiness"]
     epoch: int
     head: str
     ok: bool
@@ -227,15 +277,15 @@ class EffectResult:
     agent_cleanup_category: str = ""
 
 
-@dataclass(frozen=True)
-class Reminder:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Reminder(WorkflowModel):
     epoch: int
     head: str
     sequence: int = 0
 
 
-@dataclass(frozen=True)
-class ReadinessCommand:
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReadinessCommand(WorkflowModel):
     epoch: int
     head: str
     operation: str = ""
@@ -247,8 +297,6 @@ def workflow_wait(control: Control) -> str:
     """Project the single highest-priority external wait from current gates."""
     if control.provisional:
         return "verified head admission"
-    if control.mutation_pending:
-        return "mutation confirmation"
     if control.conflict:
         return "conflict resolution"
     if control.change_in_flight:
@@ -303,9 +351,9 @@ def update(control: Control, *, preserve_dashboard_request: bool = False, **chan
     if not preserve_dashboard_request:
         changes.setdefault("dashboard_requested", False)
         changes.setdefault("dashboard_operation", "")
-    changed = replace(control, **changes)
+    changed = control.validated_update(**changes)
     if "wait" not in changes:
-        changed = replace(changed, wait=workflow_wait(changed))
+        changed = changed.validated_update(wait=workflow_wait(changed))
     return changed
 
 
@@ -329,7 +377,6 @@ def workflow_gates_ready(control: Control) -> bool:
             not any(
                 (
                     control.provisional,
-                    control.mutation_pending,
                     control.change_in_flight,
                     control.repair_in_flight,
                 )

@@ -7,6 +7,7 @@ import json
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
+from typing import Any, cast
 
 from hamsterdan.agents import AgentRunner
 from hamsterdan.contracts.readiness import (
@@ -254,7 +255,7 @@ class PrReadinessApplication:
             self._deliver(
                 "human_observation",
                 human,
-                f"reconcile:human:{control.epoch}:{control.revision}:{_digest(asdict(human))}",
+                f"reconcile:human:{control.epoch}:{control.revision}:{_digest(human.dump())}",
             )
         current = self.host.control
         if current is not None:
@@ -324,7 +325,7 @@ class PrReadinessApplication:
             control.head,
             str(run.id),
             run.attempt,
-            conclusion,
+            cast(Any, conclusion),
             fingerprint,
             True,
             observation,
@@ -332,7 +333,7 @@ class PrReadinessApplication:
             control.base_head,
             control.policy_digest,
         )
-        self._deliver("actions_observation", value, f"reconcile:actions:{control.epoch}:{_digest(asdict(value))}")
+        self._deliver("actions_observation", value, f"reconcile:actions:{control.epoch}:{_digest(value.dump())}")
 
     def _target_epoch(self, head: str) -> int:
         assert self.host is not None

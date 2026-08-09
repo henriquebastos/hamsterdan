@@ -131,7 +131,6 @@ class Runner:
         self.conversations += 1
         self.requests.append(request)
         text = str(request.comment_context.get("text", ""))
-        pending = request.dashboard.get("pending_intent", {})
         if text == "Please fix the finding":
             intents = [
                 {
@@ -140,23 +139,16 @@ class Runner:
                     "mutation": True,
                     "explicit": True,
                     "confidence": 1,
-                    "confirmation": False,
                 }
             ]
-        elif (
-            text == "This is not a confirmation"
-            and isinstance(pending, dict)
-            or text.startswith("Confirm the pending change mutation with digest")
-            and isinstance(pending, dict)
-        ) and pending.get("arguments"):
+        elif text == "Please fix it":
             intents = [
                 {
-                    "type": "change",
-                    "arguments": pending["arguments"],
-                    "mutation": True,
-                    "explicit": True,
+                    "type": "reply",
+                    "arguments": {"message": "Please clarify the requested change."},
+                    "mutation": False,
+                    "explicit": False,
                     "confidence": 1,
-                    "confirmation": True,
                 }
             ]
         else:
@@ -167,7 +159,6 @@ class Runner:
                     "mutation": False,
                     "explicit": False,
                     "confidence": 1,
-                    "confirmation": False,
                 }
             ]
         return ConversationResult(
@@ -286,7 +277,7 @@ def test_merged_is_terminal_success_without_merge_commit_identity(tmp_path: Path
     subject.close()
 
 
-def test_mention_conversation_uses_current_dashboard_and_exact_two_comment_confirmation(tmp_path: Path) -> None:
+def test_mention_conversation_executes_explicit_mutation_once_and_clarifies_ambiguity(tmp_path: Path) -> None:
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner)
@@ -305,43 +296,15 @@ def test_mention_conversation_uses_current_dashboard_and_exact_two_comment_confi
     assert request.dashboard["findings"] == []
     assert request.gates[0] == {"name": "overall", "ready": True, "blocker": ""}
     subject.route_comment(delivery_id="change", comment_id=32, text="@hamster-dan Please fix the finding", **common)
-    control = subject.host.control  # type: ignore[union-attr]
-    assert runner.codes == 0 and control is not None and control.mutation_pending
-    assert any(
-        "@hamster-dan" in comment["body"] and control.pending_intent_digest in comment["body"]
-        for comment in authority.transport.comments
-    )
+    assert runner.codes == 1
     subject.route_comment(
-        delivery_id="not-confirmation",
+        delivery_id="ambiguous",
         comment_id=33,
-        text="@hamster-dan This is not a confirmation",
-        **common,
-    )
-    assert runner.codes == 0
-    control = subject.host.control  # type: ignore[union-attr]
-    assert control is not None and control.mutation_pending
-    assert any("couldn't interpret" in comment["body"] for comment in authority.transport.comments)
-    subject.route_comment(
-        delivery_id="wrong-digest",
-        comment_id=34,
-        text=f"@hamster-dan Confirm the pending change mutation with digest {'0' * 64}",
-        **common,
-    )
-    assert runner.codes == 0
-    subject.route_comment(
-        delivery_id="confirm",
-        comment_id=35,
-        text=f"@hamster-dan Confirm the pending change mutation with digest {control.pending_intent_digest}",
+        text="@hamster-dan Please fix it",
         **common,
     )
     assert runner.codes == 1
-    subject.route_comment(
-        delivery_id="duplicate-confirmation",
-        comment_id=36,
-        text=f"@hamster-dan Confirm the pending change mutation with digest {control.pending_intent_digest}",
-        **common,
-    )
-    assert runner.codes == 1
+    assert any("clarify" in comment["body"] for comment in authority.transport.comments)
     subject.close()
 
 

@@ -11,7 +11,7 @@ from hamsterdan.agents import ConversationResult as AgentConversationResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import ActionsObservation, Control, ReadinessCommand, Work
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
-from hamsterdan.host.activities import PrReadinessActivities, _confirmation_text, _intent_digest, activity_definitions
+from hamsterdan.host.activities import PrReadinessActivities, activity_definitions
 from hamsterdan.host.git_publish import GitPublishError, GitPublishResult, PublicationCategory, payload_digest
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
 
@@ -796,7 +796,6 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
                 "mutation": False,
                 "explicit": False,
                 "confidence": 1,
-                "confirmation": False,
             }
             return AgentConversationResult(
                 request.repository,
@@ -830,7 +829,7 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
     assert "no workflow change" in result.intents[0]["arguments"]["message"]
 
 
-def test_confirmation_requires_exact_human_text_pending_arguments_and_current_fence() -> None:
+def test_explicit_mutation_intent_is_immediately_authorized() -> None:
     operations = object.__new__(PrReadinessActivities)
     operations.repository = "owner/repo"
     operations.pr_number = 7
@@ -840,19 +839,10 @@ def test_confirmation_requires_exact_human_text_pending_arguments_and_current_fe
         "a" * 40,
         payload={"base_head": "b" * 40, "policy_digest": "policy"},
     )
-    item = {"type": "change", "arguments": {"request": "fix the finding"}, "confirmation": True}
-    digest = _intent_digest(operations.repository, operations.pr_number, work, "change", item["arguments"])
-    control = {
-        "pending_intent": {"kind": "change", "arguments": item["arguments"]},
-        "pending_intent_digest": digest,
-    }
-    exact = {"text": _confirmation_text("change", digest)}
+    item = {"type": "change", "arguments": {"request": "fix the finding"}}
 
-    assert operations._confirmation_matches(item, exact, control, work)
-    assert not operations._confirmation_matches(item, {"text": "please do it"}, control, work)
-    assert not operations._confirmation_matches(item, {"text": _confirmation_text("change", "0" * 64)}, control, work)
-    assert not operations._confirmation_matches(
-        item | {"arguments": {"request": "different change"}}, exact, control, work
-    )
-    stale = replace(work, payload=work.payload | {"policy_digest": "new-policy"})
-    assert not operations._confirmation_matches(item, exact, control, stale)
+    intent = operations._intent(item, work, {})
+
+    assert intent.authorized is True
+    assert intent.blocking is True
+    assert intent.arguments == item["arguments"]

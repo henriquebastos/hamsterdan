@@ -223,7 +223,6 @@ def test_valid_conversation_selects_declared_intent() -> None:
                 "mutation": False,
                 "explicit": False,
                 "confidence": 0.9,
-                "confirmation": False,
             }
         ],
     )
@@ -241,7 +240,6 @@ def test_valid_conversation_selects_declared_intent() -> None:
                 "mutation": False,
                 "explicit": False,
                 "confidence": 1,
-                "confirmation": False,
             },
             {
                 "type": "reply",
@@ -249,7 +247,6 @@ def test_valid_conversation_selects_declared_intent() -> None:
                 "mutation": False,
                 "explicit": False,
                 "confidence": 1,
-                "confirmation": False,
             },
         ],
     ],
@@ -273,20 +270,17 @@ def test_conversation_requires_exactly_one_raw_intent(intents: list[dict[str, ob
         _validate_result("conversation", result_for(request, intents=intents), request)
 
 
-def test_conversation_instructions_stage_explicit_mutation_before_confirmation() -> None:
+def test_conversation_instructions_authorize_only_explicit_unambiguous_mutation() -> None:
     instructions = AmpExecuteRunner._instructions("conversation", object())
 
     assert "current durable dashboard" in instructions
     assert "readiness questions" in instructions
     assert "current blockers, readiness, or status" in instructions
     assert "overall gate is authoritative" in instructions
-    assert "internal response capabilities" in instructions
-    assert "user-visible commands" in instructions
-    assert "emit exactly one reply" in instructions
-    assert "Put the concrete edit and its scope" in instructions
-    assert "emit only the mutation intent with confirmation=false" in instructions
-    assert "pending kind, arguments, and digest" in instructions
-    assert "Never treat an unconfirmed request as authorized execution" in instructions
+    assert "Choose exactly one declared intent" in instructions
+    assert "explicit, unambiguous request with concrete scope" in instructions
+    assert "authorized immediately" in instructions
+    assert "asking for clarification" in instructions
 
 
 def test_coding_instructions_forbid_disabling_scenario_controls_instead_of_repairing() -> None:
@@ -297,7 +291,7 @@ def test_coding_instructions_forbid_disabling_scenario_controls_instead_of_repai
     assert "report unchanged or unable" in instructions
 
 
-def test_unconfirmed_mutation_is_staged_but_unavailable_confirmation_is_rejected() -> None:
+def test_explicit_mutation_is_accepted_but_undeclared_intent_is_rejected() -> None:
     request = ConversationRequest(
         "owner/repo",
         1,
@@ -309,7 +303,7 @@ def test_unconfirmed_mutation_is_staged_but_unavailable_confirmation_is_rejected
         {},
         [],
         [],
-        [{"type": "apply", "mutation": True, "arguments": ["id"], "requires_confirmation": True}],
+        [{"type": "apply", "mutation": True, "arguments": ["id"]}],
     )
     intent = {
         "type": "apply",
@@ -317,15 +311,11 @@ def test_unconfirmed_mutation_is_staged_but_unavailable_confirmation_is_rejected
         "mutation": True,
         "explicit": True,
         "confidence": 1,
-        "confirmation": False,
     }
     assert isinstance(
         _validate_result("conversation", result_for(request, intents=[intent]), request), ConversationResult
     )
-    intent["confirmation"] = True
-    with pytest.raises(AgentProtocolError, match="confirmation is not currently available"):
-        _validate_result("conversation", result_for(request, intents=[intent]), request)
-    intent.update(type="invented", confirmation=False)
+    intent.update(type="invented")
     with pytest.raises(AgentProtocolError, match="unauthorized"):
         _validate_result("conversation", result_for(request, intents=[intent]), request)
 

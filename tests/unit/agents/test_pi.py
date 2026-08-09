@@ -281,7 +281,6 @@ def test_conversation_and_code_preserve_strict_output_correlation() -> None:
         "mutation": False,
         "explicit": True,
         "confidence": 1,
-        "confirmation": False,
     }
     conversation_result = {
         **{name: getattr(conversation, name) for name in ("repository", "pull_request", "epoch", "head", "base")},

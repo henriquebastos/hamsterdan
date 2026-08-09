@@ -4,9 +4,10 @@
    identity rather than a human publisher pretending to be automation.
 2. **The Net owns coordination.** Provider APIs and agents perform bounded work;
    they do not hide the workflow loop.
-3. **Human judgment stays explicit.** Natural conversation may select bounded,
-   typed host controls, but guarded mutations require a second explicit
-   confirmation bound to the exact pending request and current authority.
+3. **Human intent stays explicit.** Natural conversation may select bounded,
+   typed host controls. An authorized human's explicit, unambiguous mutation
+   instruction executes immediately; ambiguity produces clarification without
+   mutation. Current-authority fencing remains mandatory at execution.
 4. **Credentials stop at the trusted host.** Agent convenience never justifies
    leaking installation authority into a prompt, checkout, subprocess, or orb.
 5. **Effects are explainable and recoverable.** Identity, correlation, fencing,

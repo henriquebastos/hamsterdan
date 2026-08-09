@@ -25,10 +25,10 @@ def result(
     agent_cleanup: str = "",
 ) -> EffectResult:
     return EffectResult(
-        "change",
-        2,
-        "a" * 40,
-        ok,
+        kind="change",
+        epoch=2,
+        head="a" * 40,
+        ok=ok,
         operation="change:diagnostic",
         publication_category=category,
         agent_result_category=agent_result,

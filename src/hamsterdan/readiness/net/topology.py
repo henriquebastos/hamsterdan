@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict
 from types import SimpleNamespace
 
 from petrus.impetus.dsl import BuiltNet, NetSpec, arc, direct, petri_guard, petri_handler
@@ -209,17 +208,17 @@ def _admit(binding, outputs):
     admission = Admission(**raw)
     confirms = isinstance(prior, dict) and admission.head == prior.get("provisional_head")
     control = Control(
-        admission.repository_id,
-        admission.pr_number,
-        epoch,
-        admission.head,
-        admission.base_head,
-        admission.strict_base,
-        admission.base_current,
-        admission.policy_digest,
-        admission.required_checks,
-        admission.required_approvals,
-        admission.conversation_resolution,
+        repository_id=admission.repository_id,
+        pr_number=admission.pr_number,
+        epoch=epoch,
+        head=admission.head,
+        base_head=admission.base_head,
+        strict_base=admission.strict_base,
+        base_current=admission.base_current,
+        policy_digest=admission.policy_digest,
+        required_checks=admission.required_checks,
+        required_approvals=admission.required_approvals,
+        conversation_resolution=admission.conversation_resolution,
         admission_relation="confirmed" if confirms else "superseded" if prior.get("epoch") else "new",
         repair_used=prior.get("repair_used", False) if confirms else False,
         repair_fingerprint=prior.get("repair_fingerprint", "") if confirms else "",
@@ -272,7 +271,7 @@ def _admit(binding, outputs):
             value = Reminder(epoch, admission.head)
         else:
             value = review_work if target == "work.review" else actions_work
-        routed[output.target] = (Token(output.color, asdict(value)),)
+        routed[output.target] = (Token(output.color, (value).dump()),)
     return routed
 
 
@@ -336,8 +335,8 @@ def _retry_review(binding, outputs):
         review_operation=work.operation,
     )
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
-        outputs[1].target: (Token(outputs[1].color, asdict(work)),),
+        outputs[0].target: (Token(outputs[0].color, (changed).dump()),),
+        outputs[1].target: (Token(outputs[1].color, (work).dump()),),
     }
 
 
@@ -364,9 +363,6 @@ def _refresh_basis(binding, outputs):
         review_attempts=1,
         findings_published=False,
         finding_publication_requested=False,
-        mutation_pending=False,
-        pending_intent_digest="",
-        pending_intent={},
         announced=False,
         readiness_operation="",
         readiness_requested=False,
@@ -413,7 +409,7 @@ def _refresh_basis(binding, outputs):
         value = (
             changed if str(output.target) == "current" else review if str(output.target) == "work.review" else actions
         )
-        routed[output.target] = (Token(output.color, asdict(value)),)
+        routed[output.target] = (Token(output.color, (value).dump()),)
     return routed
 
 
@@ -439,7 +435,7 @@ def fold_review(control: Control, result: ReviewResult) -> Control:
 def _accept_review(binding, outputs):
     control, result = _control_value(binding, ReviewResult)
     folded = fold_review.implementation(control, result)
-    routed = {outputs[0].target: (Token(outputs[0].color, asdict(folded)),)}
+    routed = {outputs[0].target: (Token(outputs[0].color, (folded).dump()),)}
     publishable = [finding for finding in folded.findings if finding.get("disposition") in {"new", "still_open"}]
     if publishable:
         out = outputs[1]
@@ -452,8 +448,8 @@ def _accept_review(binding, outputs):
             payload=payload,
         )
         folded = update(folded, finding_operation=work.operation)
-        routed[outputs[0].target] = (Token(outputs[0].color, asdict(folded)),)
-        routed[out.target] = (Token(out.color, asdict(work)),)
+        routed[outputs[0].target] = (Token(outputs[0].color, (folded).dump()),)
+        routed[out.target] = (Token(out.color, (work).dump()),)
     return routed
 
 
@@ -570,15 +566,9 @@ def fold_intent(control: Control, value: Intent) -> Control:
     mutation = value.blocking and value.kind in {"change", "update_base", "resolve_conflict"}
     if not mutation:
         return control
-    if value.confirmed:
-        return control
-    return update(
-        control,
-        mutation_pending=True,
-        pending_intent_digest=value.digest,
-        pending_intent=asdict(value),
-        wait="mutation confirmation",
-    )
+    # Mutation work is authorized from the parallel intent basis in this same
+    # cycle. Control remains unchanged here; there is no staged confirmation.
+    return control
 
 
 @direct
@@ -605,9 +595,6 @@ def fold_effect(control: Control, result: EffectResult) -> Control:
                 control,
                 provisional=True,
                 provisional_head=result.provisional_head,
-                mutation_pending=False,
-                pending_intent_digest="",
-                pending_intent={},
                 change_in_flight=False,
                 repair_in_flight=False,
                 repair_recovery_required=False,
@@ -722,17 +709,17 @@ def _basis_done(c: Control, value: ActionsObservation) -> bool:
 @direct
 def rerun_work(c: Control, value: ActionsObservation) -> Work:
     del c
-    return Work("actions_rerun", value.epoch, value.head)
+    return Work(kind="actions_rerun", epoch=value.epoch, head=value.head)
 
 
 def _rerun(binding, outputs):
     c, value = _control_value(binding, ActionsObservation)
-    payload = effect_payload(c, {"actions": asdict(value)})
+    payload = effect_payload(c, {"actions": (value).dump()})
     work = Work(
-        "actions_rerun",
-        value.epoch,
-        value.head,
-        operation("actions-rerun", c, payload=payload),
+        kind="actions_rerun",
+        epoch=value.epoch,
+        head=value.head,
+        operation=operation("actions-rerun", c, payload=payload),
         payload=payload,
     )
     changed = update(
@@ -744,30 +731,30 @@ def _rerun(binding, outputs):
         wait="same-head rerun",
     )
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
-        outputs[1].target: (Token(outputs[1].color, asdict(work)),),
+        outputs[0].target: (Token(outputs[0].color, (changed).dump()),),
+        outputs[1].target: (Token(outputs[1].color, (work).dump()),),
     }
 
 
 def _repair(binding, outputs):
     c, value = _control_value(binding, ActionsObservation)
-    payload = effect_payload(c, {"actions": asdict(value)})
+    payload = effect_payload(c, {"actions": (value).dump()})
     operation_id = operation("repair", c, payload=payload)
     changed = update(c, repair_in_flight=True, mutation_operation=operation_id, wait="repair")
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
+        outputs[0].target: (Token(outputs[0].color, (changed).dump()),),
         outputs[1].target: (
             Token(
                 outputs[1].color,
-                asdict(
+                (
                     Work(
-                        "repair",
-                        value.epoch,
-                        value.head,
-                        operation_id,
+                        kind="repair",
+                        epoch=value.epoch,
+                        head=value.head,
+                        operation=operation_id,
                         payload=payload,
                     )
-                ),
+                ).dump(),
             ),
         ),
     }
@@ -777,33 +764,30 @@ def _mutation(c: Control, value: Intent) -> bool:
     return (
         _current(c, value)
         and value.authorized
-        and value.confirmed
+        and value.blocking
         and value.kind in {"change", "update_base", "resolve_conflict"}
-        and c.mutation_pending
-        and value.digest == c.pending_intent_digest
         and not any((c.provisional, c.change_in_flight, c.repair_in_flight))
     )
 
 
 def _authorize_change(binding, outputs):
     c, value = _control_value(binding, Intent)
-    payload = effect_payload(c, {"intent": asdict(value)})
+    payload = effect_payload(c, {"intent": (value).dump()})
     operation_id = operation("change", c, payload=payload)
     changed = update(
         c,
         change_in_flight=True,
-        mutation_pending=False,
-        pending_intent_digest="",
-        pending_intent={},
         mutation_operation=operation_id,
         wait="change",
     )
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
+        outputs[0].target: (Token(outputs[0].color, (changed).dump()),),
         outputs[1].target: (
             Token(
                 outputs[1].color,
-                asdict(Work("change", value.epoch, value.head, operation_id, payload=payload)),
+                (
+                    Work(kind="change", epoch=value.epoch, head=value.head, operation=operation_id, payload=payload)
+                ).dump(),
             ),
         ),
     }
@@ -815,7 +799,7 @@ def _replyable(c: Control, value: Intent) -> bool:
 
 def _authorize_reply(binding, outputs):
     c, value = _control_value(binding, Intent)
-    payload = effect_payload(c, {"intent": asdict(value)})
+    payload = effect_payload(c, {"intent": (value).dump()})
     work = Work(
         "conversation",
         value.epoch,
@@ -825,13 +809,13 @@ def _authorize_reply(binding, outputs):
     )
     changed = update(
         c,
-        conversation_pending=asdict(work),
+        conversation_pending=(work).dump(),
         conversation_attempts=1,
         conversation_capability_blocking=False,
     )
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
-        outputs[1].target: (Token(outputs[1].color, asdict(work)),),
+        outputs[0].target: (Token(outputs[0].color, (changed).dump()),),
+        outputs[1].target: (Token(outputs[1].color, (work).dump()),),
     }
 
 
@@ -853,8 +837,8 @@ def _reissue_reply(binding, outputs):
         wait="conversation reply",
     )
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
-        outputs[1].target: (Token(outputs[1].color, asdict(work)),),
+        outputs[0].target: (Token(outputs[0].color, (changed).dump()),),
+        outputs[1].target: (Token(outputs[1].color, (work).dump()),),
     }
 
 
@@ -869,8 +853,14 @@ def _unpack_intents(binding, outputs):
 
 @direct
 def conversation_work(c: Control, value: ConversationObservation) -> Work:
-    payload = effect_payload(c, {"comment": asdict(value), "control": asdict(c)})
-    return Work("conversation", value.epoch, value.head, operation("conversation", c, payload=payload), payload=payload)
+    payload = effect_payload(c, {"comment": (value).dump(), "control": (c).dump()})
+    return Work(
+        kind="conversation",
+        epoch=value.epoch,
+        head=value.head,
+        operation=operation("conversation", c, payload=payload),
+        payload=payload,
+    )
 
 
 def ready(c: Control) -> bool:
@@ -890,23 +880,23 @@ def _request_dashboard(c: Control) -> bool:
 
 def _dashboard(binding, outputs):
     c = Control(**binding.tokens[0].data)
-    payload = effect_payload(c, {"control": asdict(c), "projected_revision": c.revision + 1})
+    payload = effect_payload(c, {"control": (c).dump(), "projected_revision": c.revision + 1})
     operation_id = operation("dashboard", c, payload=payload)
     changed = update(c, preserve_dashboard_request=True, dashboard_requested=True, dashboard_operation=operation_id)
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
+        outputs[0].target: (Token(outputs[0].color, (changed).dump()),),
         outputs[1].target: (
             Token(
                 outputs[1].color,
-                asdict(
+                (
                     Work(
-                        "dashboard",
-                        c.epoch,
-                        c.head,
-                        operation_id,
-                        payload=effect_payload(changed, {"control": asdict(changed)}),
+                        kind="dashboard",
+                        epoch=c.epoch,
+                        head=c.head,
+                        operation=operation_id,
+                        payload=effect_payload(changed, {"control": changed.dump()}),
                     )
-                ),
+                ).dump(),
             ),
         ),
     }
@@ -925,11 +915,19 @@ def _announce(binding, outputs):
         wait="readiness publication",
     )
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(changed)),),
+        outputs[0].target: (Token(outputs[0].color, (changed).dump()),),
         outputs[1].target: (
             Token(
                 outputs[1].color,
-                asdict(ReadinessCommand(c.epoch, c.head, operation_id, c.base_head, c.policy_digest)),
+                (
+                    ReadinessCommand(
+                        epoch=c.epoch,
+                        head=c.head,
+                        operation=operation_id,
+                        base_head=c.base_head,
+                        policy_digest=c.policy_digest,
+                    )
+                ).dump(),
             ),
         ),
     }
@@ -980,7 +978,6 @@ def _reminder_due(c: Control, timer: Reminder) -> bool:
             (
                 busy,
                 c.provisional,
-                c.mutation_pending,
                 c.change_in_flight,
                 c.repair_in_flight,
                 c.conflict,
@@ -1015,8 +1012,8 @@ def _remind(binding, outputs):
         payload,
     )
     return {
-        outputs[0].target: (Token(outputs[0].color, asdict(nxt)),),
-        outputs[1].target: (Token(outputs[1].color, asdict(work)),),
+        outputs[0].target: (Token(outputs[0].color, (nxt).dump()),),
+        outputs[1].target: (Token(outputs[1].color, (work).dump()),),
     }
 
 

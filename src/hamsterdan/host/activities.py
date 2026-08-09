@@ -7,8 +7,9 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import asdict
+from typing import Any, cast
 
-from petrus.motus.activity import ActivityDefinition, DataclassPayloadConverter, activity
+from petrus.motus.activity import ActivityDefinition, activity
 
 from hamsterdan import agents
 from hamsterdan.contracts.readiness import (
@@ -28,6 +29,7 @@ from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import ActionsRunSnapshot, GitHubBoundaryError
 
 from .git_publish import GitPublishError, HostGitPublisher, PublicationCategory, payload_digest
+from .payloads import PydanticPayloadConverter
 
 CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]
@@ -125,7 +127,7 @@ class PrReadinessActivities:
         return ReviewResult(
             work.epoch,
             work.head,
-            result.status,
+            cast(Any, result.status),
             [*result.findings, *terminal],
             result.lineage,
             work.operation,
@@ -158,7 +160,7 @@ class PrReadinessActivities:
             work.head,
             str(run.id),
             run.attempt,
-            conclusion,
+            cast(Any, conclusion),
             fingerprint,
             operation=work.operation,
             base_head=str(work.payload["base_head"]),
@@ -229,8 +231,8 @@ class PrReadinessActivities:
             raw = result.intents
             if len(raw) != 1:
                 raise agents.AgentProtocolError("conversation must select exactly one intent")
-            if raw[0].get("confirmation") and not self._confirmation_matches(raw[0], comment, control, work):
-                raise agents.AgentProtocolError("human comment did not exactly confirm the pending mutation")
+            if raw[0].get("type") == "status":
+                raw = [{"type": "reply", "arguments": {"message": self._status(control)}}]
         except agents.AgentProtocolError as error:
             self._log_agent_error("conversation", work, error)
             if error.canceled:
@@ -242,11 +244,9 @@ class PrReadinessActivities:
                     "mutation": False,
                     "explicit": False,
                     "confidence": 1,
-                    "confirmation": False,
                 }
             ]
-        raw = self._confirmation_replies(raw, control, work)
-        intents = [asdict(self._intent(item, work, control)) for item in raw]
+        intents = [(self._intent(item, work, control)).dump() for item in raw]
         self._fence(work)
         return IntentBatch(work.epoch, work.head, intents)
 
@@ -355,6 +355,7 @@ class PrReadinessActivities:
         return self._code(work, "change")
 
     def _code(self, work: Work, kind: str) -> EffectResult:
+        kind = cast(Any, kind)
         if self.git_publisher is None:
             raise RuntimeError("host Git publishing is not configured")
         intent = work.payload.get("intent", {})
@@ -545,62 +546,19 @@ class PrReadinessActivities:
         return hashlib.sha256(json.dumps(failed, separators=(",", ":")).encode()).hexdigest()
 
     def _intent(self, raw: dict, work: Work, control: dict) -> Intent:
-        kind, arguments = str(raw["type"]), dict(raw.get("arguments", {}))
+        kind, arguments = cast(Any, str(raw["type"])), dict(raw.get("arguments", {}))
         digest = _intent_digest(self.repository, self.pr_number, work, kind, arguments)
-        confirmed = bool(raw.get("confirmation", False))
-        if confirmed and (
-            digest != control.get("pending_intent_digest") or kind != control.get("pending_intent", {}).get("kind")
-        ):
-            confirmed = False
         return Intent(
             work.epoch,
             work.head,
             kind,
             digest,
             True,
-            confirmed,
             kind in _MUTATIONS,
             arguments,
             str(work.payload["base_head"]),
             str(work.payload["policy_digest"]),
         )
-
-    def _confirmation_matches(self, item: dict, comment: dict, control: dict, work: Work) -> bool:
-        pending = control.get("pending_intent")
-        kind = item.get("type")
-        arguments = item.get("arguments")
-        if not isinstance(pending, dict) or not isinstance(kind, str) or not isinstance(arguments, dict):
-            return False
-        digest = _intent_digest(self.repository, self.pr_number, work, kind, arguments)
-        return (
-            kind == pending.get("kind")
-            and arguments == pending.get("arguments")
-            and digest == control.get("pending_intent_digest")
-            and str(comment.get("text", "")).strip().casefold() == _confirmation_text(kind, digest).casefold()
-        )
-
-    def _confirmation_replies(self, raw: list[dict], control: dict, work: Work) -> list[dict]:
-        values: list[dict] = []
-        for item in raw:
-            if item.get("type") == "status":
-                values.append({"type": "reply", "arguments": {"message": self._status(control)}})
-                continue
-            values.append(item)
-            if item.get("type") in _MUTATIONS:
-                if item.get("confirmation"):
-                    message = f"Confirmed {item['type']} mutation. Authorization matches; execution can proceed."
-                else:
-                    digest = _intent_digest(
-                        self.repository, self.pr_number, work, str(item["type"]), item.get("arguments", {})
-                    )
-                    mention = f"@{self.publisher.bot_login.removesuffix('[bot]')}"
-                    message = (
-                        f"The {item['type']} mutation is staged, not authorized. Reply "
-                        f"`{mention} {_confirmation_text(str(item['type']), digest)}` to confirm exactly. "
-                        "I keep the wheel behind a lock for a reason."
-                    )
-                values.append({"type": "reply", "arguments": {"message": message}})
-        return values
 
     def _intent_declarations(self, control: dict) -> list[dict]:
         arguments = {
@@ -621,9 +579,7 @@ class PrReadinessActivities:
                 "type": name,
                 "mutation": name in _MUTATIONS,
                 "arguments": arguments[name],
-                "confirmation_available": name == control.get("pending_intent", {}).get("kind"),
                 "requires_explicit": name in _MUTATIONS,
-                "requires_confirmation": name in _MUTATIONS,
             }
             for name in _ALLOWED
         ]
@@ -692,7 +648,7 @@ class PrReadinessActivities:
             f"Observed base: `{c.get('base_head')}` · Base current: {c.get('base_current')}\n\n"
             f"Mergeable: {c.get('mergeable')} · Conflict: {c.get('conflict')} · "
             f"Unresolved conversations: {c.get('unresolved_conversations')}\n\n"
-            f"Mutation pending: {c.get('mutation_pending')} · Provisional: {c.get('provisional')}\n\n"
+            f"Mutation in flight: {c.get('change_in_flight')} · Provisional: {c.get('provisional')}\n\n"
             f"Capabilities: {capabilities}\n\nReadiness: **{'ready' if gates_ready else 'not ready'}** · "
             f"Waiting for: {wait}\n\nAdvisory only; humans keep merge authority. "
             "I keep the dashboard current, not the merge button."
@@ -722,6 +678,7 @@ class PrReadinessActivities:
 
     @staticmethod
     def _effect(kind: str, work: Work, *, capability_available: bool = True) -> EffectResult:
+        kind = cast(Any, kind)
         return EffectResult(
             kind,
             work.epoch,
@@ -770,10 +727,6 @@ def _intent_digest(repository: str, pr: int, work: Work, kind: str, arguments: d
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def _confirmation_text(kind: str, digest: str) -> str:
-    return f"confirm the pending {kind} mutation with digest {digest}"
-
-
 def activity_definitions(operations: PrReadinessActivities) -> dict[str, ActivityDefinition]:
     names = (
         "review",
@@ -789,5 +742,5 @@ def activity_definitions(operations: PrReadinessActivities) -> dict[str, Activit
         "readiness_publish",
     )
     return {
-        name: activity(getattr(operations, name), name=name, converter=DataclassPayloadConverter()) for name in names
+        name: activity(getattr(operations, name), name=name, converter=PydanticPayloadConverter()) for name in names
     }

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
@@ -191,8 +190,8 @@ class PrReadinessHost:
         if history_path.exists():
             engine = load()
         else:
-            seed = Seed(authority.repository, authority.pr_number)
-            marking = Marking({NetPath("seed"): (Token("Seed", asdict(seed)),)})
+            seed = Seed(repository_id=authority.repository, pr_number=authority.pr_number)
+            marking = Marking({NetPath("seed"): (Token("Seed", (seed).dump()),)})
             engine = Engine.create(
                 built.net,
                 instance_id,
@@ -216,7 +215,7 @@ class PrReadinessHost:
         return tuple(token.data for token in self.engine.marking.place(NetPath(path)))
 
     def deliver(self, source: str, value, identity: str):
-        token = Token(type(value).__name__, asdict(value))
+        token = Token(type(value).__name__, (value).dump())
         return self.engine.deliver(source, token, identity=identity)
 
     def drain(self, limit: int = 500) -> None:

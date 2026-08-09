@@ -72,7 +72,7 @@ def actions_rerun(work: Work) -> ActionsObservation:
 
 @activity(name="conversation", converter=DataclassPayloadConverter())
 def conversation(work: Work) -> IntentBatch:
-    intent = Intent(work.epoch, work.head, "read", "digest", True, True, False)
+    intent = Intent(epoch=work.epoch, head=work.head, kind="reply", digest="digest", authorized=True, blocking=False)
     return IntentBatch(work.epoch, work.head, [asdict(intent)])
 
 
@@ -491,15 +491,14 @@ def test_failed_conversation_publication_reissues_the_same_fenced_operation() ->
     conversation_occurrence, conversation_invocation = drive_until_activity(subject, dispatch, "conversation")
     conversation_work = work_input(conversation_invocation)
     reply = Intent(
-        1,
-        "h1",
-        "reply",
-        "status",
-        True,
-        True,
-        False,
-        {"message": "Safe status"},
-        "base",
+        epoch=1,
+        head="h1",
+        kind="reply",
+        digest="status",
+        authorized=True,
+        blocking=False,
+        arguments={"message": "Safe status"},
+        base_head="base",
     )
     dispatch.complete(conversation_occurrence, asdict(IntentBatch(1, "h1", [asdict(reply)])))
     drive_bounded(subject)
@@ -553,15 +552,14 @@ def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -
     drive_bounded(subject)
     conversation_occurrence, _ = drive_until_activity(subject, dispatch, "conversation")
     reply = Intent(
-        1,
-        "h1",
-        "reply",
-        "status",
-        True,
-        True,
-        False,
-        {"message": "Safe status"},
-        "base",
+        epoch=1,
+        head="h1",
+        kind="reply",
+        digest="status",
+        authorized=True,
+        blocking=False,
+        arguments={"message": "Safe status"},
+        base_head="base",
     )
     dispatch.complete(conversation_occurrence, asdict(IntentBatch(1, "h1", [asdict(reply)])))
     drive_bounded(subject)
@@ -709,7 +707,7 @@ def test_irrelevant_lifecycle_fact_is_retired_while_dormant() -> None:
     subject = engine()
     admit(subject, "h1", "admit")
     deliver(subject, "lifecycle_observation", Lifecycle("draft", "h1"), "draft")
-    deliver(subject, "lifecycle_observation", Lifecycle("open", "h1"), "irrelevant")
+    deliver(subject, "lifecycle_observation", Lifecycle(status="draft", head="other"), "irrelevant")
 
     assert values(subject, "dormant")
     assert not values(subject, "lifecycle")
@@ -808,10 +806,8 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
         True,
         True,
         provisional=True,
-        mutation_pending=True,
-        pending_intent_digest="d",
     )
-    intent = Intent(1, "h1", "change", "d", True, True, True, base_head="base")
+    intent = Intent(epoch=1, head="h1", kind="change", digest="d", authorized=True, blocking=True, base_head="base")
     assert _mutation(control, intent) is False
     requested = Control(
         "repo",
@@ -876,24 +872,39 @@ def test_used_repair_fingerprint_names_human_wait_and_cannot_repair_again() -> N
 
 
 def test_intent_arguments_are_isolated_and_only_authorized_settled_controls_fold() -> None:
-    one = Intent(1, "h", "dismiss", "a", True, True, False)
-    two = Intent(1, "h", "dismiss", "b", True, True, False)
+    one = Intent(epoch=1, head="h", kind="dismiss", digest="a", authorized=True, blocking=False)
+    two = Intent(epoch=1, head="h", kind="dismiss", digest="b", authorized=True, blocking=False)
     one.arguments["findings"] = ["f1"]
     assert two.arguments == {}
     control = Control("repo", 7, 1, "h", "base", True, True, findings=[{"id": "f1", "disposition": "new"}])
-    denied = Intent(1, "h", "dismiss", "x", False, True, False, {"findings": ["f1"]})
+    denied = Intent(
+        epoch=1, head="h", kind="dismiss", digest="x", authorized=False, blocking=False, arguments={"findings": ["f1"]}
+    )
     assert fold_intent.implementation(control, denied).findings[0]["disposition"] == "new"
     assert fold_intent.implementation(control, one).findings[0]["disposition"] == "dismiss"
-    snoozed = fold_intent.implementation(control, Intent(1, "h", "snooze", "s", True, True, False))
+    snoozed = fold_intent.implementation(
+        control, Intent(epoch=1, head="h", kind="snooze", digest="s", authorized=True, blocking=False)
+    )
     assert snoozed.reminder_snoozed is True
     assert (
-        fold_intent.implementation(snoozed, Intent(1, "h", "resume", "r", True, True, False)).reminder_snoozed is False
+        fold_intent.implementation(
+            snoozed, Intent(epoch=1, head="h", kind="resume", digest="r", authorized=True, blocking=False)
+        ).reminder_snoozed
+        is False
     )
 
     unavailable = Control("repo", 7, 1, "h", "base", True, True, review="unable")
     disposed = fold_intent.implementation(
         unavailable,
-        Intent(1, "h", "dismiss", "d", True, True, False, {"findings": ["missing"]}),
+        Intent(
+            epoch=1,
+            head="h",
+            kind="dismiss",
+            digest="d",
+            authorized=True,
+            blocking=False,
+            arguments={"findings": ["missing"]},
+        ),
     )
     assert disposed.review == "unable"
 
@@ -902,7 +913,7 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
     @activity(name="conversation", converter=DataclassPayloadConverter())
     def reminder_intent(work: Work) -> IntentBatch:
         kind = work.payload["comment"]["text"]
-        intent = Intent(work.epoch, work.head, kind, kind, True, True, False)
+        intent = Intent(epoch=work.epoch, head=work.head, kind=kind, digest=kind, authorized=True, blocking=False)
         return IntentBatch(work.epoch, work.head, [asdict(intent)])
 
     definitions = tuple(reminder_intent if item.declaration.name == "conversation" else item for item in ACTIVITIES)
@@ -961,7 +972,9 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
     complete(
         dispatch,
         "conversation",
-        IntentBatch(1, "h1", [asdict(Intent(1, "h1", "snooze", "s", True, True, False))]),
+        IntentBatch(
+            1, "h1", [asdict(Intent(epoch=1, head="h1", kind="snooze", digest="s", authorized=True, blocking=False))]
+        ),
     )
     drive_bounded(subject)
     for _ in range(10):
@@ -973,7 +986,9 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
     complete(
         dispatch,
         "conversation",
-        IntentBatch(1, "h1", [asdict(Intent(1, "h1", "resume", "r", True, True, False))]),
+        IntentBatch(
+            1, "h1", [asdict(Intent(epoch=1, head="h1", kind="resume", digest="r", authorized=True, blocking=False))]
+        ),
     )
     drive_bounded(subject)
     drive_until_activity(subject, dispatch, "reminder_publish")
@@ -1002,7 +1017,7 @@ def test_reminder_asks_for_assignment_but_pauses_for_mutation_and_stops_after_re
     # A zero-approval policy can be ready while the workflow still helps the
     # author obtain the desired human review rather than inventing a reviewer.
     assert _reminder_due(control, timer)
-    assert not _reminder_due(replace(control, mutation_pending=True), timer)
+    assert not _reminder_due(replace(control, change_in_flight=True), timer)
     assert not _reminder_due(replace(control, distinct_reviewer_approved=True), timer)
 
 
@@ -1030,7 +1045,7 @@ def test_quiescent_control_projects_one_priority_ordered_external_wait() -> None
 
     assert workflow_wait(ready_control) == "terminal lifecycle"
     assert workflow_wait(replace(ready_control, actions="waiting")) == "GitHub Actions"
-    assert workflow_wait(replace(ready_control, mutation_pending=True)) == "mutation confirmation"
+    assert workflow_wait(replace(ready_control, change_in_flight=True)) == "change result"
     assert workflow_wait(replace(ready_control, conflict=True, actions="waiting")) == "conflict resolution"
 
 
@@ -1094,13 +1109,12 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
     @activity(name="conversation", converter=DataclassPayloadConverter())
     def change_intent(work: Work) -> IntentBatch:
         intent = Intent(
-            work.epoch,
-            work.head,
-            "change",
-            "authorized",
-            True,
-            False,
-            True,
+            epoch=work.epoch,
+            head=work.head,
+            kind="change",
+            digest="authorized",
+            authorized=True,
+            blocking=True,
             base_head=str(work.payload["base_head"]),
             policy_digest=str(work.payload["policy_digest"]),
         )
@@ -1121,24 +1135,19 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
         IntentBatch(
             1,
             "h1",
-            [asdict(Intent(1, "h1", "change", "authorized", True, False, True, base_head="base"))],
-        ),
-    )
-    drive_bounded(subject)
-    assert values(subject, "current")[0]["mutation_pending"] is True
-    subject.deliver(
-        "conversation_observation",
-        token(ConversationObservation(1, "h1", True, "confirm")),
-        identity="confirm-change",
-    )
-    drive_until_activity(subject, dispatch, "conversation")
-    complete(
-        dispatch,
-        "conversation",
-        IntentBatch(
-            1,
-            "h1",
-            [asdict(Intent(1, "h1", "change", "authorized", True, True, True, base_head="base"))],
+            [
+                asdict(
+                    Intent(
+                        epoch=1,
+                        head="h1",
+                        kind="change",
+                        digest="authorized",
+                        authorized=True,
+                        blocking=True,
+                        base_head="base",
+                    )
+                )
+            ],
         ),
     )
     drive_bounded(subject)
@@ -1288,34 +1297,19 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
                 )
 
 
-def test_confirmation_requires_the_exact_pending_intent_and_authority_basis() -> None:
-    confirmed = Intent(
-        1,
-        "h1",
-        "change",
-        "intent-digest",
-        True,
-        True,
-        True,
+def test_mutation_requires_current_authority_basis() -> None:
+    authorized = Intent(
+        epoch=1,
+        head="h1",
+        kind="change",
+        digest="intent-digest",
+        authorized=True,
+        blocking=True,
         base_head="base-1",
         policy_digest="policy-1",
     )
-    no_pending = Control("repo", 7, 1, "h1", "base-1", True, True, "policy-1")
-    assert _mutation(no_pending, confirmed) is False
-
-    pending = Control(
-        "repo",
-        7,
-        1,
-        "h1",
-        "base-1",
-        True,
-        True,
-        "policy-1",
-        mutation_pending=True,
-        pending_intent_digest="intent-digest",
-    )
-    assert _mutation(pending, confirmed) is True
+    current = Control("repo", 7, 1, "h1", "base-1", True, True, "policy-1")
+    assert _mutation(current, authorized) is True
     stale_basis = Control(
         "repo",
         7,
@@ -1325,10 +1319,8 @@ def test_confirmation_requires_the_exact_pending_intent_and_authority_basis() ->
         True,
         True,
         "policy-2",
-        mutation_pending=True,
-        pending_intent_digest="intent-digest",
     )
-    assert _mutation(stale_basis, confirmed) is False
+    assert _mutation(stale_basis, authorized) is False
 
 
 def test_external_second_attempt_is_green_but_only_an_impetus_rerun_is_flaky() -> None:
