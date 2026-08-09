@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
+import os
+import re
+import stat
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from hamsterdan.agents import AgentCleanupCategory, AgentResultCategory
 from hamsterdan.contracts.readiness import EffectResult
 
 from .git_publish import GitPublishError, PublicationCategory
+
+_SHA = re.compile(r"[0-9a-f]{40}\Z")
+_GITHUB_REMOTE = re.compile(
+    r"https://github\.com/([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/([A-Za-z0-9._-]{1,100})\.git\Z",
+    re.ASCII,
+)
+_SETUP_MARKER = b"atomic-two-ref-v1\n"
+_MAIN_REF = "refs/heads/main"
+_QUALIFICATION_REF = "refs/heads/hamsterdan/ds11-live-v4"
 
 
 class QualificationCategory(StrEnum):
@@ -17,6 +30,162 @@ class QualificationCategory(StrEnum):
 
     REPLAY_BOUNDARY = "replay_boundary"
     CLEANUP_UNVERIFIED = "cleanup_unverified"
+
+
+class SetupCategory(StrEnum):
+    """Closed outcomes for private qualification setup observations and effects."""
+
+    ALREADY_SPENT = "already_spent"
+    FENCE_UNAVAILABLE = "fence_unavailable"
+    BOUNDARY_UNAVAILABLE = "boundary_unavailable"
+    OBSERVATION_UNCONFIRMED = "observation_unconfirmed"
+    PUSH_UNCONFIRMED = "push_unconfirmed"
+
+
+@dataclass(frozen=True)
+class SetupPushResult:
+    """Coordinate-free evidence for one admitted atomic push command."""
+
+    attempted: bool
+    command_succeeded: bool
+    category: SetupCategory | None = None
+
+    def sanitized(self) -> dict[str, object]:
+        return {
+            "attempted": self.attempted,
+            "command_succeeded": self.command_succeeded,
+            "category": "" if self.category is None else self.category.value,
+        }
+
+
+@dataclass(frozen=True)
+class SetupObservationResult:
+    """Private-input-free evidence for a setup observation."""
+
+    confirmed: bool
+    category: SetupCategory | None = None
+
+    def sanitized(self) -> dict[str, object]:
+        return {
+            "confirmed": self.confirmed,
+            "category": "" if self.category is None else self.category.value,
+        }
+
+
+def observe_setup_boundary(observer: Callable[[], bool]) -> SetupObservationResult:
+    """Run a private setup observation without allowing its exception to render."""
+
+    try:
+        confirmed = observer()
+    except Exception:  # noqa: BLE001 - private observation exceptions must never cross the evidence boundary
+        return SetupObservationResult(False, SetupCategory.BOUNDARY_UNAVAILABLE)
+    if type(confirmed) is not bool:
+        return SetupObservationResult(False, SetupCategory.BOUNDARY_UNAVAILABLE)
+    if not confirmed:
+        return SetupObservationResult(False, SetupCategory.OBSERVATION_UNCONFIRMED)
+    return SetupObservationResult(True)
+
+
+class AtomicSetupPush:
+    """Durably admit one exact atomic two-ref push without retaining private inputs."""
+
+    def __init__(self, spent_path: Path) -> None:
+        self._spent_path = Path(spent_path)
+
+    def push(
+        self,
+        remote: str,
+        base: str,
+        head: str,
+        runner: Callable[[tuple[str, ...]], int],
+    ) -> SetupPushResult:
+        command = _setup_command(remote, base, head)
+        try:
+            fence = self._spend()
+        except Exception:  # noqa: BLE001 - private fence exceptions must never cross the evidence boundary
+            return SetupPushResult(False, False, SetupCategory.FENCE_UNAVAILABLE)
+        if fence is not None:
+            return SetupPushResult(False, False, fence)
+        try:
+            returncode = runner(command)
+        except Exception:  # noqa: BLE001 - private command exceptions must never cross the evidence boundary
+            return SetupPushResult(True, False, SetupCategory.BOUNDARY_UNAVAILABLE)
+        if type(returncode) is not int:
+            return SetupPushResult(True, False, SetupCategory.BOUNDARY_UNAVAILABLE)
+        if returncode != 0:
+            return SetupPushResult(True, False, SetupCategory.PUSH_UNCONFIRMED)
+        return SetupPushResult(True, True)
+
+    def _spend(self) -> SetupCategory | None:
+        parent_descriptor: int | None = None
+        try:
+            parent = self._spent_path.parent
+            name = self._spent_path.name
+            if name in {"", ".", ".."}:
+                return SetupCategory.FENCE_UNAVAILABLE
+            parent_descriptor = os.open(
+                parent,
+                os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+            )
+            metadata = os.fstat(parent_descriptor)
+            if (
+                stat.S_ISLNK(metadata.st_mode)
+                or not stat.S_ISDIR(metadata.st_mode)
+                or stat.S_IMODE(metadata.st_mode) != 0o700
+                or metadata.st_uid != os.geteuid()
+            ):
+                return SetupCategory.FENCE_UNAVAILABLE
+            try:
+                descriptor = os.open(
+                    name,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                    dir_fd=parent_descriptor,
+                )
+            except FileExistsError:
+                return (
+                    SetupCategory.ALREADY_SPENT
+                    if _valid_setup_marker(parent_descriptor, name)
+                    else SetupCategory.FENCE_UNAVAILABLE
+                )
+            try:
+                os.fchmod(descriptor, 0o600)
+                marker = os.fstat(descriptor)
+                if (
+                    not stat.S_ISREG(marker.st_mode)
+                    or stat.S_IMODE(marker.st_mode) != 0o600
+                    or marker.st_uid != os.geteuid()
+                ):
+                    return SetupCategory.FENCE_UNAVAILABLE
+                if os.write(descriptor, _SETUP_MARKER) != len(_SETUP_MARKER):
+                    return SetupCategory.FENCE_UNAVAILABLE
+                os.fsync(descriptor)
+                entry = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+                if (
+                    (entry.st_dev, entry.st_ino) != (marker.st_dev, marker.st_ino)
+                    or not stat.S_ISREG(entry.st_mode)
+                    or stat.S_IMODE(entry.st_mode) != 0o600
+                    or entry.st_uid != os.geteuid()
+                ):
+                    return SetupCategory.FENCE_UNAVAILABLE
+            finally:
+                os.close(descriptor)
+            os.fsync(parent_descriptor)
+            current_parent = parent.lstat()
+            current_marker = self._spent_path.lstat()
+            if (
+                (current_parent.st_dev, current_parent.st_ino) != (metadata.st_dev, metadata.st_ino)
+                or stat.S_ISLNK(current_parent.st_mode)
+                or (current_marker.st_dev, current_marker.st_ino) != (marker.st_dev, marker.st_ino)
+                or stat.S_ISLNK(current_marker.st_mode)
+            ):
+                return SetupCategory.FENCE_UNAVAILABLE
+        except OSError:
+            return SetupCategory.FENCE_UNAVAILABLE
+        finally:
+            if parent_descriptor is not None:
+                os.close(parent_descriptor)
+        return None
 
 
 @dataclass
@@ -144,3 +313,59 @@ def _category[Category: StrEnum](value: object, vocabulary: type[Category], name
         return vocabulary(value)
     except ValueError:
         raise ValueError(f"{name} category is outside the closed vocabulary") from None
+
+
+def _setup_command(remote: str, base: str, head: str) -> tuple[str, ...]:
+    if type(remote) is not str or type(base) is not str or type(head) is not str:
+        raise ValueError("atomic setup command is invalid")
+    try:
+        match = _GITHUB_REMOTE.fullmatch(remote)
+        repository = "" if match is None else match.group(2)
+        valid = (
+            match is not None
+            and ".." not in repository
+            and not repository.startswith(".")
+            and not repository.endswith(".")
+            and _SHA.fullmatch(base) is not None
+            and _SHA.fullmatch(head) is not None
+            and base != head
+        )
+    except TypeError, ValueError:
+        valid = False
+    if not valid:
+        raise ValueError("atomic setup command is invalid") from None
+    return (
+        "git",
+        "push",
+        "--atomic",
+        remote,
+        f"{base}:{_MAIN_REF}",
+        f"{head}:{_QUALIFICATION_REF}",
+    )
+
+
+def _valid_setup_marker(parent_descriptor: int, name: str) -> bool:
+    try:
+        metadata = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISREG(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or metadata.st_uid != os.geteuid()
+            or metadata.st_size != len(_SETUP_MARKER)
+        ):
+            return False
+        descriptor = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent_descriptor)
+        try:
+            current = os.fstat(descriptor)
+            value = os.read(descriptor, len(_SETUP_MARKER) + 1)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        return False
+    return (
+        (current.st_dev, current.st_ino) == (metadata.st_dev, metadata.st_ino)
+        and stat.S_IMODE(current.st_mode) == 0o600
+        and current.st_uid == os.geteuid()
+        and value == _SETUP_MARKER
+    )

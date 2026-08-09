@@ -89,3 +89,14 @@ violating the coordinate-free evidence contract without causing remote mutation.
 All local authority and target material was erased after fresh RSA-OAEP transfer
 to durable Puck cleanup custody. The exact-target deletion obligation remains
 open and no cleanup or provider authority survives.
+
+The resulting credential-free hardening slice now provides one reusable setup
+boundary for private target observations and the exact atomic two-ref push.
+Observation, fence, runner, timeout, and arbitrary ordinary exceptions collapse
+to closed coordinate-free evidence. The push admits only one canonical GitHub
+remote and two exact lowercase object IDs, durably spends a mode-`0600` marker
+through a held mode-`0700` directory descriptor before execution, and refuses
+every subsequent call. File/directory sync, symlink, restrictive-umask, short
+write, parent-substitution, noncanonical URL, hostile string-subclass, and
+diagnostic canaries are qualified deterministically. This enables a future newly
+authorized setup attempt; it does not authorize one or establish live support.

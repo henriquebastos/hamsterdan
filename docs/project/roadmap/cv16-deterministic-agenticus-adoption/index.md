@@ -99,3 +99,14 @@ target coordinate in transient thread output, violating the retained evidence
 contract. Credential, fixture, receiver, and local coordinate material were
 erased after encrypted transfer to newly confirmed Puck cleanup custody. This
 does not establish live support or authorize another attempt.
+
+The credential-free qualification hardening follow-up now catches private
+pre/post observation exceptions without retaining command arguments or
+diagnostics and admits only the exact canonical two-ref Git push. A durable
+mode-`0600` marker is created and file/directory synced through a held private
+directory descriptor before the runner can execute; every later invocation is
+closed. Deterministic tests cover normalized URL variants, hostile string
+subclasses, timeouts, arbitrary diagnostics, nonzero and malformed runners,
+restrictive umasks, sync/close/short-write failures, symlinks, and parent
+substitution. This resolves the rendering implementation gap only. Cleanup and
+live qualification remain separately authorized future work.

@@ -61,11 +61,12 @@ A subsequent authorized restart created another fresh public empty target. It
 passed credential and exact-target admission plus local atomic-push rehearsal,
 then stopped when its final target read timed out before the push-spent fence.
 No remote mutation or provider work occurred. The timeout traceback rendered the
-coordinate in transient thread output, so future qualification tooling must
-bound subprocess exceptions before they cross the evidence surface. All local
-plaintext and authority were erased after a fresh encrypted transfer to a new
-durable Puck custodian. This target is a second open exact-target cleanup
-obligation; custody is not cleanup authority.
+coordinate in transient thread output. A credential-free follow-up resolves that
+rendering gap: private setup observations and the exact atomic push now sanitize
+ordinary exceptions, retain only closed evidence, and durably spend before the
+runner can execute. All local plaintext and authority were erased after a fresh
+encrypted transfer to a new durable Puck custodian. This target is a second open
+exact-target cleanup obligation; custody is not cleanup authority.
 
 Neither target coordinate may enter Git history or durable evidence. Resolution
 is externally deferred to each Puck custody workflow and requires separately

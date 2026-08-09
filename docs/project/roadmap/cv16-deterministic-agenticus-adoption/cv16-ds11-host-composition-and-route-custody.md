@@ -214,6 +214,26 @@ authority. Exact-target deletion and not-found verification remain separately
 authorized future work. This stopped setup neither reclassifies either provider
 attempt nor establishes live support.
 
+The credential-free hardening follow-up adds a reusable closed boundary for
+private setup observations and the exact irreversible command. Observation,
+fence, runner, timeout, and arbitrary ordinary exceptions retain only fixed
+categories and booleans. Command admission requires the exact canonical GitHub
+HTTPS remote string, two distinct lowercase SHA-1 object IDs, and generates only
+the non-forced atomic base/head refspecs. Before execution, a held no-follow
+mode-`0700` directory descriptor owns exclusive marker creation, exact
+mode-`0600` enforcement, inode/entry verification, and file-then-directory sync.
+Existing, malformed, symlinked, partially written, unsynced, or substituted
+fences cannot invoke the runner.
+
+Fifty focused qualification tests cover successful command/evidence shape,
+timeout and arbitrary diagnostic canaries, strict observation results, every
+closed runner outcome, normalized and credential-bearing URL variants, hostile
+string subclasses, exact sync ordering and failures, restrictive umask, parent
+substitution, short write, symlink marker, and restart refusal. The full project
+gate passes 397 Python tests with one provider test deselected, nine Bun tests,
+formatting, Ruff, ty, and source/wheel builds. No secret, GitHub, target, provider,
+or remote operation was used.
+
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
@@ -237,9 +257,8 @@ The two stopped empty targets are distinct cleanup obligations and authorize
 nothing. Future separately authorized cleanup may delete only each exact target
 under its own Puck custody and must verify exact not-found without enumeration or
 unrelated mutation. Any later qualification restart must use newly authorized
-clean revisions, a new target, fixture, credential, and handoff; it must also
-prevent subprocess exceptions from rendering private coordinates before any
-GitHub call. Any closed or uncertain outcome stops without retry. Provider
-authority remains separate and may be requested only after setup passes. Native
-subscription and extra usage remain excluded, and DS12 must not begin before the
-live gate.
+clean revisions, a new target, fixture, credential, and handoff and must route
+every private observation and the one atomic push through the new closed setup
+boundary. Any closed or uncertain outcome stops without retry. Provider authority
+remains separate and may be requested only after setup passes. Native subscription
+and extra usage remain excluded, and DS12 must not begin before the live gate.
