@@ -26,7 +26,10 @@ its second completed one production operation but admitted no changed coding
 result. Publication and agent-result observation now fail closed. A later
 credential-free setup cycle diagnosed the empty-target Git Database restriction
 and was cancelled before its corrected atomic push or provider authority began.
-That exact disposable target remains an explicit cleanup obligation externally
-deferred to the Puck custody workflow. The historical live causes remain
-unchanged and live support remains unaccepted; clean-slate finalization leaves
-no setup, provider, or cleanup authority.
+One fresh authorized restart then passed deterministic admission and rehearsal
+but stopped before its atomic push when the final target read timed out. The
+qualification traceback violated coordinate-free rendering; no remote mutation
+or provider work occurred. Both exact disposable targets remain explicit cleanup
+obligations externally deferred to Puck custody. The historical live causes
+remain unchanged and live support remains unaccepted; no setup, provider, or
+cleanup authority survives.

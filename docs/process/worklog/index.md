@@ -30,3 +30,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-07 — DS11 agent-result admission observation qualified locally](entries/2026-08-07T0934Z-ds11-agent-result-admission-observation-qualified.md)
 - [2026-08-08 — DS11 v4 qualification finalized clean-slate before remote setup](entries/2026-08-08T0221Z-ds11-v4-qualification-finalized-clean-slate.md)
 - [2026-08-08 — Petrus clean-root re-baseline accepted technically](entries/2026-08-08T1423Z-petrus-clean-root-rebaseline-accepted.md)
+- [2026-08-09 — DS11 fresh setup stopped before atomic push](entries/2026-08-09T0403Z-ds11-fresh-setup-stopped-before-atomic-push.md)

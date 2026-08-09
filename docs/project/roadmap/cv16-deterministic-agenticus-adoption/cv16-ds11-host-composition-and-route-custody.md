@@ -2,8 +2,8 @@
 code: CV16.DS11
 level: Delivery Story
 status: Qualified Locally
-status_reason: Deterministic gates pass; clean-slate finalization cancelled a later empty-target setup before remote mutation or provider authority
-updated: 2026-08-08
+status_reason: Deterministic gates pass; a fresh restart stopped at the final pre-push target read without remote mutation or provider authority
+updated: 2026-08-09
 ---
 
 # CV16.DS11 — Host composition and operation-route custody
@@ -185,6 +185,35 @@ coordinate must not enter project history or evidence. Exact-target deletion and
 not-found verification are externally deferred to the Puck custody workflow;
 no cleanup authority remains in Hamsterdan.
 
+## Fresh setup restart checkpoint
+
+A separately authorized restart began from exact clean Hamsterdan
+`a4eb49e840fb3ef3206599a19cdb6ccba7ff470a` and Petrus
+`116b0ddc460c0e04d4ad40c077158bd3498a4860`. The full credential-free gate
+passed 369 Python tests with one provider test deselected, nine Bun tests,
+formatting, Ruff, ty, and source/wheel builds. A fresh one-shot RSA-OAEP handoff
+admitted one user-level GitHub credential and one Navigator-created public empty
+target without rendering either plaintext. Exact target admission passed.
+
+The recreated deterministic fixture contained one base marker and one child
+requested change. Local rehearsal proved exact parent/tree identity, one atomic
+two-ref acceptance, all-or-nothing rejection, and pre-execution refusal of
+one-ref, non-atomic, forced, or mismatched forms. Immediately before the durable
+push-spent fence, the final exact-target branch read timed out. The push command
+was therefore never invoked. Counts are zero remote pushes, refs, PRs, current or
+stale CAS calls, direct-key materializations, provider operations, publications,
+replays, and retries.
+
+The unhandled timeout traceback rendered the private target coordinate in
+transient thread output. That is a qualification evidence-contract failure even
+though it caused no GitHub mutation and the coordinate does not enter project
+history. The credential, private receiver, askpass, fixture, runtime roots, and
+local coordinate were erased. A fresh RSA-OAEP transfer placed only ciphertext
+under confirmed durable Puck custody; neither Puck nor Hamsterdan retains cleanup
+authority. Exact-target deletion and not-found verification remain separately
+authorized future work. This stopped setup neither reclassifies either provider
+attempt nor establishes live support.
+
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
@@ -204,14 +233,13 @@ repositories remain a host resource-trust boundary.
 
 ## Next slice
 
-Clean-slate finalization leaves two explicit choices and authorizes neither.
-A future separately authorized cleanup may delete only the exact disposable
-target and must verify not-found through the external Puck custody workflow. A
-qualification restart must begin from exact clean revisions, recheck the target,
-recreate and rehearse the deterministic fixture, use a fresh GitHub credential
-handoff, and make at most one atomic two-ref push before the one PR and
-current/stale CAS checks. Any closed or uncertain outcome stops without retry.
-Either path requires fresh authorization; none remains. Provider authority
-remains separate and may be requested only after setup passes. Native
+The two stopped empty targets are distinct cleanup obligations and authorize
+nothing. Future separately authorized cleanup may delete only each exact target
+under its own Puck custody and must verify exact not-found without enumeration or
+unrelated mutation. Any later qualification restart must use newly authorized
+clean revisions, a new target, fixture, credential, and handoff; it must also
+prevent subprocess exceptions from rendering private coordinates before any
+GitHub call. Any closed or uncertain outcome stops without retry. Provider
+authority remains separate and may be requested only after setup passes. Native
 subscription and extra usage remain excluded, and DS12 must not begin before the
 live gate.

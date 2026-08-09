@@ -2,8 +2,8 @@
 code: CV16
 level: Value
 status: Active
-status_reason: Direct-key production composition is qualified; clean-slate finalization cancelled a later empty-target setup before remote mutation or provider authority
-updated: 2026-08-08
+status_reason: Direct-key composition is qualified; a fresh live setup restart stopped at the final pre-push target read without remote mutation or provider authority
+updated: 2026-08-09
 ---
 
 # CV16 — Deterministic Agenticus adoption
@@ -88,3 +88,14 @@ its authorization before secret access or remote mutation. No ref, PR, CAS,
 direct-key, or provider operation began. All setup material was retired. The
 empty target remains an externally deferred Puck cleanup obligation, and no
 setup, provider, or cleanup authority survives.
+
+A fresh separately authorized restart from exact clean revisions passed the full
+gate, fresh credential and exact empty-target checks, and a recreated local
+atomic two-ref acceptance/rejection rehearsal. The final current-state read
+timed out before the durable push-spent fence, so the remote push command was not
+invoked and ref, PR, CAS, direct-key, provider, publication, replay, and retry
+counts remained zero. An unbounded exception traceback rendered the private
+target coordinate in transient thread output, violating the retained evidence
+contract. Credential, fixture, receiver, and local coordinate material were
+erased after encrypted transfer to newly confirmed Puck cleanup custody. This
+does not establish live support or authorize another attempt.

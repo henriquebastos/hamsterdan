@@ -79,3 +79,13 @@ secret access or remote mutation. All setup and unopened direct-key material was
 retired. Exact-target deletion and not-found verification are externally
 deferred to the Puck custody workflow. No setup, provider, or cleanup authority
 survives clean-slate finalization.
+
+A fresh separately authorized setup restart passed the full deterministic gate,
+fresh credential and exact empty-target admission, and local atomic two-ref
+rehearsal. Its final current-state read timed out before the push-spent fence, so
+no push, ref, PR, CAS, direct-key, provider, publication, or retry began. A
+transient qualification traceback rendered the private target coordinate,
+violating the coordinate-free evidence contract without causing remote mutation.
+All local authority and target material was erased after fresh RSA-OAEP transfer
+to durable Puck cleanup custody. The exact-target deletion obligation remains
+open and no cleanup or provider authority survives.
