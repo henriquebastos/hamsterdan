@@ -7,6 +7,7 @@ It is not imported by the host and no credential value is accepted as input.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -28,6 +29,10 @@ SCENARIO_PATH = Path(".pr-lab/scenario.json")
 CREATABLE_SCENARIOS = ("clean-green", "first-attempt-flake", "hero-review")
 HERO_REVIEWER = "crisbastos"
 BROKER_PATH = Path(".github/workflows/rerun-broker.yml")
+BROKER_VALIDATOR_PATH = Path("tools/rerun_broker.py")
+# Normalized source pair accepted at HBNetwork/demo-pr-readiness@a83e9223f7ffc6b0af919b0b8261fa2578261b41.
+DELEGATED_BROKER_DIGEST = "373195c1935ef1a339526a577a6e3e6c30b9b618a135cfec8bd6fd2ad9c15ef9"
+DELEGATED_VALIDATOR_DIGEST = "2869cce84573f4d3d21202a023f14b6138144667ae1a058cffab7442b7ab767a"
 OLD_MARKER = "impetus-rerun"
 NEW_MARKER = "hamsterdan-rerun"
 LEGACY_BROKER_AUTHORIZATION = (
@@ -98,7 +103,7 @@ def _api(runner: Runner, path: str) -> Any:
     return _json(runner, ("gh", "api", path))
 
 
-def broker_status(text: str) -> str:
+def broker_status(text: str, validator: str | None = None) -> str:
     old_prefix = "startsWith(github.event.comment.body, '<!-- impetus-rerun ')" in text
     old_regex = r"<!-- impetus-rerun run=" in text
     new_prefix = "startsWith(github.event.comment.body, '<!-- hamsterdan-rerun ')" in text
@@ -109,7 +114,21 @@ def broker_status(text: str) -> str:
         return "legacy"
     if new_prefix and new_regex and app_auth and not old_prefix and not old_regex and not legacy_auth:
         return "hamsterdan"
+    if _delegated_broker(text, validator):
+        return "hamsterdan"
     return "malformed"
+
+
+def _delegated_broker(workflow: str, validator: str | None) -> bool:
+    if validator is None:
+        return False
+    return (
+        _broker_digest(workflow) == DELEGATED_BROKER_DIGEST and _broker_digest(validator) == DELEGATED_VALIDATOR_DIGEST
+    )
+
+
+def _broker_digest(source: str) -> str:
+    return hashlib.sha256(source.replace("\r\n", "\n").strip().encode()).hexdigest()
 
 
 def _check(name: str, passed: bool, observed: object) -> dict[str, object]:
@@ -134,6 +153,19 @@ def preflight(runner: Runner = command_runner, *, health_url: str | None = None)
                 "Accept: application/vnd.github.raw+json",
             ),
         )
+        validator = None
+        if "tools/rerun_broker.py" in broker:
+            validator = _run(
+                runner,
+                (
+                    "gh",
+                    "api",
+                    f"/repos/{REPOSITORY}/contents/{BROKER_VALIDATOR_PATH}?ref={DEFAULT_BRANCH}",
+                    "-H",
+                    "Accept: application/vnd.github.raw+json",
+                ),
+            )
+        broker_state = broker_status(broker, validator)
         names = {item.get("name") for item in workflows.get("workflows", []) if isinstance(item, dict)}
         checks.extend(
             (
@@ -144,7 +176,7 @@ def preflight(runner: Runner = command_runner, *, health_url: str | None = None)
                 _check(
                     "required_workflows", WORKFLOWS <= names, sorted(name for name in names if isinstance(name, str))
                 ),
-                _check("default_broker", broker_status(broker) in {"legacy", "hamsterdan"}, broker_status(broker)),
+                _check("default_broker", broker_state in {"legacy", "hamsterdan"}, broker_state),
             )
         )
     except OperatorError as error:
@@ -300,7 +332,9 @@ def prepare_broker(runner: Runner = command_runner) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="hamsterdan-broker-") as temporary:
         checkout = _clone(runner, Path(temporary))
         source = (checkout / BROKER_PATH).read_text(encoding="utf-8")
-        state = broker_status(source)
+        validator_path = checkout / BROKER_VALIDATOR_PATH
+        validator = validator_path.read_text(encoding="utf-8") if validator_path.is_file() else None
+        state = broker_status(source, validator)
         if state == "hamsterdan":
             return {"command": "prepare-broker", "ok": True, "status": "current", "changed": False}
         if state != "legacy" or source.count(OLD_MARKER) != 2 or source.count(LEGACY_BROKER_AUTHORIZATION) != 1:

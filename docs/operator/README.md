@@ -164,12 +164,18 @@ on HBNetwork this command reports the broker as already current:
 scripts/hamsterdan-demo prepare-broker
 ```
 
-It changes only `.github/workflows/rerun-broker.yml`, including the event prefix,
-full-match regex, and human-association gate. The replacement accepts only an
-exact `hamster-dan[bot]` actor of type `Bot`. **Merge that PR only after** host validation,
-healthy webhook ingress, selected-repository routing, and App installation are
-all confirmed. Never count an old marker as Hamsterdan evidence. Never run the
-legacy PAT service and Hamsterdan as concurrent writers.
+On an historical uncut fixture, preparation changes only
+`.github/workflows/rerun-broker.yml`, including the event prefix, full-match
+regex, and human-association gate. The current HBNetwork broker keeps the exact
+`hamster-dan[bot]` actor and `hamsterdan-rerun` prefix in the workflow while
+delegating exact marker and run/head/repository/PR/workflow binding to
+`tools/rerun_broker.py`; the workflow performs one rerun POST only after that
+validation. Preflight validates both files as one contract while retaining the
+accepted historical legacy and inline-Hamsterdan shapes. **Merge a prepared
+cutover PR only after** host validation, healthy webhook ingress,
+selected-repository routing, and App installation are all confirmed. Never
+count an old marker as Hamsterdan evidence. Never run the legacy PAT service and
+Hamsterdan as concurrent writers.
 
 After cutover, create controlled PRs with the current human operator's `gh` and
 git credentials (credentials remain outside agent territory):
