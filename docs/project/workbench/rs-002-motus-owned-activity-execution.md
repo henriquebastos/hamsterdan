@@ -1,5 +1,5 @@
 ---
-status: Active
+status: Completed
 pulled: 2026-08-10
 navigator: Henrique
 source: ../exploration/es1-petri-net-motus-boundary/index.md
@@ -49,8 +49,8 @@ merges.
 | CR-002 Add production Activity Execution policy to Motus | Complete |
 | CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Complete |
 | CR-004 Migrate conversation and eligible provider retries | Complete |
-| CR-005 Reassess residual concern-state ownership | Planned |
-| CR-006 Review, coherence, and documentation | Planned |
+| CR-005 Reassess residual concern-state ownership | Complete |
+| CR-006 Review, coherence, and documentation | Complete |
 
 ## CR-001 scope
 
@@ -213,3 +213,22 @@ PR authority and provider reconciliation remain application-owned.
   review approved the change with no release blockers. The full project gate
   passes 516 Python tests with one provider qualification route deselected,
   nine Bun tests, static analysis, formatting, and both package builds.
+
+### 2026-08-10 — Closed residual ownership and coherence review
+
+- Residual review retries are deliberate fresh semantic reviews with distinct
+  operations; they are not operational Attempts. Actions rerun/repair fields
+  express provider evidence and product budgets. Mutation in-flight fields
+  enforce workflow exclusion. Capability blockers are terminal readiness facts,
+  and reminder rearm is required to establish a fresh Petrus delay instant.
+- `ReviewRequest.review_attempt` was the sole dead duplicate of `sequence` and
+  was removed. No topology changed: the final Net remains 40 places, 138
+  transitions, and 412 arcs.
+- Moving review or coding operational recovery to Motus is deferred until agent
+  failures are classified, Attempt identity reaches agent-route custody, exact
+  evidence/fencing semantics are chosen, and the shared resolver safely owns
+  those Activity modules. Finding publication requires per-finding partial-batch
+  reconciliation before it can use the same execution boundary.
+- Process, project, and product records now agree on the shared-Worker boundary,
+  the independent per-PR Engine/History model, and the retained Net ownership.
+  RS-002 is complete.

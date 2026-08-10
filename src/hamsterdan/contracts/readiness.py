@@ -263,7 +263,6 @@ class ReviewRequest(WorkflowModel):
     prior_findings: list[dict]
     prior_lineage: list[dict]
     sequence: int = 0
-    review_attempt: int = 0
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))

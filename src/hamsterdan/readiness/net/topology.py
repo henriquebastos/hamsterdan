@@ -571,7 +571,6 @@ def _retry_review(binding, outputs):
         policy=policy,
         prior_findings=r.findings,
         prior_lineage=r.finding_lineage,
-        review_attempt=attempt,
     )
     a = a.validated_update(base_current=admission.base_current, admission_relation="same_head")
     r = r.validated_update(review="pending", review_attempts=attempt, review_operation=work.operation)
