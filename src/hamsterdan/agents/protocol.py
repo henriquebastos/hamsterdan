@@ -19,6 +19,7 @@ _SHA = re.compile(r"[0-9a-f]{40,64}")
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}")
 _FINDING_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,47}")
+_LOGIN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
 _MAX_ITEMS, _MAX_TEXT, _MAX_PATH, _MAX_FILE = 100, 20_000, 1024, 2_000_000
 _SECRET_WORDS = ("TOKEN", "PASSWORD", "PASSWD", "SECRET", "CREDENTIAL", "PRIVATE_KEY", "API_KEY")
 
@@ -371,6 +372,29 @@ def _allowed_intents(request: ConversationRequest) -> dict[str, JSONDict]:
     return allowed
 
 
+def _validate_intent_arguments(arguments: JSONDict, mutation: bool) -> None:
+    for name, value in arguments.items():
+        if name in {"request", "message"}:
+            if not _text(value, f"intent {name}").strip():
+                _fail(f"invalid intent {name}")
+        elif name == "assignee":
+            assignee = _text(value, "intent assignee", limit=39)
+            if _LOGIN.fullmatch(assignee) is None:
+                _fail("invalid intent assignee")
+        elif name in {"id", "finding_id"}:
+            finding_id = _text(value, f"intent {name}", limit=48)
+            if _FINDING_ID.fullmatch(finding_id) is None:
+                _fail(f"invalid intent {name}")
+        elif name == "findings":
+            findings = _list(value, "intent findings")
+            if not findings or any(
+                not isinstance(item, str) or _FINDING_ID.fullmatch(item) is None for item in findings
+            ):
+                _fail("invalid intent findings")
+    if mutation and not arguments:
+        _fail("mutation intent lacks concrete scope")
+
+
 def _validate_conversation(data: JSONDict, request: ConversationRequest) -> ConversationResult:
     allowed = _allowed_intents(request)
     intents = _list(data["intents"], "intents")
@@ -398,6 +422,7 @@ def _validate_conversation(data: JSONDict, request: ConversationRequest) -> Conv
             _fail("mutation intent was not explicit")
         if declared.get("requires_explicit", False) and not intent["explicit"]:
             _fail("intent requires explicit request")
+        _validate_intent_arguments(cast(JSONDict, intent["arguments"]), mutation)
         json.dumps(intent["arguments"])
     return ConversationResult(
         repository=cast(str, data["repository"]),

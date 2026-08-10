@@ -5,8 +5,8 @@ existing Hamsterdan capability outside the delivery roadmap.
 
 ## Active
 
-- [RS-001 — Make the PR-readiness Net explicit and maintainable](rs-001-explicit-maintainable-readiness-net.md)
+No Refinement Story is active.
 
 ## Closed
 
-No Refinement Story is closed yet.
+- [RS-001 — Make the PR-readiness Net explicit and maintainable](rs-001-explicit-maintainable-readiness-net.md)

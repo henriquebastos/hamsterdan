@@ -16,7 +16,15 @@ first sandbox organization for real-provider validation.
 - Hamsterdan's outer host is the sole concrete composition root.
 - GitHub App, agent, and PR-readiness subsystems are siblings communicating only
   through neutral typed contracts and host/Engine dispatch.
-- The readiness Net owns workflow decisions. Activities perform external work.
+- The readiness Net owns workflow decisions through one centralized `Authority`
+  token and independent Actions, review, human, mutation, and publication
+  concern tokens. `ReadinessSnapshot` is a relational projection, never a place
+  color or mutable aggregate.
+- Activities perform external work through exact strict Pydantic request/result
+  contracts. Dashboard/readiness continuity is explicit as separate fenced
+  lease, delayed retry, and reissue places.
+- Explicit authorized mutation instructions execute directly. Ambiguous
+  instructions clarify without mutation; there is no confirmation ceremony.
 - GitHub credentials stay host-side and never enter agent territories.
 - External effects are at-least-once, operation-identified, fenced, and
   lookup-first on recovery.

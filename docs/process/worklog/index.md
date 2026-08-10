@@ -32,3 +32,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-08 — Petrus clean-root re-baseline accepted technically](entries/2026-08-08T1423Z-petrus-clean-root-rebaseline-accepted.md)
 - [2026-08-09 — DS11 fresh setup stopped before atomic push](entries/2026-08-09T0403Z-ds11-fresh-setup-stopped-before-atomic-push.md)
 - [2026-08-09 — DS11 setup evidence boundary hardened](entries/2026-08-09T0935Z-ds11-setup-evidence-boundary-hardened.md)
+- [2026-08-10 — PR-readiness Net refinement completed](entries/2026-08-10T0243Z-pr-readiness-net-refinement-completed.md)

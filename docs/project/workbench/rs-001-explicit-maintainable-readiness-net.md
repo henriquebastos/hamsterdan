@@ -1,5 +1,5 @@
 ---
-status: Active
+status: Completed
 pulled: 2026-08-09
 navigator: Henrique
 ---
@@ -133,6 +133,20 @@ never merges remain required.
   token colors; malformed new-schema History fails rather than degrading into
   partially hydrated compatibility values.
 
+### 2026-08-10 — Completed review and maintainer handoff
+
+- Final architecture review found and closed two reachable safety gaps.
+  Terminal Actions observations can no longer release an unrelated mutation
+  repair, and explicit conversation intents now validate concrete argument
+  values before they can authorize repository mutation.
+- The maintainer tour now follows the system outside-in from host custody and
+  reconciliation through the six concern tokens, exact Activities, relational
+  projections, and publication retry continuity. Operator guidance now states
+  the direct-execution and clarification boundary.
+- The full project gate passes with 445 Python tests, one provider test
+  deselected, nine Bun tests, static analysis, formatting, and both package
+  builds. No live GitHub or provider operation was required.
+
 ## Change Requests
 
 | Change Request | Outcome |
@@ -147,7 +161,7 @@ never merges remain required.
 | CR-008 Make dashboard and readiness projection relational | Complete |
 | CR-009 Reduce retirement to proven invariants | Complete |
 | CR-010 Restructure the Net around workflow continuity | Complete |
-| CR-011 Review, coherence, and documentation | Active |
+| CR-011 Review, coherence, and documentation | Complete |
 
 ## Standing execution authorization
 

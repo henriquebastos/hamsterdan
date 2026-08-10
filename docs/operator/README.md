@@ -257,8 +257,9 @@ the first review state.
    the ordinary fenced App repair and advance the head.
 4. After the repaired head settles, Henrique posts `@hamster-dan status`. Capture
    Dan's concise current-gate reply and the refreshed dashboard. If demonstrating
-   a conversational mutation, ask for one bounded follow-up edit, then post the
-   exact digest confirmation Dan supplies; never improvise confirmation text.
+   a conversational mutation, post one explicit bounded instruction. Dan executes
+   an unambiguous authorized instruction directly; an ambiguous request must ask
+   for clarification without changing the repository.
 5. Cris reviews the current head and submits `APPROVE`. Resolve any human inline
    thread if one was created. Capture the final dashboard and readiness advisory,
    then close the rehearsal PR unmerged unless a separately approved demo calls
@@ -284,9 +285,9 @@ GitHub definitively rejects a changed-line anchor as unavailable, Dan falls back
 to one immutable conversation comment; authorization failures and malformed
 payloads fail closed rather than disguising themselves as fallback success.
 Review and conversation agents receive Dan's canonical voice rules. Deterministic
-status, dashboard, reminder, readiness, malformed-request, and mutation-
-confirmation messages follow the same register without changing stable markers,
-operation identities, or exact confirmation grammar. Security and protocol
+status, dashboard, reminder, readiness, malformed-request, and mutation messages
+follow the same register without changing stable markers or operation identities.
+Security and protocol
 failures remain plain and joke-free.
 
 The accepted HBNetwork portfolio is PR 14 at head
@@ -365,10 +366,11 @@ The unresolved thread must continue to block until the reviewer resolves it;
 then inspect `collaboration-clear`.
 
 On the stale and conflict PRs, address `@hamster-dan` with the respective base
-update or conflict-resolution request. Each mutation requires the exact pending
-digest in a second human confirmation. Record the operation identity, old and
-new head, App-authored commit attribution, successful exact-head checks, and
-the final authority inspection. Hamsterdan must use a credential-free agent
+update or conflict-resolution instruction. Each explicit authorized instruction
+executes directly; ambiguous wording must clarify without mutation. Record the
+operation identity, old and new head, App-authored commit attribution,
+successful exact-head checks, and the final authority inspection. Hamsterdan
+must use a credential-free agent
 checkout and host-owned compare-and-swap publication; never update either branch
 manually, force-push, bypass protection, or edit History.
 

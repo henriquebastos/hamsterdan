@@ -1586,6 +1586,46 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
     assert snapshot(subject).dump()["wait"] == "human repair authorization"
 
 
+def test_terminal_actions_observation_does_not_release_a_pending_repair() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    drive_bounded(subject)
+    discovery_occurrence, discovery_invocation = drive_until_activity(subject, dispatch, "actions_discovery")
+    discovery_work = work_input(discovery_invocation)
+    dispatch.complete(discovery_occurrence, action_result(discovery_work, "initial", 1, "success").dump())
+    drive_bounded(subject)
+    first = observed_actions(subject, "external", 1, "failure", "fp", observation="failure-1")
+    subject.deliver("actions_observation", token(first), identity="failure")
+    drive_bounded(subject)
+    rerun_occurrence, rerun_invocation = drive_until_activity(subject, dispatch, "actions_rerun")
+    dispatch.complete(
+        rerun_occurrence,
+        action_result(work_input(rerun_invocation), "rerun", 2, "failure", "fp", observation="failure-2").dump(),
+    )
+    drive_bounded(subject)
+    repair_occurrence, repair_invocation = pending(dispatch, "repair")
+    repair_work = work_input(repair_invocation)
+    assert snapshot(subject).repair_in_flight is True
+
+    terminal = observed_actions(subject, "manual", 3, "success", observation="manual-success")
+    subject.deliver("actions_observation", token(terminal), identity="manual-actions")
+    drive_bounded(subject)
+
+    authority = state(subject, "authority", Authority)
+    mutation = state(subject, "mutation_state", MutationState)
+    intent = Intent(1, "h1", "change", "change", True, True, base_head="base")
+    assert mutation.repair_in_flight is True
+    assert mutation.mutation_operation == repair_work.operation
+    assert _mutation(authority, mutation, intent) is False
+
+    dispatch.complete(
+        repair_occurrence,
+        effect_result("repair", 1, "h1", False, operation=repair_work.operation).dump(),
+    )
+    drive_bounded(subject)
+    assert snapshot(subject).repair_in_flight is False
+
+
 def test_activity_topology_has_complete_retirement_and_no_authority_outputs() -> None:
     net = build_net(1).net
     assert all("merge" not in str(transition) for transition in net.transitions)
@@ -1606,6 +1646,7 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
         "authorize_change",
     ):
         assert "publication_state" not in {str(item.source) for item in net.inputs(NetPath(transition))}
+    assert "mutation_state" not in {str(item.source) for item in net.inputs(NetPath("accept_actions"))}
     reminder_inputs = {str(item.source): item.mode.value for item in net.inputs(NetPath("accept_reminder"))}
     assert reminder_inputs == {"authority": "read", "reminder_result": "consume"}
     assert not net.outputs(NetPath("accept_reminder"))

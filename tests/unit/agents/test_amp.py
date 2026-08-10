@@ -321,6 +321,43 @@ def test_explicit_mutation_is_accepted_but_undeclared_intent_is_rejected() -> No
 
 
 @pytest.mark.parametrize(
+    ("name", "mutation", "arguments", "value"),
+    [
+        ("change", True, ["request"], ""),
+        ("change", True, ["request"], "   "),
+        ("reply", False, ["message"], []),
+        ("reassign", False, ["assignee"], {"login": "octocat"}),
+        ("dismiss", False, ["findings"], "F1"),
+        ("dismiss", False, ["findings"], [""]),
+    ],
+)
+def test_conversation_rejects_malformed_intent_argument_values(name, mutation, arguments, value) -> None:
+    request = ConversationRequest(
+        "owner/repo",
+        1,
+        0,
+        "a" * 40,
+        "b" * 40,
+        {},
+        {},
+        {},
+        [],
+        [],
+        [{"type": name, "mutation": mutation, "arguments": arguments}],
+    )
+    intent = {
+        "type": name,
+        "arguments": {arguments[0]: value},
+        "mutation": mutation,
+        "explicit": mutation,
+        "confidence": 1,
+    }
+
+    with pytest.raises(AgentProtocolError, match="invalid intent"):
+        _validate_result("conversation", result_for(request, intents=[intent]), request)
+
+
+@pytest.mark.parametrize(
     ("change", "message"),
     [
         ({"epoch": True}, "correlation mismatch"),

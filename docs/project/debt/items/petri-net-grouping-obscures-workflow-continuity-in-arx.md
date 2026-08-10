@@ -42,3 +42,9 @@ showing the complete net and its active paths without presentation-only aliasing
 or fabricated arcs. This item records the obligation only; the one-off PR47
 replay conversion and video must not become a compatibility layer or product
 feature in either repository.
+
+RS-001 resolved the Hamsterdan half on 2026-08-10: independent concern tokens,
+exact Activity places, relational projection, explicit publication continuity,
+and invariant-named retirement now make the executable topology traceable in
+workflow order. The Arx recursive-island and replay-visualization obligation
+remains open; this item stays accepted for that external portion.

@@ -41,6 +41,58 @@ neutral contracts but do not import one another. The host creates and drives
 public `petrus.engine.Engine` instances; the readiness Net decides work, and
 GitHub or agent providers perform typed Motus Activities.
 
+### One PR, outside in
+
+The shortest maintainer path through one reconciliation is:
+
+```text
+GitHub webhook / periodic sweep
+  -> PrReadinessApplication.reconcile(trigger) -> dict[str, object]
+  -> PrReadinessHost.deliver(source, value, identity)
+  -> petrus.engine.Engine
+  -> readiness.net.topology.build_net(...)
+  -> exact Motus Activity request -> exact result
+  -> concern-specific transition
+  -> project_readiness(...) -> ReadinessSnapshot
+```
+
+`src/hamsterdan/host/application.py` normalizes current provider facts and
+delivers only changed observations. `src/hamsterdan/host/runtime.py` opens or
+replays one durable Petrus History per PR, binds typed Activities, and exposes a
+derived snapshot. `src/hamsterdan/readiness/net/topology.py` is the workflow:
+follow it from typed ingress, through admission and concern folding, to
+conversation, publication, timers, lifecycle, and retirement.
+
+The active marking is not one aggregate state-machine token. It contains one
+token for each independently owned concern:
+
+```python
+Authority          # generation, head/base/policy and repository identity
+ActionsState       # selected run, attempt, conclusion and rerun continuity
+ReviewState        # agent review, findings and dispositions
+HumanState         # approvals, conversations, mergeability and reminders
+MutationState      # change/repair operation and provisional-head continuity
+PublicationState   # published facts and current publication operations
+
+def project_readiness(
+    authority: Authority,
+    actions: ActionsState,
+    review: ReviewState,
+    human: HumanState,
+    mutation: MutationState,
+    publication: PublicationState,
+) -> ReadinessSnapshot: ...
+```
+
+Routine transitions read centralized `Authority` and consume only the concern
+they mutate. Full-cohort movement is reserved for generation and lifecycle
+boundaries. Dashboard currency is relational: a digest of current concern facts
+must equal the exact acknowledged projection. Dashboard/readiness failures move
+exact request leases through durable delayed retry places before rejoining
+current authority. Explicit authorized mutation instructions execute directly;
+ambiguous instructions produce clarification without mutation. The host still
+fences every effect immediately before execution, and Hamsterdan never merges.
+
 ## Development
 
 Python 3.14, [uv](https://docs.astral.sh/uv/), and Bun 1.3.10 are required.

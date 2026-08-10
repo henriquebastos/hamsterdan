@@ -700,11 +700,8 @@ def _finding_effect(binding, outputs):
 
 
 def _accept_actions(binding, outputs):
-    _a, s, m, value = _values(binding, Authority, ActionsState, MutationState, ActionsObservation)
-    s = fold_actions.implementation(s, value)
-    if value.conclusion in {"success", "failure"}:
-        m = m.validated_update(repair_in_flight=False)
-    return _route(outputs, {"actions_state": s, "mutation_state": m})
+    _a, state, value = _values(binding, Authority, ActionsState, ActionsObservation)
+    return _route(outputs, {"actions_state": fold_actions.implementation(state, value)})
 
 
 def _accept_human(binding, outputs):
@@ -1136,7 +1133,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
         guards=_typed_guard((Authority, ActionsState, ActionsObservation), _new_actions),
     )
     p.authority >> arc.read() >> accept_actions
-    ((p.actions_state, p.mutation_state, p.actions_result) >> accept_actions >> (p.actions_state, p.mutation_state))
+    (p.actions_state, p.actions_result) >> accept_actions >> p.actions_state
     accept_human = t.accept_human(handler=petri_handler(_accept_human), guards=_guard(lambda a, h, v: _current(a, v)))
     p.authority >> arc.read() >> accept_human
     (p.human_state, p.human_result) >> accept_human >> p.human_state
