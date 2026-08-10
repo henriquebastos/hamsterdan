@@ -46,8 +46,8 @@ merges.
 | Change Request | Outcome |
 | --- | --- |
 | CR-001 Remove current-Petrus topology redundancies | Complete |
-| CR-002 Add production Activity Execution policy to Motus | Active |
-| CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Planned |
+| CR-002 Add production Activity Execution policy to Motus | Complete |
+| CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Active |
 | CR-004 Migrate conversation and eligible provider retries | Planned |
 | CR-005 Reassess residual concern-state ownership | Planned |
 | CR-006 Review, coherence, and documentation | Planned |
@@ -115,3 +115,18 @@ PR authority and provider reconciliation remain application-owned.
   161 transitions, and 477 arcs. The full gate passes 446 Python tests with one
   provider test deselected, nine Bun tests, static analysis, formatting, and
   both package builds.
+
+### 2026-08-10 — Accepted and pinned Motus Activity Execution V2
+
+- Petrus `35d09023f40fac34dc84c54389466b669a79ec19` supplies stable logical
+  invocation identity, classified failure, deterministic bounded backoff,
+  per-attempt and aggregate deadlines, and optional terminal-failure projection
+  while preserving one-attempt and fail-and-halt defaults.
+- The pin also deliberately removes private Pi A2 provider/client injection.
+  Hamsterdan's qualification portfolio now uses Petrus's public data-only
+  scripted runtime for deterministic lifecycle, replay, cancellation, failure,
+  cleanup, and process-loss evidence; production composition remains the exact
+  collaborator-owning native route.
+- The pinned dependency passes all 446 Hamsterdan Python tests with one provider
+  test skipped and passes the quick static/format gate. CR-003 now owns adopting
+  durable retry custody and removing publication retry topology.

@@ -4,6 +4,7 @@ import inspect
 import os
 import stat
 from pathlib import Path
+from typing import assert_type
 
 import pytest
 from petrus.agenticus.connection.key import KeyContext, KeyOperationError
@@ -65,7 +66,7 @@ def test_one_shot_supplier_transfers_mutable_buffer_once() -> None:
 def test_owned_composition_and_probe_do_not_request_authority(tmp_path: Path) -> None:
     host = compose_owned_pi_a2(tmp_path)
     try:
-        assert isinstance(host, PiA2RuntimeHost)
+        assert_type(host, PiA2RuntimeHost)
         assert host.descriptor.identity.name == "pi.native.a2.local"
         assert host.authority.connection.profile == "api-key"
         assert not host.authority_requested

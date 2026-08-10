@@ -24,7 +24,12 @@
 - Accepted Petrus clean-root dependency baseline:
   `henriquebastos/petrus@116b0ddc460c0e04d4ad40c077158bd3498a4860`,
   inspected and accepted 2026-08-08. Hamsterdan consumes this exact Git revision
-  and does not assume package publication.
+  historically and does not assume package publication.
+- Accepted Motus Activity Execution V2 dependency:
+  `henriquebastos/petrus@35d09023f40fac34dc84c54389466b669a79ec19`,
+  implemented, fully validated, and accepted 2026-08-10. Hamsterdan consumes
+  this exact Git revision for classified Activity failures, bounded retry
+  policy, deadlines, and deterministic terminal-failure projection.
 
 ## GitHub documentation
 

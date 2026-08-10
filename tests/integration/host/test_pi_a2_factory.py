@@ -3,10 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-import threading
-import time
 from contextlib import contextmanager
-from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 
@@ -22,13 +19,14 @@ from petrus.agenticus.runtime.pi_a2_host import (
     PiA2RuntimeHostConfig,
     PiA2RuntimePolicy,
     PiA2RuntimeStart,
-    compose_pi_a2_runtime,
+    PiA2ScriptedCall,
+    PiA2ScriptedTurn,
+    compose_pi_a2_scripted_runtime,
 )
 from petrus.agenticus.thread.continuation import Continuation
 from petrus.agenticus.thread.identity import ContinuationId, EpisodeId, ThreadId, TurnId
 from petrus.agenticus.thread.lifecycle import CancellationDisposition, TurnOutcome
 from petrus.motus.execution.archive import workspace_archive
-from petrus.motus.execution.providers import LocalProcessEnvironment
 
 from hamsterdan.agents import PiNativeRunner, ReviewRequest
 from hamsterdan.host.pi_a2 import (
@@ -38,91 +36,12 @@ from hamsterdan.host.pi_a2 import (
     compose_owned_pi_a2,
 )
 
-_SESSION = "11111111-1111-4111-8111-111111111111"
 _READ_POLICY = PiA2RuntimePolicy(frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH}), max_tool_calls=8)
 _CODE_POLICY = PiA2RuntimePolicy(
     frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH, ToolMethod.WORKSPACE_WRITE}),
     max_tool_calls=8,
     writable_roots=frozenset({"."}),
 )
-
-
-@dataclass
-class Plan:
-    text: str = "answer"
-    write: bool = False
-    read: str | None = None
-    block: bool = False
-    error: str | None = None
-
-
-class Client:
-    def __init__(self, plan: Plan, prior=None) -> None:
-        self.plan, self.prior = plan, prior
-        self.entered = threading.Event()
-
-    def run(self, gateway, invocation, current, deadline):
-        self.entered.set()
-        while self.plan.block and current() and time.monotonic() < deadline:
-            time.sleep(0.005)
-        if self.plan.error is not None:
-            raise RuntimeProtocolError(self.plan.error)
-        coordinates = invocation.attachment.coordinates()
-        common = {
-            "version": 1,
-            "episode_id": coordinates.episode_id,
-            "attachment_id": coordinates.attachment_id,
-            "attachment_epoch": coordinates.attachment_epoch,
-            "grant_epoch": invocation.grant_epoch,
-        }
-        if self.plan.read is not None:
-            result = gateway.submit(
-                {
-                    **common,
-                    "call_id": "read",
-                    "method": "workspace_read",
-                    "params": {"path": self.plan.read},
-                }
-            )
-            assert result.ok
-        if self.plan.write:
-            result = gateway.submit(
-                {
-                    **common,
-                    "call_id": "write",
-                    "method": "workspace_write",
-                    "params": {"path": "output.txt", "content": "changed"},
-                }
-            )
-            assert result.ok
-        session = self.prior.session_jsonl if self.prior is not None else _session()
-        body = session + json.dumps({"type": "message", "body": "next"}, separators=(",", ":")).encode() + b"\n"
-        return pi._HelperResult(pi._Candidate(_SESSION, self.plan.text, body), None, "turn-completed")
-
-    def close(self) -> bool:
-        return True
-
-
-class Factory:
-    def __init__(self, *plans: Plan) -> None:
-        self.plans = list(plans) or [Plan()]
-        self.clients: list[Client] = []
-        self.calls: list[dict[str, object]] = []
-
-    def create(self, **kwargs):
-        self.calls.append(kwargs)
-        client = Client(self.plans.pop(0), kwargs["prior"])
-        self.clients.append(client)
-        return client
-
-
-class AttachFailure(LocalProcessEnvironment):
-    def attach(self, lease, workspace_archive_bytes, input_digest):
-        raise RuntimeError("synthetic attach failure")
-
-
-def _session() -> bytes:
-    return json.dumps({"type": "session", "version": 3, "id": _SESSION}, separators=(",", ":")).encode() + b"\n"
 
 
 def _package(root: Path) -> tuple[str, str, str]:
@@ -181,23 +100,20 @@ def _config(root: Path) -> PiA2RuntimeHostConfig:
 
 def _host(
     root: Path,
-    factory: Factory,
+    script: tuple[PiA2ScriptedTurn, ...],
     supplier: OneShotApiKeySupplier,
-    *,
-    provider: LocalProcessEnvironment | None = None,
 ) -> PiA2RuntimeHost:
     authority = PiA2DirectAuthority(
         ConnectionIdentity("direct", "anthropic", "synthetic", "api-key"),
         PersistentKeyOperations(root / "keys"),
         supplier,
     )
-    host = compose_pi_a2_runtime(
+    host = compose_pi_a2_scripted_runtime(
         config=_config(root),
         authority=authority,
-        provider=provider,
-        client_factory=factory,
+        script=script,
     )
-    assert host.probe().disposition is ProbeDisposition.READY
+    assert host.scripted_readiness().ready
     return host
 
 
@@ -262,8 +178,20 @@ class RunnerWorkspaces:
 def test_fresh_start_continuation_workspace_output_and_close(tmp_path: Path) -> None:
     supplied = bytearray(b"fixture")
     supplier = OneShotApiKeySupplier(lambda: supplied)
-    factory = Factory(Plan("first", write=True), Plan("second", read="output.txt"))
-    host = _host(tmp_path, factory, supplier)
+    host = _host(
+        tmp_path,
+        (
+            PiA2ScriptedTurn(
+                "first",
+                (PiA2ScriptedCall(ToolMethod.WORKSPACE_WRITE, '{"path":"output.txt","content":"changed"}'),),
+            ),
+            PiA2ScriptedTurn(
+                "second",
+                (PiA2ScriptedCall(ToolMethod.WORKSPACE_READ, '{"path":"output.txt"}'),),
+            ),
+        ),
+        supplier,
+    )
     initial = workspace_archive(_config(tmp_path).working_directory)
 
     first_operation = host.start(_start("one", archive=initial))
@@ -281,7 +209,7 @@ def test_fresh_start_continuation_workspace_output_and_close(tmp_path: Path) -> 
     second = host.start(_start("two", archive=host.load_workspace_archive("one"), continuation=continuation)).wait(1)
 
     assert host.load_output(second.output_reference or "") == "second"
-    assert factory.calls[1]["prior"].session_id == _SESSION  # type: ignore[union-attr]
+    assert second.continuation_reference is not None
     assert set(supplied) == {0}
     assert first_operation.close().verified
     assert host.close()
@@ -290,7 +218,7 @@ def test_fresh_start_continuation_workspace_output_and_close(tmp_path: Path) -> 
 
 def test_terminal_replay_and_changed_work_conflict_use_no_authority(tmp_path: Path) -> None:
     supplier = OneShotApiKeySupplier(lambda: bytearray(b"fixture"))
-    host = _host(tmp_path, Factory(), supplier)
+    host = _host(tmp_path, (PiA2ScriptedTurn("answer"),), supplier)
     start = _start("stable", archive=workspace_archive(_config(tmp_path).working_directory))
     expected = host.start(start).wait(1)
     assert host.close()
@@ -302,15 +230,15 @@ def test_terminal_replay_and_changed_work_conflict_use_no_authority(tmp_path: Pa
         calls += 1
         return bytearray(b"unused")
 
-    replay = compose_pi_a2_runtime(
+    replay = compose_pi_a2_scripted_runtime(
         config=_config(tmp_path),
         authority=PiA2DirectAuthority(
             ConnectionIdentity("direct", "anthropic", "synthetic", "api-key"),
             PersistentKeyOperations(tmp_path / "replay-keys"),
             OneShotApiKeySupplier(replay_supply),
         ),
-        provider=LocalProcessEnvironment(),
-        client_factory=Factory(),
+        # Terminal replay must not consume this required finite script turn.
+        script=(PiA2ScriptedTurn("unused"),),
     )
     assert replay.start(start).wait() == expected
     with pytest.raises(RuntimeProtocolError, match="operation-conflict"):
@@ -363,7 +291,7 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
     operation_id = "pi:" + "1" * 64
     original = _host(
         tmp_path,
-        Factory(Plan(output)),
+        (PiA2ScriptedTurn(output),),
         OneShotApiKeySupplier(lambda: bytearray(b"fixture")),
     )
     archive = workspace_archive(_config(tmp_path).working_directory)
@@ -379,13 +307,14 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
         calls += 1
         return bytearray(b"unused")
 
-    replay = compose_pi_a2_runtime(
+    replay = compose_pi_a2_scripted_runtime(
         config=_config(tmp_path),
         authority=PiA2DirectAuthority(
             ConnectionIdentity("direct", "anthropic", "synthetic", "api-key"),
             PersistentKeyOperations(tmp_path / "replay-runner-keys"),
             OneShotApiKeySupplier(supply),
         ),
+        script=(PiA2ScriptedTurn("unused"),),
     )
     replay_runner = PiNativeRunner(replay, RunnerWorkspaces(archive))
     replay_runner.route_operation(operation_id)
@@ -394,10 +323,10 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
     assert replay.close()
 
 
-def test_cancellation_partial_rollback_and_idempotent_close(tmp_path: Path) -> None:
+def test_cancellation_and_public_script_failure_fail_closed_with_cleanup_evidence(tmp_path: Path) -> None:
     host = _host(
         tmp_path / "cancel",
-        Factory(Plan(block=True)),
+        (PiA2ScriptedTurn("unused", delay_seconds=10),),
         OneShotApiKeySupplier(lambda: bytearray(b"fixture")),
     )
     operation = host.start(_start("cancel", archive=workspace_archive(_config(tmp_path / "cancel").working_directory)))
@@ -406,18 +335,19 @@ def test_cancellation_partial_rollback_and_idempotent_close(tmp_path: Path) -> N
     assert operation.close().verified
     assert host.close() and host.close()
 
+    # Provider attachment internals are Petrus-owned. The public scripted seam
+    # preserves the application boundary: a failed turn must fail closed and
+    # report unverified cleanup when the script says cleanup could not complete.
     failed = _host(
         tmp_path / "failure",
-        Factory(),
+        (PiA2ScriptedTurn("", failure_code="scripted-failure", cleanup_verified=False),),
         OneShotApiKeySupplier(lambda: bytearray(b"fixture")),
-        provider=AttachFailure(),
     )
-    with pytest.raises(RuntimeProtocolError, match="runtime-start-failed"):
-        failed.start(_start("failed", archive=workspace_archive(_config(tmp_path / "failure").working_directory)))
     replay = failed.start(_start("failed", archive=workspace_archive(_config(tmp_path / "failure").working_directory)))
-    assert replay.wait().outcome is TurnOutcome.FAILED
-    assert replay.close().verified
-    assert failed.close()
+    with pytest.raises(RuntimeProtocolError, match="host-cleanup-uncertain"):
+        replay.wait()
+    with pytest.raises(RuntimeProtocolError, match="host-cleanup-uncertain"):
+        failed.close()
 
 
 def test_restarted_executing_operation_is_indeterminate_without_authority(tmp_path: Path) -> None:
@@ -426,25 +356,14 @@ def test_restarted_executing_operation_is_indeterminate_without_authority(tmp_pa
     script.write_text(
         """import os
 import sys
-import time
 from pathlib import Path
 from hashlib import sha256
 from petrus.agenticus.connection.custody import ConnectionIdentity
 from petrus.agenticus.hands.contract import ToolMethod
-from petrus.agenticus.runtime.pi_a2_host import PiA2DirectAuthority, PiA2RuntimeHostConfig, PiA2RuntimePolicy, PiA2RuntimeStart, compose_pi_a2_runtime
+from petrus.agenticus.runtime.pi_a2_host import PiA2DirectAuthority, PiA2RuntimeHostConfig, PiA2RuntimePolicy, PiA2RuntimeStart, PiA2ScriptedTurn, compose_pi_a2_scripted_runtime
 from petrus.agenticus.thread.identity import EpisodeId, TurnId
 from petrus.motus.execution.archive import workspace_archive
 from hamsterdan.host.pi_a2 import PersistentKeyOperations
-
-class Client:
-    def run(self, gateway, invocation, current, deadline):
-        while current() and time.monotonic() < deadline:
-            time.sleep(0.01)
-    def close(self):
-        return True
-class Factory:
-    def create(self, **kwargs):
-        return Client()
 
 root, working, cli, node, package = map(Path, sys.argv[1:])
 config = PiA2RuntimeHostConfig(
@@ -458,8 +377,10 @@ authority = PiA2DirectAuthority(
     ConnectionIdentity("direct", "anthropic", "synthetic", "api-key"),
     PersistentKeyOperations(root.parent / "keys"), lambda: bytearray(b"fixture"),
 )
-host = compose_pi_a2_runtime(config=config, authority=authority, client_factory=Factory())
-host.probe()
+host = compose_pi_a2_scripted_runtime(
+    config=config, authority=authority, script=(PiA2ScriptedTurn("unused", delay_seconds=30),)
+)
+assert host.scripted_readiness().ready
 archive = workspace_archive(working)
 host.start(PiA2RuntimeStart(
     "crashed", EpisodeId("episode-crashed"), TurnId("turn-crashed"), "prompt",
@@ -490,13 +411,14 @@ os._exit(0)
         calls += 1
         return bytearray(b"unused")
 
-    recovered = compose_pi_a2_runtime(
+    recovered = compose_pi_a2_scripted_runtime(
         config=_config(tmp_path),
         authority=PiA2DirectAuthority(
             ConnectionIdentity("direct", "anthropic", "synthetic", "api-key"),
             PersistentKeyOperations(tmp_path / "keys"),
             OneShotApiKeySupplier(supply),
         ),
+        script=(PiA2ScriptedTurn("unused"),),
     )
     assert len(recovered.recovered_settlements) == 1
     assert recovered.recovered_settlements[0].outcome is TurnOutcome.INDETERMINATE
@@ -509,4 +431,7 @@ os._exit(0)
             )
         )
     assert calls == 0
-    assert recovered.close()
+    # The crashed process cannot verify disposal of its executing attachment;
+    # restart therefore preserves both indeterminacy and fail-closed cleanup.
+    with pytest.raises(RuntimeProtocolError, match="host-cleanup-uncertain"):
+        recovered.close()

@@ -11,7 +11,7 @@ dependencies = [
     "cryptography>=46,<51",
     "fastapi>=0.116,<1",
     "githubkit[auth-app]==0.16.0",
-    "petrus @ git+https://github.com/henriquebastos/petrus.git@116b0ddc460c0e04d4ad40c077158bd3498a4860",
+    "petrus @ git+https://github.com/henriquebastos/petrus.git@35d09023f40fac34dc84c54389466b669a79ec19",
     "pydantic>=2.11,<3",
     "uvicorn>=0.35,<1",
 ]
