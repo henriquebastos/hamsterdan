@@ -609,6 +609,13 @@ def test_reversible_human_authority_survives_restart_without_duplicate_poll_chur
     assert (tmp_path / "state/history.jsonl").read_text() == history
     assert len(authority.transport.writes) == writes
     assert second_runner.reviews == 0
+
+    authority.pull = replace(authority.pull, mergeable=False, mergeable_state="dirty")
+    assert second.reconcile("same-conflict-edge-after-restart")["wait"] == "conflict resolution"
+    conflict_history = (tmp_path / "state/history.jsonl").read_text()
+
+    assert second.reconcile("duplicate-conflict-poll")["wait"] == "conflict resolution"
+    assert (tmp_path / "state/history.jsonl").read_text() == conflict_history
     second.close()
 
 

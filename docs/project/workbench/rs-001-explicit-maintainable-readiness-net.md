@@ -80,6 +80,25 @@ never merges remain required.
 - Publication revision remains a deliberate temporary serialization point for
   dashboard invalidation; CR-008 now owns removing that coupling.
 
+### 2026-08-10 — Made dashboard projection currency relational
+
+- Global revision and imperative dashboard invalidation are gone. Dashboard
+  currency is derived by comparing the current concern-facts digest with the
+  exact projection acknowledged by publication.
+- Dashboard requests bind that projection into their operation identity. A
+  late success acknowledges only its original projection, so concern changes
+  during publication leave the dashboard stale and eligible for a fresh update.
+- Routine Actions, human, review-intent, and mutation transitions no longer
+  consume publication state solely to invalidate a dashboard. Publication
+  remains an owner only where publication facts or leases actually change.
+- Human reconciliation now owns an observation sequence for durable delivery
+  identity. Repeated reversible authority edges survive replay without
+  restoring the removed global revision; that lineage is excluded from the
+  rendered projection digest.
+- Capability-denied dashboard and readiness leases remain fenced but do not yet
+  have an automatic recovery trigger. CR-010 will resolve that inherited
+  workflow-continuity gap without introducing an immediate retry loop.
+
 ## Change Requests
 
 | Change Request | Outcome |
@@ -91,8 +110,8 @@ never merges remain required.
 | CR-005 Simplify explicit conversational mutations | Complete |
 | CR-006 Compare active-token decomposition strategies | Complete |
 | CR-007 Replace `Control` with independent state tokens | Complete |
-| CR-008 Make dashboard and readiness projection relational | Active |
-| CR-009 Reduce retirement to proven invariants | Candidate |
+| CR-008 Make dashboard and readiness projection relational | Complete |
+| CR-009 Reduce retirement to proven invariants | Active |
 | CR-010 Restructure the Net around workflow continuity | Candidate |
 | CR-011 Review, coherence, and documentation | Candidate |
 

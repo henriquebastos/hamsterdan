@@ -3,6 +3,7 @@
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
 from petrus.engine import Engine, SimulatedClock
 from petrus.impetus.binding import DerivedActivityHandler
 from petrus.impetus.history import ActivityCompleted, ActivityRequested
@@ -47,6 +48,7 @@ from hamsterdan.contracts.readiness import (
     ReviewResult,
     ReviewState,
     Seed,
+    dashboard_projection_digest,
     project_readiness,
     workflow_gates_ready,
     workflow_wait,
@@ -413,11 +415,16 @@ def assert_no_active_cohort(subject: Engine) -> None:
 
 def concern_state(**overrides):
     """Build six concern values from concise legacy-shaped test overrides."""
+    dashboard_current = overrides.pop("dashboard_current", False)
     base = ReadinessSnapshot("repo", 7, 1, "h", "base", True, True).dump() | overrides
-    return tuple(
+    concerns = tuple(
         kind(**{name: base[name] for name in kind.__dataclass_fields__})
         for kind in (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
     )
+    if dashboard_current:
+        projection = dashboard_projection_digest(*concerns)
+        concerns = (*concerns[:5], concerns[5].validated_update(dashboard_projection=projection))
+    return concerns
 
 
 def make_snapshot(
@@ -970,7 +977,6 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
         "base",
         True,
         True,
-        revision=4,
         dashboard_requested=True,
         dashboard_operation="dashboard:1:4",
     )
@@ -1418,13 +1424,17 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
     assert refresh_inputs == {
         "review_state": "read",
         "authority": "consume",
-        "publication_state": "consume",
         "admission": "consume",
     }
-    assert {str(item.target) for item in net.outputs(NetPath("refresh_admission"))} == {
-        "authority",
-        "publication_state",
-    }
+    assert {str(item.target) for item in net.outputs(NetPath("refresh_admission"))} == {"authority"}
+    for transition in (
+        "accept_actions",
+        "accept_human",
+        "authorize_rerun",
+        "authorize_repair",
+        "authorize_change",
+    ):
+        assert "publication_state" not in {str(item.source) for item in net.inputs(NetPath(transition))}
     reminder_inputs = {str(item.source): item.mode.value for item in net.inputs(NetPath("accept_reminder"))}
     assert reminder_inputs == {"authority": "read", "reminder_result": "consume"}
     assert not net.outputs(NetPath("accept_reminder"))
@@ -1510,22 +1520,52 @@ def test_dashboard_capability_denial_is_an_explicit_blocker_not_success() -> Non
         findings_published=True,
         human_approved=True,
         mergeable=True,
-        revision=4,
         dashboard_current=True,
         dashboard_requested=True,
         dashboard_operation="dashboard",
     )
     result = effect_result("dashboard", 1, "h1", False, operation="dashboard", capability_available=False)
     blocked = fold_effect(concerns[5], result)
-    assert blocked.dashboard_current is False
     assert blocked.dashboard_capability_blocking is True
-    assert blocked.revision == 5
     assert blocked.dashboard_requested is True
     assert blocked.dashboard_operation == "dashboard"
+    assert project_readiness(*concerns[:5], blocked).dashboard_current is False
     assert workflow_wait(project_readiness(*concerns[:5], blocked)) == "dashboard update capability"
 
 
-def test_readiness_capability_denial_invalidates_its_ready_dashboard() -> None:
+@pytest.mark.parametrize(
+    ("index", "changed"),
+    [
+        (1, ActionsState(actions="failed", attempt=1)),
+        (3, HumanState(human_approved=False, mergeable=True)),
+    ],
+)
+def test_concern_change_stales_dashboard_without_changing_publication_bytes(index, changed) -> None:
+    concerns = concern_state(
+        actions="green",
+        review="clear",
+        findings_published=True,
+        human_approved=True,
+        mergeable=True,
+        dashboard_current=True,
+    )
+    publication_bytes = concerns[5].dump()
+    changed_concerns = list(concerns)
+    changed_concerns[index] = changed
+
+    assert project_readiness(*concerns).dashboard_current is True
+    assert project_readiness(*changed_concerns).dashboard_current is False
+    assert changed_concerns[5].dump() == publication_bytes
+
+
+def test_human_observation_lineage_does_not_change_dashboard_projection() -> None:
+    concerns = concern_state(human_approved=True, mergeable=True)
+    advanced = (*concerns[:3], concerns[3].validated_update(observation_sequence=9), *concerns[4:])
+
+    assert dashboard_projection_digest(*advanced) == dashboard_projection_digest(*concerns)
+
+
+def test_readiness_capability_denial_relationally_stales_its_ready_dashboard() -> None:
     concerns = concern_state(
         head="h1",
         actions="green",
@@ -1533,7 +1573,6 @@ def test_readiness_capability_denial_invalidates_its_ready_dashboard() -> None:
         findings_published=True,
         human_approved=True,
         mergeable=True,
-        revision=7,
         dashboard_current=True,
         readiness_requested=True,
         readiness_operation="readiness",
@@ -1542,10 +1581,9 @@ def test_readiness_capability_denial_invalidates_its_ready_dashboard() -> None:
 
     blocked = fold_effect(concerns[5], result)
 
-    assert blocked.revision == 8
-    assert blocked.dashboard_current is False
     assert blocked.dashboard_requested is False
     assert blocked.readiness_capability_blocking is True
+    assert project_readiness(*concerns[:5], blocked).dashboard_current is False
     assert workflow_wait(project_readiness(*concerns[:5], blocked)) == "readiness publication capability"
 
 
@@ -1573,15 +1611,15 @@ def test_non_capability_conversation_failure_clears_pending_without_retry() -> N
     assert cleared.conversation_capability_blocking is False
 
 
-def test_readiness_ack_invalidates_dashboard_before_latching_announcement() -> None:
-    control = make_snapshot(
-        "repo",
-        7,
-        1,
-        "h1",
-        "base",
-        True,
-        True,
+def test_readiness_ack_relationally_stales_dashboard_before_latching_announcement() -> None:
+    concerns = concern_state(
+        repository_id="repo",
+        pr_number=7,
+        epoch=1,
+        head="h1",
+        base_head="base",
+        strict_base=True,
+        base_current=True,
         actions="green",
         review="clear",
         findings_published=True,
@@ -1591,13 +1629,14 @@ def test_readiness_ack_invalidates_dashboard_before_latching_announcement() -> N
         readiness_requested=True,
         readiness_operation="readiness",
     )
+    control = project_readiness(*concerns)
     assert ready(control) is False
     acknowledged = fold_effect(
-        control,
+        concerns[5],
         effect_result("readiness", 1, "h1", True, operation="readiness"),
     )
     assert acknowledged.announced is True
-    assert acknowledged.dashboard_current is False
+    assert project_readiness(*concerns[:5], acknowledged).dashboard_current is False
 
 
 def test_mismatched_subject_admission_cannot_rebind_an_instance() -> None:

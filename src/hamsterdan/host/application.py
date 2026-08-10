@@ -254,7 +254,8 @@ class PrReadinessApplication:
             self._deliver(
                 "human_observation",
                 human,
-                f"reconcile:human:{control.epoch}:{control.revision}:{_digest(human.dump())}",
+                f"reconcile:human:{control.epoch}:{control.head}:"
+                f"{_digest({'sequence': control.observation_sequence, 'prior': current_human, 'observed': human.dump()})}",
             )
         current = self.host.snapshot
         if current is not None:

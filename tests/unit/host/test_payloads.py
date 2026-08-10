@@ -78,7 +78,7 @@ def test_readiness_state_tokens_partition_snapshot_fields() -> None:
     for index, fields in enumerate(field_sets):
         assert not fields.intersection(*field_sets[index + 1 :]) if field_sets[index + 1 :] else True
     assert all(field_sets[0].isdisjoint(fields) for fields in field_sets[1:])
-    assert set().union(*field_sets, {"wait"}) == set(ReadinessSnapshot.__dataclass_fields__)
+    assert set().union(*field_sets, {"dashboard_current", "wait"}) == set(ReadinessSnapshot.__dataclass_fields__)
 
 
 @pytest.mark.parametrize(
@@ -98,14 +98,17 @@ def test_readiness_state_tokens_partition_snapshot_fields() -> None:
             ReviewState(review="clear", findings=[{"id": "f1", "blocking": False}]),
             HumanState(human_requested=True, human_approved=True, mergeable=True, author="octocat"),
             MutationState(),
-            PublicationState(findings_published=True, dashboard_current=True),
+            PublicationState(findings_published=True),
         ),
     ],
 )
 def test_concern_tokens_project_to_derived_snapshots(tokens: tuple) -> None:
     projected = project_readiness(*tokens)
 
-    expected = {key: value for token in tokens for key, value in token.dump().items()} | {"wait": projected.wait}
+    expected = {key: value for token in tokens for key, value in token.dump().items()} | {
+        "dashboard_current": projected.dashboard_current,
+        "wait": projected.wait,
+    }
     assert projected.dump() == expected
 
 

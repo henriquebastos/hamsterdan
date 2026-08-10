@@ -101,6 +101,7 @@ class ReviewState(WorkflowModel):
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class HumanState(WorkflowModel):
+    observation_sequence: int = 0
     human_requested: bool = False
     human_approved: bool = False
     changes_requested: bool = False
@@ -130,10 +131,10 @@ class MutationState(WorkflowModel):
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class PublicationState(WorkflowModel):
-    revision: int = 0
     findings_published: bool = False
     finding_publication_requested: bool = False
-    dashboard_current: bool = False
+    dashboard_projection: str = ""
+    dashboard_requested_projection: str = ""
     dashboard_requested: bool = False
     dashboard_operation: str = ""
     dashboard_format: int = 0
@@ -162,7 +163,6 @@ class ReadinessSnapshot(WorkflowModel):
     required_checks: list[str] = field(default_factory=list)
     required_approvals: int = 0
     conversation_resolution: bool = False
-    revision: int = 0
     admission_relation: Literal["new", "confirmed", "superseded", "same_head", "same_head_basis_changed"] = "new"
     provisional_head: str = ""
     actions: Literal[
@@ -194,6 +194,7 @@ class ReadinessSnapshot(WorkflowModel):
     finding_lineage: list[dict] = field(default_factory=list)
     findings_published: bool = False
     finding_publication_requested: bool = False
+    observation_sequence: int = 0
     human_requested: bool = False
     human_approved: bool = False
     changes_requested: bool = False
@@ -207,6 +208,8 @@ class ReadinessSnapshot(WorkflowModel):
     repair_in_flight: bool = False
     repair_recovery_required: bool = False
     dashboard_current: bool = False
+    dashboard_projection: str = ""
+    dashboard_requested_projection: str = ""
     dashboard_requested: bool = False
     dashboard_operation: str = ""
     dashboard_format: int = 0
@@ -601,7 +604,7 @@ def project_readiness(
     publication: PublicationState,
 ) -> ReadinessSnapshot:
     """Merge independently owned state and derive its current external wait."""
-    values = {
+    values: dict[str, Any] = {
         **authority.dump(),
         **actions.dump(),
         **review.dump(),
@@ -609,8 +612,43 @@ def project_readiness(
         **mutation.dump(),
         **publication.dump(),
     }
+    values["dashboard_current"] = (
+        dashboard_projection_digest(authority, actions, review, human, mutation, publication)
+        == publication.dashboard_projection
+        and not publication.dashboard_requested
+    )
     snapshot = ReadinessSnapshot(**values)
     return snapshot.validated_update(wait=workflow_wait(snapshot))
+
+
+def dashboard_projection_digest(
+    authority: Authority,
+    actions: ActionsState,
+    review: ReviewState,
+    human: HumanState,
+    mutation: MutationState,
+    publication: PublicationState,
+) -> str:
+    """Return the canonical identity of facts rendered by readiness/dashboard views."""
+    import hashlib
+    import json
+
+    excluded = {
+        "observation_sequence",
+        "dashboard_projection",
+        "dashboard_requested_projection",
+        "dashboard_requested",
+        "dashboard_operation",
+        "dashboard_format",
+    }
+    facts = {
+        key: value
+        for concern in (authority, actions, review, human, mutation, publication)
+        for key, value in concern.dump().items()
+        if key not in excluded
+    }
+    canonical = json.dumps(facts, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def workflow_gates_ready(control: ReadinessSnapshot) -> bool:

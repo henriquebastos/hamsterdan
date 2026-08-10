@@ -47,6 +47,7 @@ from hamsterdan.contracts.readiness import (
     ReviewState,
     Seed,
     Terminal,
+    dashboard_projection_digest,
     project_readiness,
     workflow_gates_ready,
 )
@@ -189,15 +190,6 @@ def _current(authority: Authority, value) -> bool:
     )
 
 
-def _invalidate(publication: PublicationState, *, increment: int = 1, **changes) -> PublicationState:
-    """Invalidate only publication state, retaining legacy revision/request semantics."""
-    changes.setdefault("revision", publication.revision + increment)
-    changes.setdefault("dashboard_current", False)
-    changes.setdefault("dashboard_requested", False)
-    changes.setdefault("dashboard_operation", "")
-    return publication.validated_update(**changes)
-
-
 def _snapshot(a, ac, r, h, m, p):
     return project_readiness(a, ac, r, h, m, p)
 
@@ -321,6 +313,7 @@ def fold_intent(state, value: Intent):
 def fold_human(state: HumanState, value: HumanObservation) -> HumanState:
     # Base currency belongs to admission/Authority, never to human observation.
     return state.validated_update(
+        observation_sequence=state.observation_sequence + 1,
         human_requested=value.requested,
         human_approved=value.approved,
         changes_requested=value.changes_requested,
@@ -367,15 +360,11 @@ def fold_effect(owner, result):
         )
     if isinstance(result, DashboardPublicationResult):
         if not result.capability_available:
-            return _invalidate(
-                owner,
-                dashboard_requested=owner.dashboard_requested,
-                dashboard_operation=owner.dashboard_operation,
-                dashboard_capability_blocking=True,
-            )
+            return owner.validated_update(dashboard_capability_blocking=True)
         if result.ok:
             return owner.validated_update(
-                dashboard_current=True,
+                dashboard_projection=owner.dashboard_requested_projection,
+                dashboard_requested_projection="",
                 dashboard_requested=False,
                 dashboard_operation="",
                 dashboard_format=DASHBOARD_FORMAT,
@@ -383,15 +372,17 @@ def fold_effect(owner, result):
             )
     if isinstance(result, ReadinessPublicationResult):
         if not result.capability_available:
-            return _invalidate(owner, readiness_capability_blocking=True)
+            return owner.validated_update(readiness_capability_blocking=True)
         if result.ok:
-            return _invalidate(owner, readiness_requested=False, announced=True, readiness_capability_blocking=False)
+            return owner.validated_update(
+                readiness_requested=False, announced=True, readiness_capability_blocking=False
+            )
     return owner
 
 
 @direct
 def fold_conversation_effect(p: PublicationState, r: ConversationPublicationResult) -> PublicationState:
-    return _invalidate(fold_effect(p, r))
+    return fold_effect(p, r)
 
 
 @direct
@@ -444,7 +435,7 @@ def _admit(binding, outputs):
         repair_used=getattr(mutation_prior or prior, "repair_used", False) if confirms else False,
         repair_fingerprint=getattr(mutation_prior or prior, "repair_fingerprint", "") if confirms else "",
     )
-    publication = PublicationState(revision=1)
+    publication = PublicationState()
     policy = {
         "strict_base": admission.strict_base,
         "required_checks": admission.required_checks,
@@ -519,7 +510,7 @@ def _same_basis(a, admission):
 
 
 def _refresh_admission(binding, outputs):
-    a, _r, p, admission = _values(binding, Authority, ReviewState, PublicationState, Admission)
+    a, _r, admission = _values(binding, Authority, ReviewState, Admission)
     a = a.validated_update(
         base_head=admission.base_head,
         strict_base=admission.strict_base,
@@ -530,7 +521,7 @@ def _refresh_admission(binding, outputs):
         conversation_resolution=admission.conversation_resolution,
         admission_relation="same_head",
     )
-    return _route(outputs, {"authority": a, "publication_state": _invalidate(p)})
+    return _route(outputs, {"authority": a})
 
 
 def _retryable_review(a, r, admission):
@@ -538,7 +529,7 @@ def _retryable_review(a, r, admission):
 
 
 def _retry_review(binding, outputs):
-    a, r, p, admission = _values(binding, Authority, ReviewState, PublicationState, Admission)
+    a, r, admission = _values(binding, Authority, ReviewState, Admission)
     attempt = max(r.review_attempts, 1) + 1
     policy = {
         "strict_base": admission.strict_base,
@@ -574,9 +565,7 @@ def _retry_review(binding, outputs):
     )
     a = a.validated_update(base_current=admission.base_current, admission_relation="same_head")
     r = r.validated_update(review="pending", review_attempts=attempt, review_operation=work.operation)
-    return _route(
-        outputs, {"authority": a, "review_state": r, "publication_state": _invalidate(p), "work.review": work}
-    )
+    return _route(outputs, {"authority": a, "review_state": r, "work.review": work})
 
 
 def _refresh_basis(binding, outputs):
@@ -593,11 +582,12 @@ def _refresh_basis(binding, outputs):
     )
     ac = ActionsState()
     r = r.validated_update(review="pending", review_attempts=1)
-    p = _invalidate(
-        p,
-        increment=2,
+    p = p.validated_update(
         findings_published=False,
         finding_publication_requested=False,
+        dashboard_requested_projection="",
+        dashboard_requested=False,
+        dashboard_operation="",
         announced=False,
         readiness_operation="",
         readiness_requested=False,
@@ -652,9 +642,7 @@ def _accept_review(binding, outputs):
     a, r, p, result = _values(binding, Authority, ReviewState, PublicationState, ReviewResult)
     r = fold_review.implementation(r, result)
     publishable = [f for f in r.findings if f.get("disposition") in {"new", "still_open"}]
-    p = _invalidate(
-        p,
-        increment=2 if publishable else 1,
+    p = p.validated_update(
         findings_published=not publishable,
         finding_publication_requested=bool(publishable),
     )
@@ -682,52 +670,47 @@ def _finding_effect(binding, outputs):
         r = r.validated_update(
             findings=[{**f, "comment_url": refs.get(f.get("id"), f.get("comment_url", ""))} for f in r.findings]
         )
-        p = _invalidate(
-            p,
+        p = p.validated_update(
             findings_published=True,
             finding_publication_requested=False,
             finding_operation="",
             finding_capability_blocking=False,
         )
     elif not result.capability_available:
-        p = _invalidate(p, finding_capability_blocking=True)
+        p = p.validated_update(finding_capability_blocking=True)
     return _put(outputs, (r, p))
 
 
 def _accept_actions(binding, outputs):
-    _a, s, m, p, value = _values(binding, Authority, ActionsState, MutationState, PublicationState, ActionsObservation)
+    _a, s, m, value = _values(binding, Authority, ActionsState, MutationState, ActionsObservation)
     s = fold_actions.implementation(s, value)
     if value.conclusion in {"success", "failure"}:
         m = m.validated_update(repair_in_flight=False)
-    return _route(outputs, {"actions_state": s, "mutation_state": m, "publication_state": _invalidate(p)})
+    return _route(outputs, {"actions_state": s, "mutation_state": m})
 
 
 def _accept_human(binding, outputs):
-    h, p, value = _values(binding, HumanState, PublicationState, HumanObservation)
-    return _route(outputs, {"human_state": fold_human.implementation(h, value), "publication_state": _invalidate(p)})
+    h, value = _values(binding, HumanState, HumanObservation)
+    return _route(outputs, {"human_state": fold_human.implementation(h, value)})
 
 
 def _accept_mutation_effect(binding, outputs, result_type):
     values = _hydrate(binding)
     m = next(v for v in values if isinstance(v, MutationState))
-    p = next(v for v in values if isinstance(v, PublicationState))
     result = next(v for v in values if isinstance(v, result_type))
     if isinstance(result, RepairResult) and not result.fingerprint:
         actions = next(v for v in values if isinstance(v, ActionsState))
         result = result.validated_update(fingerprint=actions.fingerprint)
     m = fold_effect(m, result)
-    return _route(outputs, {"mutation_state": m, "publication_state": _invalidate(p)})
+    return _route(outputs, {"mutation_state": m})
 
 
 def _accept_intent(binding, outputs, owner_type):
-    owner, p, value = _values(binding, owner_type, PublicationState, Intent)
+    owner, value = _values(binding, owner_type, Intent)
     owner = fold_intent.implementation(owner, value)
     return _route(
         outputs,
-        {
-            "review_state" if owner_type is ReviewState else "human_state": owner,
-            "publication_state": _invalidate(p),
-        },
+        {"review_state" if owner_type is ReviewState else "human_state": owner},
     )
 
 
@@ -771,7 +754,7 @@ def _basis_done(a, s, m, value):
 
 
 def _rerun(binding, outputs):
-    a, s, p, value = _values(binding, Authority, ActionsState, PublicationState, ActionsObservation)
+    a, s, value = _values(binding, Authority, ActionsState, ActionsObservation)
     payload = effect_payload(a, {"actions": value.dump()})
     work = ActionsRerunRequest(
         epoch=value.epoch,
@@ -784,11 +767,11 @@ def _rerun(binding, outputs):
     s = s.validated_update(
         actions="rerun_requested", rerun_requested=True, rerun_attempt=s.attempt, actions_operation=work.operation
     )
-    return _route(outputs, {"actions_state": s, "publication_state": _invalidate(p), "work.actions_rerun": work})
+    return _route(outputs, {"actions_state": s, "work.actions_rerun": work})
 
 
 def _repair(binding, outputs):
-    a, _s, m, p, value = _values(binding, Authority, ActionsState, MutationState, PublicationState, ActionsObservation)
+    a, _s, m, value = _values(binding, Authority, ActionsState, MutationState, ActionsObservation)
     payload = effect_payload(a, {"actions": value.dump()})
     op = operation("repair", a, payload=payload)
     m = m.validated_update(repair_in_flight=True, mutation_operation=op)
@@ -801,7 +784,7 @@ def _repair(binding, outputs):
         actions=value,
         lineage=[],
     )
-    return _route(outputs, {"mutation_state": m, "publication_state": _invalidate(p), "work.repair": work})
+    return _route(outputs, {"mutation_state": m, "work.repair": work})
 
 
 def _mutation(a: Authority, m: MutationState, value: Intent) -> bool:
@@ -815,11 +798,10 @@ def _mutation(a: Authority, m: MutationState, value: Intent) -> bool:
 
 
 def _authorize_change(binding, outputs):
-    a, m, p, value = _values(binding, Authority, MutationState, PublicationState, Intent)
+    a, m, value = _values(binding, Authority, MutationState, Intent)
     payload = effect_payload(a, {"intent": value.dump()})
     op = operation("change", a, payload=payload)
     m = m.validated_update(change_in_flight=True, mutation_operation=op)
-    p = _invalidate(p)
     work = ChangeRequest(
         epoch=value.epoch,
         head=value.head,
@@ -828,7 +810,7 @@ def _authorize_change(binding, outputs):
         policy_digest=a.policy_digest,
         intent=value,
     )
-    return _put(outputs, (m, p, work))
+    return _put(outputs, (m, work))
 
 
 def _replyable(a, value):
@@ -846,8 +828,8 @@ def _authorize_reply(binding, outputs):
         policy_digest=a.policy_digest,
         intent=value,
     )
-    p = _invalidate(
-        p, conversation_pending=work.dump(), conversation_attempts=1, conversation_capability_blocking=False
+    p = p.validated_update(
+        conversation_pending=work.dump(), conversation_attempts=1, conversation_capability_blocking=False
     )
     return _route(outputs, {"publication_state": p, "work.conversation_reply": work})
 
@@ -865,7 +847,7 @@ def _reissue_reply(binding, outputs):
     pending = dict(p.conversation_pending)
     pending["intent"] = Intent(**pending["intent"])
     work = ConversationPublicationRequest(**pending)
-    p = _invalidate(p, conversation_attempts=p.conversation_attempts + 1, conversation_capability_blocking=False)
+    p = p.validated_update(conversation_attempts=p.conversation_attempts + 1, conversation_capability_blocking=False)
     return _route(outputs, {"publication_state": p, "work.conversation_reply": work})
 
 
@@ -925,9 +907,14 @@ def _dashboard(binding, outputs):
         binding, Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState
     )
     before = _snapshot(a, ac, r, h, m, p)
-    payload = effect_payload(a, {"control": before.dump(), "projected_revision": p.revision + 1})
+    projection = dashboard_projection_digest(a, ac, r, h, m, p)
+    payload = effect_payload(a, {"control": before.dump(), "projection": projection})
     op = operation("dashboard", a, payload=payload)
-    p = _invalidate(p).validated_update(dashboard_requested=True, dashboard_operation=op)
+    p = p.validated_update(
+        dashboard_requested=True,
+        dashboard_operation=op,
+        dashboard_requested_projection=projection,
+    )
     after = _snapshot(a, ac, r, h, m, p)
     work = DashboardPublicationRequest(
         epoch=a.epoch, head=a.head, operation=op, base_head=a.base_head, policy_digest=a.policy_digest, control=after
@@ -936,10 +923,11 @@ def _dashboard(binding, outputs):
 
 
 def _announce(binding, outputs):
-    a, _ac, _r, _h, _m, p = _values(
+    a, ac, r, h, m, p = _values(
         binding, Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState
     )
-    op = operation("readiness", a, payload={"revision": p.revision})
+    projection = dashboard_projection_digest(a, ac, r, h, m, p)
+    op = operation("readiness", a, payload={"projection": projection})
     p = p.validated_update(readiness_requested=True, readiness_operation=op)
     work = ReadinessCommand(
         epoch=a.epoch, head=a.head, operation=op, base_head=a.base_head, policy_digest=a.policy_digest
@@ -1089,31 +1077,25 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         ),
     )
     p.review_state >> arc.read() >> refresh
-    (p.authority, p.publication_state, p.admission) >> refresh >> (p.authority, p.publication_state)
+    (p.authority, p.admission) >> refresh >> p.authority
     # Retry precedence is encoded by competition plus the refresh guard below.
     (
-        (p.authority, p.review_state, p.publication_state, p.admission)
+        (p.authority, p.review_state, p.admission)
         >> t.retry_review(
             handler=petri_handler(_retry_review),
             guards=_typed_guard((Authority, ReviewState, Admission), _retryable_review),
         )
-        >> (p.authority, p.review_state, p.publication_state, work.p.review)
+        >> (p.authority, p.review_state, work.p.review)
     )
     accept_actions = t.accept_actions(
         handler=petri_handler(_accept_actions),
         guards=_typed_guard((Authority, ActionsState, ActionsObservation), _new_actions),
     )
     p.authority >> arc.read() >> accept_actions
-    (
-        (p.actions_state, p.mutation_state, p.publication_state, p.actions_result)
-        >> accept_actions
-        >> (p.actions_state, p.mutation_state, p.publication_state)
-    )
-    accept_human = t.accept_human(
-        handler=petri_handler(_accept_human), guards=_guard(lambda a, h, pub, v: _current(a, v))
-    )
+    ((p.actions_state, p.mutation_state, p.actions_result) >> accept_actions >> (p.actions_state, p.mutation_state))
+    accept_human = t.accept_human(handler=petri_handler(_accept_human), guards=_guard(lambda a, h, v: _current(a, v)))
     p.authority >> arc.read() >> accept_human
-    (p.human_state, p.publication_state, p.human_result) >> accept_human >> (p.human_state, p.publication_state)
+    (p.human_state, p.human_result) >> accept_human >> p.human_state
     accept_review = t.accept_review(
         handler=petri_handler(_accept_review),
         guards=_typed_guard((Authority, ReviewState, ReviewResult), _review_matches),
@@ -1146,11 +1128,10 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     p.authority >> arc.read() >> authorize_change
     (
-        (p.mutation_state, p.publication_state, p.change_basis(Intent))
+        (p.mutation_state, p.change_basis(Intent))
         >> authorize_change
         >> (
             p.mutation_state,
-            p.publication_state,
             work.p.change,
         )
     )
@@ -1192,28 +1173,20 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         p.authority >> arc.read() >> tr
         if result_type is RepairResult:
             p.actions_state >> arc.read() >> tr
-        (p.mutation_state, p.publication_state, place) >> tr >> (p.mutation_state, p.publication_state)
+        (p.mutation_state, place) >> tr >> p.mutation_state
 
     rerun = t.authorize_rerun(
         handler=petri_handler(_rerun),
-        guards=_guard(lambda a, m, s, pub, v: _first_failure(a, s, m, v)),
+        guards=_guard(lambda a, m, s, v: _first_failure(a, s, m, v)),
     )
     (p.authority, p.mutation_state) >> arc.read() >> rerun
-    (
-        (p.actions_state, p.publication_state, p.actions_basis)
-        >> rerun
-        >> (p.actions_state, p.publication_state, work.p.actions_rerun)
-    )
+    ((p.actions_state, p.actions_basis) >> rerun >> (p.actions_state, work.p.actions_rerun))
     repair_work = t.authorize_repair(
         handler=petri_handler(_repair),
-        guards=_guard(lambda a, s, m, pub, v: _repairable(a, s, m, v)),
+        guards=_guard(lambda a, s, m, v: _repairable(a, s, m, v)),
     )
     (p.authority, p.actions_state) >> arc.read() >> repair_work
-    (
-        (p.mutation_state, p.publication_state, p.actions_basis)
-        >> repair_work
-        >> (p.mutation_state, p.publication_state, work.p.repair)
-    )
+    ((p.mutation_state, p.actions_basis) >> repair_work >> (p.mutation_state, work.p.repair))
     basis_retire = retire.t.actions_basis(guards=_guard(_basis_done))
     for place in (p.authority, p.actions_state, p.mutation_state):
         place >> arc.read() >> basis_retire
@@ -1247,13 +1220,13 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         tr = getattr(t, f"accept_{name}")(
             handler=petri_handler(lambda b, o, typ=owner_type: _accept_intent(b, o, typ)),
             guards=_guard(
-                lambda a, state, pub, value, selected=kinds: (
+                lambda a, state, value, selected=kinds: (
                     _current(a, value) and value.authorized and value.kind in selected
                 )
             ),
         )
         p.authority >> arc.read() >> tr
-        (owner, p.publication_state, p.intent_result) >> tr >> (owner, p.publication_state)
+        (owner, p.intent_result) >> tr >> owner
     authorize_reply = t.authorize_reply(
         handler=petri_handler(_authorize_reply),
         guards=_typed_guard((Authority, Intent), _replyable),
