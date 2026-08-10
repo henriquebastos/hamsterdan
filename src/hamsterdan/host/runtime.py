@@ -14,7 +14,17 @@ from petrus.impetus.history_store import JsonlHistoryStore
 from petrus.impetus.petrinet import Marking, NetPath, Token
 from petrus.motus.dispatch import InlineDispatch
 
-from hamsterdan.contracts.readiness import Control, Seed
+from hamsterdan.contracts.readiness import (
+    ActionsState,
+    Authority,
+    HumanState,
+    MutationState,
+    PublicationState,
+    ReadinessSnapshot,
+    ReviewState,
+    Seed,
+    project_readiness,
+)
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS, build_net
 
@@ -53,26 +63,73 @@ class AuthorityLease:
             raise RuntimeError("authority lease Engine changed during recovery")
         self.engine = replacement
 
-    def control(self) -> Control | None:
+    def _singleton(self, path: str, value_type):
         if self.engine is None:
             return None
-        tokens = self.engine.marking.place(NetPath("current"))
-        return Control(**tokens[0].data) if len(tokens) == 1 else None
+        tokens = self.engine.marking.place(NetPath(path))
+        if len(tokens) != 1:
+            raise RuntimeError(f"active readiness place {path!r} must contain exactly one token")
+        return value_type(**tokens[0].data)
+
+    def authority_state(self) -> Authority | None:
+        if self.engine is None or not self.engine.marking.place(NetPath("authority")):
+            return None
+        return self._singleton("authority", Authority)
+
+    def mutation_state(self) -> MutationState | None:
+        if self.engine is None or not self.engine.marking.place(NetPath("mutation_state")):
+            return None
+        return self._singleton("mutation_state", MutationState)
+
+    def snapshot(self) -> ReadinessSnapshot | None:
+        if self.engine is None:
+            return None
+        cohort = (
+            ("authority", Authority),
+            ("actions_state", ActionsState),
+            ("review_state", ReviewState),
+            ("human_state", HumanState),
+            ("mutation_state", MutationState),
+            ("publication_state", PublicationState),
+        )
+        populated = [bool(self.engine.marking.place(NetPath(path))) for path, _ in cohort]
+        if not any(populated):
+            return None
+        if not all(populated):
+            state = ", ".join(f"{path}={int(present)}" for (path, _), present in zip(cohort, populated, strict=True))
+            raise RuntimeError(f"active readiness concern cohort is incomplete: {state}")
+        values = tuple(self._singleton(path, value_type) for path, value_type in cohort)
+        return project_readiness(*values)
+
+    def control(self) -> ReadinessSnapshot | None:
+        return self.snapshot()
 
     def is_current(self, epoch: int, head: str) -> bool:
-        control = self.control()
-        return control is not None and not control.provisional and (control.epoch, control.head) == (epoch, head)
+        authority = self.authority_state()
+        mutation = self.mutation_state()
+        return (
+            authority is not None
+            and mutation is not None
+            and not mutation.provisional
+            and (authority.epoch, authority.head) == (epoch, head)
+        )
 
     def fence(self, epoch: int, head: str, operation: str, base_head: str, policy_digest: str) -> None:
-        control = self.control()
-        if control is None or (
-            control.epoch,
-            control.head,
-            control.base_head,
-            control.policy_digest,
-        ) != (epoch, head, base_head, policy_digest):
+        authority = self.authority_state()
+        mutation = self.mutation_state()
+        if (
+            authority is None
+            or mutation is None
+            or (
+                authority.epoch,
+                authority.head,
+                authority.base_head,
+                authority.policy_digest,
+            )
+            != (epoch, head, base_head, policy_digest)
+        ):
             raise StaleAuthorityError("operation no longer matches current workflow authority")
-        if control.provisional:
+        if mutation.provisional:
             raise StaleAuthorityError("provisional authority cannot publish additional effects")
         if operation not in self._requested_operations():
             raise StaleAuthorityError("operation is not an active durable Activity request")
@@ -208,7 +265,11 @@ class PrReadinessHost:
         return cls(root, engine, lease, operations, load, agent_settle)
 
     @property
-    def control(self) -> Control | None:
+    def snapshot(self) -> ReadinessSnapshot | None:
+        return self.lease.snapshot()
+
+    @property
+    def control(self) -> ReadinessSnapshot | None:
         return self.lease.control()
 
     def place(self, path: str) -> tuple[dict, ...]:

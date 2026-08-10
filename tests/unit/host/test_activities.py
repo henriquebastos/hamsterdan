@@ -13,8 +13,9 @@ from hamsterdan.contracts.readiness import (
     ActionsDiscoveryRequest,
     ActionsObservation,
     ActionsRerunRequest,
+    ActionsState,
+    Authority,
     ChangeRequest,
-    Control,
     ConversationClassificationRequest,
     ConversationObservation,
     ConversationPublicationRequest,
@@ -22,12 +23,18 @@ from hamsterdan.contracts.readiness import (
     DashboardPublicationRequest,
     FindingPublicationRequest,
     FindingPublicationResult,
+    HumanState,
     Intent,
+    MutationState,
+    PublicationState,
     ReadinessCommand,
+    ReadinessSnapshot,
     ReminderPublicationRequest,
     RepairRequest,
     RepairResult,
     ReviewRequest,
+    ReviewState,
+    project_readiness,
 )
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.activities import PrReadinessActivities, activity_definitions
@@ -47,12 +54,25 @@ REQUEST_TYPES = {
 }
 
 
+def readiness_snapshot(repository, pr_number, epoch, head, base_head, strict_base=True, base_current=True, **changes):
+    token_types = (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
+    values = ReadinessSnapshot(
+        repository, pr_number, epoch, head, base_head, strict_base, base_current, **changes
+    ).dump()
+    return project_readiness(
+        *(value_type(**{name: values[name] for name in value_type.__dataclass_fields__}) for value_type in token_types)
+    )
+
+
 def request(kind, epoch, head, operation="", sequence=0, payload=None):
     values = dict(payload or {})
     values.setdefault("base_head", "base")
     values.setdefault("policy_digest", "policy")
     if kind == "dashboard":
-        values.setdefault("control", Control("repo", 1, epoch, head, values["base_head"], True, True))
+        values.setdefault(
+            "control",
+            readiness_snapshot("repo", 1, epoch, head, values["base_head"]),
+        )
     if kind == "review":
         values = {
             "strict_base": True,
@@ -107,7 +127,7 @@ def request(kind, epoch, head, operation="", sequence=0, payload=None):
         )
     else:
         request_type = REQUEST_TYPES[kind]
-    for key, value_type in (("actions", ActionsObservation), ("intent", Intent), ("control", Control)):
+    for key, value_type in (("actions", ActionsObservation), ("intent", Intent), ("control", ReadinessSnapshot)):
         if key in values and isinstance(values[key], dict):
             values[key] = value_type(**values[key])
     return request_type(epoch=epoch, head=head, operation=operation, **values)
@@ -164,7 +184,7 @@ def test_readiness_replay_accepts_the_exact_legacy_voice_payload() -> None:
 
 
 def test_dashboard_projects_current_gates_instead_of_latched_announcement() -> None:
-    ready = Control(
+    ready = readiness_snapshot(
         "repo",
         7,
         1,
@@ -189,7 +209,7 @@ def test_dashboard_projects_current_gates_instead_of_latched_announcement() -> N
 
 
 def test_conversation_gate_projection_and_status_override_latched_lifecycle_details() -> None:
-    ready = Control(
+    ready = readiness_snapshot(
         "repo",
         7,
         1,
@@ -931,7 +951,7 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
             "base_head": "b" * 40,
             "policy_digest": "policy",
             "comment": {"text": "explain the blockers", "actor_id": 1, "actor_login": "human"},
-            "control": Control("owner/repo", 7, 2, "a" * 40, "b" * 40, False, True).dump(),
+            "control": readiness_snapshot("owner/repo", 7, 2, "a" * 40, "b" * 40, False, True).dump(),
         },
     )
 

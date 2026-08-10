@@ -15,10 +15,11 @@ from hamsterdan.contracts.readiness import (
     ActionsDiscoveryRequest,
     ActionsObservation,
     ActionsRerunRequest,
+    ActionsState,
     Admission,
+    Authority,
     ChangeRequest,
     ChangeResult,
-    Control,
     ConversationClassificationRequest,
     ConversationObservation,
     ConversationPublicationRequest,
@@ -28,11 +29,15 @@ from hamsterdan.contracts.readiness import (
     FindingPublicationRequest,
     FindingPublicationResult,
     HumanObservation,
+    HumanState,
     Intent,
     IntentBatch,
     Lifecycle,
+    MutationState,
+    PublicationState,
     ReadinessCommand,
     ReadinessPublicationResult,
+    ReadinessSnapshot,
     Reminder,
     ReminderPublicationRequest,
     ReminderPublicationResult,
@@ -40,7 +45,9 @@ from hamsterdan.contracts.readiness import (
     RepairResult,
     ReviewRequest,
     ReviewResult,
+    ReviewState,
     Seed,
+    project_readiness,
     workflow_gates_ready,
     workflow_wait,
 )
@@ -282,7 +289,7 @@ def observed_actions(
     *,
     observation: str,
 ) -> ActionsObservation:
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     return ActionsObservation(
         control["epoch"],
         control["head"],
@@ -367,6 +374,79 @@ def values(subject: Engine, place: str) -> list[dict]:
     return [item.data for item in subject.marking.place(NetPath(place))]
 
 
+def state(subject: Engine, path: str, kind):
+    """Hydrate the singleton token owned by one active concern."""
+    found = values(subject, path)
+    assert len(found) == 1, (path, found)
+    return kind(**found[0])
+
+
+def snapshot(subject: Engine) -> ReadinessSnapshot:
+    """Join the six independently owned active concern tokens."""
+    return project_readiness(
+        state(subject, "authority", Authority),
+        state(subject, "actions_state", ActionsState),
+        state(subject, "review_state", ReviewState),
+        state(subject, "human_state", HumanState),
+        state(subject, "mutation_state", MutationState),
+        state(subject, "publication_state", PublicationState),
+    )
+
+
+ACTIVE_CONCERNS = {
+    "authority": Authority,
+    "actions_state": ActionsState,
+    "review_state": ReviewState,
+    "human_state": HumanState,
+    "mutation_state": MutationState,
+    "publication_state": PublicationState,
+}
+
+
+def assert_active_cohort(subject: Engine) -> None:
+    assert {path: len(values(subject, path)) for path in ACTIVE_CONCERNS} == dict.fromkeys(ACTIVE_CONCERNS, 1)
+
+
+def assert_no_active_cohort(subject: Engine) -> None:
+    assert not any(values(subject, path) for path in ACTIVE_CONCERNS)
+
+
+def concern_state(**overrides):
+    """Build six concern values from concise legacy-shaped test overrides."""
+    base = ReadinessSnapshot("repo", 7, 1, "h", "base", True, True).dump() | overrides
+    return tuple(
+        kind(**{name: base[name] for name in kind.__dataclass_fields__})
+        for kind in (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
+    )
+
+
+def make_snapshot(
+    repository_id="repo",
+    pr_number=7,
+    epoch=1,
+    head="h",
+    base_head="base",
+    strict_base=True,
+    base_current=True,
+    policy_digest="",
+    **overrides,
+) -> ReadinessSnapshot:
+    """Build a joined snapshot while keeping direct-helper setup concise."""
+    return project_readiness(
+        *concern_state(
+            repository_id=repository_id,
+            pr_number=pr_number,
+            epoch=epoch,
+            head=head,
+            base_head=base_head,
+            strict_base=strict_base,
+            base_current=base_current,
+            policy_digest=policy_digest,
+            **overrides,
+        )
+    )
+
+
 def admit(subject: Engine, head: str, identity: str) -> None:
     deliver(subject, "verified_admission", Admission("repo", 7, head, "base", True), identity)
 
@@ -378,6 +458,7 @@ def requests(subject: Engine) -> list[ActivityRequested]:
 def test_every_obligation_is_a_real_typed_activity_and_readiness_is_end_to_end() -> None:
     subject = engine()
     admit(subject, "h1", "admit")
+    assert_active_cohort(subject)
     deliver(
         subject,
         "human_observation",
@@ -386,7 +467,7 @@ def test_every_obligation_is_a_real_typed_activity_and_readiness_is_end_to_end()
     )
     names = [record.activity for record in requests(subject)]
     assert {"review", "actions_discovery", "dashboard_publish", "readiness_publish"} <= set(names)
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert control["announced"] is True
     assert not values(subject, "command.readiness")
     assert all(
@@ -416,10 +497,11 @@ def test_same_head_is_duplicate_distinct_head_supersedes_and_counts_stay_bounded
         "pause",
     )
     admit(subject, "h0", "duplicate")
-    assert values(subject, "current")[0]["epoch"] == 1
+    assert snapshot(subject).dump()["epoch"] == 1
     for epoch in range(1, 11):
         admit(subject, f"h{epoch}", f"a{epoch}")
-    assert values(subject, "current")[0]["epoch"] == 11
+        assert_active_cohort(subject)
+    assert snapshot(subject).dump()["epoch"] == 11
     assert all(len(tokens) <= 1 for _, tokens in subject.marking)
 
 
@@ -434,7 +516,7 @@ def test_same_head_reconcile_retries_unable_review_twice_then_waits() -> None:
         operations.append(work.operation)
         complete(dispatch, "review", ReviewResult(1, "h1", "unable", [], [], work.operation))
         drive_bounded(subject)
-        control = values(subject, "current")[0]
+        control = snapshot(subject).dump()
         assert (control["review"], control["review_attempts"]) == ("unable", attempt)
         if attempt < MAX_REVIEW_ATTEMPTS:
             subject.deliver(
@@ -452,48 +534,60 @@ def test_same_head_reconcile_retries_unable_review_twice_then_waits() -> None:
     )
     drive_bounded(subject)
     assert not pending_all(dispatch, "review")
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert control["review_attempts"] == MAX_REVIEW_ATTEMPTS
     assert control["wait"] == "coordinating review capability"
 
 
 def test_legacy_unable_review_without_attempt_count_resumes_at_attempt_two() -> None:
-    control = Control("repo", 7, 1, "h1", "base", True, True, review="unable")
+    authority, _, review_state, _, _, publication = concern_state(head="h1", review="unable")
     admission = Admission("repo", 7, "h1", "base", True)
 
-    assert _retryable_review(control, admission)
-    outputs = (SimpleNamespace(target="current", color="control"), SimpleNamespace(target="work", color="work"))
-    binding = SimpleNamespace(peeked=[token(control), token(admission)])
+    assert _retryable_review(authority, review_state, admission)
+    outputs = (
+        SimpleNamespace(target="authority", color="Authority"),
+        SimpleNamespace(target="review_state", color="ReviewState"),
+        SimpleNamespace(target="publication_state", color="PublicationState"),
+        SimpleNamespace(target="work.review", color="ReviewRequest"),
+    )
+    binding = SimpleNamespace(
+        read=(),
+        consumed=(("inputs", tuple(map(token, (authority, review_state, publication, admission)))),),
+    )
     routed = _retry_review(binding, outputs)
 
-    assert routed[outputs[0].target][0].data["review_attempts"] == 2
-    assert routed[outputs[1].target][0].data["sequence"] == 2
+    assert routed[outputs[1].target][0].data["review_attempts"] == 2
+    assert routed[outputs[3].target][0].data["sequence"] == 2
 
 
 def test_review_retry_atomically_refreshes_admission_authority() -> None:
-    control = Control(
-        "repo",
-        7,
-        1,
-        "h1",
-        "base",
-        True,
-        False,
+    authority, _, review_state, _, _, publication = concern_state(
+        head="h1",
+        base_current=False,
         review="unable",
         review_attempts=1,
     )
     admission = Admission("repo", 7, "h1", "base", True, base_current=True)
-    outputs = (SimpleNamespace(target="current", color="control"), SimpleNamespace(target="work", color="work"))
-    binding = SimpleNamespace(peeked=[token(control), token(admission)])
+    outputs = (
+        SimpleNamespace(target="authority", color="Authority"),
+        SimpleNamespace(target="review_state", color="ReviewState"),
+        SimpleNamespace(target="publication_state", color="PublicationState"),
+        SimpleNamespace(target="work.review", color="ReviewRequest"),
+    )
+    binding = SimpleNamespace(
+        read=(),
+        consumed=(("inputs", tuple(map(token, (authority, review_state, publication, admission)))),),
+    )
 
     routed = _retry_review(binding, outputs)
 
     changed = routed[outputs[0].target][0].data
-    work = routed[outputs[1].target][0].data
+    changed_review = routed[outputs[1].target][0].data
+    work = routed[outputs[3].target][0].data
     assert changed["base_current"] is True
-    assert changed["review_attempts"] == 2
+    assert changed_review["review_attempts"] == 2
     assert work["base_current"] is True
-    assert len(routed[outputs[1].target]) == 1
+    assert len(routed[outputs[3].target]) == 1
 
 
 def test_same_head_reconcile_does_not_retry_clear_review_and_new_head_resets_attempts() -> None:
@@ -506,13 +600,13 @@ def test_same_head_reconcile_does_not_retry_clear_review_and_new_head_resets_att
     subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="same-head")
     drive_bounded(subject)
     assert not pending_all(dispatch, "review")
-    assert values(subject, "current")[0]["review_attempts"] == 1
+    assert snapshot(subject).dump()["review_attempts"] == 1
 
     subject.deliver("verified_admission", token(Admission("repo", 7, "h2", "base", True)), identity="new-head")
     _, invocation = drive_until_activity(subject, dispatch, "review")
     new_work = work_input(invocation)
     assert (new_work.epoch, new_work.head) == (2, "h2")
-    assert values(subject, "current")[0]["review_attempts"] == 1
+    assert snapshot(subject).dump()["review_attempts"] == 1
 
 
 def test_unauthorized_conversation_and_read_only_intent_leave_no_residue() -> None:
@@ -583,7 +677,7 @@ def test_failed_conversation_publication_reissues_the_same_fenced_operation() ->
 
     second_occurrence, second_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
     second_work = work_input(second_invocation)
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert second_occurrence != first_occurrence
     assert second_work == first_work
     assert control["conversation_attempts"] == 2
@@ -594,7 +688,7 @@ def test_failed_conversation_publication_reissues_the_same_fenced_operation() ->
         effect_result("conversation", 1, "h1", True, operation=second_work.operation).dump(),
     )
     drive_bounded(subject)
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert control["conversation_pending"] == {}
     assert control["conversation_attempts"] == 0
     assert control["conversation_capability_blocking"] is False
@@ -644,15 +738,15 @@ def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -
         )
         drive_bounded(subject)
         if attempt < 3:
-            assert values(subject, "current")[0]["conversation_attempts"] == attempt + 1
+            assert snapshot(subject).dump()["conversation_attempts"] == attempt + 1
 
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert pending_all(dispatch, "conversation_publish") == []
     assert control["conversation_attempts"] == 3
     assert control["conversation_capability_blocking"] is True
     assert control["conversation_pending"]["operation"] == first_work.operation
-    assert workflow_gates_ready(Control(**control)) is False
-    otherwise_ready = Control(
+    assert workflow_gates_ready(ReadinessSnapshot(**control)) is False
+    otherwise_ready = make_snapshot(
         "repo",
         7,
         1,
@@ -675,10 +769,13 @@ def test_draft_resumes_new_epoch_and_terminal_absorbs_late_facts() -> None:
     subject = engine()
     admit(subject, "h1", "a")
     deliver(subject, "lifecycle_observation", Lifecycle("draft", "h1"), "draft")
+    assert_no_active_cohort(subject)
     assert values(subject, "dormant")[0]["last_epoch"] == 1
     admit(subject, "h1", "resume")
-    assert values(subject, "current")[0]["epoch"] == 2
+    assert_active_cohort(subject)
+    assert snapshot(subject).dump()["epoch"] == 2
     deliver(subject, "lifecycle_observation", Lifecycle("merged", "provider-head"), "merged")
+    assert_no_active_cohort(subject)
     before = len(requests(subject))
     deliver(
         subject,
@@ -694,6 +791,7 @@ def test_closed_is_abort_and_activity_mapping_is_exact() -> None:
     subject = engine()
     admit(subject, "h1", "a")
     deliver(subject, "lifecycle_observation", Lifecycle("closed", "anything"), "closed")
+    assert_no_active_cohort(subject)
     assert values(subject, "terminal")[0]["status"] == "abort"
     assert set(ACTIVITY_TRANSITIONS) == {
         "execute.review",
@@ -710,12 +808,31 @@ def test_closed_is_abort_and_activity_mapping_is_exact() -> None:
     }
 
 
+def test_human_observation_changes_only_human_and_publication_concerns() -> None:
+    subject = engine()
+    admit(subject, "h1", "admit")
+    before = {path: state(subject, path, kind).dump() for path, kind in ACTIVE_CONCERNS.items()}
+
+    deliver(
+        subject,
+        "human_observation",
+        HumanObservation(1, "h1", True, False, True, 2, True, False, False, True, True),
+        "human",
+    )
+
+    after = {path: state(subject, path, kind).dump() for path, kind in ACTIVE_CONCERNS.items()}
+    for path in ("authority", "actions_state", "review_state", "mutation_state"):
+        assert after[path] == before[path]
+    assert after["human_state"] != before["human_state"]
+
+
 def test_same_head_refreshes_verified_base_without_creating_a_generation() -> None:
     subject = engine()
     admit(subject, "h1", "first")
     dashboards = len([item for item in requests(subject) if item.activity == "dashboard_publish"])
     deliver(subject, "verified_admission", Admission("repo", 7, "h1", "base-2", False, False), "refresh")
-    control = values(subject, "current")[0]
+    assert_active_cohort(subject)
+    control = snapshot(subject).dump()
     assert (control["epoch"], control["base_head"], control["strict_base"], control["base_current"]) == (
         1,
         "base-2",
@@ -739,26 +856,25 @@ def test_external_actions_failure_is_deduplicated_and_authorizes_one_rerun() -> 
 
 
 def test_actions_basis_cannot_retire_before_a_current_observation_is_folded() -> None:
-    control = Control("repo", 7, 1, "h", "base", True, True, actions_operation="actions")
+    authority, actions, _, _, mutation, _ = concern_state(actions_operation="actions")
     failure = ActionsObservation(1, "h", "run", 1, "failure", "fp", operation="actions", observation="new")
-    assert _basis_done(control, failure) is False
+    assert _basis_done(authority, actions, mutation, failure) is False
 
-    folded = fold_actions.implementation(control, failure)
-    assert _basis_done(folded, failure) is False
+    folded = fold_actions.implementation(actions, failure)
+    assert _basis_done(authority, folded, mutation, failure) is False
     duplicate_after_rerun = replace(folded, rerun_requested=True, rerun_attempt=1)
-    assert _basis_done(duplicate_after_rerun, failure) is True
+    assert _basis_done(authority, duplicate_after_rerun, mutation, failure) is True
 
 
-def test_advanced_guards_hydrate_defaults_for_replayed_control_tokens() -> None:
-    old_control = Control("repo", 7, 1, "h", "base", True, True).dump()
-    old_control.pop("rerun_attempt")
-    old_control.pop("review_attempts")
+def test_advanced_guards_hydrate_defaults_for_replayed_concern_tokens() -> None:
+    old_actions = ActionsState().dump()
+    old_actions.pop("rerun_attempt")
     companion = ActionsObservation(1, "h", "run", 1, "failure").dump()
     binding = SimpleNamespace(
         consumed=(("actions", (Token("ActionsObservation", companion),)),),
-        read=(("current", (Token("Control", old_control),)),),
+        read=(("actions_state", (Token("ActionsState", old_actions),)),),
     )
-    guard = _guard(lambda control, value: control.rerun_attempt == 0 and value.attempt == 1)
+    guard = _guard(lambda actions, value: actions.rerun_attempt == 0 and value.attempt == 1)
     assert guard.implementation(binding) is True
 
 
@@ -774,37 +890,24 @@ def test_irrelevant_lifecycle_fact_is_retired_while_dormant() -> None:
 
 
 def test_failed_repair_spends_the_automatic_budget() -> None:
-    control = Control(
-        "repo",
-        7,
-        1,
-        "h",
-        "base",
-        True,
-        True,
+    concerns = concern_state(
         actions="reproduced",
         fingerprint="fp",
         repair_in_flight=True,
         mutation_operation="repair",
     )
     failed = fold_effect(
-        control,
+        concerns[4],
         effect_result("repair", 1, "h", False, fingerprint="fp", lineage="repair", operation="repair"),
     )
     assert failed.repair_used is True
     assert failed.repair_fingerprint == "fp"
-    assert failed.wait == "repair recovery"
+    assert workflow_wait(project_readiness(*concerns[:4], failed, concerns[5])) == "repair recovery"
 
 
 def test_terminal_finding_lineage_stays_visible_without_republication() -> None:
-    control = Control(
-        "repo",
-        7,
-        2,
-        "h",
-        "base",
-        True,
-        True,
+    _, _, review_state, _, _, publication = concern_state(
+        epoch=2,
         findings=[{"id": "finding-1", "title": "Old", "blocking": True, "comment_url": "url"}],
     )
     result = ReviewResult(
@@ -816,18 +919,18 @@ def test_terminal_finding_lineage_stays_visible_without_republication() -> None:
         "review",
     )
 
-    folded = fold_review.implementation(control, result)
+    folded = fold_review.implementation(review_state, result)
 
     assert folded.review == "clear"
     assert folded.findings == [
         {"id": "finding-1", "title": "Old", "blocking": True, "comment_url": "url", "disposition": "resolved"}
     ]
-    assert folded.findings_published is True
-    assert folded.finding_publication_requested is False
+    assert publication.findings_published is False
+    assert publication.finding_publication_requested is False
 
 
 def test_conflict_is_the_named_wait_after_independent_review_and_actions_finish() -> None:
-    control = Control("repo", 7, 1, "h", "base", True, True, conflict=True, actions="green")
+    control = make_snapshot("repo", 7, 1, "h", "base", True, True, conflict=True, actions="green")
 
     reviewed = fold_review.implementation(control, ReviewResult(1, "h", "clear", [], [], "review"))
     observed = fold_actions.implementation(
@@ -850,25 +953,16 @@ def test_rerun_failure_folds_after_the_same_attempt_was_observed_in_progress() -
     reproduced = observed_actions(subject, "run", 2, "failure", "reproduced", observation="failure-2")
     deliver(subject, "actions_observation", reproduced, "reproduced")
 
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert (control["actions"], control["attempt"], control["rerun_attempt"]) == ("reproduced", 2, 1)
     assert len([item for item in requests(subject) if item.activity == "repair"]) == 1
 
 
 def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cannot_ack() -> None:
-    control = Control(
-        "repo",
-        7,
-        1,
-        "h1",
-        "base",
-        True,
-        True,
-        provisional=True,
-    )
+    authority, _, _, _, mutation, _ = concern_state(head="h1", provisional=True)
     intent = Intent(epoch=1, head="h1", kind="change", digest="d", authorized=True, blocking=True, base_head="base")
-    assert _mutation(control, intent) is False
-    requested = Control(
+    assert _mutation(authority, mutation, intent) is False
+    requested = make_snapshot(
         "repo",
         7,
         1,
@@ -881,7 +975,8 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
         dashboard_operation="dashboard:1:4",
     )
     stale = effect_result("dashboard", 1, "h1", True, operation="dashboard:1:3")
-    assert _effect_matches(requested, stale) is False
+    requested_authority, *_, requested_publication = concern_state(**requested.dump())
+    assert _effect_matches(requested_authority, requested_publication, stale) is False
 
     conversation = replace(
         requested,
@@ -889,21 +984,24 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
     )
     assert (
         _effect_matches(
-            conversation,
+            requested_authority,
+            concern_state(**conversation.dump())[5],
             effect_result("conversation", 1, "h1", True, operation="conversation:stale"),
         )
         is False
     )
     assert (
         _effect_matches(
-            conversation,
+            requested_authority,
+            concern_state(**conversation.dump())[5],
             effect_result("conversation", 1, "h1", True, operation="conversation:1"),
         )
         is True
     )
     assert (
         _effect_matches(
-            replace(conversation, conversation_pending={}),
+            requested_authority,
+            concern_state(**replace(conversation, conversation_pending={}).dump())[5],
             effect_result("conversation", 1, "h1", True, operation="conversation:1"),
         )
         is False
@@ -911,23 +1009,17 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
 
 
 def test_used_repair_fingerprint_names_human_wait_and_cannot_repair_again() -> None:
-    control = Control(
-        "repo",
-        7,
-        2,
-        "h2",
-        "base",
-        True,
-        True,
+    concerns = concern_state(
+        epoch=2,
+        head="h2",
         actions="reproduced",
         actions_observation="obs",
         repair_used=True,
         repair_fingerprint="fp",
-        wait="human repair authorization",
     )
     observation = ActionsObservation(2, "h2", "run", 2, "failure", "fp", observation="obs")
-    assert _repairable(control, observation) is False
-    assert control.wait == "human repair authorization"
+    assert _repairable(concerns[0], concerns[1], concerns[4], observation) is False
+    assert workflow_wait(project_readiness(*concerns)) == "human repair authorization"
 
 
 def test_intent_arguments_are_isolated_and_only_authorized_settled_controls_fold() -> None:
@@ -935,14 +1027,15 @@ def test_intent_arguments_are_isolated_and_only_authorized_settled_controls_fold
     two = Intent(epoch=1, head="h", kind="dismiss", digest="b", authorized=True, blocking=False)
     one.arguments["findings"] = ["f1"]
     assert two.arguments == {}
-    control = Control("repo", 7, 1, "h", "base", True, True, findings=[{"id": "f1", "disposition": "new"}])
+    review = ReviewState(findings=[{"id": "f1", "disposition": "new"}])
     denied = Intent(
         epoch=1, head="h", kind="dismiss", digest="x", authorized=False, blocking=False, arguments={"findings": ["f1"]}
     )
-    assert fold_intent.implementation(control, denied).findings[0]["disposition"] == "new"
-    assert fold_intent.implementation(control, one).findings[0]["disposition"] == "dismiss"
+    assert fold_intent.implementation(review, denied).findings[0]["disposition"] == "new"
+    assert fold_intent.implementation(review, one).findings[0]["disposition"] == "dismiss"
+    human = HumanState()
     snoozed = fold_intent.implementation(
-        control, Intent(epoch=1, head="h", kind="snooze", digest="s", authorized=True, blocking=False)
+        human, Intent(epoch=1, head="h", kind="snooze", digest="s", authorized=True, blocking=False)
     )
     assert snoozed.reminder_snoozed is True
     assert (
@@ -952,7 +1045,7 @@ def test_intent_arguments_are_isolated_and_only_authorized_settled_controls_fold
         is False
     )
 
-    unavailable = Control("repo", 7, 1, "h", "base", True, True, review="unable")
+    unavailable = make_snapshot("repo", 7, 1, "h", "base", True, True, review="unable")
     disposed = fold_intent.implementation(
         unavailable,
         Intent(
@@ -1051,7 +1144,7 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
 
 
 def test_reminder_asks_for_assignment_but_pauses_for_mutation_and_stops_after_real_approval() -> None:
-    control = Control(
+    control = make_snapshot(
         "repo",
         7,
         1,
@@ -1077,13 +1170,13 @@ def test_reminder_asks_for_assignment_but_pauses_for_mutation_and_stops_after_re
 
 
 def test_dashboard_format_upgrade_requests_one_fresh_projection() -> None:
-    old = Control("repo", 7, 1, "head", "base", True, True, dashboard_current=True)
+    old = make_snapshot("repo", 7, 1, "head", "base", True, True, dashboard_current=True)
     assert _request_dashboard(old)
     assert not _request_dashboard(replace(old, dashboard_format=DASHBOARD_FORMAT))
 
 
 def test_quiescent_control_projects_one_priority_ordered_external_wait() -> None:
-    ready_control = Control(
+    ready_control = make_snapshot(
         "repo",
         7,
         1,
@@ -1126,7 +1219,7 @@ def test_late_review_and_dashboard_results_retire_after_supersession_and_termina
         ).dump(),
     )
     drive_bounded(subject)
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert (control["epoch"], control["head"], control["review"], control["dashboard_current"]) == (
         2,
         "h2",
@@ -1212,7 +1305,7 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
         ).dump(),
     )
     drive_bounded(subject)
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert (control["head"], control["provisional"], control["provisional_head"]) == ("human-head", False, "")
 
 
@@ -1248,12 +1341,12 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
         ).dump(),
     )
     drive_bounded(subject)
-    assert values(subject, "current")[0]["provisional_head"] == "h2"
+    assert snapshot(subject).dump()["provisional_head"] == "h2"
     subject.deliver("verified_admission", token(Admission("repo", 7, "h2", "base", True)), identity="confirm")
     drive_bounded(subject)
-    assert values(subject, "current")[0]["repair_used"] is True
+    assert snapshot(subject).dump()["repair_used"] is True
     for _ in range(20):
-        control = values(subject, "current")[0]
+        control = snapshot(subject).dump()
         if control["actions"] == "green" and control["review"] == "clear":
             break
         drive_bounded(subject)
@@ -1313,13 +1406,44 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
             dispatch.complete(occurrence, result.dump())
         drive_bounded(subject)
     assert not values(subject, "work.repair") and not values(subject, "actions_basis")
-    assert values(subject, "current")[0]["wait"] == "human repair authorization"
+    assert snapshot(subject).dump()["wait"] == "human repair authorization"
 
 
 def test_activity_topology_has_complete_retirement_and_no_authority_outputs() -> None:
     net = build_net(1).net
     assert all("merge" not in str(transition) for transition in net.transitions)
-    authority = {"current", "admission", "terminal"}
+    assert NetPath("current") not in net.places
+    assert all(place.color != "Control" for place in net.places.values())
+    refresh_inputs = {str(item.source): item.mode.value for item in net.inputs(NetPath("refresh_admission"))}
+    assert refresh_inputs == {
+        "review_state": "read",
+        "authority": "consume",
+        "publication_state": "consume",
+        "admission": "consume",
+    }
+    assert {str(item.target) for item in net.outputs(NetPath("refresh_admission"))} == {
+        "authority",
+        "publication_state",
+    }
+    reminder_inputs = {str(item.source): item.mode.value for item in net.inputs(NetPath("accept_reminder"))}
+    assert reminder_inputs == {"authority": "read", "reminder_result": "consume"}
+    assert not net.outputs(NetPath("accept_reminder"))
+    authority = {"authority", "admission", "terminal"}
+    result_consumers = {
+        "accept_review",
+        "accept_actions",
+        "unpack_intents",
+        "authorize_rerun",
+        "authorize_repair",
+        "authorize_change",
+        "accept_conversation",
+        "accept_repair",
+        "accept_change",
+        "accept_finding",
+        "accept_dashboard",
+        "accept_reminder",
+        "accept_readiness",
+    }
     for path in ACTIVITY_TRANSITIONS:
         transition = NetPath(path)
         inputs = net.inputs(transition)
@@ -1336,9 +1460,7 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
             assert any(name.startswith("retire.terminal_") for name in names)
             if result:
                 assert any(
-                    name in {"accept_review", "accept_actions", "accept_intent", "unpack_intents"}
-                    or name.startswith("accept_effect_")
-                    or name in {"authorize_rerun", "authorize_repair", "authorize_change"}
+                    name in result_consumers
                     or name.startswith("retire.")
                     and any(word in name for word in ("operation", "duplicate"))
                     for name in names
@@ -1356,26 +1478,17 @@ def test_mutation_requires_current_authority_basis() -> None:
         base_head="base-1",
         policy_digest="policy-1",
     )
-    current = Control("repo", 7, 1, "h1", "base-1", True, True, "policy-1")
-    assert _mutation(current, authorized) is True
-    stale_basis = Control(
-        "repo",
-        7,
-        1,
-        "h1",
-        "base-2",
-        True,
-        True,
-        "policy-2",
-    )
-    assert _mutation(stale_basis, authorized) is False
+    authority, _, _, _, mutation, _ = concern_state(head="h1", base_head="base-1", policy_digest="policy-1")
+    assert _mutation(authority, mutation, authorized) is True
+    stale_authority, _, _, _, stale_mutation, _ = concern_state(head="h1", base_head="base-2", policy_digest="policy-2")
+    assert _mutation(stale_authority, stale_mutation, authorized) is False
 
 
 def test_external_second_attempt_is_green_but_only_an_impetus_rerun_is_flaky() -> None:
-    control = Control("repo", 7, 1, "h1", "base", True, True, actions_operation="actions")
+    control = make_snapshot("repo", 7, 1, "h1", "base", True, True, actions_operation="actions")
     external = ActionsObservation(1, "h1", "run", 2, "success", operation="actions")
     assert fold_actions.implementation(control, external).actions == "green"
-    rerun = Control(
+    rerun = make_snapshot(
         "repo",
         7,
         1,
@@ -1390,27 +1503,55 @@ def test_external_second_attempt_is_green_but_only_an_impetus_rerun_is_flaky() -
 
 
 def test_dashboard_capability_denial_is_an_explicit_blocker_not_success() -> None:
-    control = Control(
-        "repo",
-        7,
-        1,
-        "h1",
-        "base",
-        True,
-        True,
+    concerns = concern_state(
+        head="h1",
+        actions="green",
+        review="clear",
+        findings_published=True,
+        human_approved=True,
+        mergeable=True,
+        revision=4,
+        dashboard_current=True,
         dashboard_requested=True,
         dashboard_operation="dashboard",
     )
     result = effect_result("dashboard", 1, "h1", False, operation="dashboard", capability_available=False)
-    blocked = fold_effect(control, result)
+    blocked = fold_effect(concerns[5], result)
     assert blocked.dashboard_current is False
     assert blocked.dashboard_capability_blocking is True
-    assert blocked.wait == "dashboard update capability"
+    assert blocked.revision == 5
+    assert blocked.dashboard_requested is True
+    assert blocked.dashboard_operation == "dashboard"
+    assert workflow_wait(project_readiness(*concerns[:5], blocked)) == "dashboard update capability"
+
+
+def test_readiness_capability_denial_invalidates_its_ready_dashboard() -> None:
+    concerns = concern_state(
+        head="h1",
+        actions="green",
+        review="clear",
+        findings_published=True,
+        human_approved=True,
+        mergeable=True,
+        revision=7,
+        dashboard_current=True,
+        readiness_requested=True,
+        readiness_operation="readiness",
+    )
+    result = effect_result("readiness", 1, "h1", False, operation="readiness", capability_available=False)
+
+    blocked = fold_effect(concerns[5], result)
+
+    assert blocked.revision == 8
+    assert blocked.dashboard_current is False
+    assert blocked.dashboard_requested is False
+    assert blocked.readiness_capability_blocking is True
+    assert workflow_wait(project_readiness(*concerns[:5], blocked)) == "readiness publication capability"
 
 
 def test_non_capability_conversation_failure_clears_pending_without_retry() -> None:
     work = request("conversation", 1, "h1", "conversation:1")
-    control = Control(
+    control = make_snapshot(
         "repo",
         7,
         1,
@@ -1433,7 +1574,7 @@ def test_non_capability_conversation_failure_clears_pending_without_retry() -> N
 
 
 def test_readiness_ack_invalidates_dashboard_before_latching_announcement() -> None:
-    control = Control(
+    control = make_snapshot(
         "repo",
         7,
         1,
@@ -1463,7 +1604,7 @@ def test_mismatched_subject_admission_cannot_rebind_an_instance() -> None:
     subject = engine()
     admit(subject, "h1", "first")
     deliver(subject, "verified_admission", Admission("other", 99, "h2", "base", True), "misrouted")
-    control = values(subject, "current")[0]
+    control = snapshot(subject).dump()
     assert (control["repository_id"], control["pr_number"], control["head"], control["epoch"]) == (
         "repo",
         7,
@@ -1491,7 +1632,7 @@ def test_same_generation_stale_dashboard_ack_cannot_ack_newer_projection() -> No
         effect_result("dashboard", 1, "h1", True, operation=work_input(old_invocation).operation).dump(),
     )
     drive_bounded(subject)
-    assert values(subject, "current")[0]["dashboard_current"] is False
+    assert snapshot(subject).dump()["dashboard_current"] is False
     assert not values(subject, "dashboard_result")
     current_occurrence, current_invocation = pending(dispatch, "dashboard_publish")
     dispatch.complete(
@@ -1499,4 +1640,4 @@ def test_same_generation_stale_dashboard_ack_cannot_ack_newer_projection() -> No
         effect_result("dashboard", 1, "h1", True, operation=work_input(current_invocation).operation).dump(),
     )
     drive_bounded(subject)
-    assert values(subject, "current")[0]["dashboard_current"] is True
+    assert snapshot(subject).dump()["dashboard_current"] is True

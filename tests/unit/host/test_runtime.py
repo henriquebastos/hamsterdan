@@ -8,7 +8,16 @@ from petrus.impetus.history import ActivityFailed, ActivityRequested, FiringFail
 from petrus.impetus.petrinet import NetPath, Token
 from petrus.motus.activity import ExecutionPolicy
 
-from hamsterdan.contracts.readiness import Control, ReviewRequest
+from hamsterdan.contracts.readiness import (
+    ActionsState,
+    Authority,
+    HumanState,
+    MutationState,
+    PublicationState,
+    ReadinessSnapshot,
+    ReviewRequest,
+    ReviewState,
+)
 from hamsterdan.host.activities import PrReadinessActivities
 from hamsterdan.host.runtime import AuthorityLease, PrReadinessHost
 
@@ -27,24 +36,81 @@ class ProviderAuthority:
 
 
 class Marking:
-    def __init__(self, control: Control) -> None:
-        self.token = Token("control", control.dump())
+    def __init__(self, snapshot: ReadinessSnapshot, *, missing: str = "", duplicate: str = "") -> None:
+        values = snapshot.dump()
+        concerns = tuple(
+            value_type(**{name: values[name] for name in value_type.__dataclass_fields__})
+            for value_type in (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
+        )
+        self.tokens = {
+            path: (Token(type(value).__name__, value.dump()),)
+            for path, value in zip(
+                ("authority", "actions_state", "review_state", "human_state", "mutation_state", "publication_state"),
+                concerns,
+                strict=True,
+            )
+        }
+        if missing:
+            self.tokens[missing] = ()
+        if duplicate:
+            self.tokens[duplicate] *= 2
 
     def place(self, path: NetPath):
-        assert path == NetPath("current")
-        return (self.token,)
+        return self.tokens.get(str(path), ())
+
+
+def readiness_snapshot(**changes: object) -> ReadinessSnapshot:
+    return ReadinessSnapshot("repo", 7, 2, "head", "base", True, True, **changes)
 
 
 def test_fast_current_check_uses_only_durable_local_authority() -> None:
     authority = ProviderAuthority()
     lease = AuthorityLease(cast(Any, authority))
-    control = Control("repo", 7, 2, "head", "base", True, True, policy_digest="policy")
-    lease.engine = cast(Any, SimpleNamespace(marking=Marking(control)))
+    lease.engine = cast(Any, SimpleNamespace(marking=Marking(readiness_snapshot(policy_digest="policy"))))
 
     assert all(lease.is_current(2, "head") for _ in range(1_000))
     assert not lease.is_current(1, "head")
     assert not lease.is_current(2, "stale")
     assert authority.calls == 0
+
+
+def test_provisional_mutation_blocks_fast_currentness() -> None:
+    lease = AuthorityLease(cast(Any, ProviderAuthority()))
+    lease.engine = cast(Any, SimpleNamespace(marking=Marking(readiness_snapshot(provisional=True))))
+
+    assert not lease.is_current(2, "head")
+
+
+def test_snapshot_strictly_joins_the_six_concern_tokens() -> None:
+    lease = AuthorityLease(cast(Any, ProviderAuthority()))
+    lease.engine = cast(Any, SimpleNamespace(marking=Marking(readiness_snapshot(actions="green", review="clear"))))
+
+    snapshot = lease.snapshot()
+
+    assert snapshot is not None
+    assert (snapshot.repository_id, snapshot.epoch, snapshot.actions, snapshot.review) == ("repo", 2, "green", "clear")
+
+
+@pytest.mark.parametrize(
+    "marking",
+    [
+        Marking(readiness_snapshot(), missing="review_state"),
+        Marking(readiness_snapshot(), duplicate="authority"),
+    ],
+)
+def test_snapshot_rejects_partial_or_duplicate_active_cohort(marking: Marking) -> None:
+    lease = AuthorityLease(cast(Any, ProviderAuthority()))
+    lease.engine = cast(Any, SimpleNamespace(marking=marking))
+
+    with pytest.raises(RuntimeError, match="exactly one|incomplete"):
+        lease.snapshot()
+
+
+def test_snapshot_is_none_when_the_active_cohort_is_inactive() -> None:
+    lease = AuthorityLease(cast(Any, ProviderAuthority()))
+    lease.engine = cast(Any, SimpleNamespace(marking=SimpleNamespace(place=lambda path: ())))
+
+    assert lease.snapshot() is None
 
 
 def test_agent_polling_predicate_does_not_invoke_provider_fence() -> None:

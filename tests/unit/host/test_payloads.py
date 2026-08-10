@@ -8,7 +8,6 @@ from hamsterdan.contracts.readiness import (
     ActionsState,
     Authority,
     ChangeResult,
-    Control,
     HumanState,
     MutationState,
     PublicationState,
@@ -16,7 +15,6 @@ from hamsterdan.contracts.readiness import (
     RepairResult,
     ReviewState,
     project_readiness,
-    split_control,
 )
 from hamsterdan.host.payloads import PydanticPayloadConverter
 
@@ -57,21 +55,12 @@ def test_converter_round_trips_strict_json_workflow_model() -> None:
 )
 def test_converter_rejects_coercion_and_extra_fields(payload: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
-        PydanticPayloadConverter().decode(payload, Control)
+        PydanticPayloadConverter().decode(payload, Authority)
 
 
 def test_closed_workflow_vocabulary_rejects_unknown_actions_state() -> None:
     with pytest.raises(ValidationError):
-        Control(
-            repository_id="repo",
-            pr_number=7,
-            epoch=1,
-            head="head",
-            base_head="base",
-            strict_base=True,
-            base_current=True,
-            actions="provider-private",
-        )
+        ActionsState(actions="provider-private")
 
 
 def test_converter_rejects_a_different_nominal_result_contract() -> None:
@@ -82,50 +71,42 @@ def test_converter_rejects_a_different_nominal_result_contract() -> None:
         PydanticPayloadConverter().encode(repair, ChangeResult)
 
 
-def test_readiness_state_tokens_partition_legacy_control_fields() -> None:
+def test_readiness_state_tokens_partition_snapshot_fields() -> None:
     token_types = (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
     field_sets = [set(value_type.__dataclass_fields__) for value_type in token_types]
 
     for index, fields in enumerate(field_sets):
         assert not fields.intersection(*field_sets[index + 1 :]) if field_sets[index + 1 :] else True
     assert all(field_sets[0].isdisjoint(fields) for fields in field_sets[1:])
-    assert set().union(*field_sets, {"wait"}) == set(Control.__dataclass_fields__)
+    assert set().union(*field_sets, {"wait"}) == set(ReadinessSnapshot.__dataclass_fields__)
 
 
 @pytest.mark.parametrize(
-    "control",
+    "tokens",
     [
-        Control("repo", 7, 1, "head", "base", True, True),
-        Control(
-            "repo",
-            7,
-            3,
-            "head-3",
-            "base-2",
-            True,
-            False,
-            policy_digest="policy",
-            required_checks=["test"],
-            required_approvals=2,
-            actions="green",
-            run_id="run",
-            attempt=2,
-            review="clear",
-            findings=[{"id": "f1", "blocking": False}],
-            findings_published=True,
-            human_requested=True,
-            human_approved=True,
-            mergeable=True,
-            dashboard_current=True,
-            author="octocat",
-            wait="stale legacy projection",
+        (
+            Authority("repo", 7, 1, "head", "base", True, True),
+            ActionsState(),
+            ReviewState(),
+            HumanState(),
+            MutationState(),
+            PublicationState(),
+        ),
+        (
+            Authority("repo", 7, 3, "head-3", "base-2", True, False, "policy", ["test"], 2),
+            ActionsState(actions="green", run_id="run", attempt=2),
+            ReviewState(review="clear", findings=[{"id": "f1", "blocking": False}]),
+            HumanState(human_requested=True, human_approved=True, mergeable=True, author="octocat"),
+            MutationState(),
+            PublicationState(findings_published=True, dashboard_current=True),
         ),
     ],
 )
-def test_split_controls_project_to_equivalent_derived_snapshots(control: Control) -> None:
-    projected = project_readiness(*split_control(control))
+def test_concern_tokens_project_to_derived_snapshots(tokens: tuple) -> None:
+    projected = project_readiness(*tokens)
 
-    assert projected.dump() == control.validated_update(wait=projected.wait).dump()
+    expected = {key: value for token in tokens for key, value in token.dump().items()} | {"wait": projected.wait}
+    assert projected.dump() == expected
 
 
 def test_split_tokens_are_strict_and_extra_forbidden() -> None:
@@ -137,7 +118,14 @@ def test_split_tokens_are_strict_and_extra_forbidden() -> None:
 
 def test_converter_round_trips_readiness_snapshot() -> None:
     converter = PydanticPayloadConverter()
-    snapshot = project_readiness(*split_control(Control("repo", 7, 1, "head", "base", True, True)))
+    snapshot = project_readiness(
+        Authority("repo", 7, 1, "head", "base", True, True),
+        ActionsState(),
+        ReviewState(),
+        HumanState(),
+        MutationState(),
+        PublicationState(),
+    )
 
     encoded = converter.encode(snapshot, ReadinessSnapshot)
 

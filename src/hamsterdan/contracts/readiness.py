@@ -48,89 +48,6 @@ class Lifecycle(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
-class Control(WorkflowModel):
-    repository_id: str
-    pr_number: int
-    epoch: int
-    head: str
-    base_head: str
-    strict_base: bool
-    base_current: bool
-    policy_digest: str = ""
-    required_checks: list[str] = field(default_factory=list)
-    required_approvals: int = 0
-    conversation_resolution: bool = False
-    revision: int = 0
-    admission_relation: Literal["new", "confirmed", "superseded", "same_head", "same_head_basis_changed"] = "new"
-    provisional_head: str = ""
-    actions: Literal[
-        "discovering",
-        "capability_unavailable",
-        "running",
-        "waiting",
-        "green",
-        "flaky_green",
-        "failed",
-        "reproduced",
-        "rerun_requested",
-        "queued",
-        "requested",
-        "canceled",
-        "unavailable",
-    ] = "discovering"
-    run_id: str = ""
-    attempt: int = 0
-    rerun_requested: bool = False
-    rerun_attempt: int = 0
-    fingerprint: str = ""
-    repair_lineage: str = ""
-    repair_used: bool = False
-    repair_fingerprint: str = ""
-    actions_observation: str = ""
-    review: Literal["pending", "clear", "blocking", "unable"] = "pending"
-    findings: list[dict] = field(default_factory=list)
-    finding_lineage: list[dict] = field(default_factory=list)
-    findings_published: bool = False
-    finding_publication_requested: bool = False
-    human_requested: bool = False
-    human_approved: bool = False
-    changes_requested: bool = False
-    unresolved_conversations: int = 0
-    distinct_reviewer_required: bool = False
-    distinct_reviewer_approved: bool = False
-    mergeable: bool = False
-    conflict: bool = False
-    provisional: bool = False
-    change_in_flight: bool = False
-    repair_in_flight: bool = False
-    repair_recovery_required: bool = False
-    dashboard_current: bool = False
-    dashboard_requested: bool = False
-    dashboard_operation: str = ""
-    dashboard_format: int = 0
-    conversation_pending: dict = field(default_factory=dict)
-    conversation_attempts: int = 0
-    conversation_capability_blocking: bool = False
-    review_operation: str = ""
-    review_attempts: int = 0
-    actions_operation: str = ""
-    finding_operation: str = ""
-    mutation_operation: str = ""
-    reminder_snoozed: bool = False
-    reminder_recipient: str = ""
-    author: str = ""
-    actions_capability_blocking: bool = False
-    human_capability_blocking: bool = False
-    dashboard_capability_blocking: bool = False
-    finding_capability_blocking: bool = False
-    readiness_capability_blocking: bool = False
-    readiness_operation: str = ""
-    readiness_requested: bool = False
-    announced: bool = False
-    wait: str = "actions, coordinating review, and human review"
-
-
-@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class Authority(WorkflowModel):
     repository_id: str
     pr_number: int
@@ -466,7 +383,7 @@ class ConversationClassificationRequest(WorkflowModel):
     base_head: str
     policy_digest: str
     comment: ConversationObservation
-    control: Control
+    control: ReadinessSnapshot
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -519,7 +436,7 @@ class DashboardPublicationRequest(WorkflowModel):
     operation: str
     base_head: str
     policy_digest: str
-    control: Control
+    control: ReadinessSnapshot
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -624,7 +541,7 @@ class ReadinessCommand(WorkflowModel):
     policy_digest: str = ""
 
 
-def workflow_wait(control: Control | ReadinessSnapshot) -> str:
+def workflow_wait(control: ReadinessSnapshot) -> str:
     """Project the single highest-priority external wait from current gates."""
     if control.provisional:
         return "verified head admission"
@@ -696,35 +613,7 @@ def project_readiness(
     return snapshot.validated_update(wait=workflow_wait(snapshot))
 
 
-def split_control(
-    control: Control,
-) -> tuple[Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState]:
-    """Temporarily split legacy Control state for migration tests."""
-    values = control.dump()
-    return (
-        Authority(**{name: values[name] for name in Authority.__dataclass_fields__}),
-        ActionsState(**{name: values[name] for name in ActionsState.__dataclass_fields__}),
-        ReviewState(**{name: values[name] for name in ReviewState.__dataclass_fields__}),
-        HumanState(**{name: values[name] for name in HumanState.__dataclass_fields__}),
-        MutationState(**{name: values[name] for name in MutationState.__dataclass_fields__}),
-        PublicationState(**{name: values[name] for name in PublicationState.__dataclass_fields__}),
-    )
-
-
-def update(control: Control, *, preserve_dashboard_request: bool = False, **changes: object) -> Control:
-    """Update authority, invalidate its projection, and normalize its external wait."""
-    changes.setdefault("revision", control.revision + 1)
-    changes.setdefault("dashboard_current", False)
-    if not preserve_dashboard_request:
-        changes.setdefault("dashboard_requested", False)
-        changes.setdefault("dashboard_operation", "")
-    changed = control.validated_update(**changes)
-    if "wait" not in changes:
-        changed = changed.validated_update(wait=workflow_wait(changed))
-    return changed
-
-
-def workflow_gates_ready(control: Control | ReadinessSnapshot) -> bool:
+def workflow_gates_ready(control: ReadinessSnapshot) -> bool:
     """Evaluate readiness gates that do not depend on publishing their projection."""
     findings_clear = control.review == "clear" and not any(
         finding.get("blocking") and finding.get("disposition") in {"new", "still_open"} for finding in control.findings

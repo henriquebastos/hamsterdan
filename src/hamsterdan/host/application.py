@@ -138,8 +138,8 @@ class PrReadinessApplication:
                     )
             return self.projection(pull.state)
         if pull.draft:
-            if self.host is not None and self.host.control is not None:
-                control = self.host.control
+            if self.host is not None and self.host.snapshot is not None:
+                control = self.host.snapshot
                 assert control is not None
                 self._deliver(
                     "lifecycle_observation",
@@ -165,7 +165,7 @@ class PrReadinessApplication:
             policy.required_approvals,
             policy.conversation_resolution,
         )
-        control = self.host.control
+        control = self.host.snapshot
         current_basis = None
         if control is not None:
             current_basis = {
@@ -198,7 +198,7 @@ class PrReadinessApplication:
                     f"{_digest(admission_basis)}:{review_attempt}"
                 ),
             )
-        control = self.host.control
+        control = self.host.snapshot
         if control is None:
             return self.projection(pull.state)
 
@@ -223,6 +223,7 @@ class PrReadinessApplication:
             pull.author,
             threads_available or not policy.conversation_resolution,
         )
+        # Authority owns base_current; compare human-owned observation fields only.
         current_human = (
             control.human_requested,
             control.human_approved,
@@ -232,7 +233,6 @@ class PrReadinessApplication:
             control.distinct_reviewer_approved,
             control.mergeable,
             control.conflict,
-            control.base_current,
             control.reminder_recipient,
             control.author,
             not control.human_capability_blocking,
@@ -246,7 +246,6 @@ class PrReadinessApplication:
             human.distinct_approved,
             human.mergeable,
             human.conflict,
-            human.base_current,
             human.reviewer,
             human.author,
             human.capability_available,
@@ -257,7 +256,7 @@ class PrReadinessApplication:
                 human,
                 f"reconcile:human:{control.epoch}:{control.revision}:{_digest(human.dump())}",
             )
-        current = self.host.control
+        current = self.host.snapshot
         if current is not None:
             self._observe_actions(current, policy.required_checks)
         return self.projection(pull.state)

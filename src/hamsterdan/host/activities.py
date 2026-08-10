@@ -18,7 +18,6 @@ from hamsterdan.contracts.readiness import (
     ActionsRerunRequest,
     ChangeRequest,
     ChangeResult,
-    Control,
     ConversationClassificationRequest,
     ConversationPublicationRequest,
     ConversationPublicationResult,
@@ -30,6 +29,7 @@ from hamsterdan.contracts.readiness import (
     IntentBatch,
     ReadinessCommand,
     ReadinessPublicationResult,
+    ReadinessSnapshot,
     ReminderPublicationRequest,
     ReminderPublicationResult,
     RepairRequest,
@@ -637,7 +637,7 @@ class PrReadinessActivities:
 
     @staticmethod
     def _conversation_gates(control: dict) -> list[dict]:
-        current = Control(**control)
+        current = ReadinessSnapshot(**control)
         overall = workflow_gates_ready(current)
         findings_clear = current.review == "clear" and not any(
             finding.get("blocking") and finding.get("disposition") in {"new", "still_open"}
@@ -660,14 +660,14 @@ class PrReadinessActivities:
 
     @staticmethod
     def _status(control: dict) -> str:
-        current = Control(**control)
+        current = ReadinessSnapshot(**control)
         if workflow_gates_ready(current):
             return "Ready: every observed gate is clear. Clean. I'll keep one paw on the wheel."
         return f"Waiting for {workflow_wait(current)}. That's the next gate; I'm keeping watch."
 
     @staticmethod
     def _dashboard(c: dict) -> str:
-        control = Control(**c)
+        control = ReadinessSnapshot(**c)
         gates_ready = workflow_gates_ready(control)
         wait = workflow_wait(control)
         findings = c.get("findings", [])

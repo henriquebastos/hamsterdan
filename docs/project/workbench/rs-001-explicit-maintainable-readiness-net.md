@@ -67,6 +67,19 @@ never merges remain required.
 - `Control` remains temporarily in the running Net only until the topology and
   host migrate to the proven contracts; CR-007 remains active.
 
+### 2026-08-10 — Replaced the aggregate control token
+
+- The active marking now holds exactly one `Authority`, `ActionsState`,
+  `ReviewState`, `HumanState`, `MutationState`, and `PublicationState` token.
+  No `Control` class, token color, or `current` place remains.
+- Routine transitions read centralized authority and consume only the concerns
+  they mutate. Full-cohort movement is limited to generation and lifecycle
+  boundaries; host observation joins a strict derived `ReadinessSnapshot`.
+- Current-authority fencing reads only local authority and mutation state before
+  provider checks. Partial or duplicate active cohorts fail loudly.
+- Publication revision remains a deliberate temporary serialization point for
+  dashboard invalidation; CR-008 now owns removing that coupling.
+
 ## Change Requests
 
 | Change Request | Outcome |
@@ -77,8 +90,8 @@ never merges remain required.
 | CR-004 Specialize Activity requests and results | Complete |
 | CR-005 Simplify explicit conversational mutations | Complete |
 | CR-006 Compare active-token decomposition strategies | Complete |
-| CR-007 Replace `Control` with independent state tokens | Active |
-| CR-008 Make dashboard and readiness projection relational | Candidate |
+| CR-007 Replace `Control` with independent state tokens | Complete |
+| CR-008 Make dashboard and readiness projection relational | Active |
 | CR-009 Reduce retirement to proven invariants | Candidate |
 | CR-010 Restructure the Net around workflow continuity | Candidate |
 | CR-011 Review, coherence, and documentation | Candidate |
