@@ -47,7 +47,7 @@ merges.
 | --- | --- |
 | CR-001 Remove current-Petrus topology redundancies | Complete |
 | CR-002 Add production Activity Execution policy to Motus | Complete |
-| CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Active |
+| CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Paused for cross-project architecture exploration |
 | CR-004 Migrate conversation and eligible provider retries | Planned |
 | CR-005 Reassess residual concern-state ownership | Planned |
 | CR-006 Review, coherence, and documentation | Planned |
@@ -130,3 +130,24 @@ PR authority and provider reconciliation remain application-owned.
 - The pinned dependency passes all 446 Hamsterdan Python tests with one provider
   test skipped and passes the quick static/format gate. CR-003 now owns adopting
   durable retry custody and removing publication retry topology.
+
+### 2026-08-10 — Paused CR-003 at the execution-scope boundary
+
+- Integration analysis rejected a permanent Worker thread per PR and deferred a
+  Hamsterdan-specific shared-Worker router. Durable Dispatch already knows the
+  authorizing Instance internally, but the Worker-facing execution contract
+  resolves implementations globally by Activity name and does not expose that
+  Instance as first-class execution scope.
+- The refinement now depends on a Petrus-owned exploration of Instance
+  scheduling, scoped Activity execution, host-composed Activity modules, and
+  reconstructible implementation resolution. The inquiry and candidate runtime
+  shape are preserved in
+  [ES-001](../exploration/es1-petri-net-motus-boundary/index.md).
+- The co-equal acceptance criterion is a materially smaller Hamsterdan Net. The
+  target removes publication lease/retry/due/reissue mechanics while preserving
+  immutable authorization, exact operation ownership, fresh provider authority,
+  lookup-first recovery, typed terminal outcome, and current-state acceptance or
+  supersession.
+- No production topology is deleted at this pause. Petrus Activity Execution V2
+  remains accepted and pinned; CR-003 resumes only after the cross-project
+  exploration yields a reviewed implementation boundary.

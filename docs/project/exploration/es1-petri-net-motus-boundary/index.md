@@ -13,9 +13,11 @@ are durable asynchronous-call semantics, and which are execution mechanics
 that should be supplied by Petrus or Motus as reusable behavior or
 configuration?
 
-The analysis compares the current Hamsterdan topology with Petrus/Motus at the
-pinned revision `116b0ddc460c0e04d4ad40c077158bd3498a4860` and uses Temporal's
-Activity execution model as a design reference rather than a framework to copy.
+The analysis began against Petrus/Motus at revision
+`116b0ddc460c0e04d4ad40c077158bd3498a4860`. Petrus Activity Execution V2 was
+subsequently accepted at `35d09023f40fac34dc84c54389466b669a79ec19` and is now
+pinned by Hamsterdan. Temporal's Activity execution model remains a design
+reference rather than a framework to copy.
 
 ## Executive judgment
 
@@ -238,6 +240,146 @@ generation handoff, cross-History routing, continuity transfer, cancellation,
 archival, and authority fencing outside the generation Net. It moves rather
 than removes complexity and is not recommended without first-class Petrus
 instance/scope support.
+
+## Story thickened — instance scheduling and scoped effects
+
+Integrating Activity Execution V2 exposed a deeper boundary than publication
+retry. Durable Dispatch separates authorization from execution, but the current
+Worker contract resolves implementations globally by Activity name while
+Hamsterdan's `PrReadinessActivities` is composed with one PR's authority,
+publisher, clients, and provider-reconciliation behavior. A permanent Worker per
+PR preserves that locality but duplicates resident infrastructure. A shared
+Worker avoids duplication only by introducing application-specific routing that
+must reconstruct the correct PR context after restart.
+
+The useful synthesis is to keep workflow state partitioned by Instance while
+sharing scheduling and execution infrastructure. One Engine/History per PR is
+analogous to a resumable activation record: the static Net need not carry a
+scope field through every token or filter one global marking. This does not
+require one thread or Worker per Instance. It requires one advancing owner per
+Instance at a time and a scheduler capable of resuming runnable Instances.
+
+The programming-language-runtime lens separates three scopes that must not
+collapse into an ambient service locator:
+
+1. workflow scope identifies the durable Instance that authorized work;
+2. implementation binding identifies the host-composed Activity module that
+   interprets a named effect;
+3. Attempt execution context carries operational identity, heartbeat, deadline,
+   and checkpoint behavior.
+
+Live clients, credentials, Engines, markings, and callables must not enter the
+durable invocation. Durable implementation selection must be reconstructible
+from stable scope and binding identity after process loss. Dynamic test
+overrides may be ephemeral, but production retries cannot depend on a closure or
+mutable global patch that disappears on restart.
+
+`PrReadinessActivities` already resembles the desired developer surface: a
+cohesive Activity module whose methods share external capabilities. Treating
+such a module as an effect interpreter is preferable to calling it an actor,
+which would imply mailbox, identity, residency, and private mutable state that
+are not required. A host may compose a default module, decorate it, replace it,
+or overlay selected operations without requiring inheritance. Petrus should
+provide only the neutral resolution seam if evidence shows that applications
+otherwise rebuild it.
+
+The Activity boundary remains semantic. One Activity may coordinate several
+external systems when it owns one safely reconcilable logical operation across
+all of them. Lookup-first recovery and stable operation identity then remain
+inside the Activity module. Durable branching, waiting, compensation decisions,
+human intervention, and meaningful intermediate business states belong in the
+Net instead. Operational mechanics leaking into the Net and durable workflow
+decisions hiding inside Activities are dual failure modes.
+
+## Candidate runtime shape
+
+The current candidate is not yet an accepted framework contract:
+
+```text
+provider ingress
+  -> durable observation inbox
+  -> Instance scheduler claims one runnable Instance
+  -> Engine delivers observations and advances to quiescence
+  -> scoped Activity instructions enter shared durable custody
+  -> executor resolves a host-composed Activity module
+  -> terminal result wakes the owning Instance
+  -> Engine accepts against current ownership or retires as superseded
+```
+
+Webhook processing may become durable ingress rather than the special inline
+path that performs complete reconciliation. Startup recovery, observations,
+Activity terminals, Petri timers, and delayed Attempts could then share one
+scheduler path. A periodic full sweep remains a recovery mechanism rather than
+the primary scheduler. Serialization remains mandatory per Instance, but may be
+implemented by a single scheduler, actor mailbox, durable lease, or database
+claim instead of a permanent thread and in-memory lock per Instance.
+
+PostgreSQL may eventually consolidate History, observation inboxes, Activity
+custody, runnable-instance indexes, and leases while preserving logical
+partitioning by Instance. It does not solve implementation resolution,
+authority fencing, or workflow ownership by itself and must not substitute for
+an explicit scope contract.
+
+## Co-equal simplification test
+
+The framework inquiry and the application topology must be evaluated together:
+
+> What is the smallest provider-neutral execution-scope contract that lets many
+> isolated Engine Instances share durable scheduling and Activity infrastructure
+> while producing the smallest Petri Net that still expresses all durable
+> business decisions explicitly?
+
+A healthy dashboard/readiness slice should approach:
+
+```text
+current facts
+  -> authorize immutable request and record current operation
+  -> external Activity owns Attempts, deadlines, and reconciliation
+  -> terminal typed result rejoins current authority and operation ownership
+  -> accept and fold, or retire as superseded
+```
+
+No Net place should exist solely for Attempt count, retry delay, claim,
+heartbeat, deadline, worker availability, provider connection, retry maturation,
+or reissuing the same logical operation. The Net must continue to express
+requested work, exact operation ownership, capability blocking, current
+authority, supersession, and accepted business outcome.
+
+Complexity is evidence in all directions:
+
+- retry/due/reissue and operational lifecycle places suggest runtime mechanics
+  leaked into the Net;
+- Activities containing durable branching, waits, compensation policy, or
+  hidden progress state suggest workflow leaked into the effect layer;
+- large Activity-name routers, routing fields repeated in business payloads,
+  serialized closures, one thread per Instance, or application reimplementation
+  of Worker behavior suggest missing host-composition primitives.
+
+Any Petrus enhancement must preserve the trivial application path. A scope or
+resolver abstraction that enables distributed composition by making simple
+inline applications framework-heavy is not acceptable.
+
+## Next learning movement
+
+The inquiry continues in a Petrus-owned exploration, with Hamsterdan providing
+the application pressure and target Net. It should produce evidence for:
+
+1. whether exposing only `instance` on `ActivityAttempt` and execution context
+   is sufficient, or a richer neutral scope is necessary;
+2. whether Activity resolution belongs in Worker, execution context, or host
+   composition outside Petrus;
+3. how default Activity modules and reconstructible scoped overrides compose;
+4. whether one scheduler path can replace inline webhook reconciliation without
+   weakening latency, restart, authority, or isolation;
+5. how shared Local or PostgreSQL custody preserves per-Instance result routing;
+6. whether the resulting dashboard/readiness Net actually loses the lease,
+   retry, due, reissue, and associated retirement topology without hiding
+   workflow decisions elsewhere.
+
+The production CR-003 implementation remains paused until this exploration
+reaches a reviewed conclusion. Activity Execution V2 remains accepted and
+pinned; the unresolved question is composition and scheduling, not retry-policy
+correctness.
 
 ## Simplifications available with current Petrus
 
