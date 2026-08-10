@@ -552,9 +552,10 @@ objects, introduce a general ActivityScope container, or move scheduling into
 Petrus. The host owns exclusivity and wake policy; Motus owns logical execution
 and Attempts; the Net owns authorization and acceptance. Under that division,
 dashboard/readiness operational retry topology was removed and the Net reached
-40 places, 139 transitions, and 415 arcs. Conversation transport retry remains
-the next production migration; broader lifecycle scopes remain an independent
-study rather than a prerequisite.
+40 places, 139 transitions, and 415 arcs. Applying the same boundary to
+conversation publication then removed its final logical reissue transition,
+reaching 40 places, 138 transitions, and 412 arcs. Broader lifecycle scopes
+remain an independent study rather than a prerequisite.
 
 ## Required experiments
 

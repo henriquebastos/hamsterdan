@@ -306,18 +306,22 @@ class PrReadinessActivities:
     def conversation_publish(self, work: ConversationPublicationRequest) -> ConversationPublicationResult:
         message = str(work.intent.arguments.get("message", "Status acknowledged."))
         try:
-            self._immutable("conversation", work, message)
-        except GitHubBoundaryError:
-            return ConversationPublicationResult(
-                work.epoch,
-                work.head,
-                False,
-                operation=work.operation,
-                capability_available=False,
-            )
-        except RuntimeError:
+            result = self._immutable("conversation", work, message)
+        except GitHubBoundaryError as error:
+            raise ActivityError(
+                "GitHub publication boundary unavailable", kind="GitHubBoundaryError", retryable=True
+            ) from error
+        except ValueError as error:
+            raise ActivityError("GitHub publication invariant failed", kind="ValueError", retryable=False) from error
+        except StaleAuthorityError:
             return ConversationPublicationResult(work.epoch, work.head, False, operation=work.operation)
-        return ConversationPublicationResult(work.epoch, work.head, True, operation=work.operation)
+        return ConversationPublicationResult(
+            work.epoch,
+            work.head,
+            result.capability_available,
+            operation=work.operation,
+            capability_available=result.capability_available,
+        )
 
     def finding_publish(self, work: FindingPublicationRequest) -> FindingPublicationResult:
         try:
@@ -786,6 +790,7 @@ def _intent_digest(
         "head": work.head,
         "base": work.base_head,
         "policy": work.policy_digest,
+        "source_operation": work.operation,
         "type": kind,
         "arguments": arguments,
     }

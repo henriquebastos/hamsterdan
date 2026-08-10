@@ -19,6 +19,7 @@ from petrus.motus.dispatch import Dispatch, InlineDispatch, LocalDispatch
 from hamsterdan.contracts.readiness import (
     ActionsState,
     Authority,
+    ConversationPublicationResult,
     DashboardPublicationResult,
     HumanState,
     MutationState,
@@ -34,7 +35,7 @@ from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS, build_net
 
 from .activities import PrReadinessActivities, StaleAuthorityError, activity_definitions
 
-_DURABLE_ACTIVITIES = frozenset({"dashboard_publish", "readiness_publish"})
+_DURABLE_ACTIVITIES = frozenset({"conversation_publish", "dashboard_publish", "readiness_publish"})
 _PUBLICATION_POLICY = ExecutionPolicy(
     attempts=3, initial_interval=5, coefficient=2, max_interval=10, jitter=0, schedule_to_close=60
 )
@@ -78,11 +79,12 @@ class PublicationActivityHandler:
         # capability blocker. Unknown failures remain projection-pending/loud.
         if failure.kind not in {"GitHubBoundaryError", "DeadlineExceeded"}:
             raise RuntimeError(f"unprojectable publication failure: {failure.kind}")
-        expected_color = (
-            "DashboardPublicationRequest"
-            if self.derived.activity.declaration.name == "dashboard_publish"
-            else "ReadinessCommand"
-        )
+        activity = self.derived.activity.declaration.name
+        expected_color = {
+            "conversation_publish": "ConversationPublicationRequest",
+            "dashboard_publish": "DashboardPublicationRequest",
+            "readiness_publish": "ReadinessCommand",
+        }[activity]
         tokens = (token for _, selected in (*binding.consumed, *binding.read) for token in selected)
         matches = [token.data for token in tokens if token.color == expected_color]
         if len(matches) != 1:
@@ -93,11 +95,12 @@ class PublicationActivityHandler:
         epoch, head, operation = work.get("epoch"), work.get("head"), work.get("operation")
         if not isinstance(epoch, int) or not isinstance(head, str) or not isinstance(operation, str):
             raise TypeError("publication invocation request identity is malformed")
-        result = (
-            DashboardPublicationResult(epoch, head, False, operation, False)
-            if self.derived.activity.declaration.name == "dashboard_publish"
-            else ReadinessPublicationResult(epoch, head, False, operation, False)
-        )
+        result_type = {
+            "conversation_publish": ConversationPublicationResult,
+            "dashboard_publish": DashboardPublicationResult,
+            "readiness_publish": ReadinessPublicationResult,
+        }[activity]
+        result = result_type(epoch, head, False, operation, False)
         return self.derived.project(binding, result.dump())
 
 

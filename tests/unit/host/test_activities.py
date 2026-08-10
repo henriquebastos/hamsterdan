@@ -20,7 +20,6 @@ from hamsterdan.contracts.readiness import (
     ConversationClassificationRequest,
     ConversationObservation,
     ConversationPublicationRequest,
-    ConversationPublicationResult,
     DashboardPublicationRequest,
     FindingPublicationRequest,
     FindingPublicationResult,
@@ -764,7 +763,7 @@ def test_stale_finding_publication_becomes_typed_effect_result() -> None:
     assert result.operation == "finding-operation"
 
 
-def test_conversation_provider_failure_becomes_a_retryable_typed_result() -> None:
+def test_conversation_provider_failure_becomes_a_retryable_activity_error() -> None:
     operations = object.__new__(PrReadinessActivities)
     operations._immutable = lambda *args: (_ for _ in ()).throw(GitHubBoundaryError("transient provider failure"))
     work = request(
@@ -775,11 +774,11 @@ def test_conversation_provider_failure_becomes_a_retryable_typed_result() -> Non
         payload={"intent": {"arguments": {"message": "Safe reply"}}},
     )
 
-    result = operations.conversation_publish(work)
+    with pytest.raises(ActivityError) as raised:
+        operations.conversation_publish(work)
 
-    assert isinstance(result, ConversationPublicationResult) and result.ok is False
-    assert result.operation == "conversation-operation"
-    assert result.capability_available is False
+    assert raised.value.failure.kind == "GitHubBoundaryError"
+    assert raised.value.failure.retryable is True
 
 
 def test_one_coordinated_review_publishes_multiple_findings_with_one_authority_lease() -> None:
@@ -1019,3 +1018,23 @@ def test_explicit_mutation_intent_is_immediately_authorized() -> None:
     assert intent.authorized is True
     assert intent.blocking is True
     assert intent.arguments == item["arguments"]
+
+
+def test_identical_reply_content_from_distinct_comments_has_distinct_intent_identity() -> None:
+    operations = object.__new__(PrReadinessActivities)
+    operations.repository = "owner/repo"
+    operations.pr_number = 7
+    first = request(
+        "conversation",
+        2,
+        "a" * 40,
+        payload={"base_head": "b" * 40, "policy_digest": "policy"},
+    )
+    second = replace(first, operation="conversation:distinct-comment")
+    item = {"type": "reply", "arguments": {"message": "Same reply"}}
+
+    first_intent = operations._intent(item, first, {})
+    second_intent = operations._intent(item, second, {})
+
+    assert first_intent.arguments == second_intent.arguments
+    assert first_intent.digest != second_intent.digest

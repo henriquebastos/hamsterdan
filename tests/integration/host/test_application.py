@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from petrus.impetus.history import ActivityFailed, ActivityRequested, FiringFailed
-from petrus.motus.activity import ActivityError
+from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested, FiringFailed
+from petrus.motus.activity import ActivityError, ExecutionPolicy
 from petrus.motus.dispatch import LocalDispatch
 from petrus.motus.worker import Worker
 
@@ -601,9 +601,301 @@ def test_frozen_worker_success_is_collected_after_application_reopen_without_dup
     worker.close()
 
 
+def test_conversation_retry_succeeds_under_one_activity_request_and_stable_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hamsterdan.host import runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_PUBLICATION_POLICY",
+        ExecutionPolicy(attempts=3, initial_interval=0, coefficient=1, max_interval=0, jitter=0),
+    )
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    subject.reconcile("enqueue")
+    subject.route_comment(
+        delivery_id="reply",
+        comment_id=51,
+        text="@hamster-dan Please fix it",
+        actor_id=7,
+        actor_login="author",
+        actor_type="User",
+        association="OWNER",
+    )
+    calls: list[str] = []
+
+    def resolver(instance: str, name: str):
+        implementation = subject.activity(name)
+
+        def retry_once(invocation, *, context):
+            if name != "conversation_publish":
+                return implementation(invocation, context=context)
+            calls.append(invocation.correlation)
+            if len(calls) == 1:
+                raise ActivityError("retry", kind="GitHubBoundaryError", retryable=True)
+            return implementation(invocation, context=context)
+
+        return retry_once
+
+    worker = Worker(LocalDispatch(dispatch_path, instance="worker").worker(("publication",)), {}, resolver=resolver)
+    for _ in range(10):
+        worker.run_available(limit=20)
+        subject.settle()
+        if len(calls) == 2:
+            break
+
+    records = subject.host.engine.records  # type: ignore[union-attr]
+    requested = [
+        record
+        for record in records
+        if isinstance(record, ActivityRequested) and record.activity == "conversation_publish"
+    ]
+    assert len(calls) == 2 and calls[0] == calls[1]
+    assert len(requested) == 1 and requested[0].idempotency == calls[0]
+    assert (
+        sum(
+            record.__class__.__name__ == "ActivityCompleted" and record.occurrence == requested[0].occurrence
+            for record in records
+        )
+        == 1
+    )
+    matching_writes = [write for write in authority.transport.writes if "clarify" in str(write[2]["body"])]
+    control = subject.host.control  # type: ignore[union-attr]
+    assert len(matching_writes) == 1
+    assert control is not None and not control.conversation_requested and control.conversation_operation == ""
+    subject.close()
+    worker.close()
+
+
+def test_frozen_conversation_terminal_reopens_without_duplicate_provider_call(tmp_path: Path) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    first.reconcile("enqueue")
+    worker = Worker(
+        LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: first.activity(name),
+    )
+    for _ in range(10):
+        claimed = worker.run_available(limit=20)
+        first.settle()
+        if claimed == 0:
+            break
+    first.route_comment(
+        delivery_id="reply",
+        comment_id=55,
+        text="@hamster-dan Please fix it",
+        actor_id=7,
+        actor_login="author",
+        actor_type="User",
+        association="OWNER",
+    )
+    requested = next(
+        record
+        for record in first.host.engine.records  # type: ignore[union-attr]
+        if isinstance(record, ActivityRequested) and record.activity == "conversation_publish"
+    )
+    occurrence, operation = requested.occurrence, requested.idempotency
+    assert worker.run_available(limit=20) >= 1
+    calls = sum("clarify" in str(write[2]["body"]) for write in authority.transport.writes)
+    assert calls == 1
+    first.close()
+
+    second = application(tmp_path, authority, Runner(), dispatch_path=dispatch_path)
+    second.settle()
+    records = second.host.engine.records  # type: ignore[union-attr]
+    completed = [
+        record for record in records if isinstance(record, ActivityCompleted) and record.occurrence == occurrence
+    ]
+    conversation_requests = [
+        record
+        for record in records
+        if isinstance(record, ActivityRequested) and record.activity == "conversation_publish"
+    ]
+    control = second.host.control  # type: ignore[union-attr]
+    assert len(completed) == 1
+    assert len(conversation_requests) == 1 and conversation_requests[0].idempotency == operation
+    assert control is not None and not control.conversation_requested and control.conversation_operation == ""
+    cleanup_worker = Worker(
+        LocalDispatch(dispatch_path, instance="cleanup-worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: second.activity(name),
+    )
+    cleanup_worker.run_available(limit=20)
+    second.settle()
+    cleanup_worker.close()
+    assert worker.run_available(limit=20) == 0
+    assert sum("clarify" in str(write[2]["body"]) for write in authority.transport.writes) == calls
+    second.close()
+    worker.close()
+
+
+def test_frozen_exhausted_conversation_projects_exact_terminal_after_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hamsterdan.host import runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_PUBLICATION_POLICY",
+        ExecutionPolicy(attempts=3, initial_interval=0, coefficient=1, max_interval=0, jitter=0),
+    )
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    first.reconcile("enqueue")
+    baseline_worker = Worker(
+        LocalDispatch(dispatch_path, instance="baseline-worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: first.activity(name),
+    )
+    for _ in range(10):
+        claimed = baseline_worker.run_available(limit=20)
+        first.settle()
+        if claimed == 0:
+            break
+    baseline_worker.close()
+    first.route_comment(
+        delivery_id="restart-exhaustion",
+        comment_id=56,
+        text="@hamster-dan Please fix it",
+        actor_id=7,
+        actor_login="author",
+        actor_type="User",
+        association="OWNER",
+    )
+    requested = next(
+        record
+        for record in first.host.engine.records  # type: ignore[union-attr]
+        if isinstance(record, ActivityRequested) and record.activity == "conversation_publish"
+    )
+    occurrence, operation, request = requested.occurrence, requested.idempotency, requested.input
+    calls: list[str] = []
+
+    def resolver(instance: str, name: str):
+        implementation = first.activity(name)
+
+        def exhaust(invocation, *, context):
+            if name != "conversation_publish":
+                return implementation(invocation, context=context)
+            calls.append(invocation.correlation)
+            raise ActivityError("retry", kind="GitHubBoundaryError", retryable=True)
+
+        return exhaust
+
+    worker = Worker(LocalDispatch(dispatch_path, instance="worker").worker(("publication",)), {}, resolver=resolver)
+    for _ in range(3):
+        worker.run_available(limit=20)
+    assert calls == [operation, operation, operation]
+    assert not any(isinstance(record, ActivityFailed) for record in first.host.engine.records)  # type: ignore[union-attr]
+    first.close()
+
+    second = application(tmp_path, authority, Runner(), dispatch_path=dispatch_path)
+    second.settle()
+    records = second.host.engine.records  # type: ignore[union-attr]
+    failed = [record for record in records if isinstance(record, ActivityFailed) and record.occurrence == occurrence]
+    control = second.host.control  # type: ignore[union-attr]
+    assert len(failed) == 1 and failed[0].occurrence == occurrence
+    assert control is not None and control.conversation_capability_blocking and control.conversation_requested
+    assert control.conversation_operation == operation
+    assert requested.input == request
+    cleanup_worker = Worker(
+        LocalDispatch(dispatch_path, instance="cleanup-worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: second.activity(name),
+    )
+    cleanup_worker.run_available(limit=20)
+    second.settle()
+    cleanup_worker.close()
+    assert worker.run_available(limit=20) == 0 and len(calls) == 3
+    second.close()
+    worker.close()
+
+
+def test_conversation_exhaustion_projects_one_blocker_and_retains_exact_operation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hamsterdan.host import runtime
+
+    monkeypatch.setattr(
+        runtime,
+        "_PUBLICATION_POLICY",
+        ExecutionPolicy(attempts=3, initial_interval=0, coefficient=1, max_interval=0, jitter=0),
+    )
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    subject.reconcile("enqueue")
+    subject.route_comment(
+        delivery_id="reply",
+        comment_id=52,
+        text="@hamster-dan Please fix it",
+        actor_id=7,
+        actor_login="author",
+        actor_type="User",
+        association="OWNER",
+    )
+    calls: list[str] = []
+
+    def resolver(instance: str, name: str):
+        implementation = subject.activity(name)
+
+        def exhaust(invocation, *, context):
+            if name != "conversation_publish":
+                return implementation(invocation, context=context)
+            calls.append(invocation.correlation)
+            raise ActivityError("retry", kind="GitHubBoundaryError", retryable=True)
+
+        return exhaust
+
+    worker = Worker(LocalDispatch(dispatch_path, instance="worker").worker(("publication",)), {}, resolver=resolver)
+    for _ in range(10):
+        worker.run_available(limit=20)
+        subject.settle()
+        control = subject.host.control  # type: ignore[union-attr]
+        if control is not None and control.conversation_capability_blocking:
+            break
+
+    records = subject.host.engine.records  # type: ignore[union-attr]
+    requested = [
+        record
+        for record in records
+        if isinstance(record, ActivityRequested) and record.activity == "conversation_publish"
+    ]
+    failed = [
+        record
+        for record in records
+        if isinstance(record, ActivityFailed) and str(record.transition) == "execute.conversation_publish"
+    ]
+    control = subject.host.control  # type: ignore[union-attr]
+    assert len(calls) == 3 and len(set(calls)) == 1
+    assert len(requested) == len(failed) == 1
+    assert control is not None and control.conversation_capability_blocking and control.conversation_requested
+    assert control.conversation_operation == requested[0].idempotency == calls[0]
+    count = len(requested)
+    subject.settle()
+    assert (
+        sum(
+            isinstance(record, ActivityRequested) and record.activity == "conversation_publish"
+            for record in subject.host.engine.records  # type: ignore[union-attr]
+        )
+        == count
+    )
+    subject.close()
+    worker.close()
+
+
 @pytest.mark.parametrize(
     ("activity", "marker", "blocker"),
     [
+        ("conversation_publish", "clarify", "conversation_capability_blocking"),
         ("dashboard_publish", "hamsterdan:dashboard", "dashboard_capability_blocking"),
         ("readiness_publish", "hamsterdan:readiness", "readiness_capability_blocking"),
     ],
@@ -618,6 +910,16 @@ def test_production_publication_capability_absence_completes_once_with_typed_blo
     authority.transport.rejection = (marker, status)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
     subject.reconcile("enqueue")
+    if activity == "conversation_publish":
+        subject.route_comment(
+            delivery_id="reply",
+            comment_id=53,
+            text="@hamster-dan Please fix it",
+            actor_id=7,
+            actor_login="author",
+            actor_type="User",
+            association="OWNER",
+        )
     worker = Worker(
         LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
         {},
@@ -660,6 +962,7 @@ def test_production_publication_capability_absence_completes_once_with_typed_blo
 @pytest.mark.parametrize(
     ("activity", "marker"),
     [
+        ("conversation_publish", "clarify"),
         ("dashboard_publish", "hamsterdan:dashboard"),
         ("readiness_publish", "hamsterdan:readiness"),
     ],
@@ -673,6 +976,16 @@ def test_production_publication_422_fails_once_and_projector_stays_loud(
     authority.transport.rejection = (marker, 422)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
     subject.reconcile("enqueue")
+    if activity == "conversation_publish":
+        subject.route_comment(
+            delivery_id="reply",
+            comment_id=54,
+            text="@hamster-dan Please fix it",
+            actor_id=7,
+            actor_login="author",
+            actor_type="User",
+            association="OWNER",
+        )
     worker = Worker(
         LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
         {},

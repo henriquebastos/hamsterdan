@@ -53,7 +53,6 @@ from hamsterdan.contracts.readiness import (
 )
 
 DASHBOARD_FORMAT = 2
-MAX_CONVERSATION_ATTEMPTS = 3
 MAX_REVIEW_ATTEMPTS = 3
 
 ACTIVITY_TRANSITIONS = {
@@ -234,7 +233,7 @@ def _effect_matches(a: Authority, owner, value) -> bool:
     if not _current(a, value):
         return False
     if isinstance(value, ConversationPublicationResult):
-        return bool(owner.conversation_pending) and value.operation == owner.conversation_pending.get("operation")
+        return owner.conversation_requested and value.operation == owner.conversation_operation
     if isinstance(value, ReminderPublicationResult):
         return True
     field = (
@@ -341,7 +340,7 @@ def fold_effect(owner, result):
         if not result.capability_available:
             return owner.validated_update(conversation_capability_blocking=True)
         return owner.validated_update(
-            conversation_pending={}, conversation_attempts=0, conversation_capability_blocking=False
+            conversation_requested=False, conversation_operation="", conversation_capability_blocking=False
         )
     if isinstance(result, (ChangeResult, RepairResult)):
         repair = isinstance(result, RepairResult)
@@ -599,6 +598,9 @@ def _refresh_basis(binding, outputs):
         dashboard_requested_projection="",
         dashboard_requested=False,
         dashboard_operation="",
+        conversation_requested=False,
+        conversation_operation="",
+        conversation_capability_blocking=False,
         announced=False,
         readiness_operation="",
         readiness_requested=False,
@@ -824,8 +826,12 @@ def _authorize_change(binding, outputs):
     return _put(outputs, (m, work))
 
 
-def _replyable(a, value):
+def _valid_reply(a, value):
     return _current(a, value) and value.authorized and value.kind == "reply" and bool(value.arguments.get("message"))
+
+
+def _replyable(a, p, value):
+    return _valid_reply(a, value) and not p.conversation_requested and not p.conversation_capability_blocking
 
 
 def _authorize_reply(binding, outputs):
@@ -840,25 +846,10 @@ def _authorize_reply(binding, outputs):
         intent=value,
     )
     p = p.validated_update(
-        conversation_pending=work.dump(), conversation_attempts=1, conversation_capability_blocking=False
+        conversation_requested=True,
+        conversation_operation=work.operation,
+        conversation_capability_blocking=False,
     )
-    return _route(outputs, {"publication_state": p, "work.conversation_reply": work})
-
-
-def _retry_reply(p):
-    return (
-        p.conversation_capability_blocking
-        and bool(p.conversation_pending)
-        and p.conversation_attempts < MAX_CONVERSATION_ATTEMPTS
-    )
-
-
-def _reissue_reply(binding, outputs):
-    p = _values(binding, PublicationState)[0]
-    pending = dict(p.conversation_pending)
-    pending["intent"] = Intent(**pending["intent"])
-    work = ConversationPublicationRequest(**pending)
-    p = p.validated_update(conversation_attempts=p.conversation_attempts + 1, conversation_capability_blocking=False)
     return _route(outputs, {"publication_state": p, "work.conversation_reply": work})
 
 
@@ -1257,7 +1248,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (owner, p.intent_result) >> tr >> owner
     authorize_reply = t.authorize_reply(
         handler=petri_handler(_authorize_reply),
-        guards=_typed_guard((Authority, Intent), _replyable),
+        guards=_typed_guard((Authority, PublicationState, Intent), _replyable),
     )
     p.authority >> arc.read() >> authorize_reply
     (
@@ -1267,11 +1258,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
             p.publication_state,
             work.p.conversation_reply,
         )
-    )
-    (
-        p.publication_state
-        >> t.reissue_reply(handler=petri_handler(_reissue_reply), guards=_guard(_retry_reply))
-        >> (p.publication_state, work.p.conversation_reply)
     )
     # Full snapshots are relational joins only at projection/gate boundaries.
     dashboard = t.request_dashboard(
@@ -1458,7 +1444,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         place >> tr
     for name, place, guard in (
         ("conversation_basis", p.conversation_basis, lambda a, v: not (_current(a, v) and v.authorized)),
-        ("reply_basis", p.reply_basis, lambda a, v: not _replyable(a, v)),
+        ("reply_basis", p.reply_basis, lambda a, v: not _valid_reply(a, v)),
     ):
         tr = getattr(retire.t, name)(guards=_guard(guard))
         p.authority >> arc.read() >> tr

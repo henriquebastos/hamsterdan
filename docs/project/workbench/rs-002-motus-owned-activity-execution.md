@@ -48,7 +48,7 @@ merges.
 | CR-001 Remove current-Petrus topology redundancies | Complete |
 | CR-002 Add production Activity Execution policy to Motus | Complete |
 | CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Complete |
-| CR-004 Migrate conversation and eligible provider retries | Planned |
+| CR-004 Migrate conversation and eligible provider retries | Complete |
 | CR-005 Reassess residual concern-state ownership | Planned |
 | CR-006 Review, coherence, and documentation | Planned |
 
@@ -189,3 +189,27 @@ PR authority and provider reconciliation remain application-owned.
   release blockers. The full project gate passes 504 Python tests with one
   provider qualification route deselected, nine Bun tests, static analysis,
   formatting, and both package builds.
+
+### 2026-08-10 — Completed conversation publication retry migration
+
+- Conversation reply publication now uses the same shared durable Worker,
+  stable operation identity, and bounded Motus policy as dashboard/readiness.
+  `PublicationState` retains only requested, operation, and capability-blocking
+  business facts; the Net no longer stores an Activity payload or Attempt
+  count and no longer reissues logical executions.
+- Replies serialize through one exact ownership slot. A valid later reply stays
+  queued while the current operation is running or terminally blocked, rather
+  than overwriting its result latch. Same-head authority-basis refresh and new
+  generations supersede old ownership. Source classification operation is part
+  of intent identity, so identical reply text for distinct comments does not
+  collapse into one provider marker.
+- Real Local Dispatch/Worker tests prove retry then success under one History
+  occurrence, three-Attempt exhaustion into one retained blocker, 403/404 typed
+  capability outcomes, loud nonretryable 422 handling, exact inactive-route
+  stale results, and projection-only restart recovery for frozen success and
+  failure without another provider call.
+- Removing `reissue_reply` reduced the Net from 40 places, 139 transitions, and
+  415 arcs to 40 places, 138 transitions, and 412 arcs. The final adversarial
+  review approved the change with no release blockers. The full project gate
+  passes 516 Python tests with one provider qualification route deselected,
+  nine Bun tests, static analysis, formatting, and both package builds.

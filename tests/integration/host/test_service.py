@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from petrus.motus.activity import ActivityError, ActivityInvocation
 
+from hamsterdan.contracts.readiness import ConversationPublicationRequest, Intent
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host.__main__ import inspect_instance
@@ -557,6 +558,54 @@ def test_cached_application_revalidates_route_and_returns_typed_stale_publicatio
         "head": "a" * 40,
         "ok": False,
         "operation": "dashboard:one",
+        "capability_available": True,
+    }
+    assert provider_calls == []
+    host.close()
+
+
+def test_inactive_route_returns_exact_typed_stale_conversation_publication(tmp_path: Path) -> None:
+    provider_calls: list[str] = []
+
+    class ResolvableApplication(Application):
+        def activity(self, name: str):
+            def publish(invocation, *, context):
+                provider_calls.append(name)
+                return {"ok": True}
+
+            return publish
+
+    host = service(tmp_path, factory=ResolvableApplication)
+    host._application(44, 31, 7)
+    resolved = host._resolve_activity("github:44:31:pr:7", "conversation_publish")
+    assert resolved is not None
+    host.registry.installation("suspend", 44, 23)
+    request = ConversationPublicationRequest(
+        2,
+        "a" * 40,
+        "conversation:stale",
+        "b" * 40,
+        "policy",
+        Intent(
+            2,
+            "a" * 40,
+            "reply",
+            "reply-digest",
+            True,
+            False,
+            {"message": "Safe reply"},
+            "b" * 40,
+            "policy",
+        ),
+    )
+
+    result = resolved(ActivityInvocation("conversation_publish", input={"work": request.dump()}), context=object())
+
+    assert result == {
+        "epoch": 2,
+        "head": "a" * 40,
+        "ok": False,
+        "operation": "conversation:stale",
         "capability_available": True,
     }
     assert provider_calls == []

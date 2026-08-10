@@ -138,8 +138,8 @@ class PublicationState(WorkflowModel):
     dashboard_requested: bool = False
     dashboard_operation: str = ""
     dashboard_format: int = 0
-    conversation_pending: dict = field(default_factory=dict)
-    conversation_attempts: int = 0
+    conversation_requested: bool = False
+    conversation_operation: str = ""
     conversation_capability_blocking: bool = False
     finding_operation: str = ""
     dashboard_capability_blocking: bool = False
@@ -213,8 +213,8 @@ class ReadinessSnapshot(WorkflowModel):
     dashboard_requested: bool = False
     dashboard_operation: str = ""
     dashboard_format: int = 0
-    conversation_pending: dict = field(default_factory=dict)
-    conversation_attempts: int = 0
+    conversation_requested: bool = False
+    conversation_operation: str = ""
     conversation_capability_blocking: bool = False
     review_operation: str = ""
     review_attempts: int = 0

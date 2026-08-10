@@ -21,6 +21,8 @@ from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, AgentRunner, OperationRoutedRunner
 from hamsterdan.contracts.readiness import (
+    ConversationPublicationRequest,
+    ConversationPublicationResult,
     DashboardPublicationRequest,
     DashboardPublicationResult,
     ReadinessCommand,
@@ -60,7 +62,7 @@ _FAULT_BOUNDARIES = frozenset({"agent", "comment"})
 _FAULT_PHASES = frozenset({"timed_out", "malformed", "before_call", "after_call"})
 _INSTANCE_PATTERN = re.compile(r"github:([1-9][0-9]*):([1-9][0-9]*):pr:([1-9][0-9]*)\Z")
 _REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
-_DURABLE_PUBLICATIONS = frozenset({"dashboard_publish", "readiness_publish"})
+_DURABLE_PUBLICATIONS = frozenset({"conversation_publish", "dashboard_publish", "readiness_publish"})
 
 
 @dataclass
@@ -255,13 +257,21 @@ class HostService:
         converter = PydanticPayloadConverter()
         try:
             payload = cast(Any, invocation).input
-            request_name = "work" if name == "dashboard_publish" else "command"
-            request_type = DashboardPublicationRequest if name == "dashboard_publish" else ReadinessCommand
-            result_type = DashboardPublicationResult if name == "dashboard_publish" else ReadinessPublicationResult
+            request_name = "command" if name == "readiness_publish" else "work"
+            request_type = {
+                "conversation_publish": ConversationPublicationRequest,
+                "dashboard_publish": DashboardPublicationRequest,
+                "readiness_publish": ReadinessCommand,
+            }[name]
+            result_type = {
+                "conversation_publish": ConversationPublicationResult,
+                "dashboard_publish": DashboardPublicationResult,
+                "readiness_publish": ReadinessPublicationResult,
+            }[name]
             if not isinstance(payload, dict) or request_name not in payload:
                 raise TypeError("publication invocation has no request")
             request = cast(
-                DashboardPublicationRequest | ReadinessCommand,
+                ConversationPublicationRequest | DashboardPublicationRequest | ReadinessCommand,
                 converter.decode(payload[request_name], request_type),
             )
             result = result_type(request.epoch, request.head, False, request.operation, True)

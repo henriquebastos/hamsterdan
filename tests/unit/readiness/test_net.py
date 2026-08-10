@@ -661,7 +661,7 @@ def test_unauthorized_conversation_and_read_only_intent_leave_no_residue() -> No
     assert not values(subject, "change_basis") and not values(subject, "work.change")
 
 
-def test_failed_conversation_publication_reissues_the_same_fenced_operation() -> None:
+def test_terminal_conversation_publication_retains_one_logical_operation_without_reissue() -> None:
     subject, dispatch = asynchronous_engine()
     subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
     drive_bounded(subject)
@@ -702,23 +702,13 @@ def test_failed_conversation_publication_reissues_the_same_fenced_operation() ->
     )
     drive_bounded(subject)
 
-    second_occurrence, second_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
-    second_work = work_input(second_invocation)
     control = snapshot(subject).dump()
-    assert second_occurrence != first_occurrence
-    assert second_work == first_work
-    assert control["conversation_attempts"] == 2
-    assert control["conversation_pending"]["operation"] == first_work.operation
-
-    dispatch.complete(
-        second_occurrence,
-        effect_result("conversation", 1, "h1", True, operation=second_work.operation).dump(),
-    )
+    assert pending_all(dispatch, "conversation_publish") == []
+    assert control["conversation_requested"] is True
+    assert control["conversation_operation"] == first_work.operation
+    assert control["conversation_capability_blocking"] is True
     drive_bounded(subject)
-    control = snapshot(subject).dump()
-    assert control["conversation_pending"] == {}
-    assert control["conversation_attempts"] == 0
-    assert control["conversation_capability_blocking"] is False
+    assert pending_all(dispatch, "conversation_publish") == []
     assert conversation_work.operation != first_work.operation
 
 
@@ -784,7 +774,7 @@ def test_readiness_capability_terminal_retains_ownership_without_a_new_activity(
     assert pending_all(dispatch, "readiness_publish") == []
 
 
-def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -> None:
+def test_conversation_publication_terminal_exhaustion_latches_original_operation() -> None:
     subject, dispatch = asynchronous_engine()
     subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
     drive_bounded(subject)
@@ -808,32 +798,26 @@ def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -
     dispatch.complete(conversation_occurrence, IntentBatch(1, "h1", [reply]).dump())
     drive_bounded(subject)
 
-    first_work = None
-    for attempt in range(1, 4):
-        occurrence, invocation = drive_until_activity(subject, dispatch, "conversation_publish")
-        work = work_input(invocation)
-        first_work = first_work or work
-        assert work == first_work
-        dispatch.complete(
-            occurrence,
-            effect_result(
-                "conversation",
-                work.epoch,
-                work.head,
-                False,
-                operation=work.operation,
-                capability_available=False,
-            ).dump(),
-        )
-        drive_bounded(subject)
-        if attempt < 3:
-            assert snapshot(subject).dump()["conversation_attempts"] == attempt + 1
+    occurrence, invocation = drive_until_activity(subject, dispatch, "conversation_publish")
+    first_work = work_input(invocation)
+    dispatch.complete(
+        occurrence,
+        effect_result(
+            "conversation",
+            first_work.epoch,
+            first_work.head,
+            False,
+            operation=first_work.operation,
+            capability_available=False,
+        ).dump(),
+    )
+    drive_bounded(subject)
 
     control = snapshot(subject).dump()
     assert pending_all(dispatch, "conversation_publish") == []
-    assert control["conversation_attempts"] == 3
+    assert control["conversation_requested"] is True
     assert control["conversation_capability_blocking"] is True
-    assert control["conversation_pending"]["operation"] == first_work.operation
+    assert control["conversation_operation"] == first_work.operation
     assert workflow_gates_ready(ReadinessSnapshot(**control)) is False
     otherwise_ready = make_snapshot(
         "repo",
@@ -954,6 +938,102 @@ def test_same_head_basis_refresh_retires_stale_publication_result() -> None:
     assert not values(subject, "dashboard_result")
     _, new_invocation = drive_until_activity(subject, dispatch, "dashboard_publish")
     assert work_input(new_invocation).operation != old_work.operation
+
+
+def test_same_head_basis_refresh_retires_stale_conversation_result() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="first")
+    drive_bounded(subject)
+    subject.deliver(
+        "conversation_observation",
+        token(ConversationObservation(1, "h1", True, "reply", comment_id=41)),
+        identity="comment-41",
+    )
+    occurrence, _ = drive_until_activity(subject, dispatch, "conversation")
+    reply = Intent(1, "h1", "reply", "reply-41", True, False, {"message": "first"}, "base")
+    dispatch.complete(occurrence, IntentBatch(1, "h1", [reply]).dump())
+    drive_bounded(subject)
+    old_occurrence, old_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
+    old_work = work_input(old_invocation)
+
+    subject.deliver(
+        "verified_admission",
+        token(Admission("repo", 7, "h1", "base-2", False, False)),
+        identity="new-basis",
+    )
+    drive_bounded(subject)
+    dispatch.complete(
+        old_occurrence,
+        effect_result("conversation", 1, "h1", True, operation=old_work.operation).dump(),
+    )
+    drive_bounded(subject)
+
+    assert not values(subject, "conversation_result")
+    control = snapshot(subject)
+    assert not control.conversation_requested and control.conversation_operation == ""
+
+
+def test_two_reply_intents_serialize_until_first_success() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="first")
+    drive_bounded(subject)
+    subject.deliver(
+        "conversation_observation",
+        token(ConversationObservation(1, "h1", True, "two replies", comment_id=42)),
+        identity="comment-42",
+    )
+    occurrence, _ = drive_until_activity(subject, dispatch, "conversation")
+    replies = [
+        Intent(1, "h1", "reply", f"reply-{number}", True, False, {"message": f"reply {number}"}, "base")
+        for number in (1, 2)
+    ]
+    dispatch.complete(occurrence, IntentBatch(1, "h1", replies).dump())
+    drive_bounded(subject)
+
+    first_occurrence, first_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
+    assert len(values(subject, "reply_basis")) == 1
+    assert len(pending_all(dispatch, "conversation_publish")) == 1
+    first_work = work_input(first_invocation)
+    dispatch.complete(
+        first_occurrence,
+        effect_result("conversation", 1, "h1", True, operation=first_work.operation).dump(),
+    )
+    drive_bounded(subject)
+
+    _, second_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
+    assert work_input(second_invocation).operation != first_work.operation
+    assert not values(subject, "reply_basis")
+
+
+def test_conversation_blocker_latch_keeps_second_reply_queued() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="first")
+    drive_bounded(subject)
+    subject.deliver(
+        "conversation_observation",
+        token(ConversationObservation(1, "h1", True, "two replies", comment_id=43)),
+        identity="comment-43",
+    )
+    occurrence, _ = drive_until_activity(subject, dispatch, "conversation")
+    replies = [
+        Intent(1, "h1", "reply", f"blocked-{number}", True, False, {"message": f"reply {number}"}, "base")
+        for number in (1, 2)
+    ]
+    dispatch.complete(occurrence, IntentBatch(1, "h1", replies).dump())
+    drive_bounded(subject)
+    first_occurrence, first_invocation = drive_until_activity(subject, dispatch, "conversation_publish")
+    first_work = work_input(first_invocation)
+    dispatch.complete(
+        first_occurrence,
+        effect_result(
+            "conversation", 1, "h1", False, operation=first_work.operation, capability_available=False
+        ).dump(),
+    )
+    drive_bounded(subject)
+
+    assert snapshot(subject).conversation_capability_blocking
+    assert len(values(subject, "reply_basis")) == 1
+    assert pending_all(dispatch, "conversation_publish") == []
 
 
 def test_external_actions_failure_is_deduplicated_and_authorizes_one_rerun() -> None:
@@ -1090,10 +1170,7 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
     requested_authority, *_, requested_publication = concern_state(**requested.dump())
     assert _effect_matches(requested_authority, requested_publication, stale) is False
 
-    conversation = replace(
-        requested,
-        conversation_pending=request("conversation", 1, "h1", "conversation:1").dump(),
-    )
+    conversation = replace(requested, conversation_requested=True, conversation_operation="conversation:1")
     assert (
         _effect_matches(
             requested_authority,
@@ -1113,7 +1190,7 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
     assert (
         _effect_matches(
             requested_authority,
-            concern_state(**replace(conversation, conversation_pending={}).dump())[5],
+            concern_state(**replace(conversation, conversation_requested=False, conversation_operation="").dump())[5],
             effect_result("conversation", 1, "h1", True, operation="conversation:1"),
         )
         is False
@@ -1696,7 +1773,8 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
     assert "retire.dormant_dashboard_result" in retirement_names
     assert "retire.terminal_dashboard_result" in retirement_names
     assert "retire.stale_dashboard_result" not in retirement_names
-    assert (len(net.places), len(net.transitions), len(net.arcs)) == (40, 139, 415)
+    assert (len(net.places), len(net.transitions), len(net.arcs)) == (40, 138, 412)
+    assert NetPath("reissue_reply") not in net.transitions
     publication_paths = {str(path) for path in (*net.places, *net.transitions) if str(path).startswith("publication.")}
     assert not any(
         any(part in path for part in ("lease", "retry", "due", "reissue", "mature")) for path in publication_paths
@@ -1834,7 +1912,7 @@ def test_readiness_capability_denial_relationally_stales_its_ready_dashboard() -
     assert workflow_wait(project_readiness(*concerns[:5], blocked)) == "readiness publication capability"
 
 
-def test_non_capability_conversation_failure_clears_pending_without_retry() -> None:
+def test_capability_available_conversation_terminal_clears_operation() -> None:
     work = request("conversation", 1, "h1", "conversation:1")
     control = make_snapshot(
         "repo",
@@ -1844,8 +1922,8 @@ def test_non_capability_conversation_failure_clears_pending_without_retry() -> N
         "base",
         True,
         True,
-        conversation_pending=work.dump(),
-        conversation_attempts=1,
+        conversation_requested=True,
+        conversation_operation=work.operation,
     )
 
     cleared = fold_effect(
@@ -1853,8 +1931,8 @@ def test_non_capability_conversation_failure_clears_pending_without_retry() -> N
         effect_result("conversation", 1, "h1", False, operation=work.operation),
     )
 
-    assert cleared.conversation_pending == {}
-    assert cleared.conversation_attempts == 0
+    assert cleared.conversation_requested is False
+    assert cleared.conversation_operation == ""
     assert cleared.conversation_capability_blocking is False
 
 
