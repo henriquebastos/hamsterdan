@@ -58,6 +58,15 @@ never merges remain required.
   payload projections, while same-generation superseded result tokens are
   explicitly retired.
 
+### 2026-08-09 — Established the concern-state partition
+
+- The six strict token contracts now assign every aggregate field to exactly
+  one owner: authority, Actions, review, human, mutation, or publication.
+- `ReadinessSnapshot` projects those independent values and derives `wait`;
+  parity tests prove the split preserves representative aggregate behavior.
+- `Control` remains temporarily in the running Net only until the topology and
+  host migrate to the proven contracts; CR-007 remains active.
+
 ## Change Requests
 
 | Change Request | Outcome |
