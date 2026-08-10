@@ -8,7 +8,6 @@ from hamsterdan.contracts.readiness import (
     ActionsState,
     Authority,
     ChangeResult,
-    DashboardPublicationLease,
     DashboardPublicationRequest,
     HumanState,
     MutationState,
@@ -137,7 +136,7 @@ def test_converter_round_trips_readiness_snapshot() -> None:
     assert converter.decode(encoded, ReadinessSnapshot) == snapshot
 
 
-def test_converter_round_trips_nested_publication_retry_contract() -> None:
+def test_converter_round_trips_immutable_dashboard_request() -> None:
     snapshot = project_readiness(
         Authority("repo", 7, 1, "head", "base", True, True),
         ActionsState(),
@@ -146,9 +145,9 @@ def test_converter_round_trips_nested_publication_retry_contract() -> None:
         MutationState(),
         PublicationState(),
     )
-    retry = DashboardPublicationLease(
-        DashboardPublicationRequest(1, "head", "dashboard:1", "base", "policy", snapshot),
-    )
+    request = DashboardPublicationRequest(1, "head", "dashboard:1", "base", "policy", snapshot)
     converter = PydanticPayloadConverter()
 
-    assert converter.decode(converter.encode(retry, DashboardPublicationLease), DashboardPublicationLease) == retry
+    assert (
+        converter.decode(converter.encode(request, DashboardPublicationRequest), DashboardPublicationRequest) == request
+    )

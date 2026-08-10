@@ -22,7 +22,6 @@ from hamsterdan.contracts.readiness import (
     ConversationObservation,
     ConversationPublicationRequest,
     ConversationPublicationResult,
-    DashboardPublicationLease,
     DashboardPublicationRequest,
     DashboardPublicationResult,
     Dormant,
@@ -36,7 +35,6 @@ from hamsterdan.contracts.readiness import (
     MutationState,
     PublicationState,
     ReadinessCommand,
-    ReadinessPublicationLease,
     ReadinessPublicationResult,
     ReadinessSnapshot,
     Reminder,
@@ -112,8 +110,6 @@ _TOKEN_TYPES = {
         DashboardPublicationRequest,
         ReminderPublicationRequest,
         ReadinessCommand,
-        DashboardPublicationLease,
-        ReadinessPublicationLease,
     )
 }
 _TOKEN_ADAPTERS = {name: TypeAdapter(value_type) for name, value_type in _TOKEN_TYPES.items()}
@@ -418,24 +414,6 @@ def fold_dashboard_effect(p: PublicationState, r: DashboardPublicationResult) ->
 @direct
 def fold_readiness_effect(p: PublicationState, r: ReadinessPublicationResult) -> PublicationState:
     return fold_effect(p, r)
-
-
-def _publication_result_matches(authority, publication, retry, result) -> bool:
-    return _effect_matches(authority, publication, result) and retry.operation == result.operation
-
-
-def _accept_publication_result(binding, outputs, result_type, retry_type, folder, retry_target):
-    publication, retry, result = _values(binding, PublicationState, retry_type, result_type)
-    updated = folder.implementation(publication, result)
-    routed = {"publication_state": updated}
-    if not result.ok:
-        routed[retry_target] = retry
-    return _route(outputs, routed)
-
-
-def _reissue_publication(binding, outputs, retry_type, lease_target, work_target):
-    retry = _values(binding, retry_type)[0]
-    return _route(outputs, {lease_target: retry, work_target: retry.request})
 
 
 def _admit(binding, outputs):
@@ -957,7 +935,6 @@ def _dashboard(binding, outputs):
         {
             "publication_state": p,
             "work.dashboard": work,
-            "publication.dashboard_lease": DashboardPublicationLease(work),
         },
     )
 
@@ -977,16 +954,8 @@ def _announce(binding, outputs):
         {
             "publication_state": p,
             "command.readiness": work,
-            "publication.readiness_lease": ReadinessPublicationLease(work),
         },
     )
-
-
-def _publication_retry_current(authority, publication, retry) -> bool:
-    dashboard = isinstance(retry, DashboardPublicationLease)
-    field = "dashboard_operation" if dashboard else "readiness_operation"
-    requested = publication.dashboard_requested if dashboard else publication.readiness_requested
-    return requested and _current(authority, retry) and retry.operation == getattr(publication, field)
 
 
 def _reminder_due(snapshot: ReadinessSnapshot, timer: Reminder) -> bool:
@@ -1040,17 +1009,16 @@ def _lifecycle(binding, outputs, terminal=False):
     return _put(outputs, (value,))
 
 
-def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay: float = 5 * 60) -> BuiltNet:
+def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     net = NetSpec("pr-readiness-concerns")
     p, t = net.p, net.t
-    work, execute, retire, admit, reminder, command, publication = (
+    work, execute, retire, admit, reminder, command = (
         net.s.work,
         net.s.execute,
         net.s.retire,
         net.s.admit,
         net.s.reminder,
         net.s.command,
-        net.s.publication,
     )
     # External observations enter exact typed places; Activities bridge only
     # their matching request and result places.
@@ -1198,36 +1166,30 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
     )
     p.authority >> arc.read() >> accept_conversation
     (p.publication_state, p.conversation_result) >> accept_conversation >> p.publication_state
-    for name, place, result_type, retry_type, lease, retry_place, folder in (
+    for name, place, result_type, folder in (
         (
             "dashboard",
             p.dashboard_result,
             DashboardPublicationResult,
-            DashboardPublicationLease,
-            publication.p.dashboard_lease,
-            publication.p.dashboard_retry,
             fold_dashboard_effect,
         ),
         (
             "readiness",
             p.readiness_result,
             ReadinessPublicationResult,
-            ReadinessPublicationLease,
-            publication.p.readiness_lease,
-            publication.p.readiness_retry,
             fold_readiness_effect,
         ),
     ):
         tr = getattr(t, f"accept_{name}")(
             handler=petri_handler(
-                lambda b, o, result_type=result_type, retry_type=retry_type, fold=folder, retry_target=str(retry_place._path): (
-                    _accept_publication_result(b, o, result_type, retry_type, fold, retry_target)
+                lambda b, o, result_type=result_type, fold=folder: _fold_owned(
+                    b, o, PublicationState, result_type, fold
                 )
             ),
-            guards=_typed_guard((Authority, PublicationState, retry_type, result_type), _publication_result_matches),
+            guards=_typed_guard((Authority, PublicationState, result_type), _effect_matches),
         )
         p.authority >> arc.read() >> tr
-        (p.publication_state, lease, place) >> tr >> (p.publication_state, retry_place(retry_type))
+        (p.publication_state, place) >> tr >> p.publication_state
     accept_reminder = t.accept_reminder(guards=_guard(lambda a, result: _current(a, result)))
     p.authority >> arc.read() >> accept_reminder
     p.reminder_result >> accept_reminder
@@ -1312,8 +1274,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
         >> (p.publication_state, work.p.conversation_reply)
     )
     # Full snapshots are relational joins only at projection/gate boundaries.
-    # Failed dashboard/readiness Activities retain their exact lease, mature on
-    # a token-only delay, then rejoin current authority before reissue.
     dashboard = t.request_dashboard(
         handler=petri_handler(_dashboard),
         guards=_guard(lambda a, ac, r, h, m, pub: _request_dashboard(_snapshot(a, ac, r, h, m, pub))),
@@ -1331,7 +1291,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
         >> (
             p.publication_state,
             work.p.dashboard,
-            publication.p.dashboard_lease(DashboardPublicationLease),
         )
     )
     (
@@ -1340,42 +1299,8 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
         >> (
             p.publication_state,
             command.p.readiness,
-            publication.p.readiness_lease(ReadinessPublicationLease),
         )
     )
-    for name, retry_type, retry_place, due_place, lease_place, work_place in (
-        (
-            "dashboard",
-            DashboardPublicationLease,
-            publication.p.dashboard_retry,
-            publication.p.dashboard_due,
-            publication.p.dashboard_lease,
-            work.p.dashboard,
-        ),
-        (
-            "readiness",
-            ReadinessPublicationLease,
-            publication.p.readiness_retry,
-            publication.p.readiness_due,
-            publication.p.readiness_lease,
-            command.p.readiness,
-        ),
-    ):
-        mature = getattr(publication.t, f"mature_{name}_retry")(
-            handler=petri_handler(lambda b, o, retry_type=retry_type: _put(o, (_values(b, retry_type)[0],))),
-            timers=(Delay(publication_retry_delay),),
-        )
-        retry_place >> mature >> due_place(retry_type)
-        reissue = getattr(publication.t, f"reissue_{name}")(
-            handler=petri_handler(
-                lambda b, o, retry_type=retry_type, lease_target=str(lease_place._path), work_target=str(work_place._path): (
-                    _reissue_publication(b, o, retry_type, lease_target, work_target)
-                )
-            ),
-            guards=_typed_guard((Authority, PublicationState, retry_type), _publication_retry_current),
-        )
-        (p.authority, p.publication_state) >> arc.read() >> reissue
-        due_place >> reissue >> (lease_place, work_place)
     due = t.reminder_due(
         handler=petri_handler(_remind),
         guards=_guard(lambda a, ac, r, h, m, pub, timer: _reminder_due(_snapshot(a, ac, r, h, m, pub), timer)),
@@ -1462,12 +1387,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
         work.p.dashboard,
         work.p.reminder,
         command.p.readiness,
-        publication.p.dashboard_lease,
-        publication.p.dashboard_retry,
-        publication.p.dashboard_due,
-        publication.p.readiness_lease,
-        publication.p.readiness_retry,
-        publication.p.readiness_due,
     )
     for place in inactive_transients:
         suffix = str(place._path).replace(".", "_")
@@ -1502,24 +1421,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
         stale = getattr(retire.t, f"stale_{suffix}")(guards=_guard(lambda a, value: not _current(a, value)))
         p.authority >> arc.read() >> stale
         place >> stale
-    for name, place, lease_type in (
-        ("dashboard_lease", publication.p.dashboard_lease, DashboardPublicationLease),
-        ("dashboard_retry", publication.p.dashboard_retry, DashboardPublicationLease),
-        ("dashboard_due", publication.p.dashboard_due, DashboardPublicationLease),
-        ("readiness_lease", publication.p.readiness_lease, ReadinessPublicationLease),
-        ("readiness_retry", publication.p.readiness_retry, ReadinessPublicationLease),
-        ("readiness_due", publication.p.readiness_due, ReadinessPublicationLease),
-    ):
-        obsolete = getattr(retire.t, name)(
-            guards=_typed_guard(
-                (Authority, PublicationState, lease_type),
-                lambda authority, publication_state, lease: (
-                    not _publication_retry_current(authority, publication_state, lease)
-                ),
-            )
-        )
-        (p.authority, p.publication_state) >> arc.read() >> obsolete
-        place >> obsolete
     # Result envelopes retire against the exact operation owned by their concern;
     # these guards cover both stale authority and same-generation supersession.
     for name, place, owner, predicate in (

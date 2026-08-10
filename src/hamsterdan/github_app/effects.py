@@ -120,14 +120,21 @@ class CommentPublisher:
                 if attempt:
                     raise
                 continue
-            if response.status == 201 and isinstance(response.body, dict):
-                return PublicationResult("created", _reference(_response_mapping(response.body)))
+            if response.status == 201:
+                try:
+                    return PublicationResult("created", _reference(_response_mapping(response.body)))
+                except KeyError, TypeError, ValueError, OverflowError:
+                    pass
             recovered = self._recover(marker, payload)
             if recovered is not None:
                 return recovered
-            error = GitHubBoundaryError("GitHub did not prove comment publication")
-            if response.status != 201 or attempt:
-                raise error
+            if response.status == 201:
+                raise GitHubBoundaryError("GitHub did not prove comment publication")
+            outcome = _comment_rejection(response.status, "comment publication")
+            if outcome is not None:
+                return outcome
+            if attempt:
+                raise GitHubBoundaryError("GitHub did not prove comment publication")
         raise AssertionError("bounded comment recovery exhausted without an outcome")
 
     def _recover(self, marker: str, payload: str) -> PublicationResult | None:
@@ -144,19 +151,61 @@ class CommentPublisher:
         payload = f"{body}\n\n{marker}"
         if existing is None:
             self.fence(self.repository, self.pr_number, epoch, head, operation)
-            response = self.transport.request("POST", self.root, {"body": payload})
-            if response.status != 201 or not isinstance(response.body, dict):
-                raise GitHubBoundaryError("GitHub did not prove dashboard publication")
-            return PublicationResult("created", _reference(_response_mapping(response.body)))
+            try:
+                response = self.transport.request("POST", self.root, {"body": payload})
+            except GitHubBoundaryError:
+                recovered = self._recover(marker, payload)
+                if recovered is not None:
+                    return recovered
+                raise
+            if response.status == 201:
+                try:
+                    return PublicationResult("created", _reference(_response_mapping(response.body)))
+                except KeyError, TypeError, ValueError, OverflowError:
+                    pass
+            else:
+                recovered = self._recover(marker, payload)
+                if recovered is not None:
+                    return recovered
+                outcome = _comment_rejection(response.status, "dashboard publication")
+                if outcome is not None:
+                    return outcome
+            recovered = self._recover(marker, payload)
+            if recovered is not None:
+                return recovered
+            raise GitHubBoundaryError("GitHub did not prove dashboard publication")
         if existing.get("body") == payload:
             return PublicationResult("existing", _reference(existing))
         self.fence(self.repository, self.pr_number, epoch, head, operation)
-        response = self.transport.request("PATCH", f"{self.edit_root}/{existing['id']}", {"body": payload})
-        if response.status in {403, 404}:
-            return PublicationResult("update_unavailable", _reference(existing), False)
-        if response.status != 200 or not isinstance(response.body, dict):
-            raise GitHubBoundaryError("GitHub did not prove dashboard update")
-        return PublicationResult("updated", _reference(_response_mapping(response.body)))
+        try:
+            response = self.transport.request("PATCH", f"{self.edit_root}/{existing['id']}", {"body": payload})
+        except GitHubBoundaryError:
+            recovered = self._recover_dashboard(marker, payload)
+            if recovered is not None:
+                return recovered
+            raise
+        if response.status == 200:
+            try:
+                return PublicationResult("updated", _reference(_response_mapping(response.body)))
+            except KeyError, TypeError, ValueError, OverflowError:
+                pass
+        else:
+            recovered = self._recover_dashboard(marker, payload)
+            if recovered is not None:
+                return recovered
+            outcome = _comment_rejection(response.status, "dashboard update", reference=_reference(existing))
+            if outcome is not None:
+                return outcome
+        recovered = self._recover_dashboard(marker, payload)
+        if recovered is not None:
+            return recovered
+        raise GitHubBoundaryError("GitHub did not prove dashboard update")
+
+    def _recover_dashboard(self, marker: str, payload: str) -> PublicationResult | None:
+        existing = self._find(marker)
+        if existing is None or existing.get("body") != payload:
+            return None
+        return PublicationResult("existing", _reference(existing))
 
     def finding(
         self,
@@ -298,6 +347,17 @@ class CommentPublisher:
     @property
     def reviewer_assignment_available(self) -> bool:
         return False
+
+
+def _comment_rejection(
+    status: int, operation: str, *, reference: CommentReference | None = None
+) -> PublicationResult | None:
+    """Classify a proven HTTP outcome without retaining provider diagnostics."""
+    if status in {403, 404}:
+        return PublicationResult("capability_unavailable", reference, False)
+    if status == 429 or status >= 500:
+        raise GitHubBoundaryError(f"GitHub did not prove {operation}")
+    raise ValueError(f"GitHub rejected {operation}")
 
 
 def _reference(value: Mapping[str, Any]) -> CommentReference:

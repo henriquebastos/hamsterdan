@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from petrus.impetus.history import ActivityFailed, ActivityRequested, FiringFailed
+from petrus.motus.activity import ActivityError
+from petrus.motus.dispatch import LocalDispatch
+from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, CodingResult, ConversationResult, ReviewResult
 from hamsterdan.contracts.readiness import workflow_gates_ready
@@ -28,6 +32,7 @@ class CommentTransport:
     def __init__(self) -> None:
         self.comments: list[dict[str, Any]] = []
         self.writes: list[tuple[str, str, dict[str, Any]]] = []
+        self.rejection: tuple[str, int] | None = None
 
     def pages(self, path: str) -> tuple[dict[str, Any], ...]:
         assert path.endswith("/issues/3/comments?per_page=100")
@@ -36,6 +41,8 @@ class CommentTransport:
     def request(self, method: str, path: str, body=None) -> WireResponse:
         assert method in {"POST", "PATCH"} and isinstance(body, dict)
         self.writes.append((method, path, body))
+        if self.rejection is not None and self.rejection[0] in str(body["body"]):
+            return WireResponse(self.rejection[1], {"message": "provider detail must not escape"})
         if method == "POST":
             item = {
                 "id": len(self.comments) + 1,
@@ -214,10 +221,17 @@ class TerminalReviewRunner(Runner):
         raise RuntimeError("terminal review failure")
 
 
-def application(tmp_path: Path, authority: Authority, runner: Runner) -> PrReadinessApplication:
+def application(
+    tmp_path: Path,
+    authority: Authority,
+    runner: Runner,
+    *,
+    dispatch_path: Path | None = None,
+    instance_id: str = "github-1-pr-3",
+) -> PrReadinessApplication:
     return PrReadinessApplication(
         tmp_path / "state",
-        "github-1-pr-3",
+        instance_id,
         authority,
         runner,  # type: ignore[arg-type]
         agent_dispatch=lambda operation, attempt: None,
@@ -225,6 +239,7 @@ def application(tmp_path: Path, authority: Authority, runner: Runner) -> PrReadi
         bot_login=BOT,
         public_clone_url=str(tmp_path),
         reminder_delay=10**30,
+        dispatch_path=dispatch_path,
     )
 
 
@@ -471,6 +486,344 @@ def test_close_reopen_restart_preserves_pending_durable_activity_without_duplica
     assert sum("hamsterdan-rerun" in x["body"] for x in authority.transport.comments) == marker_count == 1
     assert second_runner.reviews == 0 and history_before in (tmp_path / "state/history.jsonl").read_text()
     second.close()
+
+
+def test_publication_requests_use_exact_durable_policy_and_operation_identity(tmp_path: Path) -> None:
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner, dispatch_path=tmp_path / "dispatch.sqlite3")
+
+    subject.reconcile("prepare-publications")
+    worker = Worker(
+        LocalDispatch(tmp_path / "dispatch.sqlite3", instance="worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: subject.activity(name),
+    )
+    for _ in range(10):
+        worker.run_available(limit=20)
+        subject.settle()
+        names = {
+            record.activity
+            for record in subject.host.engine.records  # type: ignore[union-attr]
+            if isinstance(record, ActivityRequested)
+        }
+        if {"dashboard_publish", "readiness_publish"} <= names:
+            break
+    requested = [
+        record
+        for record in subject.host.engine.records  # type: ignore[union-attr]
+        if isinstance(record, ActivityRequested) and record.activity in {"dashboard_publish", "readiness_publish"}
+    ]
+
+    assert {record.activity for record in requested} == {"dashboard_publish", "readiness_publish"}
+    for record in requested:
+        work = record.input.get("work", record.input.get("command"))
+        assert record.policy.attempts == 3
+        assert (record.policy.initial_interval, record.policy.coefficient, record.policy.max_interval) == (5, 2, 10)
+        assert (record.policy.jitter, record.policy.schedule_to_close) == (0, 60)
+        assert record.correlation == record.idempotency == work["operation"]
+    subject.close()
+    worker.close()
+
+
+def test_one_local_worker_routes_instances_to_distinct_publication_providers(tmp_path: Path) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    subjects: dict[str, PrReadinessApplication] = {}
+    authorities: list[Authority] = []
+    for label in ("one", "two"):
+        authority, runner = Authority(), Runner()
+        ready(authority)
+        instance = f"github-{label}-pr-3"
+        subject = application(
+            tmp_path / label,
+            authority,
+            runner,
+            dispatch_path=dispatch_path,
+            instance_id=instance,
+        )
+        subject.reconcile("enqueue")
+        subjects[instance] = subject
+        authorities.append(authority)
+
+    worker = Worker(
+        LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: subjects[instance].activity(name),
+    )
+    assert worker.run_available(limit=2) == 2
+    for subject in subjects.values():
+        subject.settle()
+
+    assert [len(authority.transport.writes) for authority in authorities] == [1, 1]
+    for instance, subject in subjects.items():
+        completed = [
+            record
+            for record in subject.host.engine.records  # type: ignore[union-attr]
+            if record.__class__.__name__ == "ActivityCompleted"
+            and str(record.transition) == "execute.dashboard_publish"
+        ]
+        assert len(completed) == 1
+        assert subject.instance_id == instance
+        subject.close()
+    worker.close()
+
+
+def test_frozen_worker_success_is_collected_after_application_reopen_without_duplicate_provider_call(
+    tmp_path: Path,
+) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    first.reconcile("enqueue")
+    worker = Worker(
+        LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: first.activity(name),
+    )
+    assert worker.run_available(limit=20) == 1
+    occurrence = next(
+        record.occurrence
+        for record in first.host.engine.records  # type: ignore[union-attr]
+        if isinstance(record, ActivityRequested) and record.activity == "dashboard_publish"
+    )
+    calls = len(authority.transport.writes)
+    first.close()
+
+    second = application(tmp_path, authority, Runner(), dispatch_path=dispatch_path)
+    second.settle()
+    assert len(authority.transport.writes) == calls == 1
+    assert any(
+        record.__class__.__name__ == "ActivityCompleted" and record.occurrence == occurrence
+        for record in second.host.engine.records  # type: ignore[union-attr]
+    )
+    second.close()
+    worker.close()
+
+
+@pytest.mark.parametrize(
+    ("activity", "marker", "blocker"),
+    [
+        ("dashboard_publish", "hamsterdan:dashboard", "dashboard_capability_blocking"),
+        ("readiness_publish", "hamsterdan:readiness", "readiness_capability_blocking"),
+    ],
+)
+@pytest.mark.parametrize("status", [403, 404])
+def test_production_publication_capability_absence_completes_once_with_typed_blocker(
+    tmp_path: Path, activity: str, marker: str, blocker: str, status: int
+) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    authority.transport.rejection = (marker, status)
+    subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    subject.reconcile("enqueue")
+    worker = Worker(
+        LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: subject.activity(name),
+    )
+
+    for _ in range(10):
+        worker.run_available(limit=20)
+        subject.settle()
+        terminals = [
+            record
+            for record in subject.host.engine.records  # type: ignore[union-attr]
+            if record.__class__.__name__ == "ActivityCompleted" and str(record.transition) == f"execute.{activity}"
+        ]
+        if terminals:
+            break
+
+    records = subject.host.engine.records  # type: ignore[union-attr]
+    completed = [
+        record
+        for record in records
+        if record.__class__.__name__ == "ActivityCompleted" and str(record.transition) == f"execute.{activity}"
+    ]
+    failed = [
+        record
+        for record in records
+        if isinstance(record, ActivityFailed) and str(record.transition) == f"execute.{activity}"
+    ]
+    matching_writes = [write for write in authority.transport.writes if marker in str(write[2]["body"])]
+    control = subject.host.control  # type: ignore[union-attr]
+
+    assert len(completed) == 1 and failed == []
+    assert completed[0].result["capability_available"] is False
+    assert len(matching_writes) == 1
+    assert control is not None and getattr(control, blocker)
+    subject.close()
+    worker.close()
+
+
+@pytest.mark.parametrize(
+    ("activity", "marker"),
+    [
+        ("dashboard_publish", "hamsterdan:dashboard"),
+        ("readiness_publish", "hamsterdan:readiness"),
+    ],
+)
+def test_production_publication_422_fails_once_and_projector_stays_loud(
+    tmp_path: Path, activity: str, marker: str
+) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    authority.transport.rejection = (marker, 422)
+    subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    subject.reconcile("enqueue")
+    worker = Worker(
+        LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: subject.activity(name),
+    )
+
+    for _ in range(10):
+        worker.run_available(limit=20)
+        try:
+            subject.settle()
+        except RuntimeError as error:
+            assert "unprojectable publication failure: ValueError" in str(error)
+            break
+    else:
+        pytest.fail("definite publication rejection was not kept loud")
+
+    records = [json.loads(line) for line in (tmp_path / "state/history.jsonl").read_text().splitlines()]
+    failed = [
+        record
+        for record in records
+        if record["record"] == "ActivityFailed" and record.get("transition") == f"execute.{activity}"
+    ]
+    firing_failed = [
+        record
+        for record in records
+        if record["record"] == "FiringFailed" and record.get("transition") == f"execute.{activity}"
+    ]
+    matching_writes = [write for write in authority.transport.writes if marker in str(write[2]["body"])]
+    assert len(failed) == len(matching_writes) == 1 and firing_failed == []
+    assert failed[0]["kind"] == "ValueError" and not failed[0]["retryable"]
+    assert "provider detail" not in str(failed + firing_failed)
+    assert not any(
+        record["record"] == "ActivityCompleted" and record.get("transition") == f"execute.{activity}"
+        for record in records
+    )
+    subject.close()
+    worker.close()
+
+
+def test_nonretryable_publication_boundary_failure_projects_typed_blocker_once(tmp_path: Path) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    subject.reconcile("enqueue")
+
+    def resolver(instance: str, name: str):
+        implementation = subject.activity(name)
+
+        def fail(invocation, *, context):
+            raise ActivityError("boundary unavailable", kind="GitHubBoundaryError", retryable=False)
+
+        return fail if name == "readiness_publish" else implementation
+
+    worker = Worker(LocalDispatch(dispatch_path, instance="worker").worker(("publication",)), {}, resolver=resolver)
+    for _ in range(10):
+        assert worker.run_available(limit=20) >= 1
+        subject.settle()
+        if any(isinstance(record, ActivityFailed) for record in subject.host.engine.records):  # type: ignore[union-attr]
+            break
+    records = subject.host.engine.records  # type: ignore[union-attr]
+    failures = [record for record in records if isinstance(record, ActivityFailed)]
+    requests = [record for record in records if isinstance(record, ActivityRequested)]
+    failed_request = next(record for record in requests if record.occurrence == failures[0].occurrence)
+    work = failed_request.input["command"]
+    control = subject.host.control  # type: ignore[union-attr]
+
+    assert len(failures) == 1 and failures[0].kind == "GitHubBoundaryError"
+    assert not any(isinstance(record, FiringFailed) for record in records)
+    assert control is not None and control.readiness_capability_blocking
+    assert control.readiness_requested
+    assert (control.readiness_operation, work["operation"]) == (failed_request.idempotency, failed_request.idempotency)
+    count = len(requests)
+    subject.settle()
+    assert sum(isinstance(record, ActivityRequested) for record in subject.host.engine.records) == count  # type: ignore[union-attr]
+    subject.close()
+    worker.close()
+
+
+def test_wrapped_value_error_is_one_nonretryable_attempt_and_rejected_by_projector(tmp_path: Path) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    subject.reconcile("enqueue")
+    calls = 0
+
+    def resolver(instance: str, name: str):
+        implementation = subject.activity(name)
+
+        def wrapped(invocation, *, context):
+            nonlocal calls
+            if name != "readiness_publish":
+                return implementation(invocation, context=context)
+            calls += 1
+            try:
+                raise ValueError("publication invariant")
+            except Exception as error:
+                raise ActivityError(
+                    "publication invariant failed",
+                    kind=type(error).__name__,
+                    retryable=False,
+                ) from error
+
+        return wrapped
+
+    worker = Worker(LocalDispatch(dispatch_path, instance="worker").worker(("publication",)), {}, resolver=resolver)
+    for _ in range(10):
+        assert worker.run_available(limit=20) >= 1
+        try:
+            subject.settle()
+        except RuntimeError as error:
+            assert "unprojectable publication failure: ValueError" in str(error)
+            break
+    else:
+        pytest.fail("ValueError terminal was not rejected by the publication projector")
+
+    records = [json.loads(line) for line in (tmp_path / "state/history.jsonl").read_text().splitlines()]
+    failed = [record for record in records if record["record"] == "ActivityFailed"]
+    firing_failed = [record for record in records if record["record"] == "FiringFailed"]
+    assert calls == 1
+    assert len(failed) == 1 and firing_failed == []
+    assert failed[0]["kind"] == "ValueError" and not failed[0]["retryable"]
+    assert not any(
+        record["record"] == "ActivityCompleted" and record.get("transition") == "execute.readiness_publish"
+        for record in records
+    )
+    subject.close()
+    worker.close()
+
+
+def test_unrelated_review_activity_stays_inline_and_outside_local_publication_custody(tmp_path: Path) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+
+    subject.reconcile("mixed-dispatch")
+    claimed = LocalDispatch(dispatch_path, instance="inspector").worker(("publication",)).claim()
+
+    assert runner.reviews == 1
+    assert claimed is not None and claimed.invocation.activity in {"dashboard_publish", "readiness_publish"}
+    records = subject.host.engine.records  # type: ignore[union-attr]
+    review_requests = [
+        record for record in records if isinstance(record, ActivityRequested) and record.activity == "review"
+    ]
+    review_terminals = {
+        record.occurrence for record in records if record.__class__.__name__ in {"ActivityCompleted", "ActivityFailed"}
+    }
+    assert len(review_requests) == 1 and review_requests[0].occurrence in review_terminals
+    subject.close()
 
 
 def test_same_head_policy_changes_reverts_and_deduplicates(tmp_path: Path) -> None:

@@ -47,7 +47,7 @@ merges.
 | --- | --- |
 | CR-001 Remove current-Petrus topology redundancies | Complete |
 | CR-002 Add production Activity Execution policy to Motus | Complete |
-| CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Paused for cross-project architecture exploration |
+| CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Complete |
 | CR-004 Migrate conversation and eligible provider retries | Planned |
 | CR-005 Reassess residual concern-state ownership | Planned |
 | CR-006 Review, coherence, and documentation | Planned |
@@ -151,3 +151,41 @@ PR authority and provider reconciliation remain application-owned.
 - No production topology is deleted at this pause. Petrus Activity Execution V2
   remains accepted and pinned; CR-003 resumes only after the cross-project
   exploration yields a reviewed implementation boundary.
+
+### 2026-08-10 — Completed scoped execution and publication retry migration
+
+- Petrus `cb9cb63c3938c9318a99c9f605a0364b3c81bd6b` makes the authorizing
+  Instance first-class on Worker Attempts and execution contexts, adds optional
+  host resolution by `(instance, activity)`, and supplies bounded non-waiting
+  Worker pumping. Hamsterdan pins that exact accepted revision.
+- One Local Worker now shares durable dashboard/readiness execution custody
+  across PRs. One Engine and History remain scoped to each PR. The host
+  reconstructs each Activity module from strict durable Instance binding and
+  current process configuration; no clients, closures, credentials, Engines,
+  or markings enter Dispatch state.
+- A host-owned SQLite runnable index stores only reconstructible wake hints.
+  Webhook custody, History, and Local Dispatch remain canonical. Per-PR locks
+  enforce one advancing owner without creating a thread or Worker per PR;
+  periodic sweep remains repair rather than primary scheduling.
+- Dashboard/readiness use one immutable logical execution with three bounded
+  Attempts, deterministic 5s/10s backoff, a 60s schedule-to-close budget, and
+  stable correlation/idempotency equal to the exact publication operation.
+  Transport ambiguity and 429/5xx retry; 403/404 become typed capability
+  outcomes; definite rejection and invariant failures remain non-retryable and
+  loud. Lookup-first recovery precedes every ambiguous retry.
+- Terminal exhaustion projects one typed capability blocker while retaining
+  the original requested flag and operation. Reconciliation therefore cannot
+  mint an unbounded sequence of new logical executions. Stale authority and
+  revoked routes instead produce exact non-blocking stale outcomes with no
+  provider effect.
+- Dashboard/readiness lease, retry, due, maturation, reissue, and associated
+  obsolete retirement topology are gone. The Net moved from 46 places, 161
+  transitions, and 477 arcs to 40 places, 139 transitions, and 415 arcs while
+  preserving immutable authorization, exact operation ownership, current
+  Authority plus PublicationState acceptance, and stale/superseded retirement.
+- Focused restart, retry, terminal projection, two-Instance isolation, route
+  revocation, provider classification, runnable recovery, and shutdown tests
+  pass. The final adversarial review approved the integrated change with no
+  release blockers. The full project gate passes 504 Python tests with one
+  provider qualification route deselected, nine Bun tests, static analysis,
+  formatting, and both package builds.

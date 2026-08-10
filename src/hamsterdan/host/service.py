@@ -7,14 +7,25 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
+from petrus.motus.activity import ActivityError
+from petrus.motus.dispatch import LocalDispatch
+from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, AgentRunner, OperationRoutedRunner
+from hamsterdan.contracts.readiness import (
+    DashboardPublicationRequest,
+    DashboardPublicationResult,
+    ReadinessCommand,
+    ReadinessPublicationResult,
+)
 from hamsterdan.github_app.auth import GitHubAppClients
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.gateway import GitHubAuthority
@@ -25,6 +36,8 @@ from hamsterdan.github_app.webhooks import Observation, WebhookCustody
 
 from .agenticus import AgentComposition, AgentRouteStore
 from .application import PrReadinessApplication
+from .payloads import PydanticPayloadConverter
+from .runnable import RunnableIndex
 
 LOG = logging.getLogger("hamsterdan.host")
 ApplicationFactory = Callable[..., PrReadinessApplication]
@@ -45,6 +58,9 @@ APP_EVENTS = {
 }
 _FAULT_BOUNDARIES = frozenset({"agent", "comment"})
 _FAULT_PHASES = frozenset({"timed_out", "malformed", "before_call", "after_call"})
+_INSTANCE_PATTERN = re.compile(r"github:([1-9][0-9]*):([1-9][0-9]*):pr:([1-9][0-9]*)\Z")
+_REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+_DURABLE_PUBLICATIONS = frozenset({"dashboard_publish", "readiness_publish"})
 
 
 @dataclass
@@ -184,6 +200,76 @@ class HostService:
         self._locks: dict[tuple[int, int, int], threading.Lock] = {}
         self._stop = asyncio.Event()
         self._closed = False
+        self._instances: dict[str, tuple[int, int, int]] = {}
+        self._application_lock = threading.RLock()
+        self._pump_lock = threading.Lock()
+        self._scheduler_errors: dict[str, str] = {}
+        self.runnable = RunnableIndex(self.root / "runnable.sqlite3")
+        dispatch_path = self.root / "activity-dispatch.sqlite3"
+        provider = LocalDispatch(dispatch_path, instance="host-worker").worker(("publication",))
+        self.activity_worker = Worker(provider, {}, resolver=self._resolve_activity)
+        self._dispatch_path = dispatch_path
+
+    def _resolve_activity(self, instance: str, name: str):
+        if name not in _DURABLE_PUBLICATIONS:
+            return None
+        match = _INSTANCE_PATTERN.fullmatch(instance)
+        if match is None:
+            return self._invalid_publication_scope
+        installation_id, repository_id, pull_request_number = (int(value) for value in match.groups())
+        key = installation_id, repository_id, pull_request_number
+        try:
+            application = self._application(*key, allow_inactive_binding=True)
+            implementation = application.activity(name)
+        except Exception:  # noqa: BLE001 -- recognized publications must fail closed through an implementation
+            return self._invalid_publication_scope
+        if implementation is None:
+            return self._invalid_publication_scope
+
+        def wake(invocation, *, context):
+            try:
+                with self._locks[key]:
+                    try:
+                        if self.registry.route(key[0], key[1]) is None:
+                            return self._stale_publication_result(name, invocation)
+                        return implementation(invocation, context=context)
+                    except ActivityError:
+                        raise
+                    except Exception as error:
+                        raise ActivityError(
+                            "publication invariant failed",
+                            kind=type(error).__name__,
+                            retryable=False,
+                        ) from error
+            finally:
+                self.runnable.wake(instance, time.time(), "activity-terminal", name)
+
+        return wake
+
+    @staticmethod
+    def _invalid_publication_scope(invocation, *, context):
+        raise ActivityError("publication scope is unavailable", kind="PublicationScopeError", retryable=False)
+
+    @staticmethod
+    def _stale_publication_result(name: str, invocation: object) -> object:
+        converter = PydanticPayloadConverter()
+        try:
+            payload = cast(Any, invocation).input
+            request_name = "work" if name == "dashboard_publish" else "command"
+            request_type = DashboardPublicationRequest if name == "dashboard_publish" else ReadinessCommand
+            result_type = DashboardPublicationResult if name == "dashboard_publish" else ReadinessPublicationResult
+            if not isinstance(payload, dict) or request_name not in payload:
+                raise TypeError("publication invocation has no request")
+            request = cast(
+                DashboardPublicationRequest | ReadinessCommand,
+                converter.decode(payload[request_name], request_type),
+            )
+            result = result_type(request.epoch, request.head, False, request.operation, True)
+            return converter.encode(result, result_type)
+        except Exception as error:
+            raise ActivityError(
+                "publication scope is unavailable", kind="PublicationScopeError", retryable=False
+            ) from error
 
     def _request_metadata(self, metadata: Any) -> None:
         LOG.info(
@@ -305,22 +391,55 @@ class HostService:
         }
 
     def _application(
-        self, installation_id: int, repository_id: int, pull_request_number: int
+        self,
+        installation_id: int,
+        repository_id: int,
+        pull_request_number: int,
+        *,
+        allow_inactive_binding: bool = False,
     ) -> PrReadinessApplication:
         key = installation_id, repository_id, pull_request_number
-        if key not in self._apps:
+        with self._application_lock:
+            if key in self._apps:
+                return self._apps[key]
             route = self.registry.route(installation_id, repository_id)
-            if route is None:
+            if route is None and not allow_inactive_binding:
                 raise RuntimeError("route became inactive")
+            instance = f"github:{installation_id}:{repository_id}:pr:{pull_request_number}"
+            root = self.root / "applications" / str(installation_id) / str(repository_id) / str(pull_request_number)
+            if route is None:
+                binding = root / "binding.json"
+                try:
+                    if binding.is_symlink() or not binding.is_file() or binding.stat().st_size > 4096:
+                        raise ValueError
+                    persisted = json.loads(binding.read_text(encoding="utf-8"))
+                except OSError, ValueError, json.JSONDecodeError:
+                    raise RuntimeError("inactive route has no strict durable binding") from None
+                expected_names = {"instance_id", "repository", "pull_request"}
+                repository = persisted.get("repository") if isinstance(persisted, dict) else None
+                if (
+                    not isinstance(persisted, dict)
+                    or set(persisted) != expected_names
+                    or persisted.get("instance_id") != instance
+                    or type(persisted.get("pull_request")) is not int
+                    or persisted.get("pull_request") != pull_request_number
+                    or not isinstance(repository, str)
+                    or _REPOSITORY_PATTERN.fullmatch(repository) is None
+                    or not (root / "history.jsonl").is_file()
+                ):
+                    raise RuntimeError("inactive route has no strict durable binding")
+                repository_full_name = repository
+            else:
+                assert route is not None
+                repository_full_name = route.repository_full_name
             operation_client = self.clients.installation(installation_id, [repository_id])
             transport = GitHubKitTransport(operation_client)
             authority = GitHubAuthority(
                 transport,
-                route.repository_full_name,
+                repository_full_name,
                 pull_request_number,
                 graphql=GitHubGraphQL(transport),
             )
-            root = self.root / "applications" / str(installation_id) / str(repository_id) / str(pull_request_number)
             qualification_fault = self.qualification_fault
             routes, composition = self.agent_routes, self.agent_composition
 
@@ -330,13 +449,13 @@ class HostService:
                     digest = hashlib.sha256(f"{operation}\0{attempt}".encode()).hexdigest()
                     self.runner.route_operation(f"pi:{digest}")
 
-            self._apps[key] = self.application_factory(
+            application = self.application_factory(
                 root,
                 f"github:{installation_id}:{repository_id}:pr:{pull_request_number}",
                 authority,
                 self.runner,
                 bot_login=self.config.bot_login,
-                public_clone_url=f"https://github.com/{route.repository_full_name}.git",
+                public_clone_url=f"https://github.com/{repository_full_name}.git",
                 workflow_path=self.workflow_path,
                 reminder_delay=self.reminder_delay,
                 publication_fault=None if qualification_fault is None else qualification_fault.publication,
@@ -344,14 +463,17 @@ class HostService:
                     None
                     if qualification_fault is None
                     else lambda kind, operation: qualification_fault.agent(
-                        route.repository_full_name, pull_request_number, kind, operation
+                        repository_full_name, pull_request_number, kind, operation
                     )
                 ),
                 agent_dispatch=agent_dispatch,
                 agent_settle=routes.settle,
+                dispatch_path=self._dispatch_path,
             )
             self._locks[key] = threading.Lock()
-        return self._apps[key]
+            self._apps[key] = application
+            self._instances[instance] = key
+            return application
 
     def sweep(self, trigger: str = "periodic") -> int:
         """Reconcile durable PR Instances after restarts or missed provider events."""
@@ -368,12 +490,9 @@ class HostService:
                 continue
             if self.registry.route(installation_id, repository_id) is None:
                 continue
-            key = installation_id, repository_id, pull_request_number
             try:
-                application = self._application(*key)
-                with self._locks[key]:
-                    application.reconcile(f"{trigger}:{installation_id}:{repository_id}:{pull_request_number}")
-                reconciled += 1
+                instance = f"github:{installation_id}:{repository_id}:pr:{pull_request_number}"
+                reconciled += self._run_instance(instance, reconcile_trigger=trigger)
             except Exception as error:  # noqa: BLE001 -- one PR must not prevent repair of another
                 LOG.warning(
                     "application_sweep_retry installation_id=%s repository_id=%s pull_request_number=%s error_class=%s",
@@ -391,6 +510,22 @@ class HostService:
         return reconciled
 
     def process(self, item: Observation) -> None:
+        self._process(item, lock_owned=False)
+        instance = self._instance(item)
+        if instance is None:
+            return
+        match = _INSTANCE_PATTERN.fullmatch(instance)
+        assert match is not None
+        installation_id, repository_id, pull_request_number = (int(value) for value in match.groups())
+        key = installation_id, repository_id, pull_request_number
+        application = self._apps.get(key)
+        if application is None:
+            return
+        with self._locks[key]:
+            settle = getattr(application, "settle", None)
+            self._record_posture(instance, None if settle is None else settle())
+
+    def _process(self, item: Observation, *, lock_owned: bool) -> None:
         fields = {
             "delivery_id": item.delivery_id,
             "event": item.event,
@@ -424,10 +559,15 @@ class HostService:
                 self.custody.acknowledge(item.delivery_id, "comment not addressed")
                 return
         try:
-            application = self._application(item.installation_id, item.repository_id, item.pull_request_number)
-            key = item.installation_id, item.repository_id, item.pull_request_number
-            with self._locks[key]:
-                if self.registry.route(item.installation_id, item.repository_id) is None:
+            installation_id = item.installation_id
+            repository_id = item.repository_id
+            pull_request_number = item.pull_request_number
+            application = self._application(installation_id, repository_id, pull_request_number)
+            key = installation_id, repository_id, pull_request_number
+            lock = self._locks[key]
+
+            def perform() -> None:
+                if self.registry.route(installation_id, repository_id) is None:
                     self.custody.acknowledge(item.delivery_id, "route inactive before work")
                     return
                 if item.event == "issue_comment":
@@ -442,6 +582,12 @@ class HostService:
                     )
                 else:
                     application.reconcile(f"github-delivery:{item.delivery_id}")
+
+            if lock_owned:
+                perform()
+            else:
+                with lock:
+                    perform()
             self.custody.acknowledge(item.delivery_id)
             LOG.info(
                 "webhook_terminal delivery_id=%s event=%s installation_id=%s repository_id=%s "
@@ -469,10 +615,16 @@ class HostService:
 
     async def worker(self) -> None:
         loop = asyncio.get_running_loop()
-        next_sweep = loop.time()
+        await asyncio.to_thread(self.sweep, "startup")
+        next_sweep = loop.time() + self.sweep_interval
         while not self._stop.is_set():
-            for item in self.custody.pending():
-                await asyncio.to_thread(self.process, item)
+            await asyncio.to_thread(self.pump)
+            if self._stop.is_set():
+                break
+            await asyncio.to_thread(self.project_pending)
+            await asyncio.to_thread(self.run_due)
+            if self._stop.is_set():
+                break
             if loop.time() >= next_sweep:
                 await asyncio.to_thread(self.sweep)
                 next_sweep = loop.time() + self.sweep_interval
@@ -481,25 +633,151 @@ class HostService:
             except TimeoutError:
                 pass
 
+    def pump(self, limit: int = 20) -> int:
+        """Run one bounded Activity cycle and settle only owning Instances."""
+        with self._pump_lock:
+            processed = self.activity_worker.run_available(limit=limit)
+            # Repair locally generated terminals which did not execute through
+            # the resolver. The durable Dispatch/History remain authoritative.
+            for instance, key in tuple(self._instances.items()):
+                pending = getattr(self._apps[key], "has_unresolved_publication", None)
+                if pending is not None and pending():
+                    self.runnable.wake(instance, time.time(), "dispatch-repair", "unresolved-publication")
+            return processed
+
+    @staticmethod
+    def _instance(item: Observation) -> str | None:
+        if item.installation_id is None or item.repository_id is None or item.pull_request_number is None:
+            return None
+        return f"github:{item.installation_id}:{item.repository_id}:pr:{item.pull_request_number}"
+
+    def project_pending(self) -> int:
+        """Project canonical due inbox observations into noncanonical wake hints."""
+        projected = 0
+        for item in self.custody.pending(limit=1000):
+            instance = self._instance(item)
+            if (
+                instance is None
+                or self.registry.route(cast(int, item.installation_id), cast(int, item.repository_id)) is None
+            ):
+                self.process(item)
+                continue
+            identity = item.delivery_id if item.event == "issue_comment" else "reconcile"
+            self.runnable.wake(instance, time.time(), "webhook", identity)
+            projected += 1
+        return projected
+
+    def _record_posture(self, instance: str, outcome: object | None) -> None:
+        self.runnable.replace_timer(instance, getattr(outcome, "next_maturation", None))
+
+    def _run_instance(self, instance: str, *, reconcile_trigger: str | None = None) -> bool:
+        match = _INSTANCE_PATTERN.fullmatch(instance)
+        if match is None:
+            return False
+        installation_id, repository_id, pull_request_number = (int(value) for value in match.groups())
+        key = installation_id, repository_id, pull_request_number
+        route_active = self.registry.route(key[0], key[1]) is not None
+        if not route_active and key not in self._apps:
+            return False
+        application = self._apps[key] if not route_active else self._application(*key)
+        with self._locks[key]:
+            if route_active:
+                for item in self.custody.pending(limit=1000):
+                    if self._instance(item) == instance:
+                        self._process(item, lock_owned=True)
+            settle = getattr(application, "settle", None)
+            if route_active and reconcile_trigger is not None and settle is not None:
+                # Repair a frozen terminal before provider reconciliation can
+                # infer that the same logical publication is still pending.
+                self._record_posture(instance, settle())
+            if route_active and reconcile_trigger is not None:
+                application.reconcile(f"{reconcile_trigger}:{key[0]}:{key[1]}:{key[2]}")
+            outcome = None if settle is None else settle()
+            self._record_posture(instance, outcome)
+        return True
+
+    def run_due(self, limit: int = 100) -> int:
+        instances = self.runnable.take_due(limit)
+        processed = 0
+        for instance in instances:
+            try:
+                processed += self._run_instance(instance)
+                self._scheduler_errors.pop(instance, None)
+            except Exception as error:  # noqa: BLE001 -- one damaged Instance must not consume later due wakes
+                error_class = type(error).__name__
+                self._scheduler_errors[instance] = error_class
+                self.runnable.wake(instance, time.time(), "scheduler-repair", "run-due-failure")
+                LOG.warning(
+                    "scheduler_instance_degraded instance=%s error_class=%s",
+                    instance,
+                    error_class,
+                    extra={"instance": instance, "error_class": error_class},
+                )
+        return processed
+
     def stop(self) -> None:
         self._stop.set()
+        self.activity_worker.stop()
 
     def health(self) -> dict[str, object]:
         return {
-            "status": "ok",
+            "status": "degraded" if self._scheduler_errors else "ok",
             "installation_reconciled": self.installation_id is not None,
             "active_repositories": self.registry.active_count(),
             "applications": len(self._apps),
             "inbox": self.custody.counts(),
+            "runnable_hints": self.runnable.count(),
+            "scheduler": {
+                "degraded_instances": len(self._scheduler_errors),
+                "error_classes": sorted(set(self._scheduler_errors.values())),
+            },
         }
+
+    def settle_terminals_for_shutdown(self) -> None:
+        """Boundedly collect terminals for loaded Instances without driving more Attempts."""
+        for instance, key in tuple(self._instances.items()):
+            application = self._apps.get(key)
+            if application is None:
+                continue
+            settle = getattr(application, "settle", None)
+            if settle is None:
+                continue
+            try:
+                with self._locks[key]:
+                    self._record_posture(instance, settle())
+            except Exception as error:  # noqa: BLE001 -- shutdown must continue closing all custody
+                LOG.warning(
+                    "shutdown_terminal_settlement_failed instance=%s error_class=%s",
+                    instance,
+                    type(error).__name__,
+                    extra={"instance": instance, "error_class": type(error).__name__},
+                )
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
         failure: Exception | None = None
+        with self._pump_lock:
+            try:
+                self.settle_terminals_for_shutdown()
+            except Exception as error:  # noqa: BLE001 -- remaining resources still require closure
+                failure = error
+            try:
+                self.activity_worker.close()
+            except Exception as error:  # noqa: BLE001 -- remaining resources still require closure
+                if failure is None:
+                    failure = error
         runtime = () if self.agent_runtime is None else (self.agent_runtime,)
-        for resource in (*self._apps.values(), self.custody, self.registry, self.clients, *runtime, self.agent_routes):
+        for resource in (
+            *self._apps.values(),
+            self.runnable,
+            self.custody,
+            self.registry,
+            self.clients,
+            *runtime,
+            self.agent_routes,
+        ):
             try:
                 resource.close()
             except Exception as error:  # noqa: BLE001 -- every owned resource must still receive exactly one close

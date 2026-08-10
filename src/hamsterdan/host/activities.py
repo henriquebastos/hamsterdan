@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import asdict
 from typing import Any, TypeVar, cast
 
-from petrus.motus.activity import ActivityDefinition, activity
+from petrus.motus.activity import ActivityDefinition, ActivityError, activity
 
 from hamsterdan import agents
 from hamsterdan.contracts.readiness import (
@@ -63,6 +63,10 @@ PublicationRequest = (
     | ReadinessCommand
 )
 CodeResult = TypeVar("CodeResult", ChangeResult, RepairResult)
+
+
+class StaleAuthorityError(RuntimeError):
+    """An operation no longer has exact marking and GitHub authority."""
 
 
 def _publication_identity(request: CodeRequest) -> dict[str, Any]:
@@ -357,7 +361,13 @@ class PrReadinessActivities:
         try:
             self._fence(work)
             result = self.publisher.dashboard(work.operation, work.epoch, work.head, body)
-        except RuntimeError:
+        except GitHubBoundaryError as error:
+            raise ActivityError(
+                "GitHub publication boundary unavailable", kind="GitHubBoundaryError", retryable=True
+            ) from error
+        except ValueError as error:
+            raise ActivityError("GitHub publication invariant failed", kind="ValueError", retryable=False) from error
+        except StaleAuthorityError:
             return DashboardPublicationResult(work.epoch, work.head, False, operation=work.operation)
         return DashboardPublicationResult(
             work.epoch,
@@ -397,7 +407,13 @@ class PrReadinessActivities:
                 "All observed gates are ready. Clean. Humans keep merge authority; Dan never merges PRs.",
                 compatible_bodies=(legacy,),
             )
-        except RuntimeError:
+        except GitHubBoundaryError as error:
+            raise ActivityError(
+                "GitHub publication boundary unavailable", kind="GitHubBoundaryError", retryable=True
+            ) from error
+        except ValueError as error:
+            raise ActivityError("GitHub publication invariant failed", kind="ValueError", retryable=False) from error
+        except StaleAuthorityError:
             return ReadinessPublicationResult(command.epoch, command.head, False, operation=command.operation)
         return ReadinessPublicationResult(
             command.epoch,

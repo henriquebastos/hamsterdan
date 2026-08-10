@@ -3,23 +3,27 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, cast
 
-from petrus.engine import Engine, choose_throughput
+from petrus.engine import DriveOutcome, Engine, choose_throughput
 from petrus.impetus.binding import DerivedActivityHandler
 from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested, FiringFailed
 from petrus.impetus.history_store import JsonlHistoryStore
-from petrus.impetus.petrinet import Marking, NetPath, Token
-from petrus.motus.dispatch import InlineDispatch
+from petrus.impetus.petrinet import Binding, Marking, NetPath, Token
+from petrus.motus.activity import ActivityFailure, ActivityInvocation, ExecutionPolicy
+from petrus.motus.dispatch import Dispatch, InlineDispatch, LocalDispatch
 
 from hamsterdan.contracts.readiness import (
     ActionsState,
     Authority,
+    DashboardPublicationResult,
     HumanState,
     MutationState,
     PublicationState,
+    ReadinessPublicationResult,
     ReadinessSnapshot,
     ReviewState,
     Seed,
@@ -28,11 +32,73 @@ from hamsterdan.contracts.readiness import (
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS, build_net
 
-from .activities import PrReadinessActivities, activity_definitions
+from .activities import PrReadinessActivities, StaleAuthorityError, activity_definitions
+
+_DURABLE_ACTIVITIES = frozenset({"dashboard_publish", "readiness_publish"})
+_PUBLICATION_POLICY = ExecutionPolicy(
+    attempts=3, initial_interval=5, coefficient=2, max_interval=10, jitter=0, schedule_to_close=60
+)
 
 
-class StaleAuthorityError(RuntimeError):
-    """An operation no longer has exact marking and GitHub authority."""
+@dataclass(frozen=True)
+class CompositeDispatch:
+    """Route selected Activities durably while retaining ordinary collection."""
+
+    inline: Dispatch
+    durable: Dispatch
+
+    def dispatch(self, occurrence: int, invocation: ActivityInvocation) -> None:
+        target = self.durable if invocation.activity in _DURABLE_ACTIVITIES else self.inline
+        target.dispatch(occurrence, invocation)
+
+    def collect(self) -> Sequence[tuple[int, object]]:
+        return (*self.inline.collect(), *self.durable.collect())
+
+
+@dataclass(frozen=True)
+class PublicationActivityHandler:
+    """Add durable publication policy and a narrow terminal blocker projection."""
+
+    derived: DerivedActivityHandler
+
+    def prepare(self, binding: Binding) -> ActivityInvocation:
+        invocation = self.derived.prepare(binding)
+        payload = invocation.input
+        work = payload.get("work", payload.get("command")) if isinstance(payload, dict) else None
+        operation = work.get("operation") if isinstance(work, dict) else None
+        if not isinstance(operation, str) or not operation:
+            raise ValueError("publication request has no immutable operation identity")
+        return replace(invocation, policy=_PUBLICATION_POLICY, correlation=operation, idempotency=operation)
+
+    def project(self, binding: Binding, result: object):
+        return self.derived.project(binding, result)
+
+    def project_failure(self, binding: Binding, failure: ActivityFailure):
+        # Only exhausted, classified operational boundary failures become a
+        # capability blocker. Unknown failures remain projection-pending/loud.
+        if failure.kind not in {"GitHubBoundaryError", "DeadlineExceeded"}:
+            raise RuntimeError(f"unprojectable publication failure: {failure.kind}")
+        expected_color = (
+            "DashboardPublicationRequest"
+            if self.derived.activity.declaration.name == "dashboard_publish"
+            else "ReadinessCommand"
+        )
+        tokens = (token for _, selected in (*binding.consumed, *binding.read) for token in selected)
+        matches = [token.data for token in tokens if token.color == expected_color]
+        if len(matches) != 1:
+            raise TypeError("publication binding has no unique immutable request")
+        work = matches[0]
+        if not isinstance(work, dict):
+            raise TypeError("publication binding request is not an object")
+        epoch, head, operation = work.get("epoch"), work.get("head"), work.get("operation")
+        if not isinstance(epoch, int) or not isinstance(head, str) or not isinstance(operation, str):
+            raise TypeError("publication invocation request identity is malformed")
+        result = (
+            DashboardPublicationResult(epoch, head, False, operation, False)
+            if self.derived.activity.declaration.name == "dashboard_publish"
+            else ReadinessPublicationResult(epoch, head, False, operation, False)
+        )
+        return self.derived.project(binding, result.dump())
 
 
 class WallClock:
@@ -218,6 +284,7 @@ class PrReadinessHost:
         *,
         reminder_delay: float = 3 * 24 * 60 * 60,
         agent_settle: Callable[[set[str]], None] | None = None,
+        dispatch_path: Path | None = None,
     ) -> PrReadinessHost:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         built = build_net(reminder_delay)
@@ -227,15 +294,27 @@ class PrReadinessHost:
         handlers = cast(Any, dict(built.handlers))
         for path in ACTIVITY_TRANSITIONS:
             name = path.removeprefix("execute.")
-            handlers[name] = DerivedActivityHandler(built.net, NetPath(path), definitions[name])
+            derived = DerivedActivityHandler(built.net, NetPath(path), definitions[name])
+            handlers[name] = PublicationActivityHandler(derived) if name in _DURABLE_ACTIVITIES else derived
         activities = tuple(item.declaration for item in definitions.values())
+
+        def dispatch():
+            inline = InlineDispatch(definitions)
+            if dispatch_path is None:
+                return inline
+            durable = LocalDispatch(
+                dispatch_path,
+                instance=instance_id,
+                activity_queues={name: "publication" for name in _DURABLE_ACTIVITIES},
+            )
+            return CompositeDispatch(inline, durable)
 
         def load() -> Engine:
             return Engine.load(
                 built.net,
                 instance_id,
                 history=JsonlHistoryStore(root / "history.jsonl"),
-                dispatch=InlineDispatch(definitions),
+                dispatch=dispatch(),
                 handlers=handlers,
                 guards=built.guards,
                 policy=choose_throughput,
@@ -253,7 +332,7 @@ class PrReadinessHost:
                 built.net,
                 instance_id,
                 history=JsonlHistoryStore(history_path),
-                dispatch=InlineDispatch(definitions),
+                dispatch=dispatch(),
                 handlers=handlers,
                 guards=built.guards,
                 policy=choose_throughput,
@@ -279,15 +358,16 @@ class PrReadinessHost:
         token = Token(type(value).__name__, (value).dump())
         return self.engine.deliver(source, token, identity=identity)
 
-    def drain(self, limit: int = 500) -> None:
+    def drain(self, limit: int = 500) -> DriveOutcome:
         self._settle_agent_routes()
         for _ in range(limit):
             before = tuple(self.engine.records)
             unresolved = self._unresolved(before)
             try:
-                if not self.engine.advance().ready:
+                outcome = self.engine.advance()
+                if not outcome.ready:
                     self._settle_agent_routes()
-                    return
+                    return outcome
                 self._settle_agent_routes()
             except RuntimeError:
                 replacement = self._loader()
@@ -347,5 +427,30 @@ class PrReadinessHost:
     def close(self) -> None:
         self.engine.close()
 
+    def activity(self, name: str):
+        definition = activity_definitions(self.operations).get(name)
+        return definition
 
-__all__ = ["AuthorityLease", "PrReadinessHost", "StaleAuthorityError", "WallClock"]
+    def has_unresolved_publication(self) -> bool:
+        """Return whether this Instance has an uncollected durable publication request."""
+        terminal = {
+            record.occurrence
+            for record in self.engine.records
+            if isinstance(record, (ActivityCompleted, ActivityFailed))
+        }
+        return any(
+            isinstance(record, ActivityRequested)
+            and record.occurrence not in terminal
+            and record.activity in _DURABLE_ACTIVITIES
+            for record in self.engine.records
+        )
+
+
+__all__ = [
+    "AuthorityLease",
+    "CompositeDispatch",
+    "PrReadinessHost",
+    "PublicationActivityHandler",
+    "StaleAuthorityError",
+    "WallClock",
+]

@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import sqlite3
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from petrus.motus.activity import ActivityError, ActivityInvocation
 
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.webhooks import Observation
@@ -444,6 +446,329 @@ def test_periodic_sweep_reopens_durable_instances_and_skips_inactive_routes(tmp_
     assert [item.reconciles for item in made] == [["startup:44:31:7"], ["startup:44:31:8"]]
     assert host.sweep() == 2
     assert [item.reconciles[-1] for item in made] == ["periodic:44:31:7", "periodic:44:31:8"]
+
+
+def test_scoped_resolver_reconstructs_persisted_application_and_rejects_non_publication_names(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    calls: list[str] = []
+
+    class ResolvableApplication(Application):
+        def activity(self, name: str):
+            calls.append(name)
+            return lambda invocation, *, context: {"activity": name}
+
+    host = service(tmp_path, factory=ResolvableApplication)
+
+    resolved = host._resolve_activity("github:44:31:pr:7", "dashboard_publish")
+
+    assert resolved is not None
+    assert (44, 31, 7) in host._apps
+    assert calls == ["dashboard_publish"]
+    assert host._resolve_activity("github:44:31:pr:7", "review") is None
+    assert host._resolve_activity("not-a-pr-instance", "dashboard_publish") is not None
+    host.close()
+
+
+def test_scoped_resolver_wraps_unexpected_publication_error_as_nonretryable(tmp_path: Path) -> None:
+    class BrokenApplication(Application):
+        def activity(self, name: str):
+            def fail(invocation, *, context):
+                raise ValueError("provider detail must not escape")
+
+            return fail
+
+    host = service(tmp_path, factory=BrokenApplication)
+    host._application(44, 31, 7)
+    resolved = host._resolve_activity("github:44:31:pr:7", "readiness_publish")
+
+    assert resolved is not None
+    with pytest.raises(ActivityError) as raised:
+        resolved(object(), context=object())
+    assert raised.value.failure.kind == "ValueError"
+    assert not raised.value.failure.retryable
+    assert "provider detail" not in str(raised.value)
+    host.close()
+
+
+def test_publication_resolver_fails_closed_for_malformed_scope_and_request(tmp_path: Path) -> None:
+    class ApplicationWithoutActivity(Application):
+        pass
+
+    host = service(tmp_path, factory=ApplicationWithoutActivity)
+    malformed_scope = host._resolve_activity("not-a-pr-instance", "dashboard_publish")
+    assert malformed_scope is not None
+    with pytest.raises(ActivityError) as scope_error:
+        malformed_scope(ActivityInvocation("dashboard_publish", input={}), context=object())
+    assert scope_error.value.failure.kind == "PublicationScopeError"
+    assert not scope_error.value.failure.retryable
+    assert host._resolve_activity("not-a-pr-instance", "review") is None
+
+    host._application(44, 31, 7)
+    host.registry.installation("suspend", 44, 23)
+    resolved = host._resolve_activity("github:44:31:pr:7", "dashboard_publish")
+    assert resolved is not None
+    with pytest.raises(ActivityError) as request_error:
+        resolved(ActivityInvocation("dashboard_publish", input={}), context=object())
+    assert request_error.value.failure.kind == "PublicationScopeError"
+    assert not request_error.value.failure.retryable
+    host.close()
+
+
+def test_cached_application_revalidates_route_and_returns_typed_stale_publication(tmp_path: Path) -> None:
+    provider_calls: list[str] = []
+
+    class ResolvableApplication(Application):
+        def activity(self, name: str):
+            def publish(invocation, *, context):
+                provider_calls.append(name)
+                return {"ok": True}
+
+            return publish
+
+    host = service(tmp_path, factory=ResolvableApplication)
+    host._application(44, 31, 7)
+    resolved = host._resolve_activity("github:44:31:pr:7", "dashboard_publish")
+    assert resolved is not None
+    host.registry.installation("suspend", 44, 23)
+    request = {
+        "epoch": 1,
+        "head": "a" * 40,
+        "operation": "dashboard:one",
+        "base_head": "b" * 40,
+        "policy_digest": "policy",
+        "control": {
+            "repository_id": "owner/one",
+            "pr_number": 7,
+            "epoch": 1,
+            "head": "a" * 40,
+            "base_head": "b" * 40,
+            "strict_base": True,
+            "base_current": True,
+            "policy_digest": "policy",
+        },
+    }
+
+    result = resolved(ActivityInvocation("dashboard_publish", input={"work": request}), context=object())
+
+    assert result == {
+        "epoch": 1,
+        "head": "a" * 40,
+        "ok": False,
+        "operation": "dashboard:one",
+        "capability_available": True,
+    }
+    assert provider_calls == []
+    host.close()
+
+
+def test_restart_reconstructs_revoked_route_and_settles_exact_stale_publication(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "binding.json").write_text(
+        json.dumps({"instance_id": "github:44:31:pr:7", "repository": "owner/one", "pull_request": 7})
+    )
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    provider_calls: list[str] = []
+    settlements: list[str] = []
+
+    class RestartedApplication(Application):
+        def activity(self, name: str):
+            def publish(invocation, *, context):
+                provider_calls.append(name)
+                return {"ok": True}
+
+            return publish
+
+        def settle(self) -> None:
+            settlements.append("settled")
+
+    host = service(tmp_path, factory=RestartedApplication)
+    host.registry.installation("suspend", 44, 23)
+    resolved = host._resolve_activity("github:44:31:pr:7", "dashboard_publish")
+    assert resolved is not None
+    request = {
+        "epoch": 3,
+        "head": "a" * 40,
+        "operation": "dashboard:restart",
+        "base_head": "b" * 40,
+        "policy_digest": "policy",
+        "control": {
+            "repository_id": "owner/one",
+            "pr_number": 7,
+            "epoch": 3,
+            "head": "a" * 40,
+            "base_head": "b" * 40,
+            "strict_base": True,
+            "base_current": True,
+            "policy_digest": "policy",
+        },
+    }
+
+    result = resolved(ActivityInvocation("dashboard_publish", input={"work": request}), context=object())
+
+    assert result == {
+        "epoch": 3,
+        "head": "a" * 40,
+        "ok": False,
+        "operation": "dashboard:restart",
+        "capability_available": True,
+    }
+    assert provider_calls == []
+    assert host.run_due() == 1
+    assert settlements == ["settled"]
+    host.close()
+
+
+@pytest.mark.parametrize("pull_request", [True, 7.0])
+def test_restart_rejects_noninteger_pull_request_in_inactive_binding(tmp_path: Path, pull_request: object) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "binding.json").write_text(
+        json.dumps({"instance_id": "github:44:31:pr:7", "repository": "owner/one", "pull_request": pull_request})
+    )
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    clients = Clients()
+    host = service(tmp_path, clients=clients)
+    host.registry.installation("suspend", 44, 23)
+
+    resolved = host._resolve_activity("github:44:31:pr:7", "dashboard_publish")
+
+    assert resolved is not None
+    with pytest.raises(ActivityError) as raised:
+        resolved(ActivityInvocation("dashboard_publish", input={}), context=object())
+    assert raised.value.failure.kind == "PublicationScopeError"
+    assert not raised.value.failure.retryable
+    assert host._apps == {}
+    assert clients.operation_client.calls == []
+    host.close()
+
+
+def test_run_due_contains_instance_failure_rewakes_and_recovers_scheduler_health(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = service(tmp_path)
+    first = "github:44:31:pr:7"
+    second = "github:44:32:pr:8"
+    attempts: dict[str, int] = {}
+
+    def run(instance: str, *, reconcile_trigger=None) -> bool:
+        attempts[instance] = attempts.get(instance, 0) + 1
+        if instance == first and attempts[instance] == 1:
+            raise RuntimeError("sensitive scheduler failure")
+        return True
+
+    monkeypatch.setattr(host, "_run_instance", run)
+    host.runnable.wake(first, 0, "petri-timer", "next-maturation")
+    host.runnable.wake(second, 0, "webhook", "delivery")
+
+    assert host.run_due() == 1
+    assert attempts == {first: 1, second: 1}
+    assert host.runnable.take_due(now=time.time()) == (first,)
+    health = host.health()
+    assert health["status"] == "degraded"
+    assert health["scheduler"] == {"degraded_instances": 1, "error_classes": ["RuntimeError"]}
+    assert "sensitive scheduler failure" not in json.dumps(health)
+
+    host.runnable.wake(first, 0, "scheduler-repair", "run-due-failure")
+    assert host.run_due() == 1
+    assert attempts[first] == 2
+    assert host.health()["status"] == "ok"
+    host.close()
+
+
+def test_worker_failure_remains_primary_and_lifespan_closes_resources_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clients = Clients()
+    host = service(tmp_path, clients=clients)
+    app = host._application(44, 31, 7)
+
+    async def fail_worker() -> None:
+        raise RuntimeError("worker failed")
+
+    monkeypatch.setattr(host, "worker", fail_worker)
+    with pytest.raises(RuntimeError, match="worker failed"), TestClient(create_app(host, reconcile_startup=False)):
+        time.sleep(0.02)
+
+    assert clients.closed == 1
+    assert app.closed == 1
+
+
+def test_startup_sweep_settles_frozen_terminal_before_provider_reconciliation(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    events: list[str] = []
+
+    class FrozenApplication(Application):
+        published = False
+
+        def settle(self) -> None:
+            events.append("settle")
+            self.published = True
+
+        def reconcile(self, trigger: str) -> None:
+            events.append(f"reconcile:{self.published}")
+            if not self.published:
+                events.append("duplicate-publication")
+
+    host = service(tmp_path, factory=FrozenApplication)
+
+    assert host.sweep("startup") == 1
+    assert events == ["settle", "reconcile:True", "settle"]
+    assert "duplicate-publication" not in events
+    host.close()
+
+
+def test_close_waits_for_admitted_pump_then_closes_worker_before_application_and_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    host = service(tmp_path)
+    entered, release, close_started, close_finished = (threading.Event() for _ in range(4))
+    events: list[str] = []
+
+    class BlockingWorker:
+        def run_available(self, *, limit: int) -> int:
+            entered.set()
+            assert release.wait(1)
+            events.append("pump-finished")
+            return 0
+
+        def close(self) -> None:
+            events.append("worker-close")
+
+        def stop(self) -> None:
+            pass
+
+    class ClosingApplication(Application):
+        def close(self) -> None:
+            events.append("application-close")
+
+    host.activity_worker = BlockingWorker()  # type: ignore[assignment]
+    host._apps[(44, 31, 7)] = ClosingApplication()
+    pump = threading.Thread(target=host.pump)
+    pump.start()
+    assert entered.wait(1)
+
+    def close() -> None:
+        close_started.set()
+        host.close()
+        close_finished.set()
+
+    closing = threading.Thread(target=close)
+    closing.start()
+    assert close_started.wait(1)
+    assert not close_finished.wait(0.05)
+    release.set()
+    pump.join(1)
+    closing.join(1)
+
+    assert not pump.is_alive() and not closing.is_alive()
+    assert events[:3] == ["pump-finished", "worker-close", "application-close"]
+    host.close()
+    assert events.count("worker-close") == events.count("application-close") == 1
 
 
 def test_instance_inspection_is_bounded_and_excludes_payloads_and_errors(tmp_path: Path) -> None:

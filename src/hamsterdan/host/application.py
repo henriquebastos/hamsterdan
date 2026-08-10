@@ -50,6 +50,7 @@ class PrReadinessApplication:
         trusted_associations: frozenset[str] = frozenset({"OWNER", "MEMBER", "COLLABORATOR"}),
         publication_fault: EffectFault | None = None,
         agent_fault: AgentFault | None = None,
+        dispatch_path: Path | None = None,
     ):
         self.root, self.instance_id, self.authority, self.runner = root, instance_id, authority, runner
         normalized_login = bot_login.strip().casefold()
@@ -61,6 +62,7 @@ class PrReadinessApplication:
         self.reminder_delay = reminder_delay
         self.publication_fault, self.agent_fault = publication_fault, agent_fault
         self.agent_dispatch, self.agent_settle = agent_dispatch, agent_settle
+        self.dispatch_path = dispatch_path
         self.host: PrReadinessHost | None = None
         if (root / "history.jsonl").exists():
             self.host = self._open_host()
@@ -102,6 +104,7 @@ class PrReadinessApplication:
             operations,
             reminder_delay=self.reminder_delay,
             agent_settle=self.agent_settle,
+            dispatch_path=self.dispatch_path,
         )
 
     def _bind_state_root(self) -> None:
@@ -380,6 +383,18 @@ class PrReadinessApplication:
     def close(self) -> None:
         if self.host is not None:
             self.host.close()
+
+    def settle(self):
+        """Collect Activity terminals without requiring a provider observation."""
+        if self.host is not None:
+            return self.host.drain()
+        return None
+
+    def activity(self, name: str):
+        return None if self.host is None else self.host.activity(name)
+
+    def has_unresolved_publication(self) -> bool:
+        return self.host is not None and self.host.has_unresolved_publication()
 
 
 __all__ = ["PrReadinessApplication"]

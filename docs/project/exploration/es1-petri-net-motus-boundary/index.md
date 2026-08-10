@@ -537,6 +537,25 @@ The Navigator accepted the candidate on 2026-08-10 with two parallel lanes:
 The independent study remains in this Exploratory Story. The accepted
 production candidate is promoted to Workbench RS-002.
 
+### Production execution-scope conclusion
+
+The production lane validated a smaller contract than a general workflow or
+actor scope. Petrus exposes the authorizing Instance to a shared Worker and
+lets the host resolve `(instance, activity)` to a reconstructible
+implementation, with the ordinary Activity map as fallback. Hamsterdan keeps
+one independently replayable Engine/History per PR and composes one shared
+durable publication Worker plus a noncanonical runnable-instance hint index.
+
+This boundary resolves the earlier false choice between one Worker thread per
+PR and one service-wide Petri marking. It does not serialize application
+objects, introduce a general ActivityScope container, or move scheduling into
+Petrus. The host owns exclusivity and wake policy; Motus owns logical execution
+and Attempts; the Net owns authorization and acceptance. Under that division,
+dashboard/readiness operational retry topology was removed and the Net reached
+40 places, 139 transitions, and 415 arcs. Conversation transport retry remains
+the next production migration; broader lifecycle scopes remain an independent
+study rather than a prerequisite.
+
 ## Required experiments
 
 - retryable failure twice, then success under one stable invocation;
@@ -553,7 +572,7 @@ production candidate is promoted to Workbench RS-002.
 ## Sources
 
 - Petrus/Motus pinned source and tests at
-  `henriquebastos/petrus@116b0ddc460c0e04d4ad40c077158bd3498a4860`.
+  `henriquebastos/petrus@cb9cb63c3938c9318a99c9f605a0364b3c81bd6b`.
 - Temporal Activity execution:
   <https://docs.temporal.io/activity-execution>.
 - Temporal Python Activity timeouts and retries:

@@ -23,13 +23,11 @@ def create_app(service: HostService, *, reconcile_startup: bool = True) -> FastA
             yield
         finally:
             service.stop()
-            if task is not None:
-                try:
-                    await asyncio.wait_for(task, timeout=max(1.0, service.poll_interval * 2))
-                except TimeoutError:
-                    task.cancel()
-                    await asyncio.gather(task, return_exceptions=True)
-            await asyncio.to_thread(service.close)
+            try:
+                if task is not None:
+                    await task
+            finally:
+                await asyncio.to_thread(service.close)
 
     app = FastAPI(title="Hamsterdan host", lifespan=lifespan)
 

@@ -236,7 +236,7 @@ def test_dashboard_fences_immediately_before_create_and_does_not_append_on_patch
     )
     fake.responses[("PATCH", "/repos/owner/repo/issues/comments/4")] = WireResponse(403, {"message": "denied"})
     result = publisher.dashboard("dash-2", 3, HEAD, "new")
-    assert result.status == "update_unavailable" and not result.capability_available
+    assert result.status == "capability_unavailable" and not result.capability_available
     assert not any(call[0] == "POST" for call in fake.calls[-2:])
 
 
@@ -333,11 +333,72 @@ def test_definitive_comment_rejection_is_looked_up_but_not_retried() -> None:
     fences: list[str] = []
     publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append("fenced"))
 
-    with pytest.raises(GitHubBoundaryError, match="did not prove"):
-        publisher.immutable("finding", "stable-operation", 1, HEAD, "Finding")
+    result = publisher.immutable("readiness", "stable-operation", 1, HEAD, "Ready")
 
+    assert not result.capability_available
     assert len([call for call in fake.calls if call[0] == "POST"]) == 1
     assert fences == ["fenced"]
+
+
+@pytest.mark.parametrize("kind", ["dashboard", "readiness"])
+@pytest.mark.parametrize("status", [422, 400])
+def test_definite_publication_payload_rejection_is_nonretryable(kind: str, status: int) -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fake.responses[("POST", comments)] = WireResponse(status, {"message": "must not escape"})
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    with pytest.raises(ValueError, match="GitHub rejected"):
+        if kind == "dashboard":
+            publisher.dashboard("stable-operation", 1, HEAD, "Dashboard")
+        else:
+            publisher.immutable("readiness", "stable-operation", 1, HEAD, "Ready")
+
+    assert len([call for call in fake.calls if call[0] == "POST"]) == 1
+
+
+@pytest.mark.parametrize("kind", ["dashboard", "readiness"])
+@pytest.mark.parametrize("status", [429, 500, 503])
+def test_transient_publication_status_is_boundary_failure(kind: str, status: int) -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fake.responses[("POST", comments)] = WireResponse(status, {})
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    with pytest.raises(GitHubBoundaryError, match="did not prove"):
+        if kind == "dashboard":
+            publisher.dashboard("stable-operation", 1, HEAD, "Dashboard")
+        else:
+            publisher.immutable("readiness", "stable-operation", 1, HEAD, "Ready")
+
+
+@pytest.mark.parametrize("body", [[], {}, {"id": None}, {"id": "not-an-id"}])
+@pytest.mark.parametrize("publication", ["immutable", "dashboard_create", "dashboard_update"])
+def test_expected_comment_status_with_unusable_reference_is_ambiguous(publication: str, body: object) -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+    marker = "<!-- hamsterdan:dashboard -->"
+    fake = FakeTransport()
+    existing = {
+        "id": 4,
+        "html_url": "url",
+        "body": f"old\n\n{marker}",
+        "user": {"login": "hamsterdan[bot]"},
+    }
+    fake.page_values[f"{comments}?per_page=100"] = () if publication != "dashboard_update" else (existing,)
+    method = "PATCH" if publication == "dashboard_update" else "POST"
+    path = "/repos/owner/repo/issues/comments/4" if method == "PATCH" else comments
+    fake.responses[(method, path)] = WireResponse(200 if method == "PATCH" else 201, body)
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    with pytest.raises(GitHubBoundaryError, match="did not prove"):
+        if publication == "immutable":
+            publisher.immutable("readiness", "stable-operation", 1, HEAD, "Ready")
+        else:
+            publisher.dashboard("stable-operation", 1, HEAD, "new")
+
+    assert [call[0] for call in fake.calls].count(method) == 1
 
 
 def test_initial_immutable_lookup_rejects_a_stable_operation_payload_collision() -> None:

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import ClassVar
 
 import pytest
+from petrus.motus.activity import ActivityError
 
 from hamsterdan.agents import AgentProtocolError, AgentResultCategory, AmpExecuteRunner, CodingResult
 from hamsterdan.agents import ConversationResult as AgentConversationResult
@@ -37,7 +38,7 @@ from hamsterdan.contracts.readiness import (
     project_readiness,
 )
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
-from hamsterdan.host.activities import PrReadinessActivities, activity_definitions
+from hamsterdan.host.activities import PrReadinessActivities, StaleAuthorityError, activity_definitions
 from hamsterdan.host.git_publish import GitPublishError, GitPublishResult, PublicationCategory, payload_digest
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
 
@@ -181,6 +182,43 @@ def test_readiness_replay_accepts_the_exact_legacy_voice_payload() -> None:
 
     assert result.ok
     assert operations.publisher.compatible == (legacy,)
+
+
+@pytest.mark.parametrize("kind", ["dashboard", "readiness"])
+def test_durable_publications_classify_boundary_as_retryable_but_stale_as_typed_result(kind: str) -> None:
+    operations = object.__new__(PrReadinessActivities)
+    work = (
+        request("dashboard", 2, "head", "operation")
+        if kind == "dashboard"
+        else ReadinessCommand(2, "head", "operation", "base", "policy")
+    )
+
+    def boundary(*args, **kwargs):
+        raise GitHubBoundaryError("unavailable")
+
+    operations.current_fence = lambda *args: None
+    if kind == "dashboard":
+        operations.publisher = type("Publisher", (), {"dashboard": boundary})()
+        invoke = operations.dashboard_publish
+    else:
+        operations._immutable = boundary
+        invoke = operations.readiness_publish
+
+    with pytest.raises(ActivityError) as raised:
+        invoke(work)
+    assert raised.value.failure.retryable
+
+    operations.current_fence = lambda *args: (_ for _ in ()).throw(StaleAuthorityError("stale"))
+    if kind == "readiness":
+        operations._immutable = PrReadinessActivities._immutable.__get__(operations)
+    result = invoke(work)
+    assert (result.epoch, result.head, result.operation, result.ok, result.capability_available) == (
+        2,
+        "head",
+        "operation",
+        False,
+        True,
+    )
 
 
 def test_dashboard_projects_current_gates_instead_of_latched_announcement() -> None:

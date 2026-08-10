@@ -21,8 +21,13 @@ first sandbox organization for real-provider validation.
   concern tokens. `ReadinessSnapshot` is a relational projection, never a place
   color or mutable aggregate.
 - Activities perform external work through exact strict Pydantic request/result
-  contracts. Dashboard/readiness continuity is explicit as separate fenced
-  lease, delayed retry, and reissue places.
+  contracts. Dashboard/readiness use one immutable logical Motus execution with
+  classified bounded retry in shared durable Worker custody; the Net retains
+  authorization, exact operation ownership, and current terminal acceptance.
+- Each PR retains an independent Engine and History. The host resolves scoped
+  Activity implementations for one shared Worker, serializes advancement per
+  PR, and stores only reconstructible scheduling hints outside canonical
+  webhook, History, and Dispatch custody.
 - Explicit authorized mutation instructions execute directly. Ambiguous
   instructions clarify without mutation; there is no confirmation ceremony.
 - GitHub credentials stay host-side and never enter agent territories.

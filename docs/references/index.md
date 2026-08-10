@@ -30,6 +30,12 @@
   implemented, fully validated, and accepted 2026-08-10. Hamsterdan consumes
   this exact Git revision for classified Activity failures, bounded retry
   policy, deadlines, and deterministic terminal-failure projection.
+- Accepted shared-Worker Instance-scoped Activity dependency:
+  `henriquebastos/petrus@cb9cb63c3938c9318a99c9f605a0364b3c81bd6b`,
+  implemented, fully validated, and accepted 2026-08-10. This revision
+  supersedes the V2 pin and adds first-class Worker execution Instance,
+  optional host-composed scoped resolution, and bounded non-waiting Worker
+  pumping without introducing a scheduler or serialized Activity scope.
 
 ## GitHub documentation
 
