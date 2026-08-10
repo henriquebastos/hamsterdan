@@ -11,6 +11,7 @@ from petrus.impetus.history_store import InMemoryHistoryStore
 from petrus.impetus.petrinet import Marking, NetPath, Token
 from petrus.motus.activity import activity
 from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
+from pydantic import ValidationError
 
 from hamsterdan.contracts.readiness import (
     ActionsDiscoveryRequest,
@@ -25,6 +26,7 @@ from hamsterdan.contracts.readiness import (
     ConversationObservation,
     ConversationPublicationRequest,
     ConversationPublicationResult,
+    DashboardPublicationLease,
     DashboardPublicationRequest,
     DashboardPublicationResult,
     FindingPublicationRequest,
@@ -61,6 +63,7 @@ from hamsterdan.readiness.net.topology import (
     _basis_done,
     _effect_matches,
     _guard,
+    _hydrate,
     _mutation,
     _reminder_due,
     _repairable,
@@ -179,6 +182,17 @@ ACTIVITIES = (
 )
 
 
+class ManualClock:
+    def __init__(self) -> None:
+        self.instant = 0.0
+
+    def now(self) -> float:
+        return self.instant
+
+    def observe(self, instant: float) -> float | None:
+        return self.instant if self.instant >= instant else None
+
+
 def engine() -> Engine:
     built = build_net(10**30)
     definitions = {item.declaration.name: item for item in ACTIVITIES}
@@ -198,8 +212,14 @@ def engine() -> Engine:
     )
 
 
-def asynchronous_engine(*, reminder_delay: int = 10, definitions=ACTIVITIES) -> tuple[Engine, InMemoryDispatch]:
-    built = build_net(reminder_delay)
+def asynchronous_engine(
+    *,
+    reminder_delay: int = 10,
+    publication_retry_delay: int = 300,
+    definitions=ACTIVITIES,
+    clock=None,
+) -> tuple[Engine, InMemoryDispatch]:
+    built = build_net(reminder_delay, publication_retry_delay)
     dispatch = InMemoryDispatch()
     by_name = {item.declaration.name: item for item in definitions}
     handlers = dict(built.handlers)
@@ -216,7 +236,7 @@ def asynchronous_engine(*, reminder_delay: int = 10, definitions=ACTIVITIES) -> 
             handlers=handlers,
             guards=built.guards,
             activities=tuple(item.declaration for item in definitions),
-            clock=SimulatedClock(),
+            clock=clock or SimulatedClock(),
         ),
         dispatch,
     )
@@ -256,7 +276,8 @@ def complete(dispatch: InMemoryDispatch, activity_name: str, result) -> int:
 
 def work_input(invocation):
     input_type = ACTIVITY_TRANSITIONS[f"execute.{invocation.activity}"][0]
-    return PydanticPayloadConverter().decode(invocation.input["work"], input_type)
+    payload = invocation.input.get("work", invocation.input.get("command"))
+    return PydanticPayloadConverter().decode(payload, input_type)
 
 
 def action_result(
@@ -702,6 +723,96 @@ def test_failed_conversation_publication_reissues_the_same_fenced_operation() ->
     assert conversation_work.operation != first_work.operation
 
 
+def test_failed_dashboard_publication_retries_the_exact_lease_after_delay() -> None:
+    clock = ManualClock()
+    subject, dispatch = asynchronous_engine(publication_retry_delay=5, clock=clock)
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    drive_bounded(subject)
+    occurrence, invocation = drive_until_activity(subject, dispatch, "dashboard_publish")
+    first_work = work_input(invocation)
+
+    dispatch.complete(
+        occurrence,
+        effect_result(
+            "dashboard",
+            first_work.epoch,
+            first_work.head,
+            False,
+            operation=first_work.operation,
+            capability_available=False,
+        ).dump(),
+    )
+    drive_bounded(subject)
+
+    assert snapshot(subject).dashboard_capability_blocking is True
+    assert pending_all(dispatch, "dashboard_publish") == []
+    assert values(subject, "publication.dashboard_retry")[0]["attempts"] == 2
+
+    clock.instant = 5
+    drive_bounded(subject)
+
+    assert any("publication.reissue_dashboard" in str(record) for record in subject.records)
+    retried = pending_all(dispatch, "dashboard_publish")
+    retry_occurrence, retry_invocation = retried[0]
+    retry_work = work_input(retry_invocation)
+    assert retry_work == first_work
+    assert values(subject, "publication.dashboard_lease")[0]["attempts"] == 2
+    dispatch.complete(
+        retry_occurrence,
+        effect_result("dashboard", 1, "h1", True, operation=retry_work.operation).dump(),
+    )
+    drive_bounded(subject)
+
+    assert snapshot(subject).dashboard_capability_blocking is False
+    assert not values(subject, "publication.dashboard_retry")
+    assert not values(subject, "publication.dashboard_lease")
+
+
+def test_failed_readiness_publication_retries_the_exact_command_after_delay() -> None:
+    subject, dispatch = asynchronous_engine(publication_retry_delay=5)
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    drive_bounded(subject)
+    subject.deliver(
+        "human_observation",
+        token(HumanObservation(1, "h1", True, True, False, 0, False, False, True, False, True)),
+        identity="approved",
+    )
+    drive_bounded(subject)
+    occurrence, invocation = drive_until_activity(subject, dispatch, "readiness_publish")
+    first_command = work_input(invocation)
+
+    dispatch.complete(
+        occurrence,
+        effect_result(
+            "readiness",
+            first_command.epoch,
+            first_command.head,
+            False,
+            operation=first_command.operation,
+            capability_available=False,
+        ).dump(),
+    )
+    drive_bounded(subject)
+
+    assert snapshot(subject).readiness_capability_blocking is True
+    retry_occurrence, retry_invocation = drive_until_activity(subject, dispatch, "readiness_publish")
+    assert any("publication.reissue_readiness" in str(record) for record in subject.records)
+    retry_command = work_input(retry_invocation)
+    assert retry_command == first_command
+    assert values(subject, "publication.readiness_lease")[0]["attempts"] == 2
+
+    dispatch.complete(
+        retry_occurrence,
+        effect_result("readiness", 1, "h1", True, operation=retry_command.operation).dump(),
+    )
+    drive_bounded(subject)
+
+    assert snapshot(subject).readiness_capability_blocking is False
+    assert snapshot(subject).announced is True
+    assert not values(subject, "publication.readiness_retry")
+    assert not values(subject, "publication.readiness_lease")
+
+
 def test_conversation_publication_exhaustion_is_bounded_and_blocks_readiness() -> None:
     subject, dispatch = asynchronous_engine()
     subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
@@ -848,6 +959,34 @@ def test_same_head_refreshes_verified_base_without_creating_a_generation() -> No
     )
     assert control["admission_relation"] == "same_head_basis_changed"
     assert len([item for item in requests(subject) if item.activity == "dashboard_publish"]) == dashboards + 1
+
+
+def test_same_head_basis_refresh_retires_old_publication_continuity() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="first")
+    drive_bounded(subject)
+    old_occurrence, old_invocation = drive_until_activity(subject, dispatch, "dashboard_publish")
+    old_work = work_input(old_invocation)
+
+    subject.deliver(
+        "verified_admission",
+        token(Admission("repo", 7, "h1", "base-2", False, False)),
+        identity="new-basis",
+    )
+    drive_bounded(subject)
+    dispatch.complete(
+        old_occurrence,
+        effect_result("dashboard", 1, "h1", True, operation=old_work.operation).dump(),
+    )
+    drive_bounded(subject)
+
+    continuity = (
+        values(subject, "publication.dashboard_lease")
+        + values(subject, "publication.dashboard_retry")
+        + values(subject, "publication.dashboard_due")
+    )
+    assert all(item["request"]["operation"] != old_work.operation for item in continuity)
+    assert not values(subject, "dashboard_result")
 
 
 def test_external_actions_failure_is_deduplicated_and_authorizes_one_rerun() -> None:
@@ -1514,6 +1653,33 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
     assert "retire.dormant_dashboard_result" in retirement_names
     assert "retire.terminal_dashboard_result" in retirement_names
     assert "retire.stale_dashboard_result" not in retirement_names
+    for name, retry_place, due_place in (
+        ("dashboard", "publication.dashboard_retry", "publication.dashboard_due"),
+        ("readiness", "publication.readiness_retry", "publication.readiness_due"),
+    ):
+        mature = NetPath(f"publication.mature_{name}_retry")
+        assert [(str(item.source), item.mode.value) for item in net.inputs(mature)] == [(retry_place, "consume")]
+        assert len(net.transitions[mature].timers) == 1
+        reissue = NetPath(f"publication.reissue_{name}")
+        assert {str(item.source): item.mode.value for item in net.inputs(reissue)} == {
+            "authority": "read",
+            "publication_state": "read",
+            due_place: "consume",
+        }
+
+
+def test_topology_hydration_strictly_rejects_malformed_nested_lease() -> None:
+    snapshot_value = make_snapshot("repo", 7, 1, "head", "base", True, True)
+    lease = DashboardPublicationLease(
+        DashboardPublicationRequest(1, "head", "dashboard:1", "base", "policy", snapshot_value)
+    ).dump()
+    lease["unexpected"] = True
+    binding = SimpleNamespace(
+        read=(), consumed=((NetPath("publication.dashboard_lease"), (Token("DashboardPublicationLease", lease),)),)
+    )
+
+    with pytest.raises(ValidationError):
+        _hydrate(binding)
 
 
 def test_mutation_requires_current_authority_basis() -> None:

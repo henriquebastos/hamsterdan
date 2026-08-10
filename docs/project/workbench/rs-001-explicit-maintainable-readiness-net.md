@@ -114,6 +114,25 @@ never merges remain required.
 - Behavioral regressions cover stale Actions results and conversation bases;
   dormant and terminal absorption remains complete for every transient place.
 
+### 2026-08-10 — Made publication continuity explicit in the Net
+
+- Dashboard and readiness publication now carry separate exact lease tokens.
+  A failed Activity moves its lease through a durable five-minute Delay and
+  reissues the byte-identical request under the same operation identity.
+- Delay maturity depends only on the retry token. Reissue then rejoins current
+  authority and publication ownership, so unrelated publication changes cannot
+  reset the retry clock and stale basis/lifecycle leases cannot execute.
+- Lease authority includes epoch, head, base, policy, operation, and requested
+  state. Same-head basis replacement and operation supersession retire active,
+  waiting, and matured continuity tokens before they can reactivate.
+- Typed ingress, Activity boundaries, concern folding, conversation fan-out,
+  projection publication, timers, lifecycle, and retirement are now called out
+  directly in topology order. No additional subnet wrapper layer was added:
+  the existing contiguous Petri DSL is simpler to trace than one-use builders.
+- Topology hydration now uses one strict Pydantic JSON-validation path for all
+  token colors; malformed new-schema History fails rather than degrading into
+  partially hydrated compatibility values.
+
 ## Change Requests
 
 | Change Request | Outcome |
@@ -127,8 +146,8 @@ never merges remain required.
 | CR-007 Replace `Control` with independent state tokens | Complete |
 | CR-008 Make dashboard and readiness projection relational | Complete |
 | CR-009 Reduce retirement to proven invariants | Complete |
-| CR-010 Restructure the Net around workflow continuity | Active |
-| CR-011 Review, coherence, and documentation | Candidate |
+| CR-010 Restructure the Net around workflow continuity | Complete |
+| CR-011 Review, coherence, and documentation | Active |
 
 ## Standing execution authorization
 

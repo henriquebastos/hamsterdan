@@ -544,6 +544,58 @@ class ReadinessCommand(WorkflowModel):
     policy_digest: str = ""
 
 
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashboardPublicationLease(WorkflowModel):
+    request: DashboardPublicationRequest
+    attempts: int = 1
+
+    @property
+    def epoch(self) -> int:
+        return self.request.epoch
+
+    @property
+    def head(self) -> str:
+        return self.request.head
+
+    @property
+    def operation(self) -> str:
+        return self.request.operation
+
+    @property
+    def base_head(self) -> str:
+        return self.request.base_head
+
+    @property
+    def policy_digest(self) -> str:
+        return self.request.policy_digest
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReadinessPublicationLease(WorkflowModel):
+    request: ReadinessCommand
+    attempts: int = 1
+
+    @property
+    def epoch(self) -> int:
+        return self.request.epoch
+
+    @property
+    def head(self) -> str:
+        return self.request.head
+
+    @property
+    def operation(self) -> str:
+        return self.request.operation
+
+    @property
+    def base_head(self) -> str:
+        return self.request.base_head
+
+    @property
+    def policy_digest(self) -> str:
+        return self.request.policy_digest
+
+
 def workflow_wait(control: ReadinessSnapshot) -> str:
     """Project the single highest-priority external wait from current gates."""
     if control.provisional:
