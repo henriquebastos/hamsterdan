@@ -212,14 +212,7 @@ def _new_actions(a: Authority, s: ActionsState, value: ActionsObservation) -> bo
 
 
 def _duplicate_actions(a: Authority, s: ActionsState, value: ActionsObservation) -> bool:
-    return _current(a, value) and (
-        not _actions_matches(a, s, value)
-        or value.observation == s.actions_observation
-        or value.attempt < s.attempt
-        or s.rerun_requested
-        and value.conclusion == "failure"
-        and value.attempt <= s.rerun_attempt
-    )
+    return not _new_actions(a, s, value)
 
 
 def _effect_matches(a: Authority, owner, value) -> bool:
@@ -1187,7 +1180,9 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     (p.authority, p.actions_state) >> arc.read() >> repair_work
     ((p.mutation_state, p.actions_basis) >> repair_work >> (p.mutation_state, work.p.repair))
-    basis_retire = retire.t.actions_basis(guards=_guard(_basis_done))
+    basis_retire = retire.t.actions_basis(
+        guards=_typed_guard((Authority, ActionsState, MutationState, ActionsObservation), _basis_done)
+    )
     for place in (p.authority, p.actions_state, p.mutation_state):
         place >> arc.read() >> basis_retire
     p.actions_basis >> basis_retire
@@ -1313,8 +1308,9 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     p.dormant >> arc.read() >> dormant_irrelevant
     p.lifecycle >> dormant_irrelevant
-    # Generic authority staleness and dormant/terminal absorption leave no active residue.
-    transient = (
+    # Dormant and terminal cohorts absorb every token that can arrive or remain
+    # after the active concern cohort has moved away.
+    inactive_transients = (
         p.review_result,
         p.actions_result,
         p.human_result,
@@ -1344,15 +1340,41 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         work.p.reminder,
         command.p.readiness,
     )
-    for index, place in enumerate(transient):
-        stale = getattr(retire.t, f"stale_{index}")(guards=_guard(lambda a, value: not _current(a, value)))
-        p.authority >> arc.read() >> stale
-        place >> stale
+    for place in inactive_transients:
+        suffix = str(place._path).replace(".", "_")
         for prefix, authority in (("dormant", p.dormant), ("terminal", p.terminal)):
-            tr = getattr(retire.t, f"{prefix}_{index}")
+            tr = getattr(retire.t, f"{prefix}_{suffix}")
             authority >> arc.read() >> tr
             place >> tr
-    # Same-generation envelopes with superseded owner operation identity are retired.
+
+    # Only tokens without a more exact active-cohort retirement guard need a
+    # generic authority-currency path. Specialized result and basis retirement
+    # below already includes `_current` through its owning workflow predicate.
+    authority_stale_transients = (
+        p.human_result,
+        p.intent_batch,
+        p.reminder_result,
+        p.actions_basis,
+        reminder.p.timer,
+        work.p.review,
+        work.p.actions_discovery,
+        work.p.actions_rerun,
+        work.p.conversation,
+        work.p.conversation_reply,
+        work.p.repair,
+        work.p.change,
+        work.p.finding,
+        work.p.dashboard,
+        work.p.reminder,
+        command.p.readiness,
+    )
+    for place in authority_stale_transients:
+        suffix = str(place._path).replace(".", "_")
+        stale = getattr(retire.t, f"stale_{suffix}")(guards=_guard(lambda a, value: not _current(a, value)))
+        p.authority >> arc.read() >> stale
+        place >> stale
+    # Result envelopes retire against the exact operation owned by their concern;
+    # these guards cover both stale authority and same-generation supersession.
     for name, place, owner, predicate in (
         ("review_operation", p.review_result, p.review_state, lambda a, owner, v: not _review_matches(a, owner, v)),
         ("actions_operation", p.actions_result, p.actions_state, lambda a, owner, v: _duplicate_actions(a, owner, v)),

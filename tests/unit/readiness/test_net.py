@@ -1257,6 +1257,38 @@ def test_late_review_and_dashboard_results_retire_after_supersession_and_termina
     assert values(subject, "terminal")[0]["status"] == "abort" and not values(subject, "review_result")
 
 
+def test_specialized_retirement_absorbs_stale_actions_result() -> None:
+    subject, dispatch = asynchronous_engine()
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="a1")
+    drive_bounded(subject)
+    old_actions, invocation = drive_until_activity(subject, dispatch, "actions_discovery")
+
+    subject.deliver("verified_admission", token(Admission("repo", 7, "h2", "base", True)), identity="a2")
+    drive_bounded(subject)
+    dispatch.complete(old_actions, action_result(work_input(invocation), "old-run", 1, "success").dump())
+    drive_bounded(subject)
+
+    assert (snapshot(subject).head, snapshot(subject).actions) == ("h2", "discovering")
+    assert not values(subject, "actions_result")
+
+
+def test_specialized_retirement_absorbs_stale_conversation_basis() -> None:
+    subject = engine()
+    admit(subject, "h1", "current")
+
+    deliver(
+        subject,
+        "conversation_observation",
+        ConversationObservation(0, "old", True, "please reply", comment_id=1),
+        "stale-conversation",
+    )
+
+    assert not values(subject, "conversation_basis")
+    assert not [
+        item for item in requests(subject) if item.activity == "conversation" and work_input(item).head == "old"
+    ]
+
+
 def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> None:
     @activity(name="conversation", converter=PydanticPayloadConverter())
     def change_intent(work: ConversationClassificationRequest) -> IntentBatch:
@@ -1465,16 +1497,23 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
         for place, result in ((input_place, False), *((item, True) for item in output_places)):
             consumers = {arc.target for arc in net.arcs if arc.source == place}
             names = {str(item) for item in consumers}
-            assert any(name.startswith("retire.stale_") for name in names)
             assert any(name.startswith("retire.dormant_") for name in names)
             assert any(name.startswith("retire.terminal_") for name in names)
-            if result:
+            if not result:
+                assert any(name.startswith("retire.stale_") for name in names)
+            else:
                 assert any(
                     name in result_consumers
                     or name.startswith("retire.")
                     and any(word in name for word in ("operation", "duplicate"))
                     for name in names
                 )
+
+    retirement_names = {str(path) for path in net.transitions if str(path).startswith("retire.")}
+    assert "retire.stale_work_dashboard" in retirement_names
+    assert "retire.dormant_dashboard_result" in retirement_names
+    assert "retire.terminal_dashboard_result" in retirement_names
+    assert "retire.stale_dashboard_result" not in retirement_names
 
 
 def test_mutation_requires_current_authority_basis() -> None:

@@ -99,6 +99,21 @@ never merges remain required.
   have an automatic recovery trigger. CR-010 will resolve that inherited
   workflow-continuity gap without introducing an immediate retry loop.
 
+### 2026-08-10 — Reduced retirement to distinct invariants
+
+- Retirement now distinguishes inactive-cohort absorption, generic authority
+  staleness, and concern-owned operation supersession instead of applying all
+  three mechanically to every transient place.
+- Specialized result and intent/basis guards own stale and same-generation
+  superseded cleanup where their predicates already partition acceptance from
+  retirement. Generic authority cleanup remains only for unowned observations,
+  staged Actions basis, timers, and Activity work.
+- Twelve redundant stale transitions were removed. Remaining generated
+  retirement transitions are named after their place rather than numeric tuple
+  position, so topology inspection identifies the residue being absorbed.
+- Behavioral regressions cover stale Actions results and conversation bases;
+  dormant and terminal absorption remains complete for every transient place.
+
 ## Change Requests
 
 | Change Request | Outcome |
@@ -111,8 +126,8 @@ never merges remain required.
 | CR-006 Compare active-token decomposition strategies | Complete |
 | CR-007 Replace `Control` with independent state tokens | Complete |
 | CR-008 Make dashboard and readiness projection relational | Complete |
-| CR-009 Reduce retirement to proven invariants | Active |
-| CR-010 Restructure the Net around workflow continuity | Candidate |
+| CR-009 Reduce retirement to proven invariants | Complete |
+| CR-010 Restructure the Net around workflow continuity | Active |
 | CR-011 Review, coherence, and documentation | Candidate |
 
 ## Standing execution authorization
