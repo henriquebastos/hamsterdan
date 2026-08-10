@@ -5,7 +5,7 @@ existing Hamsterdan capability outside the delivery roadmap.
 
 ## Active
 
-No Refinement Story is active.
+- [RS-002 — Move Activity execution mechanics into Motus](rs-002-motus-owned-activity-execution.md)
 
 ## Closed
 
