@@ -180,6 +180,21 @@ def _route(outputs, values):
     }
 
 
+def _unpack_intents(binding, outputs):
+    """Route each classified intent only to the workflow that can consume it."""
+    selected = {
+        "change_basis": {"change", "update_base", "resolve_conflict"},
+        "intent_result": {"acknowledge", "dismiss", "defer", "snooze", "resume", "reassign"},
+        "reply_basis": {"reply"},
+    }
+    intents = tuple(Intent(**raw) for raw in binding.tokens[0].data["intents"])
+    return {
+        output.target: tuple(Token(output.color, intent.dump()) for intent in intents if intent.kind in kinds)
+        for output in outputs
+        if (kinds := selected.get(str(output.target))) is not None
+    }
+
+
 def _fold_owned(binding, outputs, owner_type, result_type, folder):
     owner, result = _values(binding, owner_type, result_type)
     implementation = getattr(folder, "implementation", folder)
@@ -414,7 +429,7 @@ def _accept_publication_result(binding, outputs, result_type, retry_type, folder
     updated = folder.implementation(publication, result)
     routed = {"publication_state": updated}
     if not result.ok:
-        routed[retry_target] = retry_type(retry.request, attempts=retry.attempts + 1)
+        routed[retry_target] = retry
     return _route(outputs, routed)
 
 
@@ -701,7 +716,10 @@ def _finding_effect(binding, outputs):
 
 def _accept_actions(binding, outputs):
     _a, state, value = _values(binding, Authority, ActionsState, ActionsObservation)
-    return _route(outputs, {"actions_state": fold_actions.implementation(state, value)})
+    return _route(
+        outputs,
+        {"actions_state": fold_actions.implementation(state, value), "actions_basis": value},
+    )
 
 
 def _accept_human(binding, outputs):
@@ -1039,19 +1057,15 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
     t.verified_admission >> p.admission(Admission)
     t.lifecycle_observation >> p.lifecycle(Lifecycle)
     t.human_observation >> p.human_result(HumanObservation)
-    t.actions_observation >> (p.actions_result(ActionsObservation), p.actions_basis(ActionsObservation))
+    t.actions_observation >> p.actions_result(ActionsObservation)
     t.conversation_observation >> p.conversation_basis(ConversationObservation)
     work.p.review(ReviewRequest) >> execute.t.review(handler="review") >> p.review_result(ReviewResult)
     (
         work.p.actions_discovery(ActionsDiscoveryRequest)
         >> execute.t.actions_discovery(handler="actions_discovery")
-        >> (p.actions_result, p.actions_basis)
+        >> p.actions_result
     )
-    (
-        work.p.actions_rerun(ActionsRerunRequest)
-        >> execute.t.actions_rerun(handler="actions_rerun")
-        >> (p.actions_result, p.actions_basis)
-    )
+    (work.p.actions_rerun(ActionsRerunRequest) >> execute.t.actions_rerun(handler="actions_rerun") >> p.actions_result)
     (
         work.p.conversation(ConversationClassificationRequest)
         >> execute.t.conversation(handler="conversation")
@@ -1133,7 +1147,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
         guards=_typed_guard((Authority, ActionsState, ActionsObservation), _new_actions),
     )
     p.authority >> arc.read() >> accept_actions
-    (p.actions_state, p.actions_result) >> accept_actions >> p.actions_state
+    (p.actions_state, p.actions_result) >> accept_actions >> (p.actions_state, p.actions_basis(ActionsObservation))
     accept_human = t.accept_human(handler=petri_handler(_accept_human), guards=_guard(lambda a, h, v: _current(a, v)))
     p.authority >> arc.read() >> accept_human
     (p.human_state, p.human_result) >> accept_human >> p.human_state
@@ -1262,16 +1276,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
     p.conversation_basis >> start >> work.p.conversation
     (
         p.intent_batch
-        >> t.unpack_intents(
-            handler=petri_handler(
-                lambda b, outs: {
-                    o.target: tuple(
-                        Token(o.color, i.dump()) for i in (Intent(**raw) for raw in b.tokens[0].data["intents"])
-                    )
-                    for o in outs
-                }
-            )
-        )
+        >> t.unpack_intents(handler=petri_handler(_unpack_intents))
         >> (p.change_basis, p.intent_result(Intent), p.reply_basis(Intent))
     )
     for name, owner_type, owner, kinds in (
@@ -1553,17 +1558,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60, publication_retry_delay:
     for name, place, guard in (
         ("conversation_basis", p.conversation_basis, lambda a, v: not (_current(a, v) and v.authorized)),
         ("reply_basis", p.reply_basis, lambda a, v: not _replyable(a, v)),
-        (
-            "intent_noop",
-            p.intent_result,
-            lambda a, v: (
-                not (
-                    _current(a, v)
-                    and v.authorized
-                    and v.kind in {"acknowledge", "dismiss", "defer", "snooze", "resume", "reassign"}
-                )
-            ),
-        ),
     ):
         tr = getattr(retire.t, name)(guards=_guard(guard))
         p.authority >> arc.read() >> tr

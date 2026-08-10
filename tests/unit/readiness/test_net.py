@@ -70,6 +70,7 @@ from hamsterdan.readiness.net.topology import (
     _request_dashboard,
     _retry_review,
     _retryable_review,
+    _unpack_intents,
     build_net,
     fold_actions,
     fold_effect,
@@ -746,7 +747,9 @@ def test_failed_dashboard_publication_retries_the_exact_lease_after_delay() -> N
 
     assert snapshot(subject).dashboard_capability_blocking is True
     assert pending_all(dispatch, "dashboard_publish") == []
-    assert values(subject, "publication.dashboard_retry")[0]["attempts"] == 2
+    assert values(subject, "publication.dashboard_retry")[0] == {
+        "request": first_work.dump(),
+    }
 
     clock.instant = 5
     drive_bounded(subject)
@@ -756,7 +759,9 @@ def test_failed_dashboard_publication_retries_the_exact_lease_after_delay() -> N
     retry_occurrence, retry_invocation = retried[0]
     retry_work = work_input(retry_invocation)
     assert retry_work == first_work
-    assert values(subject, "publication.dashboard_lease")[0]["attempts"] == 2
+    assert values(subject, "publication.dashboard_lease")[0] == {
+        "request": first_work.dump(),
+    }
     dispatch.complete(
         retry_occurrence,
         effect_result("dashboard", 1, "h1", True, operation=retry_work.operation).dump(),
@@ -799,7 +804,9 @@ def test_failed_readiness_publication_retries_the_exact_command_after_delay() ->
     assert any("publication.reissue_readiness" in str(record) for record in subject.records)
     retry_command = work_input(retry_invocation)
     assert retry_command == first_command
-    assert values(subject, "publication.readiness_lease")[0]["attempts"] == 2
+    assert values(subject, "publication.readiness_lease")[0] == {
+        "request": first_command.dump(),
+    }
 
     dispatch.complete(
         retry_occurrence,
@@ -1204,6 +1211,28 @@ def test_intent_arguments_are_isolated_and_only_authorized_settled_controls_fold
         ),
     )
     assert disposed.review == "unable"
+
+
+def test_intent_batch_routes_each_intent_only_to_its_applicable_workflow() -> None:
+    intents = [
+        Intent(1, "h", "change", "change", True, True),
+        Intent(1, "h", "dismiss", "dismiss", True, False),
+        Intent(1, "h", "reply", "reply", True, False),
+        Intent(1, "h", "status", "status", True, False),
+    ]
+    binding = SimpleNamespace(tokens=(Token("IntentBatch", IntentBatch(1, "h", intents).dump()),))
+    outputs = tuple(
+        SimpleNamespace(target=NetPath(path), color="Intent")
+        for path in ("change_basis", "intent_result", "reply_basis")
+    )
+
+    routed = _unpack_intents(binding, outputs)
+
+    assert {str(path): [token.data["kind"] for token in tokens] for path, tokens in routed.items()} == {
+        "change_basis": ["change"],
+        "intent_result": ["dismiss"],
+        "reply_basis": ["reply"],
+    }
 
 
 def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None:
@@ -1647,6 +1676,18 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
     ):
         assert "publication_state" not in {str(item.source) for item in net.inputs(NetPath(transition))}
     assert "mutation_state" not in {str(item.source) for item in net.inputs(NetPath("accept_actions"))}
+    assert {str(item.target) for item in net.outputs(NetPath("actions_observation"))} == {"actions_result"}
+    assert {str(item.target) for item in net.outputs(NetPath("execute.actions_discovery"))} == {"actions_result"}
+    assert {str(item.target) for item in net.outputs(NetPath("execute.actions_rerun"))} == {"actions_result"}
+    assert {str(item.target) for item in net.outputs(NetPath("accept_actions"))} == {
+        "actions_state",
+        "actions_basis",
+    }
+    assert {str(item.target) for item in net.outputs(NetPath("unpack_intents"))} == {
+        "change_basis",
+        "intent_result",
+        "reply_basis",
+    }
     reminder_inputs = {str(item.source): item.mode.value for item in net.inputs(NetPath("accept_reminder"))}
     assert reminder_inputs == {"authority": "read", "reminder_result": "consume"}
     assert not net.outputs(NetPath("accept_reminder"))
@@ -1690,6 +1731,7 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
                 )
 
     retirement_names = {str(path) for path in net.transitions if str(path).startswith("retire.")}
+    assert "retire.intent_noop" not in retirement_names
     assert "retire.stale_work_dashboard" in retirement_names
     assert "retire.dormant_dashboard_result" in retirement_names
     assert "retire.terminal_dashboard_result" in retirement_names

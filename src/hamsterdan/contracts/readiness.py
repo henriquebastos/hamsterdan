@@ -547,7 +547,6 @@ class ReadinessCommand(WorkflowModel):
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class DashboardPublicationLease(WorkflowModel):
     request: DashboardPublicationRequest
-    attempts: int = 1
 
     @property
     def epoch(self) -> int:
@@ -573,7 +572,6 @@ class DashboardPublicationLease(WorkflowModel):
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class ReadinessPublicationLease(WorkflowModel):
     request: ReadinessCommand
-    attempts: int = 1
 
     @property
     def epoch(self) -> int:

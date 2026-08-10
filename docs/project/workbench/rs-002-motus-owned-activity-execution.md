@@ -45,8 +45,8 @@ merges.
 
 | Change Request | Outcome |
 | --- | --- |
-| CR-001 Remove current-Petrus topology redundancies | Active |
-| CR-002 Add production Activity Execution policy to Motus | Planned |
+| CR-001 Remove current-Petrus topology redundancies | Complete |
+| CR-002 Add production Activity Execution policy to Motus | Active |
 | CR-003 Pin accepted Petrus and migrate dashboard/readiness retry | Planned |
 | CR-004 Migrate conversation and eligible provider retries | Planned |
 | CR-005 Reassess residual concern-state ownership | Planned |
@@ -88,3 +88,30 @@ PR authority and provider reconciliation remain application-owned.
   provider recovery, restart, and replay.
 - `scripts/check quick` follows each coherent Hamsterdan stage.
 - Both repositories' full gates pass before their accepted `main` pushes.
+
+## Progress
+
+### 2026-08-10 — Closed the current-Petrus cleanup boundary
+
+- Publication retry leases now retain only their exact immutable request; their
+  unused attempt counters and test-only exposure are gone.
+- Actions ingress and Activities emit only observations. `accept_actions`
+  creates decision basis after currentness and novelty admission, so stale or
+  duplicate observations cannot race policy against state folding.
+- Conversation classification routes each intent only to its applicable
+  mutation, disposition/reminder, or reply path. Status/no-effect intents no
+  longer create three tokens merely to retire them, and the unreachable
+  `retire.intent_noop` transition is gone.
+- A direct reminder timer self-loop was rejected by experiment: the re-emitted
+  token remained immediately mature. The intermediate rearm transition is the
+  required fresh entry-instant boundary and remains.
+- Reminder-result and stateless conversation-bridge removal would require
+  bespoke Hamsterdan Activity handlers because current `DerivedActivityHandler`
+  requires a typed output and cannot publish begin-time state. They are deferred
+  to the general Motus boundary rather than reimplementing framework behavior
+  locally. Current Engine projections likewise do not expose enough terminal
+  phase/identity information to replace History inspection cleanly.
+- The topology moved from 46 places, 162 transitions, and 481 arcs to 46 places,
+  161 transitions, and 477 arcs. The full gate passes 446 Python tests with one
+  provider test deselected, nine Bun tests, static analysis, formatting, and
+  both package builds.

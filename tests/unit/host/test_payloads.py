@@ -148,7 +148,6 @@ def test_converter_round_trips_nested_publication_retry_contract() -> None:
     )
     retry = DashboardPublicationLease(
         DashboardPublicationRequest(1, "head", "dashboard:1", "base", "policy", snapshot),
-        attempts=2,
     )
     converter = PydanticPayloadConverter()
 
