@@ -139,15 +139,12 @@ def test_host_service_requires_agent_route_custody(tmp_path: Path) -> None:
         HostService(config(tmp_path), runner=object())  # type: ignore[call-arg, arg-type]
 
 
-def test_agent_route_is_claimed_before_runner_routing_and_start(tmp_path: Path) -> None:
+def test_agent_route_is_claimed_from_explicit_execution_identity_before_start(tmp_path: Path) -> None:
     events: list[str] = []
 
     class RoutedRunner:
-        def route_operation(self, operation: str) -> None:
-            events.append(f"route:{operation}")
-
         def review(self, *args: object, **kwargs: object) -> None:
-            events.append("start")
+            events.append(f"start:{kwargs['operation']}:{kwargs['attempt']}")
 
     class RecordingRoutes(AgentRouteStore):
         def claim(self, operation, composition):
@@ -168,19 +165,17 @@ def test_agent_route_is_claimed_before_runner_routing_and_start(tmp_path: Path) 
     )
     host.registry.reconcile(44, ((31, "owner/one"),))
     app = host._application(44, 31, 7)
+    routed = app.args[3]
 
-    dispatch = app.kwargs["agent_dispatch"]
-    dispatch("review:one", 1)
-    runner.review()
-    dispatch("review:one", 2)
-    runner.review()
+    routed.review("repository", object(), operation="review:one", attempt=1)
+    routed.review("repository", object(), operation="review:one", attempt=2)
 
-    assert events[0] == "claim:review:one"
-    assert events[1].startswith("route:pi:")
-    assert events[2] == "start"
-    assert events[3] == "claim:review:one"
-    assert events[4].startswith("route:pi:") and events[4] != events[1]
-    assert events[5] == "start"
+    assert events == [
+        "claim:review:one",
+        "start:review:one:1",
+        "claim:review:one",
+        "start:review:one:2",
+    ]
 
 
 def observation(delivery: str, repository: int = 31, pr: int = 7, **values: object) -> Observation:
@@ -300,7 +295,7 @@ def test_application_identity_roots_and_operation_clients_are_exact(tmp_path: Pa
     assert [call[1] for call in clients.operation_calls] == [(31,), (32,), (31,)]
     assert made[0].args[2].graphql is not None
     assert made[0].kwargs["publication_fault"] is None
-    assert made[0].kwargs["agent_fault"] is None
+    assert "agent_fault" not in made[0].kwargs
     host.close()
     assert all(app.closed == 1 for app in made) and clients.closed == 1
 

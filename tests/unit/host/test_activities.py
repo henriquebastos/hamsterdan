@@ -294,11 +294,10 @@ def test_expected_publication_runtime_failure_becomes_typed_effect_result(caplog
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: None
     operations.current_fence = lambda *args: None
 
     class Runner:
-        def code(self, repository_url, request, *, is_current=None):
+        def code(self, repository_url, request, *, operation, attempt, is_current=None):
             return CodingResult(
                 request.kind,
                 request.repository,
@@ -345,15 +344,15 @@ def test_coding_unchanged_result_is_terminal_without_publication_or_retry() -> N
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: dispatched.append(operation)
     fences: list[tuple] = []
     operations.current_fence = lambda *args: fences.append(args)
 
     class Runner:
         calls = 0
 
-        def code(self, repository_url, request, *, is_current=None):
+        def code(self, repository_url, request, *, operation, attempt, is_current=None):
             self.calls += 1
+            dispatched.append(operation)
             return CodingResult(
                 request.kind,
                 request.repository,
@@ -403,13 +402,12 @@ def test_coding_unable_result_is_terminal_without_publication_or_retry() -> None
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: None
     operations.current_fence = lambda *args: None
 
     class Runner:
         calls = 0
 
-        def code(self, repository_url, request, *, is_current=None):
+        def code(self, repository_url, request, *, operation, attempt, is_current=None):
             self.calls += 1
             return CodingResult(
                 request.kind,
@@ -454,13 +452,12 @@ def test_coding_retries_protocol_error_with_identical_request_then_publishes_onc
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: None
     operations.current_fence = lambda *args: None
 
     class Runner:
         requests: ClassVar[list] = []
 
-        def code(self, repository_url, request, *, is_current=None):
+        def code(self, repository_url, request, *, operation, attempt, is_current=None):
             self.requests.append(request)
             if len(self.requests) == 1:
                 raise AgentProtocolError("temporary failure")
@@ -509,14 +506,13 @@ def test_canceled_coding_attempt_does_not_retry_or_publish() -> None:
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: None
     fences: list[tuple] = []
     operations.current_fence = lambda *args: fences.append(args)
 
     class Runner:
         calls = 0
 
-        def code(self, repository_url, request, *, is_current=None):
+        def code(self, repository_url, request, *, operation, attempt, is_current=None):
             self.calls += 1
             raise AgentProtocolError("superseded", canceled=True)
 
@@ -545,7 +541,6 @@ def test_stale_authority_between_coding_attempts_stops_before_retry_and_publicat
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: None
     fence_calls = 0
 
     def fence(*args):
@@ -559,7 +554,7 @@ def test_stale_authority_between_coding_attempts_stops_before_retry_and_publicat
     class Runner:
         calls = 0
 
-        def code(self, repository_url, request, *, is_current=None):
+        def code(self, repository_url, request, *, operation, attempt, is_current=None):
             self.calls += 1
             raise AgentProtocolError("retryable protocol failure")
 
@@ -599,7 +594,6 @@ def test_final_fence_failure_retains_closed_category_before_publication(
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: dispatched.append((operation, attempt))
     fence_calls = 0
 
     def fence(*args):
@@ -613,8 +607,9 @@ def test_final_fence_failure_retains_closed_category_before_publication(
     class Runner:
         calls = 0
 
-        def code(self, repository_url, request, *, is_current=None):
+        def code(self, repository_url, request, *, operation, attempt, is_current=None):
             self.calls += 1
+            dispatched.append((operation, attempt))
             return CodingResult(
                 request.kind,
                 request.repository,
@@ -726,7 +721,6 @@ def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(t
     operations.runner = AmpExecuteRunner(argv=(sys.executable, str(script)))
     operations.git_publisher = Publisher()
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: None
     fences: list[tuple[object, ...]] = []
     operations.current_fence = lambda *args: fences.append(args)
     intent = {"kind": "change", "arguments": {"request": "update the tracked fixture"}}
@@ -892,9 +886,7 @@ def test_review_preserves_terminal_prior_finding_detail_for_dashboard_lineage() 
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.workflow_path = "ci.yml"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: None
     operations.current_fence = lambda *args: None
-    operations.agent_dispatch = lambda operation, attempt: dispatched.append(operation)
 
     class Authority:
         def comments(self):
@@ -904,8 +896,8 @@ def test_review_preserves_terminal_prior_finding_detail_for_dashboard_lineage() 
             return None
 
     class Runner:
-        def review(self, repository_url, request, *, is_current=None):
-            assert dispatched == ["review-operation"]
+        def review(self, repository_url, request, *, operation, attempt, is_current=None):
+            dispatched.append(operation)
             return AgentReviewResult(
                 request.repository,
                 request.pull_request,
@@ -972,12 +964,11 @@ def test_conversation_defensively_rejects_multiple_runner_intents() -> None:
     operations.pr_number = 7
     operations.public_clone_url = "https://example.invalid/repo.git"
     operations.current = None
-    operations.agent_dispatch = lambda operation, attempt: dispatched.append(operation)
     operations.current_fence = lambda *args: None
 
     class Runner:
-        def converse(self, repository_url, request, *, is_current=None):
-            assert dispatched == ["conversation-operation"]
+        def converse(self, repository_url, request, *, operation, attempt, is_current=None):
+            dispatched.append(operation)
             reply = {
                 "type": "reply",
                 "arguments": {"message": "Duplicate"},

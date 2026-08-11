@@ -53,6 +53,11 @@ first sandbox organization for real-provider validation.
 - GitHub App registration evidence is provider-owned. One validated immutable
   `RegistrationInventory` crosses into the host; only then does the host
   atomically replace admitted routes and record the selected installation.
+- Agent execution identity is explicit. Activities pass one logical operation
+  and Attempt to a host-owned routed runner, which claims durable composition
+  ownership before provider execution. Pi alone derives its stable per-Attempt
+  runtime identity; no ambient execution-selection scope or two-call handshake
+  remains.
 - Each active PR generation has one exact Petrus lifecycle scope. Unscoped
   lifecycle commands survive generation cleanup; a staged command, exact scope
   reset/close, and matching commit form a restart-repairable boundary. Scope

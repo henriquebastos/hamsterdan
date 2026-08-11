@@ -6,10 +6,9 @@ import json
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from contextvars import ContextVar
 from dataclasses import asdict
 from hashlib import sha256
-from typing import Protocol, cast, runtime_checkable
+from typing import Protocol, cast
 from urllib.parse import urlsplit, urlunsplit
 
 from petrus.agenticus.runtime.operation import RuntimeOperation, RuntimeProtocolError
@@ -71,12 +70,6 @@ class PiWorkspaceProvider(Protocol):
     ) -> AbstractContextManager[PreparedPiWorkspace]: ...
 
 
-@runtime_checkable
-class OperationRoutedRunner(Protocol):
-    def route_operation(self, operation: str) -> None: ...
-
-
-_OPERATION: ContextVar[str | None] = ContextVar("hamsterdan_pi_operation", default=None)
 _SEMANTICS = {
     "review": (
         "Review the exact supplied PR generation using the supplied policy, evidence, prior findings, and lenses. "
@@ -133,33 +126,54 @@ class PiNativeRunner:
         self._runtime, self._workspaces = runtime, workspaces
         self._timeout, self._poll_interval, self._clock = timeout, poll_interval, clock
 
-    def route_operation(self, operation: str) -> None:
-        _OPERATION.set(_text(operation, "operation", limit=256))
-
-    def review(self, repository_url: str, request: ReviewRequest, *, is_current: CURRENT | None = None) -> ReviewResult:
-        return cast(ReviewResult, self._run("review", repository_url, request, is_current))
+    def review(
+        self,
+        repository_url: str,
+        request: ReviewRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
+    ) -> ReviewResult:
+        return cast(ReviewResult, self._run("review", repository_url, request, operation, attempt, is_current))
 
     def converse(
-        self, repository_url: str, request: ConversationRequest, *, is_current: CURRENT | None = None
+        self,
+        repository_url: str,
+        request: ConversationRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
     ) -> ConversationResult:
-        return cast(ConversationResult, self._run("conversation", repository_url, request, is_current))
+        return cast(
+            ConversationResult, self._run("conversation", repository_url, request, operation, attempt, is_current)
+        )
 
-    def code(self, repository_url: str, request: CodingRequest, *, is_current: CURRENT | None = None) -> CodingResult:
-        return cast(CodingResult, self._run("coding", repository_url, request, is_current))
+    def code(
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
+    ) -> CodingResult:
+        return cast(CodingResult, self._run("coding", repository_url, request, operation, attempt, is_current))
 
     def _run(
         self,
         kind: str,
         repository_url: str,
         request: AgentRequest,
+        operation: str,
+        attempt: int,
         is_current: CURRENT | None,
     ) -> AgentResult:
-        operation_id = _OPERATION.get()
-        _OPERATION.set(None)
-        if operation_id is None:
-            raise AgentProtocolError(
-                "Pi operation route was not selected", result_category=AgentResultCategory.CORRELATION
-            )
+        logical_operation = _text(operation, "operation", limit=1024)
+        if type(attempt) is not int or attempt < 1:
+            raise AgentProtocolError("invalid agent attempt", result_category=AgentResultCategory.CORRELATION)
+        operation_id = f"pi:{sha256(f'{logical_operation}\0{attempt}'.encode()).hexdigest()}"
         try:
             prompt = encode_prompt(kind, repository_url, request)
         except AgentProtocolError as error:
@@ -366,18 +380,37 @@ class PiNativeRunner:
 class UnavailablePiRunner:
     """Fail closed when the exact Pi installation or collaborators are unavailable."""
 
-    def route_operation(self, operation: str) -> None:
-        _text(operation, "operation", limit=256)
-
-    def review(self, repository_url: str, request: ReviewRequest, *, is_current: CURRENT | None = None) -> ReviewResult:
+    def review(
+        self,
+        repository_url: str,
+        request: ReviewRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
+    ) -> ReviewResult:
         raise AgentProtocolError("Pi native A2 runtime is not ready")
 
     def converse(
-        self, repository_url: str, request: ConversationRequest, *, is_current: CURRENT | None = None
+        self,
+        repository_url: str,
+        request: ConversationRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
     ) -> ConversationResult:
         raise AgentProtocolError("Pi native A2 runtime is not ready")
 
-    def code(self, repository_url: str, request: CodingRequest, *, is_current: CURRENT | None = None) -> CodingResult:
+    def code(
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
+    ) -> CodingResult:
         raise AgentProtocolError("Pi native A2 runtime is not ready")
 
 

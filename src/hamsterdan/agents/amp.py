@@ -81,15 +81,37 @@ class AmpExecuteRunner:
         self.argv, self.timeout, self.max_output, self.max_result = argv, timeout, max_output, max_result
         self.poll_interval, self._popen = poll_interval, popen
 
-    def review(self, repository_url: str, request: ReviewRequest, *, is_current: CURRENT | None = None) -> ReviewResult:
+    def review(
+        self,
+        repository_url: str,
+        request: ReviewRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
+    ) -> ReviewResult:
         return cast(ReviewResult, self._run("review", repository_url, request, is_current))
 
     def converse(
-        self, repository_url: str, request: ConversationRequest, *, is_current: CURRENT | None = None
+        self,
+        repository_url: str,
+        request: ConversationRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
     ) -> ConversationResult:
         return cast(ConversationResult, self._run("conversation", repository_url, request, is_current))
 
-    def code(self, repository_url: str, request: CodingRequest, *, is_current: CURRENT | None = None) -> CodingResult:
+    def code(
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
+    ) -> CodingResult:
         return cast(CodingResult, self._run("coding", repository_url, request, is_current))
 
     change = repair = code

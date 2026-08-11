@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -30,7 +30,13 @@ from petrus.impetus.history.codec import decode_record
 from hamsterdan.agents import (
     AgentRunner,
     AmpExecuteRunner,
+    CodingRequest,
+    CodingResult,
+    ConversationRequest,
+    ConversationResult,
     PiNativeRunner,
+    ReviewRequest,
+    ReviewResult,
     UnavailablePiRunner,
 )
 from hamsterdan.agents.pi import PiWorkspaceProvider
@@ -277,6 +283,66 @@ class AgentRouteStore:
             None if row[2] is None else ResolutionSnapshot.from_data(json.loads(row[2])),
             bool(row[3]),
         )
+
+
+class RoutedAgentRunner:
+    """Claim logical operation ownership before delegating one explicit Attempt."""
+
+    def __init__(
+        self,
+        runner: AgentRunner,
+        routes: AgentRouteStore,
+        composition: AgentComposition,
+        *,
+        before_call: Callable[[str, str, int], None] | None = None,
+    ) -> None:
+        self._runner, self._routes, self._composition = runner, routes, composition
+        self._before_call = before_call
+
+    def review(
+        self,
+        repository_url: str,
+        request: ReviewRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: Callable[[], bool] | None = None,
+    ) -> ReviewResult:
+        self._claim("review", operation, attempt)
+        return self._runner.review(repository_url, request, operation=operation, attempt=attempt, is_current=is_current)
+
+    def converse(
+        self,
+        repository_url: str,
+        request: ConversationRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: Callable[[], bool] | None = None,
+    ) -> ConversationResult:
+        self._claim("conversation", operation, attempt)
+        return self._runner.converse(
+            repository_url, request, operation=operation, attempt=attempt, is_current=is_current
+        )
+
+    def code(
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: Callable[[], bool] | None = None,
+    ) -> CodingResult:
+        self._claim(request.kind, operation, attempt)
+        return self._runner.code(repository_url, request, operation=operation, attempt=attempt, is_current=is_current)
+
+    def _claim(self, kind: str, operation: str, attempt: int) -> None:
+        if type(attempt) is not int or attempt < 1:
+            raise AgentCompositionError("agent attempt must be a positive integer")
+        self._routes.claim(operation, self._composition)
+        if self._before_call is not None:
+            self._before_call(kind, operation, attempt)
 
 
 def _snapshot_data(snapshot: ResolutionSnapshot | None) -> str | None:

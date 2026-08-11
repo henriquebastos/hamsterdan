@@ -24,7 +24,7 @@ from hamsterdan.contracts.readiness import (
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
 from hamsterdan.github_app.gateway import GitHubAuthority
 
-from .activities import AgentFault, PrReadinessActivities
+from .activities import PrReadinessActivities
 from .git_publish import HostGitPublisher
 from .runtime import AuthorityLease, PrReadinessHost
 
@@ -44,14 +44,12 @@ class PrReadinessApplication:
         authority: GitHubAuthority,
         runner: AgentRunner,
         *,
-        agent_dispatch: Callable[[str, int], None],
         agent_settle: Callable[[set[str]], None],
         bot_login: str,
         public_clone_url: str,
         workflow_path: str = ".github/workflows/ci.yml",
         reminder_delay: float = 3 * 24 * 60 * 60,
         publication_fault: EffectFault | None = None,
-        agent_fault: AgentFault | None = None,
         dispatch_path: Path | None = None,
     ):
         self.root, self.instance_id, self.authority, self.runner = root, instance_id, authority, runner
@@ -61,8 +59,8 @@ class PrReadinessApplication:
         self.bot_login = normalized_login
         self.public_clone_url, self.workflow_path = public_clone_url, workflow_path
         self.reminder_delay = reminder_delay
-        self.publication_fault, self.agent_fault = publication_fault, agent_fault
-        self.agent_dispatch, self.agent_settle = agent_dispatch, agent_settle
+        self.publication_fault = publication_fault
+        self.agent_settle = agent_settle
         self.dispatch_path = dispatch_path
         self.host: PrReadinessHost | None = None
         if (root / "history.jsonl").exists():
@@ -92,10 +90,8 @@ class PrReadinessApplication:
                 self.public_clone_url,
                 self.workflow_path,
                 lease.fence,
-                self.agent_dispatch,
                 git,
                 lease.is_current,
-                self.agent_fault,
             )
 
         return PrReadinessHost.open(

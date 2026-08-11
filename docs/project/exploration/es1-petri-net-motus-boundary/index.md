@@ -714,6 +714,27 @@ had a home, and the existing bounded transport supplied safe HTTP and Link
 semantics. No Net, lifecycle, Activity execution, scheduler, storage schema, or
 Petrus behavior changed.
 
+### Production agent-execution identity conclusion
+
+RS-011 removed an ambient host/agent handshake. Activities previously called
+`agent_dispatch(operation, attempt)` to claim durable route custody and place a
+Pi execution identity in a `ContextVar`, then made a separate `AgentRunner`
+call which implicitly consumed it. The runner protocol now carries the logical
+operation and Attempt directly.
+
+One host-owned `RoutedAgentRunner` claims exact logical route ownership before
+the qualification seam or provider delegate. It forwards the unchanged pair;
+`PiNativeRunner` alone derives the stable per-Attempt runtime identity used by
+runtime, workspace, Episode, and Turn. This preserves one logical route across
+coding retries while making each provider Attempt distinct and replay-stable.
+Legacy Amp remains explicitly composed and receives no Pi identity semantics.
+
+The correction reinforces the execution-scope conclusion: pass the smallest
+immutable identity required by the callee, keep durable ownership at the host
+composition edge, and let provider adapters derive provider-local identity. A
+general scope container, ambient runtime scope, or serialized execution object
+would be larger and less explicit. No Net topology changed.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

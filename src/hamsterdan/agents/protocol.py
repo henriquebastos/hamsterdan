@@ -171,13 +171,31 @@ ChangeResult = RepairResult = CodingResult
 
 class AgentRunner(Protocol):
     def review(
-        self, repository_url: str, request: ReviewRequest, *, is_current: CURRENT | None = None
+        self,
+        repository_url: str,
+        request: ReviewRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
     ) -> ReviewResult: ...
     def converse(
-        self, repository_url: str, request: ConversationRequest, *, is_current: CURRENT | None = None
+        self,
+        repository_url: str,
+        request: ConversationRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
     ) -> ConversationResult: ...
     def code(
-        self, repository_url: str, request: CodingRequest, *, is_current: CURRENT | None = None
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: CURRENT | None = None,
     ) -> CodingResult: ...
 
 

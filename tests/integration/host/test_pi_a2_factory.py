@@ -288,7 +288,7 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
             "lineage": [],
         }
     )
-    operation_id = "pi:" + "1" * 64
+    logical_operation = "review:replay"
     original = _host(
         tmp_path,
         (PiA2ScriptedTurn(output),),
@@ -296,8 +296,10 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
     )
     archive = workspace_archive(_config(tmp_path).working_directory)
     runner = PiNativeRunner(original, RunnerWorkspaces(archive))
-    runner.route_operation(operation_id)
-    assert runner.review("https://example.invalid/owner/repo.git", request).status == "clear"
+    assert (
+        runner.review("https://example.invalid/owner/repo.git", request, operation=logical_operation, attempt=1).status
+        == "clear"
+    )
     assert original.close()
 
     calls = 0
@@ -317,8 +319,12 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
         script=(PiA2ScriptedTurn("unused"),),
     )
     replay_runner = PiNativeRunner(replay, RunnerWorkspaces(archive))
-    replay_runner.route_operation(operation_id)
-    assert replay_runner.review("https://example.invalid/owner/repo.git", request).status == "clear"
+    assert (
+        replay_runner.review(
+            "https://example.invalid/owner/repo.git", request, operation=logical_operation, attempt=1
+        ).status
+        == "clear"
+    )
     assert calls == 0
     assert replay.close()
 

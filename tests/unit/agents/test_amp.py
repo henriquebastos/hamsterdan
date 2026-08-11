@@ -77,7 +77,7 @@ def test_valid_review_is_typed_and_instructions_supply_schema(repository: tuple[
         "result.update(status='clear',findings=[],lineage=[])\n"
         "(root/'.impetus/result.json').write_text(json.dumps(result))\n",
     )
-    value = AmpExecuteRunner(argv=argv).review(str(root), review_request(head))
+    value = AmpExecuteRunner(argv=argv).review(str(root), review_request(head), operation="review:test", attempt=1)
     assert isinstance(value, ReviewResult)
     assert value.status == "clear"
 
@@ -196,7 +196,7 @@ def test_execute_stdout_is_a_strict_fallback_when_agent_does_not_write_result(
         "result.update(status='clear',findings=[],lineage=[])\n"
         "print(json.dumps(result,separators=(',',':')))\n",
     )
-    value = AmpExecuteRunner(argv=argv).review(str(root), review_request(head))
+    value = AmpExecuteRunner(argv=argv).review(str(root), review_request(head), operation="review:test", attempt=1)
     assert value.status == "clear"
 
 
@@ -383,7 +383,7 @@ def test_coding_diff_and_file_list_are_host_captured(repository: tuple[Path, str
         "result.update(status='changed',reproduction_status='not_attempted',diff='UNTRUSTED',changed_files=['lie'],validation_evidence=[{'command':'test','status':'passed'}],proposed_commit_message='Propose bounded change')\n"
         "(root/'.impetus/result.json').write_text(json.dumps(result))\n",
     )
-    value = AmpExecuteRunner(argv=argv).code(str(root), request)
+    value = AmpExecuteRunner(argv=argv).code(str(root), request, operation="code:test", attempt=1)
     assert isinstance(value, CodingResult)
     assert value.changed_files == ["hello.txt", "new.bin"]
     assert "UNTRUSTED" not in value.diff
@@ -404,7 +404,7 @@ def test_coding_agent_may_stage_resolution_but_still_cannot_commit(
         "(root/'.impetus/result.json').write_text(json.dumps(result))\n",
     )
 
-    value = AmpExecuteRunner(argv=argv).code(str(root), request)
+    value = AmpExecuteRunner(argv=argv).code(str(root), request, operation="code:test", attempt=1)
 
     assert value.status == "changed"
     assert value.changed_files == ["hello.txt"]
@@ -428,7 +428,7 @@ def test_git_metadata_tampering_and_commits_are_rejected(
         "result.update(status='clear',findings=[],lineage=[]); (root/'.impetus/result.json').write_text(json.dumps(result))\n",
     )
     with pytest.raises(AgentProtocolError, match="Git metadata"):
-        AmpExecuteRunner(argv=argv).review(str(root), review_request(head))
+        AmpExecuteRunner(argv=argv).review(str(root), review_request(head), operation="review:test", attempt=1)
 
 
 def test_secret_environment_and_url_credentials_are_stripped(
@@ -450,9 +450,14 @@ def test_secret_environment_and_url_credentials_are_stripped(
         "result={k:request[k] for k in ('repository','pull_request','epoch','head','base')}\n"
         "result.update(status='clear',findings=[],lineage=[]); (root/'.impetus/result.json').write_text(json.dumps(result))\n",
     )
-    assert AmpExecuteRunner(argv=argv).review(str(root), review_request(head)).status == "clear"
+    assert (
+        AmpExecuteRunner(argv=argv).review(str(root), review_request(head), operation="review:test", attempt=1).status
+        == "clear"
+    )
     with pytest.raises(AgentProtocolError, match="credentials"):
-        AmpExecuteRunner(argv=argv).review("https://token@example.com/repo.git", review_request(head))
+        AmpExecuteRunner(argv=argv).review(
+            "https://token@example.com/repo.git", review_request(head), operation="review:test", attempt=1
+        )
 
 
 @pytest.mark.parametrize(
@@ -500,7 +505,7 @@ def test_symlink_escape_is_not_accepted(repository: tuple[Path, str], tmp_path: 
         "(root/'.impetus/result.json').write_text(json.dumps(result))\n",
     )
     with pytest.raises(AgentProtocolError, match="symlink escapes"):
-        AmpExecuteRunner(argv=argv).code(str(root), request)
+        AmpExecuteRunner(argv=argv).code(str(root), request, operation="code:test", attempt=1)
 
 
 def test_repair_change_requires_confirmed_reproduction() -> None:
@@ -530,6 +535,6 @@ def test_real_amp_tiny_read_only_acceptance_is_explicitly_opt_in(
     for name in list(os.environ):
         if name.upper().startswith(("GITHUB_", "GH_")):
             monkeypatch.delenv(name)
-    value = AmpExecuteRunner(timeout=300).review(str(root), review_request(head))
+    value = AmpExecuteRunner(timeout=300).review(str(root), review_request(head), operation="review:test", attempt=1)
     assert isinstance(value, ReviewResult)
     assert git(root, "status", "--porcelain") == ""

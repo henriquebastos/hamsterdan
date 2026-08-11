@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
@@ -19,7 +18,7 @@ from petrus.motus.activity import ActivityError
 from petrus.motus.dispatch import LocalDispatch
 from petrus.motus.worker import Worker
 
-from hamsterdan.agents import AgentProtocolError, AgentRunner, OperationRoutedRunner
+from hamsterdan.agents import AgentProtocolError, AgentRunner
 from hamsterdan.contracts.readiness import (
     AdmittedConversation,
     ConversationPublicationRequest,
@@ -37,7 +36,7 @@ from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 from hamsterdan.github_app.webhooks import Observation, WebhookCustody, admit_conversation
 
-from .agenticus import AgentComposition, AgentRouteStore
+from .agenticus import AgentComposition, AgentRouteStore, RoutedAgentRunner
 from .application import PrReadinessApplication
 from .payloads import PydanticPayloadConverter
 from .runnable import RunnableIndex
@@ -344,33 +343,29 @@ class HostService:
                 graphql=GitHubGraphQL(transport),
             )
             qualification_fault = self.qualification_fault
-            routes, composition = self.agent_routes, self.agent_composition
-
-            def agent_dispatch(operation: str, attempt: int) -> None:
-                routes.claim(operation, composition)
-                if isinstance(self.runner, OperationRoutedRunner):
-                    digest = hashlib.sha256(f"{operation}\0{attempt}".encode()).hexdigest()
-                    self.runner.route_operation(f"pi:{digest}")
-
+            routed_runner = RoutedAgentRunner(
+                self.runner,
+                self.agent_routes,
+                self.agent_composition,
+                before_call=(
+                    None
+                    if qualification_fault is None
+                    else lambda kind, operation, attempt: qualification_fault.agent(
+                        repository_full_name, pull_request_number, kind, operation
+                    )
+                ),
+            )
             application = self.application_factory(
                 root,
                 f"github:{installation_id}:{repository_id}:pr:{pull_request_number}",
                 authority,
-                self.runner,
+                routed_runner,
                 bot_login=self.config.bot_login,
                 public_clone_url=f"https://github.com/{repository_full_name}.git",
                 workflow_path=self.workflow_path,
                 reminder_delay=self.reminder_delay,
                 publication_fault=None if qualification_fault is None else qualification_fault.publication,
-                agent_fault=(
-                    None
-                    if qualification_fault is None
-                    else lambda kind, operation: qualification_fault.agent(
-                        repository_full_name, pull_request_number, kind, operation
-                    )
-                ),
-                agent_dispatch=agent_dispatch,
-                agent_settle=routes.settle,
+                agent_settle=self.agent_routes.settle,
                 dispatch_path=self._dispatch_path,
             )
             self._locks[key] = threading.Lock()

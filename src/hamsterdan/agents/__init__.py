@@ -1,7 +1,7 @@
 """Credential-free typed agent protocol and Amp execution adapter."""
 
 from .amp import AmpExecuteRunner
-from .pi import OperationRoutedRunner, PiNativeRunner, UnavailablePiRunner, encode_prompt
+from .pi import PiNativeRunner, UnavailablePiRunner, encode_prompt
 from .protocol import (
     AgentCleanupCategory,
     AgentProtocolError,
@@ -31,7 +31,6 @@ __all__ = [
     "CodingResult",
     "ConversationRequest",
     "ConversationResult",
-    "OperationRoutedRunner",
     "PiNativeRunner",
     "RepairRequest",
     "RepairResult",

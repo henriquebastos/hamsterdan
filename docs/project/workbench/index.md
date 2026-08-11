@@ -19,3 +19,4 @@ None.
 - [RS-008 — Establish one Actions-assessment owner](rs-008-establish-one-actions-assessment-owner.md)
 - [RS-009 — Remove false host-runtime surfaces](rs-009-remove-false-host-runtime-surfaces.md)
 - [RS-010 — Move registration evidence to the provider](rs-010-move-registration-evidence-to-provider.md)
+- [RS-011 — Make agent execution identity explicit](rs-011-make-agent-execution-identity-explicit.md)

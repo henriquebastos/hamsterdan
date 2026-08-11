@@ -48,8 +48,6 @@ from .payloads import PydanticPayloadConverter
 
 CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]
-AgentFault = Callable[[str, str], None]
-AgentDispatch = Callable[[str, int], None]
 _MUTATIONS = {"change", "update_base", "resolve_conflict"}
 _ALLOWED = (
     "reply",
@@ -118,10 +116,8 @@ class PrReadinessActivities:
         public_clone_url: str,
         workflow_path: str,
         current_fence: CurrentFence,
-        agent_dispatch: AgentDispatch,
         git_publisher: HostGitPublisher | None = None,
         is_current: Current | None = None,
-        agent_fault: AgentFault | None = None,
     ):
         if authority.repository != repository or authority.pr_number != pr_number:
             raise ValueError("GitHub authority differs from the configured repository/PR")
@@ -130,7 +126,6 @@ class PrReadinessActivities:
         self.public_clone_url, self.workflow_path = public_clone_url, workflow_path
         self.current_fence, self.git_publisher = current_fence, git_publisher
         self.current = is_current
-        self.agent_fault, self.agent_dispatch = agent_fault, agent_dispatch
 
     def _fence(
         self,
@@ -175,11 +170,13 @@ class PrReadinessActivities:
             applied_changes=work.prior_lineage[:100],
         )
         try:
-            self.agent_dispatch(work.operation, 1)
-            fault = getattr(self, "agent_fault", None)
-            if fault is not None:
-                fault("review", work.operation)
-            result = self.runner.review(self.public_clone_url, request, is_current=lambda: self._is_current(work))
+            result = self.runner.review(
+                self.public_clone_url,
+                request,
+                operation=work.operation,
+                attempt=1,
+                is_current=lambda: self._is_current(work),
+            )
         except agents.AgentProtocolError as error:
             self._log_agent_error("review", work, error)
             return ReviewResult(work.epoch, work.head, "unable", [], [], work.operation)
@@ -290,11 +287,13 @@ class PrReadinessActivities:
             declarations,
         )
         try:
-            self.agent_dispatch(work.operation, 1)
-            fault = getattr(self, "agent_fault", None)
-            if fault is not None:
-                fault("conversation", work.operation)
-            result = self.runner.converse(self.public_clone_url, request, is_current=lambda: self._is_current(work))
+            result = self.runner.converse(
+                self.public_clone_url,
+                request,
+                operation=work.operation,
+                attempt=1,
+                is_current=lambda: self._is_current(work),
+            )
             raw = result.intents
             if len(raw) != 1:
                 raise agents.AgentProtocolError("conversation must select exactly one intent")
@@ -483,11 +482,13 @@ class PrReadinessActivities:
                 )
                 break
             try:
-                self.agent_dispatch(work.operation, attempt)
-                fault = getattr(self, "agent_fault", None)
-                if fault is not None:
-                    fault(kind, work.operation)
-                result = self.runner.code(self.public_clone_url, request, is_current=lambda: self._is_current(work))
+                result = self.runner.code(
+                    self.public_clone_url,
+                    request,
+                    operation=work.operation,
+                    attempt=attempt,
+                    is_current=lambda: self._is_current(work),
+                )
             except agents.AgentProtocolError as error:
                 self._log_agent_error(kind, work, error)
                 if error.result_category is not None or error.cleanup_category is not None:

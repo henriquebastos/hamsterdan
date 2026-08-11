@@ -135,7 +135,7 @@ class Runner:
         self.reviews = self.conversations = self.codes = 0
         self.requests: list[object] = []
 
-    def review(self, repository_url, request, *, is_current=None):
+    def review(self, repository_url, request, *, operation, attempt, is_current=None):
         self.reviews += 1
         self.requests.append(request)
         assert is_current is None or is_current()
@@ -143,7 +143,7 @@ class Runner:
             request.repository, request.pull_request, request.epoch, request.head, request.base, "clear", [], []
         )
 
-    def converse(self, repository_url, request, *, is_current=None):
+    def converse(self, repository_url, request, *, operation, attempt, is_current=None):
         self.conversations += 1
         self.requests.append(request)
         text = str(request.comment_context.get("text", ""))
@@ -204,7 +204,7 @@ class Runner:
             intents,
         )
 
-    def code(self, repository_url, request, *, is_current=None):
+    def code(self, repository_url, request, *, operation, attempt, is_current=None):
         self.codes += 1
         self.requests.append(request)
         return CodingResult(
@@ -225,25 +225,25 @@ class Runner:
 
 
 class UnavailableRunner(Runner):
-    def review(self, repository_url, request, *, is_current=None):
+    def review(self, repository_url, request, *, operation, attempt, is_current=None):
         self.reviews += 1
         raise AgentProtocolError("provider unavailable")
 
-    def code(self, repository_url, request, *, is_current=None):
+    def code(self, repository_url, request, *, operation, attempt, is_current=None):
         self.codes += 1
         raise AgentProtocolError("provider unavailable")
 
 
 class RecoveringReviewRunner(Runner):
-    def review(self, repository_url, request, *, is_current=None):
+    def review(self, repository_url, request, *, operation, attempt, is_current=None):
         if self.reviews < 2:
             self.reviews += 1
             raise AgentProtocolError("provider unavailable")
-        return super().review(repository_url, request, is_current=is_current)
+        return super().review(repository_url, request, operation=operation, attempt=attempt, is_current=is_current)
 
 
 class TerminalReviewRunner(Runner):
-    def review(self, repository_url, request, *, is_current=None):
+    def review(self, repository_url, request, *, operation, attempt, is_current=None):
         self.reviews += 1
         raise RuntimeError("terminal review failure")
 
@@ -261,7 +261,6 @@ def application(
         instance_id,
         authority,
         runner,  # type: ignore[arg-type]
-        agent_dispatch=lambda operation, attempt: None,
         agent_settle=lambda operations: None,
         bot_login=BOT,
         public_clone_url=str(tmp_path),
@@ -1232,9 +1231,11 @@ def test_publication_recovery_reconstructs_one_exact_owned_request_after_restart
     first_worker.close()
 
     class FixedRecoveryRunner(Runner):
-        def converse(self, repository_url, request, *, is_current=None):
+        def converse(self, repository_url, request, *, operation, attempt, is_current=None):
             if str(request.comment_context.get("text", "")) != "Retry the blocked publication":
-                return super().converse(repository_url, request, is_current=is_current)
+                return super().converse(
+                    repository_url, request, operation=operation, attempt=attempt, is_current=is_current
+                )
             self.conversations += 1
             self.requests.append(request)
             return ConversationResult(
@@ -1672,7 +1673,6 @@ def test_credentials_never_enter_agent_requests_or_durable_history(tmp_path: Pat
         "github-1-pr-3",
         authority,
         runner,  # type: ignore[arg-type]
-        agent_dispatch=lambda operation, attempt: None,
         agent_settle=lambda operations: None,
         bot_login=BOT,
         public_clone_url=f"https://example.invalid/repo?x={SECRETS[0]}",

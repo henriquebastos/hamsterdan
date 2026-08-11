@@ -38,6 +38,10 @@ WORKSPACE_ARCHIVE = b"\0" * 10240
 READ_POLICY = PiA2RuntimePolicy(frozenset({ToolMethod.WORKSPACE_READ}))
 
 
+def pi_operation(operation: str, attempt: int = 1) -> str:
+    return f"pi:{sha256(f'{operation}\0{attempt}'.encode()).hexdigest()}"
+
+
 class Workspace:
     archive = WORKSPACE_ARCHIVE
     digest = sha256(archive).hexdigest()
@@ -126,7 +130,6 @@ def run_coding_activity(subject: PiNativeRunner, runtime: Runtime, operation: st
     activities.public_clone_url = URL
     activities.current = None
     activities.current_fence = lambda *args: None
-    activities.agent_dispatch = lambda claimed, attempt: subject.route_operation(runtime.operation.operation_id)
     activities.runner = subject
     activities.git_publisher = publisher
     work = ChangeRequest(2, HEAD, operation, BASE, "policy", Intent(2, HEAD, "change", "digest", True, True))
@@ -238,12 +241,12 @@ class Runtime:
 
 def runner(result: dict[str, object], operation: Operation | None = None) -> tuple[PiNativeRunner, Runtime]:
     selected = operation or Operation("review:one")
+    selected.operation_id = pi_operation(selected.operation_id)
     runtime = Runtime(selected, json.dumps(result))
     changed = result.get("changed_files")
     workspaces = Workspaces(changed if isinstance(changed, list) else None)  # type: ignore[arg-type]
     runtime.workspaces = workspaces
     value = PiNativeRunner(runtime, workspaces)  # type: ignore[arg-type]
-    value.route_operation(selected.operation_id)
     return value, runtime
 
 
@@ -257,14 +260,40 @@ def test_review_waits_reads_strict_result_and_closes_verified_operation() -> Non
     }
     subject, runtime = runner(result)
 
-    assert subject.review(URL, request).status == "clear"
+    assert subject.review(URL, request, operation="review:one", attempt=1).status == "clear"
     assert len(runtime.started) == 1
     assert runtime.started[0].prompt == encode_prompt("review", URL, request)
     assert runtime.started[0].workspace_archive == WORKSPACE_ARCHIVE
+    assert runtime.started[0].operation_id == pi_operation("review:one")
     assert runtime.started[0].workspace_digest == sha256(WORKSPACE_ARCHIVE).hexdigest()
     assert runtime.started[0].workspace_correlation == "synthetic-workspace"
     assert runtime.started[0].policy is READ_POLICY
     assert runtime.operation.waits == 1 and runtime.operation.closed == 1
+
+
+def test_logical_operation_and_attempt_derive_stable_distinct_pi_execution_identities() -> None:
+    request = review_request()
+    output = json.dumps(
+        {
+            **{name: getattr(request, name) for name in ("repository", "pull_request", "epoch", "head", "base")},
+            "status": "clear",
+            "findings": [],
+            "lineage": [],
+        }
+    )
+    started: list[str] = []
+
+    for attempt in (1, 2):
+        operation = Operation(pi_operation("review:attempts", attempt))
+        runtime = Runtime(operation, output)
+        workspaces = Workspaces()
+        runtime.workspaces = workspaces
+        subject = PiNativeRunner(runtime, workspaces)  # type: ignore[arg-type]
+
+        assert subject.review(URL, request, operation="review:attempts", attempt=attempt).status == "clear"
+        started.append(runtime.started[0].operation_id)
+
+    assert started == [pi_operation("review:attempts", 1), pi_operation("review:attempts", 2)]
 
 
 def test_conversation_and_code_preserve_strict_output_correlation() -> None:
@@ -281,7 +310,7 @@ def test_conversation_and_code_preserve_strict_output_correlation() -> None:
         "intents": [intent],
     }
     subject, _ = runner(conversation_result, Operation("conversation:one"))
-    assert subject.converse(URL, conversation).intents == [intent]
+    assert subject.converse(URL, conversation, operation="conversation:one", attempt=1).intents == [intent]
 
     coding = coding_request()
     coding_result = {
@@ -297,69 +326,66 @@ def test_conversation_and_code_preserve_strict_output_correlation() -> None:
         "proposed_commit_message": "",
     }
     subject, _ = runner(coding_result, Operation("code:one"))
-    assert subject.code(URL, coding).status == "unchanged"
+    assert subject.code(URL, coding, operation="code:one", attempt=1).status == "unchanged"
     mismatched = dict(coding_result, head="c" * 40)
     subject, _ = runner(mismatched, Operation("code:two"))
     with pytest.raises(AgentProtocolError, match="correlation"):
-        subject.code(URL, coding)
+        subject.code(URL, coding, operation="code:two", attempt=1)
 
 
 def test_malformed_output_and_operation_identity_mismatch_fail_closed() -> None:
     request = review_request()
-    malformed_operation = Operation("review:malformed")
+    malformed_operation = Operation(pi_operation("review:malformed"))
     runtime = Runtime(malformed_operation)
     runtime.output = "not-json"
     malformed = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
-    malformed.route_operation(malformed_operation.operation_id)
     with pytest.raises(AgentProtocolError, match="malformed JSON"):
-        malformed.review(URL, request)
+        malformed.review(URL, request, operation="review:malformed", attempt=1)
     assert malformed_operation.closed == 1
 
     mismatched_operation = Operation("review:other")
     runtime = Runtime(mismatched_operation)
     mismatched = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
-    mismatched.route_operation("review:expected")
     with pytest.raises(AgentProtocolError, match="identity mismatched"):
-        mismatched.review(URL, request)
+        mismatched.review(URL, request, operation="review:expected", attempt=1)
     assert mismatched_operation.cancellations == ["operation-mismatch"]
     assert mismatched_operation.closed == 1
 
 
-def test_runtime_never_starts_without_a_claimed_route() -> None:
+def test_runtime_never_starts_without_valid_explicit_operation_identity() -> None:
     runtime = Runtime(Operation("review:unclaimed"))
     subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
 
-    with pytest.raises(AgentProtocolError, match="route was not selected"):
-        subject.review(URL, review_request())
+    with pytest.raises(AgentProtocolError, match="invalid operation"):
+        subject.review(URL, review_request(), operation="", attempt=1)
 
     assert runtime.started == []
 
 
 def test_authority_is_rechecked_after_workspace_preparation_before_start() -> None:
-    runtime = Runtime(Operation("review:stale-preparation"))
+    runtime = Runtime(Operation(pi_operation("review:stale-preparation")))
     subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
-    subject.route_operation("review:stale-preparation")
     current = iter((True, False))
 
     with pytest.raises(AgentProtocolError) as caught:
-        subject.review(URL, review_request(), is_current=lambda: next(current))
+        subject.review(
+            URL, review_request(), operation="review:stale-preparation", attempt=1, is_current=lambda: next(current)
+        )
 
     assert caught.value.canceled
     assert runtime.started == []
 
 
 def test_stable_start_identity_and_failed_preflight_cannot_start_or_reuse_route() -> None:
-    runtime = Runtime(Operation("review:expected"))
+    runtime = Runtime(Operation(pi_operation("review:expected")))
     subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
-    subject.route_operation("review:expected")
     with pytest.raises(AgentProtocolError):
-        subject.review(URL, review_request())
+        subject.review(URL, review_request(), operation="review:expected", attempt=1)
     first = runtime.started[0]
-    replay_runtime = Runtime(Operation("review:expected"))
+    replay_runtime = Runtime(Operation(pi_operation("review:expected")))
     replay = PiNativeRunner(replay_runtime, replay_runtime.workspaces)  # type: ignore[arg-type]
-    replay.route_operation("review:expected")
     with pytest.raises(AgentProtocolError):
-        replay.review(URL, review_request())
+        replay.review(URL, review_request(), operation="review:expected", attempt=1)
     second = replay_runtime.started[0]
     assert (first.operation_id, first.episode_id, first.turn_id) == (
         second.operation_id,
@@ -368,12 +394,11 @@ def test_stable_start_identity_and_failed_preflight_cannot_start_or_reuse_route(
     )
 
     subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
-    subject.route_operation("review:preflight")
     with pytest.raises(AgentProtocolError, match="repository URL"):
-        subject.review("https://user@example.invalid/repo", review_request())
-    with pytest.raises(AgentProtocolError, match="route was not selected"):
-        subject.review(URL, review_request())
-    assert len(runtime.started) == 1
+        subject.review("https://user@example.invalid/repo", review_request(), operation="review:preflight", attempt=1)
+    with pytest.raises(AgentProtocolError, match="identity mismatched"):
+        subject.review(URL, review_request(), operation="review:preflight", attempt=1)
+    assert len(runtime.started) == 2
 
 
 def test_stale_timeout_failure_and_unverified_cleanup_fail_safe() -> None:
@@ -389,31 +414,29 @@ def test_stale_timeout_failure_and_unverified_cleanup_fail_safe() -> None:
     current = iter((True, True, False))
     stale.wait = lambda timeout=None: (_ for _ in ()).throw(TimeoutError())  # type: ignore[method-assign]
     with pytest.raises(AgentProtocolError) as caught:
-        subject.review(URL, request, is_current=lambda: next(current))
+        subject.review(URL, request, operation="review:stale", attempt=1, is_current=lambda: next(current))
     assert caught.value.canceled and stale.cancellations == ["stale-authority"] and stale.closed == 1
 
     failed = Operation("review:failed", outcome=TurnOutcome.FAILED)
     subject, _ = runner(result, failed)
     with pytest.raises(AgentProtocolError, match="completed result"):
-        subject.review(URL, request)
+        subject.review(URL, request, operation="review:failed", attempt=1)
     assert failed.closed == 1
 
     unverified = Operation("review:unclean", clean=False)
     subject, _ = runner(result, unverified)
     with pytest.raises(AgentProtocolError, match="cleanup is unverified"):
-        subject.review(URL, request)
+        subject.review(URL, request, operation="review:unclean", attempt=1)
 
 
 def test_timeout_cancels_before_verified_close() -> None:
-    operation = Operation("review:timeout")
+    operation = Operation(pi_operation("review:timeout"))
     operation.wait = lambda timeout=None: (_ for _ in ()).throw(TimeoutError())  # type: ignore[method-assign]
     runtime = Runtime(operation)
     clock = iter((0.0, 2.0))
     subject = PiNativeRunner(runtime, runtime.workspaces, timeout=1, clock=lambda: next(clock))  # type: ignore[arg-type]
-    subject.route_operation(operation.operation_id)
-
     with pytest.raises(AgentProtocolError) as caught:
-        subject.review(URL, review_request())
+        subject.review(URL, review_request(), operation="review:timeout", attempt=1)
 
     assert caught.value.timed_out
     assert operation.cancellations == ["host-timeout"]
@@ -434,8 +457,8 @@ def test_coding_archive_policy_derives_unchanged_and_changed_or_rejects_missing_
         "proposed_commit_message": "",
     }
     subject, runtime = runner(dict(base, status="unchanged"), Operation("code:archive"))
-    assert subject.code(URL, request).status == "unchanged"
-    assert runtime.loaded_archives == ["code:archive"]
+    assert subject.code(URL, request, operation="code:archive", attempt=1).status == "unchanged"
+    assert runtime.loaded_archives == [pi_operation("code:archive")]
 
     subject, runtime = runner(
         dict(
@@ -448,14 +471,14 @@ def test_coding_archive_policy_derives_unchanged_and_changed_or_rejects_missing_
         ),
         Operation("code:changed"),
     )
-    changed = subject.code(URL, request)
+    changed = subject.code(URL, request, operation="code:changed", attempt=1)
     assert changed.diff == "canonical diff" and changed.changed_files == ["x.py"]
-    assert runtime.loaded_archives == ["code:changed"]
+    assert runtime.loaded_archives == [pi_operation("code:changed")]
 
     subject, runtime = runner(dict(base, status="unchanged"), Operation("code:missing"))
     runtime.archive = b""
     with pytest.raises(AgentProtocolError, match="archive is unavailable") as caught:
-        subject.code(URL, request)
+        subject.code(URL, request, operation="code:missing", attempt=1)
     assert caught.value.result_category is AgentResultCategory.WORKSPACE_RECONCILIATION
 
     subject, runtime = runner(dict(base, status="unchanged"), Operation("code:invalid-archive"))
@@ -463,7 +486,7 @@ def test_coding_archive_policy_derives_unchanged_and_changed_or_rejects_missing_
         RuntimeProtocolError("workspace-archive-corrupt")
     )
     with pytest.raises(AgentProtocolError, match="archive is unavailable") as caught:
-        subject.code(URL, request)
+        subject.code(URL, request, operation="code:invalid-archive", attempt=1)
     assert caught.value.result_category is AgentResultCategory.WORKSPACE_RECONCILIATION
 
 
@@ -590,14 +613,13 @@ def test_workspace_preparation_and_cleanup_failure_retains_both_closed_causes() 
 
 def test_throwing_runtime_identity_is_sanitized_and_still_closes() -> None:
     operation_id = "code:broken-identity"
-    operation = BrokenIdentityOperation(operation_id)
+    operation = BrokenIdentityOperation(pi_operation(operation_id))
     runtime = Runtime(operation)
     subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
-    subject.route_operation(operation_id)
     operation.identity_broken = True
 
     with pytest.raises(AgentProtocolError) as caught:
-        subject.code(URL, coding_request())
+        subject.code(URL, coding_request(), operation=operation_id, attempt=1)
 
     assert caught.value.result_category is AgentResultCategory.RUNTIME_LIFECYCLE
     assert caught.value.cleanup_category is AgentCleanupCategory.UNVERIFIED
@@ -610,23 +632,20 @@ def test_throwing_cancel_cannot_replace_correlation_or_stale_authority() -> None
     mismatch.cancel = lambda reason: (_ for _ in ()).throw(RuntimeError("private cancel diagnostic"))  # type: ignore[method-assign]
     runtime = Runtime(mismatch)
     subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
-    subject.route_operation("code:expected")
-
     with pytest.raises(AgentProtocolError) as caught:
-        subject.code(URL, request)
+        subject.code(URL, request, operation="code:expected", attempt=1)
 
     assert caught.value.result_category is AgentResultCategory.CORRELATION
     assert mismatch.closed == 1
 
-    stale = Operation("code:stale")
+    stale = Operation(pi_operation("code:stale"))
     stale.cancel = lambda reason: (_ for _ in ()).throw(RuntimeError("private cancel diagnostic"))  # type: ignore[method-assign]
     runtime = Runtime(stale)
     subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
-    subject.route_operation(stale.operation_id)
     current = iter((True, True, False))
 
     with pytest.raises(AgentProtocolError) as caught:
-        subject.code(URL, request, is_current=lambda: next(current))
+        subject.code(URL, request, operation="code:stale", attempt=1, is_current=lambda: next(current))
 
     assert caught.value.canceled and caught.value.result_category is None
     assert stale.closed == 1

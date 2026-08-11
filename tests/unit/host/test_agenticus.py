@@ -31,6 +31,7 @@ from hamsterdan.host.agenticus import (
     AgentConfig,
     AgentMode,
     AgentRouteStore,
+    RoutedAgentRunner,
     compose_agent,
     resolve_agenticus,
     select_agent_runner,
@@ -234,6 +235,51 @@ def test_snapshot_persists_and_claim_reconstructs_same_route_after_restart(tmp_p
     different = AgentComposition(composition.mode, composition.profile, changed)
     with pytest.raises(AgentCompositionError, match="route"):
         reopened.claim("review:one", different)
+
+
+def test_routed_runner_claims_and_forwards_each_explicit_attempt_without_changing_identity(tmp_path: Path) -> None:
+    composition = compose_agent(AgentConfig(AgentMode.AGENTICUS))
+    store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    store.activate(composition, tmp_path / "applications")
+    calls: list[tuple[str, int]] = []
+
+    class Runner:
+        def review(self, repository, request, *, operation, attempt, is_current=None):
+            calls.append((operation, attempt))
+            return object()
+
+    subject = RoutedAgentRunner(Runner(), store, composition)  # type: ignore[arg-type]
+    for attempt in (1, 2):
+        subject.review("repository", object(), operation="review:one", attempt=attempt)  # type: ignore[arg-type]
+
+    assert calls == [("review:one", 1), ("review:one", 2)]
+    assert store.claim("review:one", composition).operation == "review:one"
+
+
+def test_routed_runner_claims_before_fault_and_fences_route_cutover_until_settled(tmp_path: Path) -> None:
+    agenticus = compose_agent(AgentConfig(AgentMode.AGENTICUS))
+    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+    store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    store.activate(agenticus, tmp_path / "applications")
+    calls: list[str] = []
+
+    class Runner:
+        def review(self, *args, **kwargs):
+            calls.append("provider")
+
+    def fail(kind: str, operation: str, attempt: int) -> None:
+        assert (kind, operation, attempt) == ("review", "review:fault", 1)
+        raise RuntimeError("qualified fault")
+
+    subject = RoutedAgentRunner(Runner(), store, agenticus, before_call=fail)  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError, match="qualified fault"):
+        subject.review("repository", object(), operation="review:fault", attempt=1)  # type: ignore[arg-type]
+
+    assert calls == []
+    with pytest.raises(AgentCompositionError, match="prior-route work is unresolved"):
+        store.activate(legacy, tmp_path / "applications")
+    store.settle(("review:fault",))
+    store.activate(legacy, tmp_path / "applications")
 
 
 def test_rollback_refuses_while_agenticus_work_is_unresolved(tmp_path: Path) -> None:
