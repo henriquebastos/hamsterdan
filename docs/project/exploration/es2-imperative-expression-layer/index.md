@@ -214,14 +214,24 @@ Findings:
 4. Petrus's position-based anonymous declaration identity makes exact
    schema-level regeneration comparison possible; a promoted DSL must
    preserve it.
-5. Concurrent `main` evolution is itself evidence: the experiment rebases
-   onto `main` and reruns exact diffs, testing whether the vocabulary
-   absorbs real topology change.
+5. Concurrent `main` evolution is itself evidence: the experiment merges
+   `main` and reruns exact diffs, testing whether the vocabulary absorbs
+   real topology change. First merge (RS-013) passed untouched.
+6. The honesty test passed by refusing generalization (commit `6b8a672`).
+   Mutation acceptance did not fit `authorized_effect` — repair and change
+   share one `MutationState` owner, and repair enriches a fingerprint-less
+   result from the read `ActionsState` before folding. Forcing those under
+   the generic fragment would have hidden workflow decisions behind
+   parameters, so they became a distinct `MutationAcceptance` vocabulary
+   item whose enrichment read arc is a visible declarative `reads`
+   parameter. Grammar shape emerging: a small set of named fragment
+   families, not one universal combinator. Coverage: 24 transitions of 69;
+   the fingerprint-stamping behavior is proven identical to the
+   hand-written net.
 
-Next slices: mutation-owned accepts (`repair`/`change` share `MutationState`;
-`RepairResult` additionally reads `ActionsState`) — the first real test of
-whether a generic combinator stays honest or starts hiding workflow
-decisions — then the authorization/request fragments.
+Next slices: authorization/request fragments (`authorize_*`), observation
+entries, and the generation-boundary cohort — the relational-read and
+multi-owner cases the open questions anticipate.
 
 ## Open questions
 
