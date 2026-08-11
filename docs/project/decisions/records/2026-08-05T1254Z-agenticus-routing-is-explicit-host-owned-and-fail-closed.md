@@ -7,6 +7,8 @@ deciders:
 related:
   - CV16
   - CV16.DS11
+superseded_by:
+  - 2026-08-11T2359Z-agenticus-pi-is-the-only-agent-execution-route
 ---
 
 # Agenticus routing is explicit, host-owned, and fail-closed

@@ -727,7 +727,10 @@ the qualification seam or provider delegate. It forwards the unchanged pair;
 `PiNativeRunner` alone derives the stable per-Attempt runtime identity used by
 runtime, workspace, Episode, and Turn. This preserves one logical route across
 coding retries while making each provider Attempt distinct and replay-stable.
-Legacy Amp remains explicitly composed and receives no Pi identity semantics.
+At that refinement boundary, legacy Amp remained explicitly composed and
+received no Pi identity semantics. RS-013 subsequently removed that rollback
+path: Agenticus/Pi is now the sole execution architecture, while exact
+profile/snapshot route custody remains for replay safety.
 
 The correction reinforces the execution-scope conclusion: pass the smallest
 immutable identity required by the callee, keep durable ownership at the host
@@ -750,6 +753,23 @@ trailers, current PR authority, compare-and-swap, and publication categories
 remain host policy. A one-shot provider method was rejected because it would
 move that comparison after an unauthorized orphan commit had already been
 created. No Net topology changed.
+
+### Production single-agent-route conclusion
+
+RS-013 removed the final dormant agent execution architecture. Host startup now
+resolves one exact isolated Pi profile and immutable Catalog snapshot, composes
+one owned Pi runtime/workspace pair, and chooses only between a probe-qualified
+`PiNativeRunner` and fail-closed unavailability. There is no mode enum, isolation
+waiver, nullable snapshot, Amp subprocess adapter, or rollback selection.
+
+Durable operation custody remains because it protects a different invariant:
+every retry/restart must use the exact same provider/model profile and Catalog
+snapshot. Existing Agenticus custody migrates exactly; unresolved legacy work is
+refused rather than interpreted through Pi. This is another instance of the
+clarity rule established by the execution-scope exploration: remove false
+choices, but retain the smallest durable identity that proves replay semantics.
+The unrelated Amp GitHub webhook relay remains provider ingress. No Net topology
+changed.
 
 ### Production execution-scope conclusion
 

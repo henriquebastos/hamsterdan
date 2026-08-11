@@ -19,7 +19,7 @@ from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.models import RegistrationInventory
 from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host.__main__ import inspect_instance
-from hamsterdan.host.agenticus import AgentConfig, AgentMode, AgentRouteStore, compose_agent
+from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
 from hamsterdan.host.service import HostService, QualificationFault
 
@@ -128,7 +128,7 @@ def service(root: Path, *, clients: Clients | None = None, factory: Any = Applic
 
 
 def agent_custody(root: Path):
-    composition = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+    composition = compose_agent()
     routes = AgentRouteStore(root / "test-agent-routes.sqlite3")
     routes.activate(composition, root / "applications")
     return composition, routes
@@ -151,7 +151,7 @@ def test_agent_route_is_claimed_from_explicit_execution_identity_before_start(tm
             events.append(f"claim:{operation}")
             return super().claim(operation, composition)
 
-    composition = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+    composition = compose_agent()
     routes = RecordingRoutes(tmp_path / "test-agent-routes.sqlite3")
     routes.activate(composition, tmp_path / "applications")
     runner = RoutedRunner()

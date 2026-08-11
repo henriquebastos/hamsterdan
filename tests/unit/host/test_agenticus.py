@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ from petrus.impetus.history.codec import encode_record
 from petrus.impetus.petrinet import NetPath
 from petrus.motus.activity import ExecutionPolicy
 
-from hamsterdan.agents import AmpExecuteRunner, PiNativeRunner, UnavailablePiRunner
+from hamsterdan.agents import PiNativeRunner, UnavailablePiRunner
 from hamsterdan.host import __main__ as host_main
 from hamsterdan.host.__main__ import _close_owned_resources, _compose_agent_runtime
 from hamsterdan.host.agenticus import (
@@ -28,18 +29,16 @@ from hamsterdan.host.agenticus import (
     HOST_FENCED_EFFECT,
     AgentComposition,
     AgentCompositionError,
-    AgentConfig,
-    AgentMode,
     AgentRouteStore,
     RoutedAgentRunner,
     compose_agent,
+    compose_agent_runner,
     resolve_agenticus,
-    select_agent_runner,
 )
 
 
 def test_exact_pi_native_a2_local_api_key_profile_resolves_immutable_snapshot() -> None:
-    composition = compose_agent(AgentConfig(AgentMode.AGENTICUS))
+    composition = compose_agent()
 
     assert composition.profile == "pi-native-a2-local-anthropic-claude-sonnet-4-5-api-key"
     assert ("anthropic", "claude-sonnet-4-5") in PI_API_KEY_CATALOG
@@ -71,14 +70,12 @@ def test_missing_disabled_and_incompatible_profiles_refuse_deterministically() -
         resolve_agenticus(descriptors=descriptors)
 
 
-def test_amp_a1_and_legacy_amp_are_not_isolation() -> None:
+def test_amp_a1_is_not_isolation() -> None:
     descriptors = tuple(
         AMP_A1 if item.identity.kind is DescriptorKind.RUNTIME else item for item in AGENTICUS_DESCRIPTORS
     )
     with pytest.raises(AgentCompositionError, match="not agent isolation"):
         resolve_agenticus(descriptors=descriptors)
-    with pytest.raises(AgentCompositionError, match="cannot satisfy required agent isolation"):
-        compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=True))
 
 
 def test_agent_net_runner_a5_topology_is_explicitly_rejected() -> None:
@@ -90,18 +87,10 @@ def test_agent_net_runner_a5_topology_is_explicitly_rejected() -> None:
         resolve_agenticus(descriptors=descriptors)
 
 
-def test_modes_are_explicit_and_legacy_never_implicit_fallback() -> None:
-    with pytest.raises(AgentCompositionError, match="must be exactly"):
-        AgentConfig.from_environment({})
-    legacy = compose_agent(
-        AgentConfig.from_environment(
-            {
-                "HAMSTERDAN_AGENT_MODE": "legacy-amp",
-                "HAMSTERDAN_AGENT_ISOLATION_REQUIRED": "false",
-            }
-        )
-    )
-    assert legacy.mode is AgentMode.LEGACY_AMP and legacy.snapshot is None
+@pytest.mark.parametrize("name", ["HAMSTERDAN_AGENT_MODE", "HAMSTERDAN_AGENT_ISOLATION_REQUIRED"])
+def test_removed_agent_route_settings_fail_clearly(name: str) -> None:
+    with pytest.raises(AgentCompositionError, match="no longer supported"):
+        compose_agent({name: "legacy-amp"})
 
 
 class ProbeRuntime:
@@ -135,8 +124,7 @@ def probe_result(disposition: ProbeDisposition, *, runtime=PI_NATIVE_A2_LOCAL.id
 
 def test_exact_ready_probe_selects_pi_without_starting_authority() -> None:
     runtime = ProbeRuntime(probe_result(ProbeDisposition.READY))
-    runner = select_agent_runner(
-        compose_agent(AgentConfig(AgentMode.AGENTICUS)),
+    runner = compose_agent_runner(
         pi_runtime=runtime,
         pi_workspaces=object(),  # type: ignore[arg-type]
     )
@@ -145,30 +133,19 @@ def test_exact_ready_probe_selects_pi_without_starting_authority() -> None:
 
 
 @pytest.mark.parametrize("disposition", [ProbeDisposition.NOT_INSTALLED, ProbeDisposition.UNAVAILABLE])
-def test_not_ready_probe_fails_closed_without_legacy_fallback(disposition: ProbeDisposition) -> None:
+def test_not_ready_probe_fails_closed(disposition: ProbeDisposition) -> None:
     runtime = ProbeRuntime(probe_result(disposition))
-    runner = select_agent_runner(
-        compose_agent(AgentConfig(AgentMode.AGENTICUS)),
+    runner = compose_agent_runner(
         pi_runtime=runtime,
         pi_workspaces=object(),  # type: ignore[arg-type]
     )
     assert isinstance(runner, UnavailablePiRunner)
-    assert not isinstance(runner, AmpExecuteRunner)
     assert runtime.probes == 1 and runtime.starts == 0
 
 
-def test_legacy_amp_is_selected_only_by_explicit_legacy_composition() -> None:
-    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
-    assert isinstance(select_agent_runner(legacy), AmpExecuteRunner)
-
-
-def test_production_runtime_requires_explicit_installation_but_legacy_consults_none(tmp_path: Path) -> None:
-    agenticus = compose_agent(AgentConfig(AgentMode.AGENTICUS))
+def test_production_runtime_requires_explicit_installation(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="explicit direct-key and Pi runtime paths"):
-        _compose_agent_runtime(agenticus, tmp_path / "agenticus", {})
-
-    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
-    assert _compose_agent_runtime(legacy, tmp_path / "legacy", {}) == (None, None)
+        _compose_agent_runtime(tmp_path / "agenticus", {})
 
 
 def test_production_runtime_constructs_workspace_before_owned_runtime(
@@ -198,7 +175,7 @@ def test_production_runtime_constructs_workspace_before_owned_runtime(
     )
 
     with pytest.raises(ValueError, match="synthetic workspace failure"):
-        _compose_agent_runtime(compose_agent(AgentConfig(AgentMode.AGENTICUS)), tmp_path / "state", environment)
+        _compose_agent_runtime(tmp_path / "state", environment)
     assert runtimes == 0
 
 
@@ -220,7 +197,7 @@ def test_startup_cleanup_attempts_every_independently_owned_resource() -> None:
 
 
 def test_snapshot_persists_and_claim_reconstructs_same_route_after_restart(tmp_path: Path) -> None:
-    composition = compose_agent(AgentConfig(AgentMode.AGENTICUS))
+    composition = compose_agent()
     store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
     store.activate(composition, tmp_path / "applications")
     claimed = store.claim("review:one", composition)
@@ -232,13 +209,103 @@ def test_snapshot_persists_and_claim_reconstructs_same_route_after_restart(tmp_p
     assert reconstructed == claimed
     assert composition.snapshot is not None
     changed = ResolutionSnapshot(composition.snapshot.catalog_revision + 1, composition.snapshot.descriptors)
-    different = AgentComposition(composition.mode, composition.profile, changed)
+    different = AgentComposition(composition.profile, changed)
     with pytest.raises(AgentCompositionError, match="route"):
         reopened.claim("review:one", different)
 
 
+def legacy_route_database(path: Path, composition: AgentComposition) -> tuple[sqlite3.Connection, str]:
+    snapshot = json.dumps(composition.snapshot.to_data(), sort_keys=True, separators=(",", ":"))
+    database = sqlite3.connect(path)
+    database.executescript(
+        """CREATE TABLE agent_routes (
+            operation TEXT PRIMARY KEY, mode TEXT NOT NULL, profile TEXT NOT NULL,
+            snapshot TEXT, resolved INTEGER NOT NULL
+        );
+        CREATE TABLE active_agent_route (
+            singleton INTEGER PRIMARY KEY, mode TEXT NOT NULL, profile TEXT NOT NULL, snapshot TEXT
+        );"""
+    )
+    return database, snapshot
+
+
+def test_legacy_schema_preserves_only_agenticus_operation_custody(tmp_path: Path) -> None:
+    path = tmp_path / "agent-routes.sqlite3"
+    composition = compose_agent()
+    database, snapshot = legacy_route_database(path, composition)
+    database.execute(
+        "INSERT INTO agent_routes VALUES (?, 'agenticus', ?, ?, 0)",
+        ("review:existing", composition.profile, snapshot),
+    )
+    database.execute("INSERT INTO agent_routes VALUES ('review:old', 'legacy-amp', 'old', NULL, 1)")
+    database.execute(
+        "INSERT INTO active_agent_route VALUES (1, 'agenticus', ?, ?)",
+        (composition.profile, snapshot),
+    )
+    database.commit()
+    database.close()
+
+    store = AgentRouteStore(path)
+    store.activate(composition, tmp_path / "applications")
+
+    assert store.claim("review:existing", composition).operation == "review:existing"
+    columns = {row[1] for row in store._database.execute("PRAGMA table_info(agent_routes)")}
+    assert columns == {"operation", "profile", "snapshot", "resolved"}
+    assert store._database.execute("SELECT 1 FROM agent_routes WHERE operation = 'review:old'").fetchone() is None
+
+
+def test_terminal_history_repairs_legacy_crash_gap_before_migration(tmp_path: Path) -> None:
+    path = tmp_path / "agent-routes.sqlite3"
+    composition = compose_agent()
+    database, _ = legacy_route_database(path, composition)
+    database.execute("INSERT INTO agent_routes VALUES ('review:terminal', 'legacy-amp', 'old', NULL, 0)")
+    database.execute("INSERT INTO active_agent_route VALUES (1, 'legacy-amp', 'old', NULL)")
+    database.commit()
+    database.close()
+    history = tmp_path / "applications/1/2/3/history.jsonl"
+    history.parent.mkdir(parents=True)
+    requested = ActivityRequested(
+        NetPath("execute.review"),
+        activity="review",
+        input={"work": {"operation": "review:terminal"}},
+        policy=ExecutionPolicy(1, 30),
+        correlation="review:terminal",
+        idempotency="review:terminal",
+        occurrence=1,
+    )
+    completed = ActivityCompleted(NetPath("execute.review"), {}, occurrence=1)
+    history.write_text("\n".join(json.dumps(encode_record(record)) for record in (requested, completed)) + "\n")
+
+    store = AgentRouteStore(path)
+    store.activate(composition, tmp_path / "applications")
+
+    assert store._database.execute("SELECT 1 FROM agent_routes").fetchone() is None
+
+
+@pytest.mark.parametrize("mode", ["legacy-amp", "agenticus"])
+def test_unreconstructible_unresolved_legacy_schema_is_refused_atomically(tmp_path: Path, mode: str) -> None:
+    path = tmp_path / "agent-routes.sqlite3"
+    composition = compose_agent()
+    database, _ = legacy_route_database(path, composition)
+    database.execute("INSERT INTO agent_routes VALUES ('review:blocked', ?, 'old', NULL, 0)", (mode,))
+    database.execute("INSERT INTO active_agent_route VALUES (1, ?, 'old', NULL)", (mode,))
+    database.commit()
+    database.close()
+
+    store = AgentRouteStore(path)
+    with pytest.raises(AgentCompositionError, match="cannot be resumed|lacks reconstructible composition"):
+        store.activate(composition, tmp_path / "applications")
+    store.close()
+
+    unchanged = sqlite3.connect(path)
+    columns = {row[1] for row in unchanged.execute("PRAGMA table_info(agent_routes)")}
+    assert "mode" in columns
+    assert unchanged.execute("SELECT mode, resolved FROM agent_routes").fetchone() == (mode, 0)
+    unchanged.close()
+
+
 def test_routed_runner_claims_and_forwards_each_explicit_attempt_without_changing_identity(tmp_path: Path) -> None:
-    composition = compose_agent(AgentConfig(AgentMode.AGENTICUS))
+    composition = compose_agent()
     store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
     store.activate(composition, tmp_path / "applications")
     calls: list[tuple[str, int]] = []
@@ -256,9 +323,8 @@ def test_routed_runner_claims_and_forwards_each_explicit_attempt_without_changin
     assert store.claim("review:one", composition).operation == "review:one"
 
 
-def test_routed_runner_claims_before_fault_and_fences_route_cutover_until_settled(tmp_path: Path) -> None:
-    agenticus = compose_agent(AgentConfig(AgentMode.AGENTICUS))
-    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+def test_routed_runner_claims_before_fault(tmp_path: Path) -> None:
+    agenticus = compose_agent()
     store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
     store.activate(agenticus, tmp_path / "applications")
     calls: list[str] = []
@@ -276,39 +342,25 @@ def test_routed_runner_claims_before_fault_and_fences_route_cutover_until_settle
         subject.review("repository", object(), operation="review:fault", attempt=1)  # type: ignore[arg-type]
 
     assert calls == []
-    with pytest.raises(AgentCompositionError, match="prior-route work is unresolved"):
-        store.activate(legacy, tmp_path / "applications")
-    store.settle(("review:fault",))
-    store.activate(legacy, tmp_path / "applications")
 
 
-def test_rollback_refuses_while_agenticus_work_is_unresolved(tmp_path: Path) -> None:
-    store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
-    agenticus = compose_agent(AgentConfig(AgentMode.AGENTICUS))
-    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
-    store.activate(agenticus, tmp_path / "applications")
-    store.claim("code:one", agenticus)
-    with pytest.raises(AgentCompositionError, match="prior-route work is unresolved"):
-        store.activate(legacy, tmp_path / "applications")
-    store.settle(("code:one",))
-    store.activate(legacy, tmp_path / "applications")
-
-
-def test_old_process_cannot_claim_after_an_atomic_route_cutover(tmp_path: Path) -> None:
-    agenticus = compose_agent(AgentConfig(AgentMode.AGENTICUS))
-    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+def test_old_process_cannot_claim_after_an_atomic_composition_change(tmp_path: Path) -> None:
+    agenticus = compose_agent()
+    changed = AgentComposition(
+        agenticus.profile,
+        ResolutionSnapshot(agenticus.snapshot.catalog_revision + 1, agenticus.snapshot.descriptors),
+    )
     old_process = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
     old_process.activate(agenticus, tmp_path / "applications")
     new_process = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
-    new_process.activate(legacy, tmp_path / "applications")
+    new_process.activate(changed, tmp_path / "applications")
 
     with pytest.raises(AgentCompositionError, match="no longer active"):
         old_process.claim("review:late", agenticus)
 
 
-def test_terminal_history_repairs_crash_gap_before_rollback(tmp_path: Path) -> None:
-    agenticus = compose_agent(AgentConfig(AgentMode.AGENTICUS))
-    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+def test_terminal_history_repairs_crash_gap_before_composition_change(tmp_path: Path) -> None:
+    agenticus = compose_agent()
     store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
     store.activate(agenticus, tmp_path / "applications")
     store.claim("review:terminal", agenticus)
@@ -328,12 +380,11 @@ def test_terminal_history_repairs_crash_gap_before_rollback(tmp_path: Path) -> N
     history.write_text("\n".join(json.dumps(encode_record(record)) for record in (request, completed)) + "\n")
 
     reopened = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
-    reopened.activate(legacy, tmp_path / "applications")
+    reopened.activate(agenticus, tmp_path / "applications")
 
 
 def test_history_repair_refuses_a_mismatched_terminal_transition(tmp_path: Path) -> None:
-    agenticus = compose_agent(AgentConfig(AgentMode.AGENTICUS))
-    legacy = compose_agent(AgentConfig(AgentMode.LEGACY_AMP, isolation_required=False))
+    agenticus = compose_agent()
     store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
     store.activate(agenticus, tmp_path / "applications")
     store.claim("review:mismatched", agenticus)
@@ -352,7 +403,7 @@ def test_history_repair_refuses_a_mismatched_terminal_transition(tmp_path: Path)
     history.write_text("\n".join(json.dumps(encode_record(record)) for record in (request, completed)) + "\n")
 
     with pytest.raises(AgentCompositionError, match="mismatched terminal"):
-        store.activate(legacy, tmp_path / "applications")
+        store.activate(agenticus, tmp_path / "applications")
 
 
 def test_host_composition_imports_only_public_defining_modules() -> None:

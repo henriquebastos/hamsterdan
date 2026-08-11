@@ -26,9 +26,8 @@ exists, and delegates the unchanged pair.
 Provider execution identity belongs to the provider adapter. `PiNativeRunner`
 alone derives `pi:sha256(operation + "\\0" + attempt)` for runtime, workspace,
 Episode, and Turn identity. Replay of one Attempt is stable; later Attempts are
-distinct. Legacy Amp receives the same explicit pair without acquiring Pi
-semantics. Route settlement and restart repair remain keyed only by the logical
-operation.
+distinct. Route settlement and restart repair remain keyed only by the logical
+operation. RS-013 subsequently removed the legacy Amp adapter entirely.
 
 The `ContextVar`, `OperationRoutedRunner`, `route_operation`, `agent_dispatch`,
 and Activity-side fault-routing surfaces were deleted. No generalized

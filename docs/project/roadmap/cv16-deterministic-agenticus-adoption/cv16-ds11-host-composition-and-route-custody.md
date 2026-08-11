@@ -14,11 +14,12 @@ updated: 2026-08-09
 - Register and explicitly enable the exact Pi native A2 Local topology in a
   host-owned Catalog, retain its provider-neutral immutable snapshot, and bind
   Anthropic `claude-sonnet-4-5` as separately validated profile metadata.
-- Expose only `agenticus` and `legacy-amp`; reject implicit selection, reject Amp
-  A1 as isolation, and keep legacy as explicit rollback.
-- Claim each operation's complete route before dispatch, reconstruct only that
-  route on retry, settle after durable terminal History, repair the terminal
-  crash window on startup, and refuse cutover with unresolved prior-route work.
+- Compose only isolated Pi native A2 Local, reject Amp A1 as isolation, and
+  fail closed when the exact Pi runtime is unavailable.
+- Claim each operation's exact profile and Catalog snapshot before dispatch,
+  reconstruct only that composition on retry, settle after durable terminal
+  History, repair the terminal crash window on startup, and refuse a composition
+  change with unresolved prior-composition work.
 - Derive a distinct deterministic Pi runtime-operation identity for each coding
   attempt while keeping every attempt fenced to that one durable Activity route.
 - Preserve the existing request/result protocol and all readiness business and

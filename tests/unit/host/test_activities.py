@@ -1,13 +1,10 @@
-import subprocess
-import sys
 from dataclasses import replace
-from pathlib import Path
 from typing import ClassVar
 
 import pytest
 from petrus.motus.activity import ActivityError
 
-from hamsterdan.agents import AgentProtocolError, AgentResultCategory, AmpExecuteRunner, CodingResult
+from hamsterdan.agents import AgentProtocolError, AgentResultCategory, CodingResult
 from hamsterdan.agents import ConversationResult as AgentConversationResult
 from hamsterdan.agents import ReviewResult as AgentReviewResult
 from hamsterdan.contracts.readiness import (
@@ -41,7 +38,7 @@ from hamsterdan.contracts.readiness import (
 )
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.activities import PrReadinessActivities, StaleAuthorityError, activity_definitions
-from hamsterdan.host.git_publish import GitPublishError, GitPublishResult, PublicationCategory, payload_digest
+from hamsterdan.host.git_publish import GitPublishError, GitPublishResult, PublicationCategory
 from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS
 
 REQUEST_TYPES = {
@@ -651,109 +648,6 @@ def test_final_fence_failure_retains_closed_category_before_publication(
     assert operations.git_publisher.calls == 0
     assert fence_calls == 2
     assert f"coding result rejected kind=change category={log_category}" in caplog.text
-
-
-def test_confirmed_change_bridges_real_disposable_checkout_to_host_publication(tmp_path: Path) -> None:
-    source = tmp_path / "source"
-    source.mkdir()
-
-    def git(*args: str) -> str:
-        return subprocess.run(
-            ("git", "-C", str(source), *args), check=True, text=True, capture_output=True
-        ).stdout.strip()
-
-    git("init", "-q")
-    git("config", "user.email", "test@example.invalid")
-    git("config", "user.name", "Test")
-    fixture = source / "fixture.txt"
-    fixture.write_text("before\n")
-    git("add", "fixture.txt")
-    git("commit", "-qm", "requested head")
-    requested_head = git("rev-parse", "HEAD")
-    (source / "later.txt").write_text("default branch advanced\n")
-    git("add", "later.txt")
-    git("commit", "-qm", "advance source after requested head")
-    advanced_head = git("rev-parse", "HEAD")
-
-    script = tmp_path / "agent.py"
-    script.write_text(
-        "import json, pathlib, subprocess\n"
-        "root = pathlib.Path.cwd()\n"
-        "request = json.loads((root / '.impetus/request.json').read_text())\n"
-        "assert request['selected_work'] == "
-        + repr(
-            [
-                Intent(
-                    3,
-                    requested_head,
-                    "change",
-                    "digest",
-                    True,
-                    True,
-                    {"request": "update the tracked fixture"},
-                ).dump()
-            ]
-        )
-        + "\n"
-        "observed = subprocess.run(['git', 'rev-parse', 'HEAD'], check=True, text=True, capture_output=True).stdout.strip()\n"
-        "reflog = subprocess.run(['git', 'reflog', '--format=%gs'], check=True, text=True, capture_output=True).stdout\n"
-        "assert observed == request['head'] and 'moving from' in reflog and request['head'] in reflog\n"
-        "assert not (root / 'later.txt').exists()\n"
-        "(root / 'fixture.txt').write_text('after\\n')\n"
-        "result = {key: request[key] for key in ('kind','repository','pull_request','epoch','head','base','ref')}\n"
-        "result.update(status='changed', reproduction_status='not_attempted', diff='CLAIMED', "
-        "changed_files=['claimed.txt'], validation_evidence=[{'detached_at_request_head': True, 'head': observed}], "
-        "proposed_commit_message='Update tracked fixture')\n"
-        "(root / '.impetus/result.json').write_text(json.dumps(result))\n"
-    )
-
-    class Publisher:
-        calls: ClassVar[list[tuple[CodingResult, dict[str, object]]]] = []
-
-        def publish(self, result: CodingResult, **kwargs: object) -> GitPublishResult:
-            self.calls.append((result, kwargs))
-            return GitPublishResult("c" * 40)
-
-    operations = object.__new__(PrReadinessActivities)
-    operations.repository = "owner/repo"
-    operations.pr_number = 7
-    operations.public_clone_url = str(source)
-    operations.runner = AmpExecuteRunner(argv=(sys.executable, str(script)))
-    operations.git_publisher = Publisher()
-    operations.current = None
-    fences: list[tuple[object, ...]] = []
-    operations.current_fence = lambda *args: fences.append(args)
-    intent = {"kind": "change", "arguments": {"request": "update the tracked fixture"}}
-    payload = {"base_head": requested_head, "policy_digest": "policy", "intent": intent}
-    work = request("change", 3, requested_head, "confirmed-change-operation", payload=payload)
-
-    result = operations.change(work)
-
-    assert result.ok and result.head == requested_head and result.provisional_head == "c" * 40
-    assert result.operation == work.operation
-    assert len(operations.git_publisher.calls) == 1
-    coding_result, publication = operations.git_publisher.calls[0]
-    assert isinstance(coding_result, CodingResult)
-    assert coding_result.changed_files == ["fixture.txt"]
-    assert "CLAIMED" not in coding_result.diff
-    assert "-before" in coding_result.diff and "+after" in coding_result.diff
-    assert coding_result.validation_evidence == [{"detached_at_request_head": True, "head": requested_head}]
-    assert publication == {
-        "operation": work.operation,
-        "payload_digest": payload_digest(
-            {
-                "base_head": requested_head,
-                "policy_digest": "policy",
-                "intent": work.intent.dump(),
-            }
-        ),
-        "expected_head": requested_head,
-        "base_head": requested_head,
-        "merge_base": False,
-    }
-    assert fences and set(fences) == {(3, requested_head, work.operation, requested_head, "policy")}
-    assert fixture.read_text() == "before\n"
-    assert git("rev-parse", "HEAD") == advanced_head
 
 
 def test_stale_finding_publication_becomes_typed_effect_result() -> None:

@@ -88,8 +88,8 @@ restart/redelivery behavior, and a passing private-source CI path to the pinned
 Petrus repository. The qualified Petrus CV9 application remains behavioral
 evidence, not a Hamsterdan package dependency.
 
-CV16.DS11 resolves a host-owned Pi native A2 Local Agenticus profile, fences
-every operation to its persisted mode/profile/snapshot, and adapts the unchanged
+CV16.DS11 resolves the sole host-owned Pi native A2 Local Agenticus profile,
+fences every operation to its persisted profile/snapshot, and adapts the unchanged
 product protocol to the Petrus-owned probe-qualified A2 host. AgentNetRunner is
 excluded because its A5 topology is not the selected A2 route. Composition,
 probe, continuation workspace/session chaining, replay, conflicts, cancellation,
@@ -99,7 +99,8 @@ A private host receiver now rejects unsafe settled archives and replaces model
 patch claims with a reproduced canonical binary patch before the existing
 publication fences. Production now requires explicit absolute Pi installation
 paths and lazily transfers a direct key from an owned `0600` file through the
-one-shot supplier. `legacy-amp` remains rollback only. The first
+one-shot supplier. The legacy Amp agent runner and its rollback mode have been
+removed; unavailable Pi execution fails closed. The first
 authority-bearing live attempt proved one-shot direct-key custody and
 fail-closed rejection but did not publish: the real host publisher rejected the
 controlled coding candidate at its Git publication boundary. Live support

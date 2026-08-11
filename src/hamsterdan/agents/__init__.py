@@ -1,6 +1,5 @@
-"""Credential-free typed agent protocol and Amp execution adapter."""
+"""Credential-free typed agent protocol and Pi execution adapter."""
 
-from .amp import AmpExecuteRunner
 from .pi import PiNativeRunner, UnavailablePiRunner, encode_prompt
 from .protocol import (
     AgentCleanupCategory,
@@ -24,7 +23,6 @@ __all__ = [
     "AgentProtocolError",
     "AgentResultCategory",
     "AgentRunner",
-    "AmpExecuteRunner",
     "ChangeRequest",
     "ChangeResult",
     "CodingRequest",

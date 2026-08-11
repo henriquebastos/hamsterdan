@@ -15,7 +15,7 @@ from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
 
 from hamsterdan.github_app.config import ConfigurationError, HostConfig
 
-from .agenticus import AgentComposition, AgentConfig, AgentMode, AgentRouteStore, compose_agent, select_agent_runner
+from .agenticus import AgentRouteStore, compose_agent, compose_agent_runner
 from .api import create_app
 from .pi_a2 import PiA2InstallationConfig, compose_owned_pi_a2
 from .pi_workspace import GitPiWorkspaceProvider
@@ -27,12 +27,9 @@ MAX_IDENTIFIER_BYTES = 1024
 
 
 def _compose_agent_runtime(
-    composition: AgentComposition,
     state_path: Path,
     environment: Mapping[str, str],
 ) -> tuple[PiA2RuntimeHost | None, GitPiWorkspaceProvider | None]:
-    if composition.mode is AgentMode.LEGACY_AMP:
-        return None, None
     installation = PiA2InstallationConfig.from_environment(environment)
     workspaces = GitPiWorkspaceProvider(state_path / "pi-workspaces")
     return (
@@ -224,13 +221,13 @@ def main() -> int:
                 )
             )
             return 0
-        agent = compose_agent(AgentConfig.from_environment(dict(os.environ)))
+        agent = compose_agent(os.environ)
         route_store = AgentRouteStore(config.state_path / "agent-routes.sqlite3")
         route_store.activate(agent, config.state_path / "applications")
-        pi_runtime, pi_workspaces = _compose_agent_runtime(agent, config.state_path, os.environ)
+        pi_runtime, pi_workspaces = _compose_agent_runtime(config.state_path, os.environ)
         service = HostService(
             config,
-            runner=select_agent_runner(agent, pi_runtime=pi_runtime, pi_workspaces=pi_workspaces),
+            runner=compose_agent_runner(pi_runtime=pi_runtime, pi_workspaces=pi_workspaces),
             agent_composition=agent,
             agent_routes=route_store,
             agent_runtime=pi_runtime,
