@@ -69,19 +69,12 @@ class Application:
         self.comments: list[dict[str, object]] = []
         self.closed = 0
 
-    def reconcile(self, trigger: str) -> None:
+    def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> None:
         self.reconciles.append(trigger)
         if self.fail:
             raise RuntimeError("provider secret must not escape")
-
-    def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> dict[str, object]:
-        self.reconcile(trigger)
         if comment is not None:
             self.comments.append(comment.__dict__)
-        return {"reason": "activated", "trigger": trigger}
-
-    def route_comment(self, **kwargs: object) -> None:
-        self.comments.append(kwargs)
 
     def close(self) -> None:
         self.closed += 1
@@ -995,7 +988,7 @@ def test_startup_sweep_settles_frozen_terminal_before_provider_reconciliation(tm
             events.append("settle")
             self.published = True
 
-        def reconcile(self, trigger: str) -> None:
+        def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> None:
             events.append(f"reconcile:{self.published}")
             if not self.published:
                 events.append("duplicate-publication")

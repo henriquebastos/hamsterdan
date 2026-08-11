@@ -609,6 +609,26 @@ Petrus, database, actor-runtime, or HA abstraction. This confirms that a
 complicated call graph can be infrastructure leakage even when the Petri graph
 is already expressing the right business ownership.
 
+### Production application-command conclusion
+
+The next boundary inspection found that `PrReadinessApplication` was largely
+cohesive: provider reconciliation, generation lifecycle repair, and effect
+composition share real ordering and fencing invariants. Splitting those
+responsibilities would relocate the same concepts across more objects.
+
+The removable responsibility was an ignored dictionary projection and three
+application entry points retained for tests. RS-006 made
+`activate(trigger, *, comment=None) -> None` the sole command, privatized its
+one reconciliation pass, and moved tests to canonical snapshots, lifecycle
+places, derived waits, and observed effects. Public `reconcile`,
+`route_comment`, and `projection` were deleted without replacement.
+
+This removed 44 net production lines without changing the Net, provider ordering,
+lifecycle protocol, Activities, or runtime. One remaining genuine candidate is
+duplicate comment admission across service and application; unlike the deleted
+query API, that is a security-boundary choice and requires explicit Navigator
+direction.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

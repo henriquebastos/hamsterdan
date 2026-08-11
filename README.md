@@ -47,7 +47,8 @@ The shortest maintainer path through one reconciliation is:
 
 ```text
 GitHub webhook / periodic sweep
-  -> PrReadinessApplication.reconcile(trigger) -> dict[str, object]
+  -> HostService._activate_instance(instance, ...)
+  -> PrReadinessApplication.activate(trigger) -> None
   -> PrReadinessHost.deliver(source, value, identity)
   -> petrus.engine.Engine
   -> readiness.net.topology.build_net(...)
@@ -72,7 +73,10 @@ ActionsState       # selected run, attempt, conclusion and rerun continuity
 ReviewState        # agent review, findings and dispositions
 HumanState         # approvals, conversations, mergeability and reminders
 MutationState      # change/repair operation and provisional-head continuity
-PublicationState   # published facts and current publication operations
+FindingPublicationState       # finding publication ownership
+ConversationPublicationState  # conversation operation and recovery ownership
+DashboardPublicationState     # dashboard projection and operation ownership
+ReadinessPublicationState     # readiness announcement ownership
 
 def project_readiness(
     authority: Authority,
@@ -80,7 +84,10 @@ def project_readiness(
     review: ReviewState,
     human: HumanState,
     mutation: MutationState,
-    publication: PublicationState,
+    finding_publication: FindingPublicationState,
+    conversation_publication: ConversationPublicationState,
+    dashboard_publication: DashboardPublicationState,
+    readiness_publication: ReadinessPublicationState,
 ) -> ReadinessSnapshot: ...
 ```
 
@@ -88,10 +95,11 @@ Routine transitions read centralized `Authority` and consume only the concern
 they mutate. Full-cohort movement is reserved for generation and lifecycle
 boundaries. Dashboard currency is relational: a digest of current concern facts
 must equal the exact acknowledged projection. Dashboard/readiness failures move
-exact request leases through durable delayed retry places before rejoining
-current authority. Explicit authorized mutation instructions execute directly;
-ambiguous instructions produce clarification without mutation. The host still
-fences every effect immediately before execution, and Hamsterdan never merges.
+through one immutable logical Motus execution with classified durable retry;
+the Net retains exact operation ownership and current terminal acceptance.
+Explicit authorized mutation instructions execute directly; ambiguous
+instructions produce clarification without mutation. The host still fences
+every effect immediately before execution, and Hamsterdan never merges.
 
 ## Development
 

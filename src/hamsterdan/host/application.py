@@ -19,7 +19,6 @@ from hamsterdan.contracts.readiness import (
     GenerationStop,
     HumanObservation,
     ReadinessSnapshot,
-    workflow_wait,
 )
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
 from hamsterdan.github_app.gateway import GitHubAuthority
@@ -146,7 +145,7 @@ class PrReadinessApplication:
         temporary.chmod(0o600)
         temporary.replace(binding)
 
-    def reconcile(self, trigger: str = "poll") -> dict[str, object]:
+    def _reconcile(self, trigger: str) -> None:
         self._repair_generation_boundary()
         pull = self.authority.pull_request()
         if pull.closed or pull.merged:
@@ -154,12 +153,12 @@ class PrReadinessApplication:
                 status = "merged" if pull.merged else "closed"
                 if not self.host.place("terminal"):
                     self._stop_generation(status, pull.head, f"{trigger}:{status}:{pull.head}")
-            return self.projection(pull.state)
+            return
         if pull.draft:
             if self.host is not None and (self.host.snapshot is not None or self.host.place("seed")):
                 epoch = self.host.snapshot.epoch if self.host.snapshot is not None else 0
                 self._stop_generation("draft", pull.head, f"{trigger}:draft:{epoch}:{pull.head}")
-            return self.projection(pull.state)
+            return
 
         policy = self.authority.policy(pull.base_ref)
         base_current = self.authority.base_current(pull)
@@ -223,7 +222,7 @@ class PrReadinessApplication:
             )
         control = self.host.snapshot
         if control is None:
-            return self.projection(pull.state)
+            return
 
         review = self.authority.human_review()
         approvals = tuple(name for name in review.approvals if name.casefold() != pull.author.casefold())
@@ -283,22 +282,22 @@ class PrReadinessApplication:
         current = self.host.snapshot
         if current is not None:
             self._observe_actions(current, policy.required_checks)
-        return self.projection(pull.state)
+        return
 
-    def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> dict[str, object]:
+    def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> None:
         """Reconcile provider truth once, then optionally deliver a conversation."""
-        outcome = self.reconcile(trigger)
+        self._reconcile(trigger)
         if comment is None:
-            return outcome
+            return
         if self.host is None or self.host.control is None:
-            return {"routed": False, "reason": "PR has no active reviewable generation"}
+            return
         control = self.host.control
         normalized_text = comment.text.strip()
         is_bot = comment.actor_login.strip().casefold() == self.bot_login
         addressed = self._addressed_text(normalized_text)
         authorized = comment.actor_type == "User" and comment.association.upper() in self.trusted_associations
         if is_bot or not authorized or addressed is None:
-            return {"routed": False, "reason": "comment is not an authorized Hamsterdan conversation"}
+            return
         value = ConversationObservation(
             control.epoch,
             control.head,
@@ -310,23 +309,6 @@ class PrReadinessApplication:
             comment.association,
         )
         self._deliver("conversation_observation", value, f"github-delivery:{comment.delivery_id}")
-        return {"routed": True, "epoch": control.epoch, "head": control.head}
-
-    def route_comment(
-        self,
-        *,
-        delivery_id: str,
-        comment_id: int,
-        actor_id: int,
-        actor_login: str,
-        actor_type: str,
-        association: str,
-        text: str,
-    ) -> dict[str, object]:
-        return self.activate(
-            f"comment-preflight:{delivery_id}",
-            comment=NormalizedComment(delivery_id, comment_id, actor_id, actor_login, actor_type, association, text),
-        )
 
     def _addressed_text(self, text: str) -> str | None:
         """Strip the exact, case-insensitive configured App mention."""
@@ -495,32 +477,6 @@ class PrReadinessApplication:
         assert self.host is not None
         self.host.deliver(source, value, identity, scope=self.host.generation_scope)
         self.host.drain()
-
-    def projection(self, provider_state: str = "unknown") -> dict[str, object]:
-        if self.host is None:
-            return {"instance": "absent", "provider_state": provider_state, "wait": "first ready observation"}
-        if self.host.control is not None:
-            control = self.host.control
-            assert control is not None
-            return {
-                "instance": "active",
-                "provider_state": provider_state,
-                "epoch": control.epoch,
-                "head": control.head,
-                "actions": control.actions,
-                "review": control.review,
-                "human_approved": control.human_approved,
-                "provisional": control.provisional,
-                "announced": control.announced,
-                "wait": workflow_wait(control),
-            }
-        dormant = self.host.place("dormant")
-        if dormant:
-            return {"instance": "dormant", "provider_state": provider_state, **dormant[0], "wait": "ready lifecycle"}
-        terminal = self.host.place("terminal")
-        if terminal:
-            return {"instance": "terminal", "provider_state": provider_state, **terminal[0], "wait": "none"}
-        return {"instance": "recovering", "provider_state": provider_state, "wait": "Engine reconciliation"}
 
     def close(self) -> None:
         if self.host is not None:

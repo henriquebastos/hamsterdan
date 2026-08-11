@@ -45,7 +45,9 @@ startup/periodic sweep ─┘       pre-settle frozen terminals
 application activation operation. It reconciles provider truth exactly once
 and then optionally delivers a strict host-normalized `NormalizedComment`.
 The older `reconcile` and `route_comment` entry points remain thin direct-test
-and compatibility surfaces rather than alternate host paths.
+and compatibility surfaces rather than alternate host paths. RS-006
+subsequently removed those unused surfaces rather than preserving a second
+application API.
 
 ## Custody and recovery contract
 

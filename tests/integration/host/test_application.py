@@ -19,7 +19,7 @@ from petrus.motus.dispatch import LocalDispatch
 from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, CodingResult, ConversationResult, ReviewResult
-from hamsterdan.contracts.readiness import workflow_gates_ready
+from hamsterdan.contracts.readiness import workflow_gates_ready, workflow_wait
 from hamsterdan.github_app.models import (
     ActionsJobSnapshot,
     ActionsRunSnapshot,
@@ -28,7 +28,7 @@ from hamsterdan.github_app.models import (
     RepositoryPolicy,
     WireResponse,
 )
-from hamsterdan.host.application import PrReadinessApplication
+from hamsterdan.host.application import NormalizedComment, PrReadinessApplication
 
 HEAD, HEAD_2, BASE = "a" * 40, "c" * 40, "b" * 40
 BOT = "hamster-dan[bot]"
@@ -272,22 +272,38 @@ def ready(authority: Authority) -> None:
     authority.pull = replace(authority.pull, draft=False)
 
 
+def comment(subject: PrReadinessApplication, **values: Any) -> None:
+    delivery_id = str(values["delivery_id"])
+    subject.activate(
+        f"comment-preflight:{delivery_id}",
+        comment=NormalizedComment(**values),
+    )
+
+
+def snapshot(subject: PrReadinessApplication, trigger: str):
+    subject.activate(trigger)
+    assert subject.host is not None and subject.host.snapshot is not None
+    return subject.host.snapshot
+
+
 def test_draft_ready_dormant_and_same_head_resume(tmp_path: Path) -> None:
     authority, runner = Authority(), Runner()
     subject = application(tmp_path, authority, runner)
-    assert subject.reconcile() == {"instance": "absent", "provider_state": "open", "wait": "first ready observation"}
+    subject.activate("poll")
+    assert subject.host is None
     assert not (tmp_path / "state/history.jsonl").exists()
     ready(authority)
-    assert subject.reconcile("ready")["epoch"] == 1
+    assert snapshot(subject, "ready").epoch == 1
     assert runner.reviews == 1 and any("hamsterdan:dashboard" in x["body"] for x in authority.transport.comments)
     writes = len(authority.transport.writes)
     authority.pull = replace(authority.pull, draft=True)
-    assert subject.reconcile("draft")["instance"] == "dormant" and len(authority.transport.writes) == writes
+    subject.activate("draft")
+    assert subject.host is not None and subject.host.place("dormant") and len(authority.transport.writes) == writes
     assert subject.host is not None and subject.host.generation_scope is None
     assert any(isinstance(record, ScopeClosed) for record in subject.host.engine.records)
     ready(authority)
-    resumed = subject.reconcile("ready-again")
-    assert (resumed["epoch"], resumed["head"], runner.reviews) == (2, HEAD, 2)
+    resumed = snapshot(subject, "ready-again")
+    assert (resumed.epoch, resumed.head, runner.reviews) == (2, HEAD, 2)
     assert subject.host.generation_scope is not None and subject.host.generation_scope.generation == 2
     subject.close()
 
@@ -297,7 +313,7 @@ def test_active_generation_scope_and_activity_provenance_survive_restart(tmp_pat
     ready(authority)
     first = application(tmp_path, authority, runner)
 
-    first.reconcile("ready")
+    first.activate("ready")
 
     assert first.host is not None
     scope = first.host.generation_scope
@@ -315,19 +331,22 @@ def test_new_head_and_closed_terminal_absorb_late_poll(tmp_path: Path) -> None:
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner)
-    assert subject.reconcile()["epoch"] == 1
+    assert snapshot(subject, "poll").epoch == 1
     authority.pull = replace(authority.pull, head=HEAD_2)
     authority.run = replace(authority.run, head=HEAD_2, id=12)
-    assert subject.reconcile("synchronize")["epoch"] == 2
+    assert snapshot(subject, "synchronize").epoch == 2
     assert subject.host is not None and subject.host.generation_scope is not None
     assert subject.host.generation_scope.generation == 2
     assert any(isinstance(record, ScopeReset) for record in subject.host.engine.records)
     authority.pull = replace(authority.pull, state="closed", closed=True)
-    assert subject.reconcile("closed")["status"] == "abort"
+    subject.activate("closed")
+    assert subject.host.place("terminal") == ({"status": "abort", "last_epoch": 2, "head": HEAD_2},)
     assert subject.host.generation_scope is None
     writes = len(authority.transport.writes)
     history = (tmp_path / "state/history.jsonl").read_text()
-    assert subject.reconcile("late")["status"] == "abort" and len(authority.transport.writes) == writes
+    subject.activate("late")
+    assert subject.host.place("terminal") == ({"status": "abort", "last_epoch": 2, "head": HEAD_2},)
+    assert len(authority.transport.writes) == writes
     assert (tmp_path / "state/history.jsonl").read_text() == history
     subject.close()
 
@@ -336,7 +355,7 @@ def test_restart_repairs_generation_reset_after_scope_commit(tmp_path: Path) -> 
     authority, runner = Authority(), Runner()
     ready(authority)
     first = application(tmp_path, authority, runner)
-    first.reconcile("initial")
+    first.activate("initial")
     authority.pull = replace(authority.pull, head=HEAD_2)
     authority.run = replace(authority.run, head=HEAD_2, id=12)
     assert first.host is not None
@@ -348,12 +367,12 @@ def test_restart_repairs_generation_reset_after_scope_commit(tmp_path: Path) -> 
 
     first.host.reset_generation = crash_after_reset  # type: ignore[method-assign]
     with pytest.raises(RuntimeError, match="simulated crash"):
-        first.reconcile("supersede")
+        first.activate("supersede")
     first.close()
 
     second = application(tmp_path, authority, Runner())
-    projection = second.reconcile("restart")
-    assert (projection["epoch"], projection["head"]) == (2, HEAD_2)
+    projection = snapshot(second, "restart")
+    assert (projection.epoch, projection.head) == (2, HEAD_2)
     assert second.host is not None and not second.host.place("generation_start")
     second.close()
 
@@ -373,12 +392,12 @@ def test_restart_opens_missing_scope_after_initial_create_crash(
 
     monkeypatch.setattr(runtime.Engine, "open_scope", crash_before_scope)
     with pytest.raises(RuntimeError, match="simulated crash"):
-        first.reconcile("initial")
+        first.activate("initial")
     monkeypatch.setattr(runtime.Engine, "open_scope", open_scope)
 
     second = application(tmp_path, authority, Runner())
-    projection = second.reconcile("restart")
-    assert (projection["epoch"], projection["head"]) == (1, HEAD)
+    projection = snapshot(second, "restart")
+    assert (projection.epoch, projection.head) == (1, HEAD)
     second.close()
 
 
@@ -393,7 +412,7 @@ def test_restart_disposes_seed_only_instance_after_scope_open_crash(tmp_path: Pa
 
     first._start_generation = crash_before_start  # type: ignore[method-assign]
     with pytest.raises(RuntimeError, match="simulated crash"):
-        first.reconcile("initial")
+        first.activate("initial")
     first.close()
 
     authority.pull = replace(
@@ -404,8 +423,10 @@ def test_restart_disposes_seed_only_instance_after_scope_open_crash(tmp_path: Pa
         state="closed" if terminal else "open",
     )
     second = application(tmp_path, authority, Runner())
-    projection = second.reconcile("restart")
-    assert projection["instance"] == ("terminal" if terminal else "dormant")
+    second.activate("restart")
+    assert second.host is not None
+    place = "terminal" if terminal else "dormant"
+    assert second.host.place(place)
     second.close()
 
 
@@ -413,7 +434,7 @@ def test_restart_repairs_generation_stop_after_scope_commit(tmp_path: Path) -> N
     authority, runner = Authority(), Runner()
     ready(authority)
     first = application(tmp_path, authority, runner)
-    first.reconcile("initial")
+    first.activate("initial")
     authority.pull = replace(authority.pull, draft=True)
     assert first.host is not None
     close = first.host.close_generation
@@ -424,12 +445,12 @@ def test_restart_repairs_generation_stop_after_scope_commit(tmp_path: Path) -> N
 
     first.host.close_generation = crash_after_close  # type: ignore[method-assign]
     with pytest.raises(RuntimeError, match="simulated crash"):
-        first.reconcile("draft")
+        first.activate("draft")
     first.close()
 
     second = application(tmp_path, authority, Runner())
-    projection = second.reconcile("restart")
-    assert projection["instance"] == "dormant"
+    second.activate("restart")
+    assert second.host is not None and second.host.place("dormant")
     assert second.host is not None and not second.host.place("generation_stop")
     second.close()
 
@@ -439,11 +460,11 @@ def test_scope_cancellation_removes_publication_from_host_unresolved_index(tmp_p
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    subject.reconcile("enqueue")
+    subject.activate("enqueue")
     assert subject.host is not None and subject.host.has_unresolved_publication()
 
     authority.pull = replace(authority.pull, draft=True)
-    subject.reconcile("draft")
+    subject.activate("draft")
 
     assert not subject.host.has_unresolved_publication()
     subject.close()
@@ -453,10 +474,11 @@ def test_merged_is_terminal_success_without_merge_commit_identity(tmp_path: Path
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner)
-    subject.reconcile()
+    subject.activate("poll")
     authority.pull = replace(authority.pull, state="closed", closed=True, merged=True)
-    terminal = subject.reconcile("merged")
-    assert (terminal["instance"], terminal["status"], terminal["head"]) == ("terminal", "success", HEAD)
+    subject.activate("merged")
+    assert subject.host is not None
+    assert subject.host.place("terminal") == ({"status": "success", "last_epoch": 1, "head": HEAD},)
     subject.close()
 
 
@@ -464,12 +486,13 @@ def test_mention_conversation_executes_explicit_mutation_once_and_clarifies_ambi
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner)
-    subject.reconcile()
+    subject.activate("poll")
     common = {"actor_id": 7, "actor_login": "author", "actor_type": "User", "association": "OWNER"}
-    assert not subject.route_comment(delivery_id="old", comment_id=30, text="/impetus status", **common)["routed"]
-    assert not subject.route_comment(delivery_id="slash", comment_id=30, text="/hamsterdan status", **common)["routed"]
+    comment(subject, delivery_id="old", comment_id=30, text="/impetus status", **common)
+    comment(subject, delivery_id="slash", comment_id=30, text="/hamsterdan status", **common)
+    assert runner.conversations == 0
     authority.transport.comments.append({"id": 90, "body": "<!-- impetus:dashboard -->", "user": {"login": BOT}})
-    subject.route_comment(delivery_id="status", comment_id=31, text="@hamster-dan How is this looking?", **common)
+    comment(subject, delivery_id="status", comment_id=31, text="@hamster-dan How is this looking?", **common)
     assert runner.conversations == 1 and any(
         "Ready: every observed gate is clear" in x["body"] for x in authority.transport.comments
     )
@@ -478,9 +501,10 @@ def test_mention_conversation_executes_explicit_mutation_once_and_clarifies_ambi
     assert request.dashboard["head"] == HEAD
     assert request.dashboard["findings"] == []
     assert request.gates[0] == {"name": "overall", "ready": True, "blocker": ""}
-    subject.route_comment(delivery_id="change", comment_id=32, text="@hamster-dan Please fix the finding", **common)
+    comment(subject, delivery_id="change", comment_id=32, text="@hamster-dan Please fix the finding", **common)
     assert runner.codes == 1
-    subject.route_comment(
+    comment(
+        subject,
         delivery_id="ambiguous",
         comment_id=33,
         text="@hamster-dan Please fix it",
@@ -496,7 +520,7 @@ def test_only_trusted_addressed_users_route(tmp_path: Path, changes: dict[str, s
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner)
-    subject.reconcile()
+    subject.activate("poll")
     values = {
         "delivery_id": "x",
         "comment_id": 4,
@@ -506,7 +530,7 @@ def test_only_trusted_addressed_users_route(tmp_path: Path, changes: dict[str, s
         "association": "MEMBER",
         "text": "@hamster-dan explain the blockers",
     } | changes
-    assert not subject.route_comment(**values)["routed"]
+    comment(subject, **values)
     assert runner.conversations == 0
     subject.close()
 
@@ -516,13 +540,13 @@ def test_first_failure_reruns_once_then_flaky_green(tmp_path: Path) -> None:
     ready(authority)
     authority.run = replace(authority.run, conclusion="failure")
     subject = application(tmp_path, authority, runner)
-    assert subject.reconcile()["actions"] in {"failed", "waiting"}
+    assert snapshot(subject, "poll").actions in {"failed", "waiting"}
     markers = lambda: [x for x in authority.transport.comments if "hamsterdan-rerun" in x["body"]]
     assert len(markers()) == 1
-    subject.reconcile("same-failure")
+    subject.activate("same-failure")
     assert len(markers()) == 1
     authority.run = replace(authority.run, attempt=2, conclusion="success")
-    assert subject.reconcile("complete")["actions"] == "flaky_green"
+    assert snapshot(subject, "complete").actions == "flaky_green"
     subject.close()
 
 
@@ -531,11 +555,11 @@ def test_failed_rerun_reproduces_after_running_observation(tmp_path: Path) -> No
     ready(authority)
     authority.run = replace(authority.run, conclusion="failure")
     subject = application(tmp_path, authority, runner)
-    subject.reconcile()
+    subject.activate("poll")
     authority.run = replace(authority.run, attempt=2, status="in_progress", conclusion=None)
-    assert subject.reconcile("running")["actions"] == "running"
+    assert snapshot(subject, "running").actions == "running"
     authority.run = replace(authority.run, status="completed", conclusion="failure")
-    assert subject.reconcile("failed")["actions"] == "reproduced" and runner.codes == 1
+    assert snapshot(subject, "failed").actions == "reproduced" and runner.codes == 1
     subject.close()
 
 
@@ -544,11 +568,11 @@ def test_first_later_attempt_failure_still_reruns_before_repair(tmp_path: Path) 
     ready(authority)
     authority.run = replace(authority.run, attempt=2, conclusion="failure")
     subject = application(tmp_path, authority, runner)
-    assert subject.reconcile()["actions"] == "waiting" and runner.codes == 0
-    subject.reconcile("same")
+    assert snapshot(subject, "poll").actions == "waiting" and runner.codes == 0
+    subject.activate("same")
     assert runner.codes == 0
     authority.run = replace(authority.run, attempt=3)
-    assert subject.reconcile("failed")["actions"] == "reproduced" and runner.codes == 1
+    assert snapshot(subject, "failed").actions == "reproduced" and runner.codes == 1
     subject.close()
 
 
@@ -557,13 +581,13 @@ def test_provider_failures_are_typed_inability_and_recovery(tmp_path: Path) -> N
     ready(authority)
     authority.run = replace(authority.run, attempt=2, conclusion="failure")
     subject = application(tmp_path, authority, runner)
-    first = subject.reconcile()
-    assert first["review"] == "unable" and first["actions"] == "waiting"
+    first = snapshot(subject, "poll")
+    assert first.review == "unable" and first.actions == "waiting"
     authority.run = replace(authority.run, attempt=3)
-    recovered = subject.reconcile("failed")
+    recovered = snapshot(subject, "failed")
     control = subject.host.control  # type: ignore[union-attr]
-    assert recovered["actions"] == "reproduced" and control is not None and not control.repair_in_flight
-    assert control.wait == "repair recovery" and runner.codes == 3
+    assert recovered.actions == "reproduced" and control is not None and not control.repair_in_flight
+    assert workflow_wait(control) == "repair recovery" and runner.codes == 3
     subject.close()
 
 
@@ -572,11 +596,11 @@ def test_same_basis_reconciliation_recovers_review_with_bounded_distinct_attempt
     ready(authority)
     subject = application(tmp_path, authority, runner)
 
-    assert subject.reconcile("attempt-1")["review"] == "unable"
-    assert subject.reconcile("attempt-2")["review"] == "unable"
-    assert subject.reconcile("attempt-3")["review"] == "clear"
+    assert snapshot(subject, "attempt-1").review == "unable"
+    assert snapshot(subject, "attempt-2").review == "unable"
+    assert snapshot(subject, "attempt-3").review == "clear"
     assert runner.reviews == 3
-    subject.reconcile("settled")
+    subject.activate("settled")
     assert runner.reviews == 3
     subject.close()
 
@@ -588,11 +612,11 @@ def test_same_basis_reconciliation_stops_after_three_unavailable_reviews(tmp_pat
 
     projection = {}
     for attempt in range(1, 7):
-        projection = subject.reconcile(f"attempt-{attempt}")
+        projection = snapshot(subject, f"attempt-{attempt}")
 
     control = subject.host.control  # type: ignore[union-attr]
     assert runner.reviews == 3
-    assert projection["review"] == "unable"
+    assert projection.review == "unable"
     assert control is not None and control.review_attempts == 3
     assert "agent activity unavailable kind=review category=protocol" in caplog.text
     assert "provider unavailable" not in caplog.text
@@ -603,12 +627,12 @@ def test_restart_one_history_has_no_duplicate_agent_or_publication(tmp_path: Pat
     authority, first_runner = Authority(), Runner()
     ready(authority)
     first = application(tmp_path, authority, first_runner)
-    initial = first.reconcile()
+    initial = snapshot(first, "poll")
     writes = len(authority.transport.writes)
     first.close()
     second_runner = Runner()
     second = application(tmp_path, authority, second_runner)
-    assert second.reconcile("restart") == initial
+    assert snapshot(second, "restart") == initial
     assert second_runner.reviews == 0 and len(authority.transport.writes) == writes
     second.close()
 
@@ -618,7 +642,7 @@ def test_terminal_activity_failure_reloads_and_resolves_in_flight_siblings(tmp_p
     ready(authority)
     subject = application(tmp_path, authority, runner)
 
-    projection = subject.reconcile("terminal-agent-failure")
+    projection = snapshot(subject, "terminal-agent-failure")
     records = [json.loads(line) for line in (tmp_path / "state/history.jsonl").read_text().splitlines()]
     requested = {record["occurrence"] for record in records if record["record"] == "ActivityRequested"}
     terminal = {
@@ -627,14 +651,14 @@ def test_terminal_activity_failure_reloads_and_resolves_in_flight_siblings(tmp_p
     failed = [record for record in records if record["record"] == "ActivityFailed"]
     firing_failed = [record for record in records if record["record"] == "FiringFailed"]
 
-    assert projection["instance"] == "active"
+    assert subject.host is not None and projection == subject.host.snapshot
     assert requested == terminal
     assert len(failed) == len(firing_failed) == 1
     assert failed[0]["occurrence"] == firing_failed[0]["occurrence"]
     assert sum("hamsterdan:dashboard" in item["body"] for item in authority.transport.comments) == 1
 
     settled = (tmp_path / "state/history.jsonl").read_text()
-    subject.reconcile("settled")
+    subject.activate("settled")
     assert (tmp_path / "state/history.jsonl").read_text() == settled
     subject.close()
 
@@ -644,13 +668,13 @@ def test_close_reopen_restart_preserves_pending_durable_activity_without_duplica
     ready(authority)
     authority.run = replace(authority.run, conclusion="failure")
     first = application(tmp_path, authority, runner)
-    first.reconcile()
+    first.activate("poll")
     marker_count = sum("hamsterdan-rerun" in x["body"] for x in authority.transport.comments)
     history_before = (tmp_path / "state/history.jsonl").read_text()
     first.close()
     second_runner = Runner()
     second = application(tmp_path, authority, second_runner)
-    second.reconcile("reopened")
+    second.activate("reopened")
     assert sum("hamsterdan-rerun" in x["body"] for x in authority.transport.comments) == marker_count == 1
     assert second_runner.reviews == 0 and history_before in (tmp_path / "state/history.jsonl").read_text()
     second.close()
@@ -661,7 +685,7 @@ def test_publication_requests_use_exact_durable_policy_and_operation_identity(tm
     ready(authority)
     subject = application(tmp_path, authority, runner, dispatch_path=tmp_path / "dispatch.sqlite3")
 
-    subject.reconcile("prepare-publications")
+    subject.activate("prepare-publications")
     worker = Worker(
         LocalDispatch(tmp_path / "dispatch.sqlite3", instance="worker").worker(("publication",)),
         {},
@@ -709,7 +733,7 @@ def test_one_local_worker_routes_instances_to_distinct_publication_providers(tmp
             dispatch_path=dispatch_path,
             instance_id=instance,
         )
-        subject.reconcile("enqueue")
+        subject.activate("enqueue")
         subjects[instance] = subject
         authorities.append(authority)
 
@@ -743,7 +767,7 @@ def test_frozen_worker_success_is_collected_after_application_reopen_without_dup
     authority, runner = Authority(), Runner()
     ready(authority)
     first = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    first.reconcile("enqueue")
+    first.activate("enqueue")
     worker = Worker(
         LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
         {},
@@ -783,8 +807,9 @@ def test_conversation_retry_succeeds_under_one_activity_request_and_stable_ident
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    subject.reconcile("enqueue")
-    subject.route_comment(
+    subject.activate("enqueue")
+    comment(
+        subject,
         delivery_id="reply",
         comment_id=51,
         text="@hamster-dan Please fix it",
@@ -843,7 +868,7 @@ def test_frozen_conversation_terminal_reopens_without_duplicate_provider_call(tm
     authority, runner = Authority(), Runner()
     ready(authority)
     first = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    first.reconcile("enqueue")
+    first.activate("enqueue")
     worker = Worker(
         LocalDispatch(dispatch_path, instance="worker").worker(("publication",)),
         {},
@@ -854,7 +879,8 @@ def test_frozen_conversation_terminal_reopens_without_duplicate_provider_call(tm
         first.settle()
         if claimed == 0:
             break
-    first.route_comment(
+    comment(
+        first,
         delivery_id="reply",
         comment_id=55,
         text="@hamster-dan Please fix it",
@@ -917,7 +943,7 @@ def test_frozen_exhausted_conversation_projects_exact_terminal_after_restart(
     authority, runner = Authority(), Runner()
     ready(authority)
     first = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    first.reconcile("enqueue")
+    first.activate("enqueue")
     baseline_worker = Worker(
         LocalDispatch(dispatch_path, instance="baseline-worker").worker(("publication",)),
         {},
@@ -929,7 +955,8 @@ def test_frozen_exhausted_conversation_projects_exact_terminal_after_restart(
         if claimed == 0:
             break
     baseline_worker.close()
-    first.route_comment(
+    comment(
+        first,
         delivery_id="restart-exhaustion",
         comment_id=56,
         text="@hamster-dan Please fix it",
@@ -1000,8 +1027,9 @@ def test_conversation_exhaustion_projects_one_blocker_and_retains_exact_operatio
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    subject.reconcile("enqueue")
-    subject.route_comment(
+    subject.activate("enqueue")
+    comment(
+        subject,
         delivery_id="reply",
         comment_id=52,
         text="@hamster-dan Please fix it",
@@ -1056,7 +1084,8 @@ def test_conversation_exhaustion_projects_one_blocker_and_retains_exact_operatio
         )
         == count
     )
-    subject.route_comment(
+    comment(
+        subject,
         delivery_id="recover-reply",
         comment_id=54,
         text="@hamster-dan Retry the blocked publication",
@@ -1095,9 +1124,10 @@ def test_production_publication_capability_absence_completes_once_with_typed_blo
     ready(authority)
     authority.transport.rejection = (marker, status)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    subject.reconcile("enqueue")
+    subject.activate("enqueue")
     if activity == "conversation_publish":
-        subject.route_comment(
+        comment(
+            subject,
             delivery_id="reply",
             comment_id=53,
             text="@hamster-dan Please fix it",
@@ -1184,9 +1214,10 @@ def test_publication_recovery_reconstructs_one_exact_owned_request_after_restart
     ready(authority)
     authority.transport.rejection = (marker, 403)
     first = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    first.reconcile("enqueue")
+    first.activate("enqueue")
     if target == "conversation":
-        first.route_comment(
+        comment(
+            first,
             delivery_id="reply",
             comment_id=53,
             text="@hamster-dan Please fix it",
@@ -1251,7 +1282,8 @@ def test_publication_recovery_reconstructs_one_exact_owned_request_after_restart
         for other in {"conversation", "dashboard", "readiness"} - {target}
     )
 
-    second.route_comment(
+    comment(
+        second,
         delivery_id=f"recover-{target}",
         comment_id=54,
         text="@hamster-dan Retry the blocked publication",
@@ -1288,7 +1320,8 @@ def test_publication_recovery_reconstructs_one_exact_owned_request_after_restart
     assert state[f"{target}_operation"] is None
     assert state[recovery_field] is None
 
-    second.route_comment(
+    comment(
+        second,
         delivery_id=f"recover-{target}-stale",
         comment_id=55,
         text="@hamster-dan Retry the blocked publication",
@@ -1326,9 +1359,10 @@ def test_production_publication_422_projects_one_nonrecoverable_fault_without_we
     ready(authority)
     authority.transport.rejection = (marker, 422)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    subject.reconcile("enqueue")
+    subject.activate("enqueue")
     if activity == "conversation_publish":
-        subject.route_comment(
+        comment(
+            subject,
             delivery_id="reply",
             comment_id=54,
             text="@hamster-dan Please fix it",
@@ -1369,7 +1403,8 @@ def test_production_publication_422_projects_one_nonrecoverable_fault_without_we
     assert failed[0]["kind"] == "ValueError" and not failed[0]["retryable"]
     assert "provider detail" not in str(failed + firing_failed)
     authority.pull = replace(authority.pull, state="closed", closed=True)
-    assert subject.reconcile("closed-after-fault")["instance"] == "terminal"
+    subject.activate("closed-after-fault")
+    assert subject.host is not None and subject.host.place("terminal")
     subject.close()
     worker.close()
 
@@ -1379,7 +1414,7 @@ def test_nonretryable_publication_boundary_failure_projects_typed_blocker_once(t
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    subject.reconcile("enqueue")
+    subject.activate("enqueue")
 
     def resolver(instance: str, name: str):
         implementation = subject.activity(name)
@@ -1419,7 +1454,7 @@ def test_wrapped_value_error_is_one_nonretryable_attempt_and_projects_fault(tmp_
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
-    subject.reconcile("enqueue")
+    subject.activate("enqueue")
     calls = 0
 
     def resolver(instance: str, name: str):
@@ -1471,7 +1506,7 @@ def test_unrelated_review_activity_stays_inline_and_outside_local_publication_cu
     ready(authority)
     subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
 
-    subject.reconcile("mixed-dispatch")
+    subject.activate("mixed-dispatch")
     claimed = LocalDispatch(dispatch_path, instance="inspector").worker(("publication",)).claim()
 
     assert runner.reviews == 1
@@ -1492,15 +1527,15 @@ def test_same_head_policy_changes_reverts_and_deduplicates(tmp_path: Path) -> No
     ready(authority)
     original = authority.policy_value
     subject = application(tmp_path, authority, runner)
-    subject.reconcile()
+    subject.activate("poll")
     authority.policy_value = replace(original, strict=True, update_required=True, digest="policy-b")
-    subject.reconcile("b")
+    subject.activate("b")
     assert subject.host.control.policy_digest == "policy-b"  # type: ignore[union-attr]
     authority.policy_value = original
-    subject.reconcile("a")
+    subject.activate("a")
     assert subject.host.control.policy_digest == original.digest and runner.reviews == 3  # type: ignore[union-attr]
     writes = len(authority.transport.writes)
-    subject.reconcile("duplicate")
+    subject.activate("duplicate")
     assert runner.reviews == 3 and len(authority.transport.writes) == writes
     subject.close()
 
@@ -1509,17 +1544,15 @@ def test_strict_policy_requires_base_alignment(tmp_path: Path) -> None:
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner)
-    subject.reconcile()
+    subject.activate("poll")
     authority.pull = replace(authority.pull, base="d" * 40)
-    non_strict = subject.reconcile("moved")
+    non_strict = snapshot(subject, "moved")
     control = subject.host.control  # type: ignore[union-attr]
-    assert (
-        non_strict["epoch"] == 1 and control is not None and not control.base_current and workflow_gates_ready(control)
-    )
+    assert non_strict.epoch == 1 and control is not None and not control.base_current and workflow_gates_ready(control)
     authority.policy_value = replace(authority.policy_value, strict=True, update_required=True, digest="strict")
-    strict = subject.reconcile("strict")
+    strict = snapshot(subject, "strict")
     control = subject.host.control  # type: ignore[union-attr]
-    assert control is not None and not workflow_gates_ready(control) and strict["wait"] == "base update"
+    assert control is not None and not workflow_gates_ready(control) and workflow_wait(strict) == "base update"
     subject.close()
 
 
@@ -1527,7 +1560,8 @@ def test_real_provider_collaboration_facts_fold_into_minimal_gates(tmp_path: Pat
     authority, runner = Authority(), Runner()
     subject = application(tmp_path, authority, runner)
 
-    assert subject.reconcile("draft")["instance"] == "absent"
+    subject.activate("draft")
+    assert subject.host is None
 
     ready(authority)
     authority.policy_value = replace(
@@ -1539,51 +1573,52 @@ def test_real_provider_collaboration_facts_fold_into_minimal_gates(tmp_path: Pat
         digest="authority-policy",
     )
     authority.review = HumanReviewSnapshot(("reviewer",), (), (), (), 0, "available")
-    requested = subject.reconcile("review-requested")
+    requested = snapshot(subject, "review-requested")
     control = subject.host.control  # type: ignore[union-attr]
     assert control is not None
-    assert requested["wait"] == "human review"
+    assert workflow_wait(requested) == "human review"
     assert (control.human_requested, control.human_approved, control.required_approvals) == (True, False, 1)
 
     authority.review = HumanReviewSnapshot((), (("reviewer", "CHANGES_REQUESTED"),), (), ("reviewer",), 1, "available")
-    changes_requested = subject.reconcile("changes-requested")
+    changes_requested = snapshot(subject, "changes-requested")
     control = subject.host.control  # type: ignore[union-attr]
     assert control is not None
-    assert changes_requested["wait"] == "requested changes"
+    assert workflow_wait(changes_requested) == "requested changes"
     assert (control.changes_requested, control.unresolved_conversations) == (True, 1)
 
     authority.review = HumanReviewSnapshot((), (("reviewer", "APPROVED"),), ("reviewer",), (), 1, "available")
-    approved = subject.reconcile("approved-thread-open")
+    approved = snapshot(subject, "approved-thread-open")
     control = subject.host.control  # type: ignore[union-attr]
     assert control is not None
-    assert approved["wait"] == "conversation resolution"
+    assert workflow_wait(approved) == "conversation resolution"
     assert (control.human_approved, control.distinct_reviewer_approved) == (True, True)
 
     authority.review = replace(authority.review, unresolved_threads=0)
-    clear = subject.reconcile("thread-resolved")
+    clear = snapshot(subject, "thread-resolved")
     control = subject.host.control  # type: ignore[union-attr]
     assert control is not None and workflow_gates_ready(control)
-    assert clear["wait"] == "terminal lifecycle"
+    assert workflow_wait(clear) == "terminal lifecycle"
 
     authority.pull = replace(authority.pull, base="d" * 40)
-    stale = subject.reconcile("base-advanced")
-    assert stale["wait"] == "base update"
+    stale = snapshot(subject, "base-advanced")
+    assert workflow_wait(stale) == "base update"
 
     authority.pull = replace(authority.pull, mergeable=False, mergeable_state="dirty")
-    conflicted = subject.reconcile("conflict")
-    assert conflicted["wait"] == "conflict resolution"
+    conflicted = snapshot(subject, "conflict")
+    assert workflow_wait(conflicted) == "conflict resolution"
 
     authority.pull = replace(authority.pull, base=BASE, mergeable=True, mergeable_state="clean")
-    restored = subject.reconcile("authority-restored")
+    restored = snapshot(subject, "authority-restored")
     control = subject.host.control  # type: ignore[union-attr]
     assert control is not None and workflow_gates_ready(control)
-    assert restored["wait"] == "terminal lifecycle"
+    assert workflow_wait(restored) == "terminal lifecycle"
 
     authority.pull = replace(authority.pull, draft=True)
-    assert subject.reconcile("draft-again")["instance"] == "dormant"
+    subject.activate("draft-again")
+    assert subject.host is not None and subject.host.place("dormant")
     ready(authority)
-    resumed = subject.reconcile("ready-again")
-    assert (resumed["instance"], resumed["epoch"]) == ("active", 2)
+    resumed = snapshot(subject, "ready-again")
+    assert resumed.epoch == 2
     subject.close()
 
 
@@ -1595,11 +1630,11 @@ def test_author_approval_is_excluded_case_insensitively(tmp_path: Path) -> None:
     authority.review = HumanReviewSnapshot((), (("author", "APPROVED"),), ("author",), (), 0, "available")
     subject = application(tmp_path, authority, runner)
 
-    projection = subject.reconcile("author-approved")
+    projection = snapshot(subject, "author-approved")
 
     control = subject.host.control  # type: ignore[union-attr]
     assert control is not None and not control.human_approved
-    assert projection["wait"] == "human review"
+    assert workflow_wait(projection) == "human review"
     subject.close()
 
 
@@ -1607,28 +1642,28 @@ def test_reversible_human_authority_survives_restart_without_duplicate_poll_chur
     authority, first_runner = Authority(), Runner()
     ready(authority)
     first = application(tmp_path, authority, first_runner)
-    assert first.reconcile("clean")["wait"] == "terminal lifecycle"
+    assert workflow_wait(snapshot(first, "clean")) == "terminal lifecycle"
     authority.pull = replace(authority.pull, mergeable=False, mergeable_state="dirty")
-    assert first.reconcile("conflict")["wait"] == "conflict resolution"
+    assert workflow_wait(snapshot(first, "conflict")) == "conflict resolution"
     first.close()
 
     authority.pull = replace(authority.pull, mergeable=True, mergeable_state="clean")
     second_runner = Runner()
     second = application(tmp_path, authority, second_runner)
-    assert second.reconcile("restored-after-restart")["wait"] == "terminal lifecycle"
+    assert workflow_wait(snapshot(second, "restored-after-restart")) == "terminal lifecycle"
     history = (tmp_path / "state/history.jsonl").read_text()
     writes = len(authority.transport.writes)
 
-    assert second.reconcile("duplicate-clean-poll")["wait"] == "terminal lifecycle"
+    assert workflow_wait(snapshot(second, "duplicate-clean-poll")) == "terminal lifecycle"
     assert (tmp_path / "state/history.jsonl").read_text() == history
     assert len(authority.transport.writes) == writes
     assert second_runner.reviews == 0
 
     authority.pull = replace(authority.pull, mergeable=False, mergeable_state="dirty")
-    assert second.reconcile("same-conflict-edge-after-restart")["wait"] == "conflict resolution"
+    assert workflow_wait(snapshot(second, "same-conflict-edge-after-restart")) == "conflict resolution"
     conflict_history = (tmp_path / "state/history.jsonl").read_text()
 
-    assert second.reconcile("duplicate-conflict-poll")["wait"] == "conflict resolution"
+    assert workflow_wait(snapshot(second, "duplicate-conflict-poll")) == "conflict resolution"
     assert (tmp_path / "state/history.jsonl").read_text() == conflict_history
     second.close()
 
@@ -1637,7 +1672,7 @@ def test_state_root_refuses_rebinding(tmp_path: Path) -> None:
     authority, runner = Authority(), Runner()
     ready(authority)
     subject = application(tmp_path, authority, runner)
-    subject.reconcile()
+    subject.activate("poll")
     subject.close()
     rebound = Authority()
     rebound.repository, rebound.pr_number = "other/repo", 99
@@ -1660,7 +1695,7 @@ def test_credentials_never_enter_agent_requests_or_durable_history(tmp_path: Pat
         public_clone_url=f"https://example.invalid/repo?x={SECRETS[0]}",
         reminder_delay=10**30,
     )
-    subject.reconcile()
+    subject.activate("poll")
     encoded_requests = json.dumps([asdict(x) for x in runner.requests])
     encoded_history = (tmp_path / "state/history.jsonl").read_text()
     assert all(secret not in encoded_requests and secret not in encoded_history for secret in SECRETS)
