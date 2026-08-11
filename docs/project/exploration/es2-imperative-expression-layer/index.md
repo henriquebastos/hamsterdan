@@ -228,10 +228,26 @@ Findings:
    families, not one universal combinator. Coverage: 24 transitions of 69;
    the fingerprint-stamping behavior is proven identical to the
    hand-written net.
+7. The authorization family confirmed the grammar shape (commit `bc83fad`).
+   `authorize_change`, `authorize_rerun`, `authorize_repair`, and
+   `authorize_reply` share one fragment: read current `Authority` plus
+   adjacent states, consume the owner and one basis token, reproduce the
+   owner alongside a typed work request. The `Authorization` item keeps
+   the decision predicate and request-building handler as visible named
+   functions — nothing about the workflow decision moved into the
+   combinator. Typed-guard normalization again absorbed hand-written
+   drift (argument-reordering wrapper lambdas), proven identical by a
+   verdict-grid test. Coverage: 28 of 69 transitions across five
+   vocabulary items: `activity_bridge`, `authorized_effect`,
+   `retired_result`, `MutationAcceptance`, `Authorization`.
 
-Next slices: authorization/request fragments (`authorize_*`), observation
-entries, and the generation-boundary cohort — the relational-read and
-multi-owner cases the open questions anticipate.
+Next slices, in rising design risk: observation entries and the intent
+acceptances (`accept_finding_intent`/`accept_reminder_intent`); the
+conversation fan-out (`start_conversation`, `unpack_intents`); the
+recovery family (`recover_publication.*`, `retire.recovery_basis`) with
+its cross-owner read arcs; then the genuinely open cases — snapshot
+relational joins (`request_dashboard`, `authorize_readiness` reading the
+cohort) and the generation-boundary cohort creation.
 
 ## Open questions
 
