@@ -49,7 +49,7 @@ this series as prior art.
 | # | Question | State | Verdict |
 | --- | --- | --- | --- |
 | [AX0](ax0-architecture-map/index.md) | Architecture map and baseline example | Completed | Baseline selected |
-| AX1 | Minimal workflow AST (Activity/Sequence/Parallel) | Planned | — |
+| [AX1](ax1-minimal-ast/index.md) | Minimal workflow AST (Activity/Sequence/Parallel) | Completed | Promising; continue |
 | AX2 | Lowering Activity and Sequence to `Net` | Planned | — |
 | AX3 | Typed activities, ports, basic inference | Planned | — |
 | AX4 | Parallel split, execution, join | Planned | — |

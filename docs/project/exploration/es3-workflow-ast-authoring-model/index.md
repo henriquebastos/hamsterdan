@@ -74,3 +74,11 @@ All records and spike code live inside this directory; production
   selected the actions failure → rerun-or-repair fragment
   (`topology.py` L1461–1476 plus its two activity bridges) as the
   baseline example for AX1–AX11.
+- [AX1 — Minimal workflow AST](experiments/ax1-minimal-ast/index.md)
+  completed 2026-08-11 — Promising; continue. Three frozen nodes
+  (`Activity`/`Sequence`/`Parallel`) with structural identity, origin as
+  non-identity metadata, deterministic walk paths as `NetPath` seeds, and
+  an origin-free canonical form + fingerprint for compile-determinism
+  checks. Fourteen tests pass. Honest gap carried to AX2/AX3: the AST
+  omits exactly the data semantics (colors, transforms, join meaning)
+  the current DSL forces you to write.
