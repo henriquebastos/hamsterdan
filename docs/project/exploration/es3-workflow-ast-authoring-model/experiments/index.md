@@ -55,7 +55,7 @@ this series as prior art.
 | [AX0](ax0-architecture-map/index.md) | Architecture map and baseline example | Completed | Baseline selected |
 | [AX1](ax1-minimal-ast/index.md) | Minimal workflow AST (Activity/Sequence/Parallel) | Completed | Promising; continue |
 | [AX2](ax2-lower-sequence/index.md) | Lowering Activity and Sequence to `Net` | Completed | Promising; continue |
-| AX3 | Typed activities, ports, basic inference | Planned | — |
+| [AX3](ax3-typed-ports/index.md) | Typed activities, ports, basic inference | Completed | Promising; continue |
 | AX4 | Parallel split, execution, join | Planned | — |
 | AX5 | Branching by output type | Planned | — |
 | AX6 | Guard-based branching, predicate AST → CEL | Planned | — |

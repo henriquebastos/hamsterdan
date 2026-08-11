@@ -93,3 +93,13 @@ All records and spike code live inside this directory; production
   occurrences bind safely by exact handler `NetUri`. Ten tests pass.
   AX3 next: derive colors from typed signatures instead of explicit
   `request=`/`result=` declarations.
+- [AX3 — Typed activities, ports, and basic inference](experiments/ax3-typed-ports/index.md)
+  completed 2026-08-11 — Promising; continue. `@activity` definitions
+  already carry resolved hints, so inference needs no new machinery;
+  single in/out, multi-input with distinct colors, sinks (as a signal),
+  and async infer safely, while unions, optionals, and generics are
+  refused with reasons and remedies. The mandated same-type-two-places
+  case is refused loudly by the frozen derivation and resolved by a
+  ~60-line place-bound port handler above the runtime — named ports need
+  no Petrus change. Sink probe recorded as ledger SP-2. Fourteen tests
+  pass.

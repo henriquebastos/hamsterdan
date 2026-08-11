@@ -33,3 +33,26 @@ result of the explorations.
   language-neutral and serializable (`NetDefinitionV3` carries portable
   names, never implementation objects); history replay must not require
   importable domain classes.
+- AX3 evidence (2026-08-11): nominal identity held up better than
+  expected for inputs — the typed derivation already refuses same-color
+  fan-in loudly, and place-bound ports resolve it entirely above the
+  runtime. The genuine nominal-string casualties observed: unions have
+  no color (`Approved | Rejected` must be exploded by the compiler,
+  AX5), and generics erase (`list[Decision]` → `"list"`), forcing
+  wrapper dataclasses.
+
+### SP-2 — First-class sinks (no-output activities)
+
+- Raised by: AX3 probe, 2026-08-11.
+- Today: `DerivedActivityHandler` requires the result annotation to match
+  at least one output arc color, so `-> None` activities fail derivation
+  (`return type NoneType matches no output arc`). A place explicitly
+  colored `"NoneType"` satisfies it mechanically — workable but it leaks
+  a Python spelling into the language-neutral net and creates a
+  token-per-completion place the author never wanted.
+- Speculation: either the derivation layer accepts a declared "no
+  projection" sink, or a canonical completion color exists. Until then
+  the AX compiler can emit the `NoneType` completion place and hide the
+  ugliness above the runtime.
+- Watch in: AX4 (join branches whose sides produce nothing), AX8
+  (retry exits), AX11 (real fragment).
