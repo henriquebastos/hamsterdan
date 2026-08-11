@@ -42,9 +42,9 @@ from hamsterdan.contracts.readiness import (
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import GitHubBoundaryError
+from hamsterdan.readiness.payloads import PydanticPayloadConverter
 
 from .git_publish import GitPublishError, HostGitPublisher, PublicationCategory, payload_digest
-from .payloads import PydanticPayloadConverter
 
 CurrentFence = Callable[[int, str, str, str, str], None]
 Current = Callable[[int, str], bool]

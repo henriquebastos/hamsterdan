@@ -118,6 +118,64 @@ authority fencing, or recovery changes even in principle.
    semantics, cancellation behavior, and soundness assumptions, using the
    Workflow Patterns catalogue as the test suite.
 
+## First production refinement — 2026-08-11
+
+### A bridge-only production helper did not earn its abstraction
+
+The current topology has a real repeated Activity bridge:
+
+```text
+typed request place -> Activity transition -> typed result place
+```
+
+The smallest proposed production helper only replaced the already fluent and
+more visible `work >> transition >> result` expression with a name. Applying a
+single broad `owned_effect` helper directly in production would immediately
+have needed callback hooks, custom relational reads, preprocessing, recovery
+destinations, optional fan-out, and exceptions. That one universal shape would
+serialize the existing arcs into configuration rather than remove a workflow
+concept, so no combinator or DSL was introduced into `main`.
+
+This narrows rather than falsifies the independent prototype below. Repetition
+alone does not earn a helper, and one universal owned-effect combinator is not
+the emerging answer; exact regeneration is separately testing a small grammar
+of named semantic fragment families. Promotion still requires each family to
+eliminate a demonstrated burden while retaining an obvious lowering.
+
+### Direct typed transformations clarified a narrower boundary
+
+Six one-output acceptance transitions did contain accidental expression
+mechanics. Generic handlers hydrated every selected token, searched values by
+runtime type, reflected through a folder wrapper, zipped one result to one
+output, and serialized it. Petrus's existing direct handler contract expresses
+the same rules as ordinary typed functions:
+
+```python
+def _accept_dashboard(
+    authority: Authority,
+    state: DashboardPublicationState,
+    result: DashboardPublicationResult,
+) -> DashboardPublicationState:
+    ...
+```
+
+RS-014 applies that form only to human, change, repair, conversation,
+dashboard, and readiness acceptance. Dynamic fan-out, optional output,
+multi-owner folding, and target-sensitive routing remain Petri-aware because
+their topology is part of their meaning. The strict Pydantic converter moved
+from `host` to `readiness` so replayed inputs and direct outputs share the same
+domain-owned validation boundary.
+
+The result preserves the exact 46-place, 69-transition, 309-arc Net. It is a
+local notation improvement, not by itself evidence that an imperative layer or
+fragment IR is warranted. It establishes a stronger experiment rule: first use
+the smallest existing Petrus expression that says the truth directly;
+introduce a new surface only when that is still insufficient. It also removes
+the application-private `_fold_owned` seam used by the early prototype, so the
+prototype's next rebase must reconstruct these acceptance fragments through
+public typed direct transformations rather than depend on that accidental
+helper.
+
 ## Language evaluation
 
 1. **Stay in Python.** Machinery, team, and the compile-to-net strategy all
@@ -272,9 +330,12 @@ judgment before committing to a design.
 
 ## Open questions
 
-- Which combinator vocabulary covers the current 69 transitions without
-  hiding workflow decisions? Where do relational reads (snapshot projection)
-  and multi-owner folds fit a fragment grammar?
+- Can the eight emerging fragment families survive the direct-acceptance
+  production change without depending on application-private binding helpers?
+- Which of the remaining 31 transitions represent repeated semantic fragments,
+  rather than merely repeated arc shapes?
+- Where do relational reads (snapshot projection) and multi-owner folds fit a
+  fragment grammar without hiding workflow decisions?
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —
   generated `NetSpec`, a serialized IR, or both?
 - Is generator-based sugar worth its tracing/static-analysis cost over a

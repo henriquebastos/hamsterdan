@@ -56,6 +56,7 @@ from hamsterdan.contracts.readiness import (
     project_readiness,
     workflow_gates_ready,
 )
+from hamsterdan.readiness.payloads import PydanticPayloadConverter
 
 DASHBOARD_FORMAT = 2
 MAX_REVIEW_ATTEMPTS = 3
@@ -199,12 +200,6 @@ def _unpack_intents(binding, outputs):
         for output in outputs
         if (kinds := selected.get(str(output.target))) is not None
     }
-
-
-def _fold_owned(binding, outputs, owner_type, result_type, folder):
-    owner, result = _values(binding, owner_type, result_type)
-    implementation = getattr(folder, "implementation", folder)
-    return _put(outputs, (implementation(owner, result),))
 
 
 def _current(authority: Authority, value) -> bool:
@@ -776,20 +771,50 @@ def _accept_actions(binding, outputs):
     )
 
 
-def _accept_human(binding, outputs):
-    h, value = _values(binding, HumanState, HumanObservation)
-    return _route(outputs, {"human_state": fold_human.implementation(h, value)})
+@direct(converter=PydanticPayloadConverter())
+def _accept_human(authority: Authority, state: HumanState, value: HumanObservation) -> HumanState:
+    del authority
+    return fold_human.implementation(state, value)
 
 
-def _accept_mutation_effect(binding, outputs, result_type):
-    values = _hydrate(binding)
-    m = next(v for v in values if isinstance(v, MutationState))
-    result = next(v for v in values if isinstance(v, result_type))
-    if isinstance(result, RepairResult) and not result.fingerprint:
-        actions = next(v for v in values if isinstance(v, ActionsState))
+@direct(converter=PydanticPayloadConverter())
+def _accept_change(authority: Authority, state: MutationState, result: ChangeResult) -> MutationState:
+    del authority
+    return fold_change_effect.implementation(state, result)
+
+
+@direct(converter=PydanticPayloadConverter())
+def _accept_repair(
+    authority: Authority, actions: ActionsState, state: MutationState, result: RepairResult
+) -> MutationState:
+    del authority
+    if not result.fingerprint:
         result = result.validated_update(fingerprint=actions.fingerprint)
-    m = fold_effect(m, result)
-    return _route(outputs, {"mutation_state": m})
+    return fold_repair_effect.implementation(state, result)
+
+
+@direct(converter=PydanticPayloadConverter())
+def _accept_conversation(
+    authority: Authority, state: ConversationPublicationState, result: ConversationPublicationResult
+) -> ConversationPublicationState:
+    del authority
+    return fold_conversation_effect.implementation(state, result)
+
+
+@direct(converter=PydanticPayloadConverter())
+def _accept_dashboard(
+    authority: Authority, state: DashboardPublicationState, result: DashboardPublicationResult
+) -> DashboardPublicationState:
+    del authority
+    return fold_dashboard_effect.implementation(state, result)
+
+
+@direct(converter=PydanticPayloadConverter())
+def _accept_readiness(
+    authority: Authority, state: ReadinessPublicationState, result: ReadinessPublicationResult
+) -> ReadinessPublicationState:
+    del authority
+    return fold_readiness_effect.implementation(state, result)
 
 
 def _accept_intent(binding, outputs, owner_type):
@@ -1359,7 +1384,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     p.authority >> arc.read() >> accept_actions
     (p.actions_state, p.actions_result) >> accept_actions >> (p.actions_state, p.actions_basis(ActionsObservation))
-    accept_human = t.accept_human(handler=petri_handler(_accept_human), guards=_guard(lambda a, h, v: _current(a, v)))
+    accept_human = t.accept_human(handler=_accept_human, guards=_guard(lambda a, h, v: _current(a, v)))
     p.authority >> arc.read() >> accept_human
     (p.human_state, p.human_result) >> accept_human >> p.human_state
     accept_review = t.accept_review(
@@ -1401,24 +1426,17 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
             work.p.change,
         )
     )
-    accept_conversation = t.accept_conversation(
-        handler=petri_handler(
-            lambda b, o: _fold_owned(
-                b, o, ConversationPublicationState, ConversationPublicationResult, fold_conversation_effect
-            )
-        ),
-        guards=_guard(_effect_matches),
-    )
+    accept_conversation = t.accept_conversation(handler=_accept_conversation, guards=_guard(_effect_matches))
     p.authority >> arc.read() >> accept_conversation
     (p.conversation_publication_state, p.conversation_result) >> accept_conversation >> p.conversation_publication_state
-    for name, owner, owner_type, place, result_type, folder in (
+    for name, owner, owner_type, place, result_type, handler in (
         (
             "dashboard",
             p.dashboard_publication_state,
             DashboardPublicationState,
             p.dashboard_result,
             DashboardPublicationResult,
-            fold_dashboard_effect,
+            _accept_dashboard,
         ),
         (
             "readiness",
@@ -1426,15 +1444,11 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
             ReadinessPublicationState,
             p.readiness_result,
             ReadinessPublicationResult,
-            fold_readiness_effect,
+            _accept_readiness,
         ),
     ):
         tr = getattr(t, f"accept_{name}")(
-            handler=petri_handler(
-                lambda b, o, owner_type=owner_type, result_type=result_type, fold=folder: _fold_owned(
-                    b, o, owner_type, result_type, fold
-                )
-            ),
+            handler=handler,
             guards=_typed_guard((Authority, owner_type, result_type), _effect_matches),
         )
         p.authority >> arc.read() >> tr
@@ -1442,12 +1456,12 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     accept_reminder = t.accept_reminder(guards=_guard(lambda a, result: _current(a, result)))
     p.authority >> arc.read() >> accept_reminder
     p.reminder_result >> accept_reminder
-    for name, place, result_type in (
-        ("repair", p.repair_result, RepairResult),
-        ("change", p.change_result, ChangeResult),
+    for name, place, result_type, handler in (
+        ("repair", p.repair_result, RepairResult, _accept_repair),
+        ("change", p.change_result, ChangeResult, _accept_change),
     ):
         tr = getattr(t, f"accept_{name}")(
-            handler=petri_handler(lambda b, o, kind=result_type: _accept_mutation_effect(b, o, kind)),
+            handler=handler,
             guards=_typed_guard(
                 (Authority, MutationState, result_type),
                 lambda authority, mutation, result: _effect_matches(authority, mutation, result),

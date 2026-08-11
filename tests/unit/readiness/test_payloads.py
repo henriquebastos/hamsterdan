@@ -1,3 +1,5 @@
+"""Strict conversion and projection contracts for readiness values."""
+
 from typing import Any
 
 import pytest
@@ -21,7 +23,7 @@ from hamsterdan.contracts.readiness import (
     ReviewState,
     project_readiness,
 )
-from hamsterdan.host.payloads import PydanticPayloadConverter
+from hamsterdan.readiness.payloads import PydanticPayloadConverter
 
 
 def test_converter_round_trips_strict_json_workflow_model() -> None:

@@ -61,7 +61,6 @@ from hamsterdan.contracts.readiness import (
     workflow_gates_ready,
     workflow_wait,
 )
-from hamsterdan.host.payloads import PydanticPayloadConverter
 from hamsterdan.readiness.net.topology import (
     ACTIVITY_TRANSITIONS,
     DASHBOARD_FORMAT,
@@ -84,6 +83,7 @@ from hamsterdan.readiness.net.topology import (
     fold_review,
     ready,
 )
+from hamsterdan.readiness.payloads import PydanticPayloadConverter
 
 REQUEST_TYPES = {
     "review": ReviewRequest,

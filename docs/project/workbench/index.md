@@ -22,3 +22,4 @@ None.
 - [RS-011 — Make agent execution identity explicit](rs-011-make-agent-execution-identity-explicit.md)
 - [RS-012 — Move Git object protocol to the provider](rs-012-move-git-object-protocol-to-provider.md)
 - [RS-013 — Remove legacy Amp agent execution](rs-013-remove-legacy-amp-agent-execution.md)
+- [RS-014 — Express typed acceptance directly](rs-014-express-typed-acceptance-directly.md)

@@ -35,10 +35,10 @@ from hamsterdan.github_app.models import GitHubBoundaryError
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 from hamsterdan.github_app.webhooks import Observation, WebhookCustody, admit_conversation
+from hamsterdan.readiness.payloads import PydanticPayloadConverter
 
 from .agenticus import AgentComposition, AgentRouteStore, RoutedAgentRunner
 from .application import PrReadinessApplication
-from .payloads import PydanticPayloadConverter
 from .runnable import RunnableIndex
 
 LOG = logging.getLogger("hamsterdan.host")
