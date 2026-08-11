@@ -166,6 +166,63 @@ Petrus change: the combinators lower to the existing public
 Petrus cannot prove the DSL is good enough; only a real Net can. Exploration
 evidence therefore precedes framework contract.
 
+## Prototype evidence — branch `es2/expression-layer`, 2026-08-11
+
+Experiment 1 (combinator layer) is running as additive code only:
+`src/hamsterdan/readiness/net/expression.py` plus
+`tests/unit/readiness/test_expression_fragment.py`. Production
+`topology.py` is untouched and remains the comparison oracle; nothing
+imports the prototype. Commits `62250d3` (dashboard/readiness) and
+`adda7a1` (all bridges, conversation, retirement family).
+
+Vocabulary so far — three items regenerate every external-effect fragment:
+
+- `activity_bridge` — one typed Activity boundary (request place →
+  `execute.<activity>` transition → result place). Covers all 11 bridges,
+  including the two actions bridges sharing one result place.
+- `authorized_effect` — the full owned-effect fragment ES-001 proved must
+  stay explicit: bridge, acceptance against current `Authority` and exact
+  operation ownership, pure fold into owner state, retirement of superseded
+  results. Covers dashboard, readiness, and conversation (whose extra
+  requested-state condition lives in `_effect_matches`, not the combinator).
+- `retired_result` — one superseded/stale-result retirement. Covers the
+  8-member retirement family, including review's distinct `_review_matches`
+  and actions' `_duplicate_actions` predicates as declarative parameters.
+
+The regeneration tests compare 22 transitions and their places/arcs as
+frozen schema values (exact structural equality, not counts) and evaluate
+lowered guards/handlers of both nets on identical bindings (accepted,
+superseded-head, foreign-operation, and conversation not-requested cases).
+Full suite stays green: 602 passed.
+
+Findings:
+
+1. Petrus's fluent `>>` arc syntax was never the pain; the pain is the
+   repeated guard/handler/binding plumbing and the per-concern repetition of
+   the authorize→request→accept/supersede/retire fragment. One combinator
+   absorbs `_typed_guard`, `_fold_owned`, operation matching, and retirement
+   wiring in a single declaration per concern.
+2. The prototype reuses private topology seams (`_effect_matches`,
+   `_fold_owned`, `_guard`, `_typed_guard`, `_review_matches`,
+   `_duplicate_actions`). A promoted Petrus DSL needs neutral, public
+   equivalents of exactly these: typed-binding hydration, typed guards, an
+   owned-state fold helper.
+3. The combinator normalizes an incidental inconsistency: hand-written
+   `accept_conversation` uses the untyped `_guard` where dashboard/readiness
+   use `_typed_guard`. Behavioral tests prove the judgments identical —
+   regeneration surfaces and absorbs ad-hoc drift rather than copying it.
+4. Petrus's position-based anonymous declaration identity makes exact
+   schema-level regeneration comparison possible; a promoted DSL must
+   preserve it.
+5. Concurrent `main` evolution is itself evidence: the experiment rebases
+   onto `main` and reruns exact diffs, testing whether the vocabulary
+   absorbs real topology change.
+
+Next slices: mutation-owned accepts (`repair`/`change` share `MutationState`;
+`RepairResult` additionally reads `ActionsState`) — the first real test of
+whether a generic combinator stays honest or starts hiding workflow
+decisions — then the authorization/request fragments.
+
 ## Open questions
 
 - Which combinator vocabulary covers the current 69 transitions without
