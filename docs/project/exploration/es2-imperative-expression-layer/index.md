@@ -465,6 +465,57 @@ rather than opening a new one, and records here what the evidence
 supports. Promotion still follows the ES-001 pattern — accepted Petrus
 lands first; Hamsterdan re-pins.
 
+## Guard decomposition audit — 2026-08-11
+
+The libpetri-prompted question — how much of the readiness net's guard
+content is decidable correlation equality rather than opaque predicate —
+was answered by classifying every guard atom across all 69 transitions
+(guard inventory extracted mechanically from the built net; predicate
+decomposition read from the named guard functions in `topology.py`).
+
+Result: **45 of the 48 guarded transitions decompose completely into
+decidable atoms; zero guards are irreducibly opaque as a whole.**
+
+- 21 transitions carry no guard at all: the 7 observation entries, the 11
+  Activity bridges, `rearm`, `unpack_intents`, and
+  `retire.terminal_admission`.
+- 45 of 48 guarded transitions are built entirely from four decidable atom
+  kinds:
+  1. **Token-pair field equality** (the `MatchSpec` shape, including
+     tuple-valued and optional-field-conditional equality): `_current`
+     (epoch/head plus conditional base_head/policy_digest), `_subject`,
+     `_same`, `_same_basis`, operation identity (`_effect_matches`,
+     `_review_matches`), commit/generation matching, observation identity,
+     fingerprint equality, and the recovery four-field authority tuple.
+  2. **Constant filters** (field vs literal, set membership, flags,
+     presence): `authorized`, `blocking`, intent kinds, conclusions,
+     stop status, boundary, relation sets, state flags.
+  3. **Ordered field comparisons** (linear arithmetic): attempt
+     orderings, retry-attempt thresholds.
+  4. **Boolean combination including negation** — every `retire.*`
+     operation guard is literally the complement of its acceptance
+     guard, so declared as data the acceptance/retirement partition
+     becomes mechanically checkable for disjointness and totality
+     (the experiment's hand-written verdict grids proved exactly this
+     pairwise).
+- The only semantic residue lives in the 3 projection gates
+  (`request_dashboard`, `authorize_readiness`, `reminder_due`), and it is
+  exactly **two atoms**: the dashboard projection-digest currency check
+  (a sha256 over merged facts compared to the stored projection) and the
+  blocking-findings list scan inside `workflow_gates_ready`. Everything
+  else inside those three guards is constant filters over merged cohort
+  fields plus one `_current` correlation (`reminder_due`'s timer).
+  `start_conversation`, despite reading the full cohort, has a fully
+  decidable guard — the snapshot feeds its handler, not its guard.
+
+Implication for the Petrus kernel lane: a declared correlation/filter
+construct with those four atom kinds would express 94% of this
+production net's guard content as analyzable data — directly consumable
+by the structural/SMT verification work — leaving named opaque
+predicates only where genuine domain computation exists (digest
+currency, findings scan). This is the concrete spec the earlier
+`MatchSpec` open question asked for; that open question is resolved.
+
 ## Open questions
 
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —
@@ -473,12 +524,7 @@ lands first; Hamsterdan re-pins.
   name in a later composition step) is prior art for the answer.
 - Is generator-based sugar worth its tracing/static-analysis cost over a
   plain builder API, given the Navigator's DX goal?
-- From libpetri's TypeScript surface (2026-08-11 re-read, Navigator
-  prompt): how much of the readiness net's guard content decomposes into
-  decidable correlation equality (epoch/head/operation matching — the
-  `MatchSpec` shape) plus a residual named domain predicate? Declared
-  correlation would turn most fencing plumbing into analyzable data.
-- Also from libpetri: which handler-owned routing decisions are static
+- From libpetri: which handler-owned routing decisions are static
   XOR/AND output contracts (generation stop routes, intent fan-out) that
   could be declared as data — and how much exact-incidence verification
   coverage would that buy the structural-analysis lane, whose current
