@@ -27,6 +27,8 @@ from hamsterdan.contracts.readiness import (
     Dormant,
     FindingPublicationRequest,
     FindingPublicationResult,
+    GenerationStart,
+    GenerationStop,
     HumanObservation,
     HumanState,
     Intent,
@@ -74,6 +76,8 @@ _TOKEN_TYPES = {
     for value in (
         Seed,
         Admission,
+        GenerationStart,
+        GenerationStop,
         Lifecycle,
         Authority,
         ActionsState,
@@ -497,6 +501,86 @@ def _admit(binding, outputs):
         "reminder.timer": Reminder(epoch, authority.head),
     }
     return {out.target: (Token(out.color, by_target[str(out.target)].dump()),) for out in outputs}
+
+
+def _begin_generation(binding, outputs):
+    start = _values(binding, GenerationStart)[0]
+    authority = Authority(
+        start.repository_id,
+        start.pr_number,
+        start.epoch,
+        start.head,
+        start.base_head,
+        start.strict_base,
+        start.base_current,
+        start.policy_digest,
+        start.required_checks,
+        start.required_approvals,
+        start.conversation_resolution,
+        "new" if start.relation in {"new", "resumed"} else start.relation,
+    )
+    policy = {
+        "strict_base": start.strict_base,
+        "required_checks": start.required_checks,
+        "required_approvals": start.required_approvals,
+        "conversation_resolution": start.conversation_resolution,
+        "digest": start.policy_digest,
+    }
+    review_payload = effect_payload(
+        authority,
+        {
+            "strict_base": start.strict_base,
+            "base_current": start.base_current,
+            "policy": policy,
+            "prior_findings": start.prior_findings,
+            "prior_lineage": start.prior_lineage,
+        },
+    )
+    review_work = ReviewRequest(
+        epoch=start.epoch,
+        head=start.head,
+        operation=operation("review", authority, payload=review_payload),
+        base_head=start.base_head,
+        policy_digest=start.policy_digest,
+        strict_base=start.strict_base,
+        base_current=start.base_current,
+        policy=policy,
+        prior_findings=start.prior_findings,
+        prior_lineage=start.prior_lineage,
+    )
+    actions_payload = effect_payload(authority)
+    actions_work = ActionsDiscoveryRequest(
+        epoch=start.epoch,
+        head=start.head,
+        operation=operation("actions_discovery", authority, payload=actions_payload),
+        **actions_payload,
+    )
+    by_target = {
+        "authority": authority,
+        "actions_state": ActionsState(actions_operation=actions_work.operation),
+        "review_state": ReviewState(review_operation=review_work.operation, review_attempts=1),
+        "human_state": HumanState(),
+        "mutation_state": MutationState(
+            repair_used=start.repair_used,
+            repair_fingerprint=start.repair_fingerprint,
+        ),
+        "publication_state": PublicationState(),
+        "work.review": review_work,
+        "work.actions_discovery": actions_work,
+        "reminder.timer": Reminder(start.epoch, start.head),
+    }
+    return {out.target: (Token(out.color, by_target[str(out.target)].dump()),) for out in outputs}
+
+
+def _stop_generation(stop: GenerationStop):
+    if stop.status == "draft":
+        return Dormant(stop.repository_id, stop.pr_number, stop.last_epoch, stop.head)
+    return Terminal("success" if stop.status == "merged" else "abort", stop.last_epoch, stop.head)
+
+
+def _route_generation_stop(binding, outputs):
+    value = _stop_generation(*_values(binding, GenerationStop))
+    return _route(outputs, {"dormant" if isinstance(value, Dormant) else "terminal": value})
 
 
 def _subject(prior, admission):
@@ -1013,6 +1097,8 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     # External observations enter exact typed places; Activities bridge only
     # their matching request and result places.
     t.verified_admission >> p.admission(Admission)
+    t.begin_generation >> p.generation_start(GenerationStart)
+    t.end_generation >> p.generation_stop(GenerationStop)
     t.lifecycle_observation >> p.lifecycle(Lifecycle)
     t.human_observation >> p.human_result(HumanObservation)
     t.actions_observation >> p.actions_result(ActionsObservation)
@@ -1064,6 +1150,63 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         p.human_state(HumanState),
         p.mutation_state(MutationState),
         p.publication_state(PublicationState),
+    )
+    generation = net.s.generation
+    for name, prior, prior_type, relation in (
+        ("initial", p.seed(Seed), Seed, "new"),
+        ("resume", p.dormant(Dormant), Dormant, "resumed"),
+    ):
+        transition = getattr(generation.t, name)(
+            handler=petri_handler(_begin_generation),
+            guards=_typed_guard(
+                (prior_type, GenerationStart),
+                lambda control, start, expected=relation: _subject(control, start) and start.relation == expected,
+            ),
+        )
+        (
+            (prior, p.generation_start)
+            >> transition
+            >> (
+                *cohort,
+                work.p.review,
+                work.p.actions_discovery,
+                reminder.p.timer(Reminder),
+            )
+        )
+    (
+        p.generation_start
+        >> generation.t.supersede(
+            handler=petri_handler(_begin_generation),
+            guards=_typed_guard(
+                (GenerationStart,),
+                lambda start: start.relation in {"confirmed", "superseded"},
+            ),
+        )
+        >> (*cohort, work.p.review, work.p.actions_discovery, reminder.p.timer)
+    )
+    (
+        p.generation_stop
+        >> generation.t.stop_active(
+            handler=petri_handler(_route_generation_stop),
+            guards=_typed_guard((GenerationStop,), lambda stop: stop.active),
+        )
+        >> (p.dormant, p.terminal)
+    )
+    (
+        (p.dormant, p.generation_stop)
+        >> generation.t.stop_dormant(
+            handler=petri_handler(_route_generation_stop),
+            guards=_typed_guard(
+                (Dormant, GenerationStop),
+                lambda dormant, stop: (
+                    not stop.active
+                    and stop.status in {"merged", "closed"}
+                    and _subject(dormant, stop)
+                    and dormant.last_epoch == stop.last_epoch
+                ),
+            ),
+        )
+        >> p.terminal
     )
     for name, prior, guard in (
         ("initial", p.seed(Seed), _subject),

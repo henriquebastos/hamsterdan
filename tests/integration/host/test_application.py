@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested, FiringFailed
+from petrus.impetus.history import (
+    ActivityCompleted,
+    ActivityFailed,
+    ActivityRequested,
+    FiringFailed,
+    ScopeClosed,
+    ScopeReset,
+)
 from petrus.motus.activity import ActivityError, ExecutionPolicy
 from petrus.motus.dispatch import LocalDispatch
 from petrus.motus.worker import Worker
@@ -258,9 +265,12 @@ def test_draft_ready_dormant_and_same_head_resume(tmp_path: Path) -> None:
     writes = len(authority.transport.writes)
     authority.pull = replace(authority.pull, draft=True)
     assert subject.reconcile("draft")["instance"] == "dormant" and len(authority.transport.writes) == writes
+    assert subject.host is not None and subject.host.generation_scope is None
+    assert any(isinstance(record, ScopeClosed) for record in subject.host.engine.records)
     ready(authority)
     resumed = subject.reconcile("ready-again")
     assert (resumed["epoch"], resumed["head"], runner.reviews) == (2, HEAD, 2)
+    assert subject.host.generation_scope is not None and subject.host.generation_scope.generation == 2
     subject.close()
 
 
@@ -291,8 +301,12 @@ def test_new_head_and_closed_terminal_absorb_late_poll(tmp_path: Path) -> None:
     authority.pull = replace(authority.pull, head=HEAD_2)
     authority.run = replace(authority.run, head=HEAD_2, id=12)
     assert subject.reconcile("synchronize")["epoch"] == 2
+    assert subject.host is not None and subject.host.generation_scope is not None
+    assert subject.host.generation_scope.generation == 2
+    assert any(isinstance(record, ScopeReset) for record in subject.host.engine.records)
     authority.pull = replace(authority.pull, state="closed", closed=True)
     assert subject.reconcile("closed")["status"] == "abort"
+    assert subject.host.generation_scope is None
     writes = len(authority.transport.writes)
     history = (tmp_path / "state/history.jsonl").read_text()
     assert subject.reconcile("late")["status"] == "abort" and len(authority.transport.writes) == writes

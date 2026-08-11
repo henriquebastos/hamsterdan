@@ -42,6 +42,36 @@ class Admission(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class GenerationStart(WorkflowModel):
+    repository_id: str
+    pr_number: int
+    epoch: int
+    relation: Literal["new", "confirmed", "superseded", "resumed"]
+    head: str
+    base_head: str
+    strict_base: bool
+    base_current: bool = True
+    policy_digest: str = ""
+    required_checks: list[str] = field(default_factory=list)
+    required_approvals: int = 0
+    conversation_resolution: bool = False
+    prior_findings: list[dict] = field(default_factory=list)
+    prior_lineage: list[dict] = field(default_factory=list)
+    repair_used: bool = False
+    repair_fingerprint: str = ""
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class GenerationStop(WorkflowModel):
+    repository_id: str
+    pr_number: int
+    last_epoch: int
+    status: Literal["draft", "merged", "closed"]
+    head: str
+    active: bool
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class Lifecycle(WorkflowModel):
     status: Literal["draft", "merged", "closed"]
     head: str

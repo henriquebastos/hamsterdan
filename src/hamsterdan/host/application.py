@@ -7,15 +7,17 @@ import json
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from hamsterdan.agents import AgentRunner
 from hamsterdan.contracts.readiness import (
     ActionsObservation,
     Admission,
     ConversationObservation,
+    GenerationStart,
+    GenerationStop,
     HumanObservation,
-    Lifecycle,
+    ReadinessSnapshot,
     workflow_wait,
 )
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
@@ -136,19 +138,13 @@ class PrReadinessApplication:
             if self.host is not None:
                 status = "merged" if pull.merged else "closed"
                 if not self.host.place("terminal"):
-                    self._deliver(
-                        "lifecycle_observation", Lifecycle(status, pull.head), f"{trigger}:{status}:{pull.head}"
-                    )
+                    self._stop_generation(status, pull.head, f"{trigger}:{status}:{pull.head}")
             return self.projection(pull.state)
         if pull.draft:
             if self.host is not None and self.host.snapshot is not None:
                 control = self.host.snapshot
                 assert control is not None
-                self._deliver(
-                    "lifecycle_observation",
-                    Lifecycle("draft", pull.head),
-                    f"{trigger}:draft:{control.epoch}:{pull.head}",
-                )
+                self._stop_generation("draft", pull.head, f"{trigger}:draft:{control.epoch}:{pull.head}")
             return self.projection(pull.state)
 
         policy = self.authority.policy(pull.base_ref)
@@ -171,6 +167,10 @@ class PrReadinessApplication:
             policy.conversation_resolution,
         )
         control = self.host.snapshot
+        started = control is None or control.head != pull.head
+        if started:
+            self._start_generation(admission, target_epoch, control)
+            control = self.host.snapshot
         current_basis = None
         if control is not None:
             current_basis = {
@@ -194,7 +194,7 @@ class PrReadinessApplication:
             "conversation_resolution": admission.conversation_resolution,
         }
         review_attempt = max(control.review_attempts, 1) if control is not None and control.review == "unable" else 0
-        if current_basis != admission_basis or review_attempt:
+        if not started and (current_basis != admission_basis or review_attempt):
             self._deliver(
                 "verified_admission",
                 admission,
@@ -350,6 +350,66 @@ class PrReadinessApplication:
         if dormant:
             return int(dormant[0]["last_epoch"]) + 1
         return 1
+
+    def _start_generation(self, admission: Admission, epoch: int, prior: ReadinessSnapshot | None) -> None:
+        assert self.host is not None
+        if prior is None:
+            relation = "resumed" if self.host.place("dormant") else "new"
+        else:
+            relation = "confirmed" if admission.head == prior.provisional_head else "superseded"
+            self.host.drain()
+            self.host.reset_generation()
+        confirmed = relation == "confirmed"
+        start = GenerationStart(
+            admission.repository_id,
+            admission.pr_number,
+            epoch,
+            relation,
+            admission.head,
+            admission.base_head,
+            admission.strict_base,
+            admission.base_current,
+            admission.policy_digest,
+            admission.required_checks,
+            admission.required_approvals,
+            admission.conversation_resolution,
+            [] if prior is None else prior.findings,
+            [] if prior is None else prior.finding_lineage,
+            bool(prior is not None and confirmed and prior.repair_used),
+            "" if prior is None or not confirmed else prior.repair_fingerprint,
+        )
+        self._deliver(
+            "begin_generation",
+            start,
+            f"generation:start:{epoch}:{relation}:{_digest(start.dump())}",
+        )
+
+    def _stop_generation(self, status: Literal["draft", "merged", "closed"], head: str, identity: str) -> None:
+        assert self.host is not None
+        self.host.drain()
+        control = self.host.snapshot
+        dormant = self.host.place("dormant")
+        if control is not None:
+            repository_id, pr_number, last_epoch, active = (
+                control.repository_id,
+                control.pr_number,
+                control.epoch,
+                True,
+            )
+        elif dormant:
+            repository_id, pr_number, last_epoch, active = (
+                str(dormant[0]["repository_id"]),
+                int(dormant[0]["pr_number"]),
+                int(dormant[0]["last_epoch"]),
+                False,
+            )
+        else:
+            raise RuntimeError("lifecycle stop has no active or dormant PR generation")
+        stop = GenerationStop(repository_id, pr_number, last_epoch, status, head, active)
+        self.host.deliver("end_generation", stop, identity)
+        if active:
+            self.host.close_generation()
+        self.host.drain()
 
     def _deliver(self, source: str, value, identity: str) -> None:
         assert self.host is not None
