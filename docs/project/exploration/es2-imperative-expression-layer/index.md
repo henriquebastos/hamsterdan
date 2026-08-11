@@ -591,6 +591,16 @@ Petri-aware. The result supplies cleaner production seams for a future
 mechanical partition experiment while preserving the no-correlation-language
 decision.
 
+## Successor exploration — 2026-08-11
+
+The authoring-model question graduated into its own story:
+[ES-003 — Workflow AST authoring model compiled to the Petri net](../es3-workflow-ast-authoring-model/index.md)
+runs a structured experiment series (AX0–AX12) testing an
+authoring-forward workflow AST as intermediate representation. ES-002's
+evidence — the closed combinator experiment, the guard decomposition
+audit, and the smallest-existing-expression rule — binds that series as
+prior art.
+
 ## Open questions
 
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —

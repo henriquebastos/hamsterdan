@@ -1,0 +1,76 @@
+# ES-003 — Authoring-model experiment series (AX)
+
+A sequence of small, isolated, reversible design experiments testing whether
+the current low-level Petrus DSL can become an internal representation while
+processes are authored through a higher-level embedded Python DSL:
+
+```text
+Activities describe work.
+Combinators describe process structure.
+The Python DSL constructs a workflow AST.
+A compiler lowers the AST into the existing Petri-net representation.
+The existing event-sourced runtime, dispatcher, and workers execute it.
+```
+
+The series is numbered AX0–AX12 to stay distinct from ES-002's earlier
+"Experiment 1" (the combinator-regeneration experiment, closed 2026-08-11
+with the universal-combinator approach rejected), whose evidence binds
+this series as prior art.
+
+## Series rules
+
+1. Each experiment answers one stated design question with the smallest
+   useful prototype, evaluated before the next begins.
+2. Everything — records, spike code, tests — lives inside this experiment
+   directory tree. Production code and `topology.py` are never modified;
+   the production net remains the comparison oracle.
+3. Petrus is frozen at the pinned baseline
+   `3b41f19aa68ed228e68324f7c6888371f805b560`. Experiments lower only onto
+   the existing public surface. Evidence that suggests a Petrus runtime
+   change goes into the [Petrus speculation ledger](petrus-speculation.md)
+   as analysis, never into an experiment's implementation.
+4. Prior ES-002 evidence binds the series: first use the smallest existing
+   Petrus expression that says the truth directly; a new surface must
+   eliminate a demonstrated burden, not merely rename fluent wiring.
+   The closed combinator experiment showed the pain is binding plumbing and
+   per-concern fragment repetition, not `>>` arcs — the AX series tests the
+   different hypothesis that an authoring-forward AST (not regeneration of
+   the hand-written topology) changes those economics.
+5. No text parsers. Embedded Python object construction only.
+6. No live generator or coroutine frame may become durable workflow state.
+7. Spike tests run with
+   `uv run --frozen pytest -q docs/project/exploration/es3-workflow-ast-authoring-model/experiments/`.
+8. Each experiment record ends with one verdict: Promising; continue —
+   Promising with changes — Not useful enough — Incompatible with the
+   current architecture.
+
+## Experiments
+
+| # | Question | State | Verdict |
+| --- | --- | --- | --- |
+| [AX0](ax0-architecture-map/index.md) | Architecture map and baseline example | Completed | Baseline selected |
+| AX1 | Minimal workflow AST (Activity/Sequence/Parallel) | Planned | — |
+| AX2 | Lowering Activity and Sequence to `Net` | Planned | — |
+| AX3 | Typed activities, ports, basic inference | Planned | — |
+| AX4 | Parallel split, execution, join | Planned | — |
+| AX5 | Branching by output type | Planned | — |
+| AX6 | Guard-based branching, predicate AST → CEL | Planned | — |
+| AX7 | Hybrid type + guard routing | Planned | — |
+| AX8 | Loops, cycles, retries | Planned | — |
+| AX9 | Effect-oriented activity authoring | Planned | — |
+| AX10 | Python authoring-style comparison | Planned | — |
+| AX11 | Leading design on the real baseline fragment | Planned | — |
+| AX12 | Final architecture recommendation | Planned | — |
+
+## Standing inputs from prior ES-002 evidence
+
+- Guard decomposition audit: 45 of 48 guarded transitions decompose into
+  four decidable atom kinds; only two genuinely opaque atoms exist. Direct
+  input to AX6/AX7 — a predicate AST needs exactly those atoms, and CEL
+  (currently unused by the production net: 0 filter declarations) is the
+  candidate execution backend to test.
+- RS-014/RS-015/RS-016/RS-017: typed direct transformations and public
+  `typed_guard` already removed the accidental binding plumbing. The AX
+  series measures against this improved baseline, not the older one.
+- `stateless` and the durable-execution literature: syntax reference only;
+  the Net stays the single durable workflow representation.

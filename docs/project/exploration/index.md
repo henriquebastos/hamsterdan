@@ -11,3 +11,4 @@ Paused, Candidate, Promoted, or Archived.
 ## Archived
 
 - [ES-002 — Imperative expression layer compiled to the readiness Net](es2-imperative-expression-layer/index.md)
+- [ES-003 — Workflow AST authoring model compiled to the Petri net](es3-workflow-ast-authoring-model/index.md)
