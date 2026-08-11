@@ -416,12 +416,73 @@ Findings:
     fragment families plus a visible residue of irreducibly relational
     declarations regenerates the production net exactly.
 
+## Value assessment and promotion decision — 2026-08-11
+
+Experiment 1's numbers answer the value question against the prototype:
+
+- `expression.py` is 1,094 lines: ~115 of imports (including ~40 named
+  domain guards/handlers that never left `topology.py`), ~540 of family
+  machinery (14 dataclasses plus lowering functions), ~440 of declarations
+  and builder — the workflow actually written in the vocabulary.
+- The fair comparison is those ~440 declaration lines against `build_net`'s
+  ~510 hand-wired lines; the other ~1,160 lines of `topology.py` are domain
+  functions both versions share. Compression ~510 → ~440, bought with 540
+  lines of one-off machinery. For a single net the economics are negative.
+- Only 4 of the 14 families are general Petri/Petrus shapes (`Bridge`,
+  `PureStep`, `Entry`, roughly `Retirement`). The rest name Hamsterdan's
+  domain discipline — authority fencing, operation identity, the concern
+  cohort, generation lifecycle. Workflow vocabulary turned out to be domain
+  vocabulary.
+- The category error the experiment exposed: `expression.py` is not the
+  analog of a general effect library (`stateless`); it is the analog of an
+  *application written with one*. Petrus's `impetus.dsl` is the general
+  layer, and the pain was never `>>` wiring — it was binding plumbing,
+  which the two production refinements (RS-014, RS-015) already fixed at
+  the right layer.
+
+**Decision: the 14 families are not promoted to Petrus and do not ship in
+Hamsterdan production.** `expression.py` remains disposable branch-only
+evidence, per its own docstring. `topology.py` stays the production
+expression.
+
+What the experiment would promote instead is a small general kernel:
+
+1. Public typed guards and typed binding hydration (today the app-private
+   `_typed_guard` / `_hydrate` seams every family reused).
+2. A uniform step declaration — one typed function plus an execution
+   marker (pure transition vs Motus Activity) lowering to the correct
+   fragment. Declaration ergonomics may unify; the net shapes must not:
+   an external effect is request/result places plus operation identity,
+   fencing, and recovery (ES-001), and collapsing that in the durable
+   representation would rebuild the replay world's implicit state.
+3. Possibly a first-class named parametrized fragment concept, so any
+   application can define its own vocabulary in a page instead of 540
+   lines — the general *mechanism*; families stay app-owned.
+
+Ownership: the Petrus kernel lane already carries this work in threads
+with the necessary context; ES-002 delegates the kernel items to that lane
+rather than opening a new one, and records here what the evidence
+supports. Promotion still follows the ES-001 pattern — accepted Petrus
+lands first; Hamsterdan re-pins.
+
 ## Open questions
 
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —
-  generated `NetSpec`, a serialized IR, or both?
+  generated `NetSpec`, a serialized IR, or both? libpetri's
+  `bindActions` separation (pure structural net value, behavior bound by
+  name in a later composition step) is prior art for the answer.
 - Is generator-based sugar worth its tracing/static-analysis cost over a
   plain builder API, given the Navigator's DX goal?
+- From libpetri's TypeScript surface (2026-08-11 re-read, Navigator
+  prompt): how much of the readiness net's guard content decomposes into
+  decidable correlation equality (epoch/head/operation matching — the
+  `MatchSpec` shape) plus a residual named domain predicate? Declared
+  correlation would turn most fencing plumbing into analyzable data.
+- Also from libpetri: which handler-owned routing decisions are static
+  XOR/AND output contracts (generation stop routes, intent fan-out) that
+  could be declared as data — and how much exact-incidence verification
+  coverage would that buy the structural-analysis lane, whose current
+  limit is precisely Petrus's variable output effects?
 
 ## Sources
 
@@ -457,3 +518,10 @@ Findings:
   CPN Tools superseded by CPN IDE: <https://cpntools.org/>.
 - SNAKES (Python high-level Petri nets): <https://github.com/fpom/snakes>.
 - XState (machines as inspectable data): <https://stately.ai/docs/xstate>.
+- libpetri TypeScript authoring surface, re-read 2026-08-11 at the pinned
+  revision `6345140` (transition-centered builder, `one`/`exactly`
+  cardinalities, `and`/`xor` output trees, `MatchSpec` decidable
+  correlation instead of general guards, `bindActions` topology/behavior
+  separation): <https://github.com/debe/libpetri>. Verifier evaluation and
+  the no-semantics-import stance are owned by the Impetus structural
+  analysis lane.
