@@ -82,3 +82,14 @@ All records and spike code live inside this directory; production
   checks. Fourteen tests pass. Honest gap carried to AX2/AX3: the AST
   omits exactly the data semantics (colors, transforms, join meaning)
   the current DSL forces you to write.
+- [AX2 — Lowering Activity and Sequence onto the frozen Net](experiments/ax2-lower-sequence/index.md)
+  completed 2026-08-11 — Promising; continue. The lowering contract is a
+  threaded fragment (entry place in, exit place out; `Sequence` owns
+  nothing). The ~200-line compiler produces nets byte-identical to the
+  hand-written DSL equivalent, executes unmodified through
+  `Engine`/`InlineDispatch`, replays over a recompiled net, fails loudly
+  against divergent compilation, and carries a two-way source map
+  (AST address ↔ generated paths ↔ authoring line). Duplicate activity
+  occurrences bind safely by exact handler `NetUri`. Ten tests pass.
+  AX3 next: derive colors from typed signatures instead of explicit
+  `request=`/`result=` declarations.
