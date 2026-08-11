@@ -33,7 +33,6 @@ from hamsterdan.contracts.readiness import (
     HumanState,
     Intent,
     IntentBatch,
-    Lifecycle,
     MutationState,
     PublicationState,
     ReadinessCommand,
@@ -78,7 +77,6 @@ _TOKEN_TYPES = {
         Admission,
         GenerationStart,
         GenerationStop,
-        Lifecycle,
         Authority,
         ActionsState,
         ReviewState,
@@ -419,90 +417,6 @@ def fold_readiness_effect(p: PublicationState, r: ReadinessPublicationResult) ->
     return fold_effect(p, r)
 
 
-def _admit(binding, outputs):
-    values = _hydrate(binding)
-    admission = next(v for v in values if isinstance(v, Admission))
-    authority_prior = next((v for v in values if isinstance(v, Authority)), None)
-    review_prior = next((v for v in values if isinstance(v, ReviewState)), None)
-    mutation_prior = next((v for v in values if isinstance(v, MutationState)), None)
-    prior = authority_prior or next(v for v in values if not isinstance(v, Admission))
-    epoch = getattr(prior, "epoch", getattr(prior, "last_epoch", 0)) + 1
-    confirms = admission.head == getattr(mutation_prior or prior, "provisional_head", "")
-    authority = Authority(
-        admission.repository_id,
-        admission.pr_number,
-        epoch,
-        admission.head,
-        admission.base_head,
-        admission.strict_base,
-        admission.base_current,
-        admission.policy_digest,
-        admission.required_checks,
-        admission.required_approvals,
-        admission.conversation_resolution,
-        "confirmed" if confirms else "superseded" if hasattr(prior, "epoch") else "new",
-    )
-    actions = ActionsState()
-    review = ReviewState(review_attempts=1)
-    human = HumanState()
-    mutation = MutationState(
-        repair_used=getattr(mutation_prior or prior, "repair_used", False) if confirms else False,
-        repair_fingerprint=getattr(mutation_prior or prior, "repair_fingerprint", "") if confirms else "",
-    )
-    publication = PublicationState()
-    policy = {
-        "strict_base": admission.strict_base,
-        "required_checks": admission.required_checks,
-        "required_approvals": admission.required_approvals,
-        "conversation_resolution": admission.conversation_resolution,
-        "digest": admission.policy_digest,
-    }
-
-    review_payload = effect_payload(
-        authority,
-        {
-            "strict_base": admission.strict_base,
-            "base_current": admission.base_current,
-            "policy": policy,
-            "prior_findings": getattr(review_prior or prior, "findings", []),
-            "prior_lineage": getattr(review_prior or prior, "finding_lineage", []),
-        },
-    )
-    review_work = ReviewRequest(
-        epoch=epoch,
-        head=admission.head,
-        operation=operation("review", authority, payload=review_payload),
-        base_head=authority.base_head,
-        policy_digest=authority.policy_digest,
-        strict_base=authority.strict_base,
-        base_current=authority.base_current,
-        policy=policy,
-        prior_findings=review_payload["prior_findings"],
-        prior_lineage=review_payload["prior_lineage"],
-    )
-    actions_payload = effect_payload(authority)
-    actions_work = ActionsDiscoveryRequest(
-        epoch=epoch,
-        head=authority.head,
-        operation=operation("actions_discovery", authority, payload=actions_payload),
-        **actions_payload,
-    )
-    review = review.validated_update(review_operation=review_work.operation)
-    actions = actions.validated_update(actions_operation=actions_work.operation)
-    by_target = {
-        "authority": authority,
-        "actions_state": actions,
-        "review_state": review,
-        "human_state": human,
-        "mutation_state": mutation,
-        "publication_state": publication,
-        "work.review": review_work,
-        "work.actions_discovery": actions_work,
-        "reminder.timer": Reminder(epoch, authority.head),
-    }
-    return {out.target: (Token(out.color, by_target[str(out.target)].dump()),) for out in outputs}
-
-
 def _begin_generation(binding, outputs):
     start = _values(binding, GenerationStart)[0]
     authority = Authority(
@@ -585,10 +499,6 @@ def _route_generation_stop(binding, outputs):
 
 def _subject(prior, admission):
     return (prior.repository_id, prior.pr_number) == (admission.repository_id, admission.pr_number)
-
-
-def _different(a, admission):
-    return _subject(a, admission) and a.head != admission.head
 
 
 def _same(a, admission):
@@ -1071,26 +981,13 @@ def _rearm(timer: Reminder) -> Reminder:
     return timer
 
 
-def _lifecycle(binding, outputs, terminal=False):
-    values = _hydrate(binding)
-    a = next(v for v in values if isinstance(v, Authority))
-    lifecycle = next(v for v in values if isinstance(v, Lifecycle))
-    value = (
-        Terminal("success" if lifecycle.status == "merged" else "abort", a.epoch, lifecycle.head)
-        if terminal
-        else Dormant(a.repository_id, a.pr_number, a.epoch, lifecycle.head)
-    )
-    return _put(outputs, (value,))
-
-
 def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     net = NetSpec("pr-readiness-concerns")
     p, t = net.p, net.t
-    work, execute, retire, admit, reminder, command = (
+    work, execute, retire, reminder, command = (
         net.s.work,
         net.s.execute,
         net.s.retire,
-        net.s.admit,
         net.s.reminder,
         net.s.command,
     )
@@ -1099,7 +996,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     t.verified_admission >> p.admission(Admission)
     t.begin_generation >> p.generation_start(GenerationStart)
     t.end_generation >> p.generation_stop(GenerationStop)
-    t.lifecycle_observation >> p.lifecycle(Lifecycle)
     t.human_observation >> p.human_result(HumanObservation)
     t.actions_observation >> p.actions_result(ActionsObservation)
     t.conversation_observation >> p.conversation_basis(ConversationObservation)
@@ -1208,14 +1104,6 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         )
         >> p.terminal
     )
-    for name, prior, guard in (
-        ("initial", p.seed(Seed), _subject),
-        ("supersede", cohort, lambda a, ac, r, h, m, pub, ad: _different(a, ad)),
-        ("resume", p.dormant(Dormant), _subject),
-    ):
-        tr = getattr(admit.t, name)(handler=petri_handler(_admit), guards=_guard(guard))
-        sources = (*prior, p.admission) if isinstance(prior, tuple) else (prior, p.admission)
-        sources >> tr >> (*cohort, work.p.review, work.p.actions_discovery, reminder.p.timer(Reminder))
     (
         (p.authority, p.actions_state, p.review_state, p.publication_state, p.admission)
         >> t.refresh_basis(
@@ -1438,117 +1326,9 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         place >> arc.read() >> due
     reminder.p.timer >> due >> (reminder.p.rearm(Reminder), work.p.reminder)
     reminder.p.rearm >> t.rearm(handler=_rearm) >> reminder.p.timer
-    # Lifecycle-wide movement alone consumes the complete active cohort.
-    (
-        (*cohort, p.lifecycle)
-        >> t.draft(
-            handler=petri_handler(lambda b, o: _lifecycle(b, o)),
-            guards=_guard(lambda a, ac, r, h, m, pub, life: life.status == "draft"),
-        )
-        >> p.dormant
-    )
-    (
-        (*cohort, p.lifecycle)
-        >> t.terminal_active(
-            handler=petri_handler(lambda b, o: _lifecycle(b, o, True)),
-            guards=_guard(lambda a, ac, r, h, m, pub, life: life.status in {"merged", "closed"}),
-        )
-        >> p.terminal(Terminal)
-    )
-    (
-        (p.dormant, p.lifecycle)
-        >> t.terminal_dormant(
-            handler=petri_handler(
-                lambda b, o: _route(
-                    o,
-                    {
-                        "terminal": Terminal(
-                            "success" if _values(b, Lifecycle)[0].status == "merged" else "abort",
-                            _values(b, Dormant)[0].last_epoch,
-                            _values(b, Lifecycle)[0].head,
-                        )
-                    },
-                )
-            ),
-            guards=_guard(lambda d, life: life.status in {"merged", "closed"}),
-        )
-        >> p.terminal
-    )
-    irrelevant = retire.t.lifecycle_active(
-        guards=_guard(lambda a, life: life.status not in {"draft", "merged", "closed"})
-    )
-    p.authority >> arc.read() >> irrelevant
-    p.lifecycle >> irrelevant
-    dormant_irrelevant = retire.t.lifecycle_dormant(
-        guards=_guard(lambda d, life: life.status not in {"merged", "closed"})
-    )
-    p.dormant >> arc.read() >> dormant_irrelevant
-    p.lifecycle >> dormant_irrelevant
-    # Dormant and terminal cohorts absorb every token that can arrive or remain
-    # after the active concern cohort has moved away.
-    inactive_transients = (
-        p.review_result,
-        p.actions_result,
-        p.human_result,
-        p.intent_result,
-        p.intent_batch,
-        p.conversation_result,
-        p.repair_result,
-        p.change_result,
-        p.finding_result,
-        p.dashboard_result,
-        p.reminder_result,
-        p.readiness_result,
-        p.actions_basis,
-        p.change_basis,
-        p.reply_basis,
-        p.conversation_basis,
-        reminder.p.timer,
-        work.p.review,
-        work.p.actions_discovery,
-        work.p.actions_rerun,
-        work.p.conversation,
-        work.p.conversation_reply,
-        work.p.repair,
-        work.p.change,
-        work.p.finding,
-        work.p.dashboard,
-        work.p.reminder,
-        command.p.readiness,
-    )
-    for place in inactive_transients:
-        suffix = str(place._path).replace(".", "_")
-        for prefix, authority in (("dormant", p.dormant), ("terminal", p.terminal)):
-            tr = getattr(retire.t, f"{prefix}_{suffix}")
-            authority >> arc.read() >> tr
-            place >> tr
-
-    # Only tokens without a more exact active-cohort retirement guard need a
-    # generic authority-currency path. Specialized result and basis retirement
-    # below already includes `_current` through its owning workflow predicate.
-    authority_stale_transients = (
-        p.human_result,
-        p.intent_batch,
-        p.reminder_result,
-        p.actions_basis,
-        reminder.p.timer,
-        work.p.review,
-        work.p.actions_discovery,
-        work.p.actions_rerun,
-        work.p.conversation,
-        work.p.conversation_reply,
-        work.p.repair,
-        work.p.change,
-        work.p.finding,
-        work.p.dashboard,
-        work.p.reminder,
-        command.p.readiness,
-    )
-    for place in authority_stale_transients:
-        suffix = str(place._path).replace(".", "_")
-        stale = getattr(retire.t, f"stale_{suffix}")(guards=_guard(lambda a, value: not _current(a, value)))
-        p.authority >> arc.read() >> stale
-        place >> stale
+    # Lifecycle scopes discard generation-owned queued work and fence in-flight
+    # Activities. The remaining retirement routes are same-generation business
+    # ownership checks, not lifecycle cleanup.
     # Result envelopes retire against the exact operation owned by their concern;
     # these guards cover both stale authority and same-generation supersession.
     for name, place, owner, predicate in (
@@ -1604,6 +1384,4 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         p.admission >> tr
     p.terminal >> arc.read() >> retire.t.terminal_admission
     p.admission >> retire.t.terminal_admission
-    p.terminal >> arc.read() >> retire.t.terminal_lifecycle
-    p.lifecycle >> retire.t.terminal_lifecycle
     return net.build()

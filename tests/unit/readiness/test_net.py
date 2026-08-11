@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from types import SimpleNamespace
+from typing import Literal
 
 import pytest
 from petrus.engine import Engine, SimulatedClock
@@ -30,11 +31,12 @@ from hamsterdan.contracts.readiness import (
     DashboardPublicationResult,
     FindingPublicationRequest,
     FindingPublicationResult,
+    GenerationStart,
+    GenerationStop,
     HumanObservation,
     HumanState,
     Intent,
     IntentBatch,
-    Lifecycle,
     MutationState,
     PublicationState,
     ReadinessCommand,
@@ -200,7 +202,7 @@ def engine() -> Engine:
     for path in ACTIVITY_TRANSITIONS:
         name = path.removeprefix("execute.")
         handlers[name] = DerivedActivityHandler(built.net, NetPath(path), definitions[name])
-    return Engine.create(
+    subject = Engine.create(
         built.net,
         "pr-7",
         history=InMemoryHistoryStore(),
@@ -210,6 +212,8 @@ def engine() -> Engine:
         guards=built.guards,
         activities=tuple(item.declaration for item in ACTIVITIES),
     )
+    subject.open_scope("readiness-generation")
+    return subject
 
 
 def asynchronous_engine(
@@ -225,20 +229,19 @@ def asynchronous_engine(
     for path in ACTIVITY_TRANSITIONS:
         name = path.removeprefix("execute.")
         handlers[name] = DerivedActivityHandler(built.net, NetPath(path), by_name[name])
-    return (
-        Engine.create(
-            built.net,
-            "pr-7-async",
-            history=InMemoryHistoryStore(),
-            dispatch=dispatch,
-            marking=Marking({NetPath("seed"): (token(Seed("repo", 7)),)}),
-            handlers=handlers,
-            guards=built.guards,
-            activities=tuple(item.declaration for item in definitions),
-            clock=clock or SimulatedClock(),
-        ),
-        dispatch,
+    subject = Engine.create(
+        built.net,
+        "pr-7-async",
+        history=InMemoryHistoryStore(),
+        dispatch=dispatch,
+        marking=Marking({NetPath("seed"): (token(Seed("repo", 7)),)}),
+        handlers=handlers,
+        guards=built.guards,
+        activities=tuple(item.declaration for item in definitions),
+        clock=clock or SimulatedClock(),
     )
+    subject.open_scope("readiness-generation")
+    return subject, dispatch
 
 
 def drive_bounded(subject: Engine, limit: int = 200) -> None:
@@ -388,7 +391,26 @@ def drain(subject: Engine) -> None:
 
 
 def deliver(subject: Engine, source: str, value, identity: str) -> None:
-    subject.deliver(source, token(value), identity=identity)
+    scope = subject.active_scopes.get("readiness-generation")
+    subject.deliver(source, token(value), identity=identity, scope=scope or "readiness-generation")
+    drain(subject)
+
+
+def stop(subject: Engine, status: Literal["draft", "merged", "closed"], head: str, identity: str) -> None:
+    scope = subject.active_scopes.get("readiness-generation")
+    control = snapshot(subject) if values(subject, "authority") else None
+    dormant = values(subject, "dormant")
+    value = GenerationStop(
+        "repo",
+        7,
+        control.epoch if control is not None else dormant[0]["last_epoch"],
+        status,
+        head,
+        control is not None,
+    )
+    subject.deliver("end_generation", token(value), identity=identity)
+    if scope is not None:
+        subject.close_scope(scope)
     drain(subject)
 
 
@@ -474,8 +496,47 @@ def make_snapshot(
     )
 
 
-def admit(subject: Engine, head: str, identity: str) -> None:
-    deliver(subject, "verified_admission", Admission("repo", 7, head, "base", True), identity)
+def admit(subject: Engine, head: str, identity: str, *, drain_after: bool = True) -> None:
+    admission = Admission("repo", 7, head, "base", True)
+    prior = snapshot(subject) if values(subject, "authority") else None
+    if prior is not None and prior.head == head:
+        scope = subject.active_scopes["readiness-generation"]
+        subject.deliver("verified_admission", token(admission), identity=identity, scope=scope)
+        if drain_after:
+            drain(subject)
+        return
+    dormant = values(subject, "dormant")
+    relation = (
+        "new"
+        if prior is None and not dormant
+        else "resumed"
+        if prior is None
+        else "confirmed"
+        if prior.provisional_head == head
+        else "superseded"
+    )
+    epoch = 1 if prior is None and not dormant else dormant[0]["last_epoch"] + 1 if prior is None else prior.epoch + 1
+    if prior is not None:
+        subject.reset_scope(subject.active_scopes["readiness-generation"])
+    elif "readiness-generation" not in subject.active_scopes:
+        subject.open_scope("readiness-generation")
+    start = GenerationStart(
+        "repo",
+        7,
+        epoch,
+        relation,
+        head,
+        "base",
+        True,
+        prior_findings=[] if prior is None else prior.findings,
+        prior_lineage=[] if prior is None else prior.finding_lineage,
+        repair_used=bool(prior is not None and relation == "confirmed" and prior.repair_used),
+        repair_fingerprint="" if prior is None or relation != "confirmed" else prior.repair_fingerprint,
+    )
+    scope = subject.active_scopes["readiness-generation"]
+    subject.deliver("begin_generation", token(start), identity=identity, scope=scope)
+    if drain_after:
+        drain(subject)
 
 
 def requests(subject: Engine) -> list[ActivityRequested]:
@@ -534,7 +595,7 @@ def test_same_head_is_duplicate_distinct_head_supersedes_and_counts_stay_bounded
 
 def test_same_head_reconcile_retries_unable_review_twice_then_waits() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    admit(subject, "h1", "admit", drain_after=False)
     operations = []
 
     for attempt in range(1, MAX_REVIEW_ATTEMPTS + 1):
@@ -619,17 +680,17 @@ def test_review_retry_atomically_refreshes_admission_authority() -> None:
 
 def test_same_head_reconcile_does_not_retry_clear_review_and_new_head_resets_attempts() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    admit(subject, "h1", "admit", drain_after=False)
     _, invocation = drive_until_activity(subject, dispatch, "review")
     work = work_input(invocation)
     complete(dispatch, "review", ReviewResult(1, "h1", "clear", [], [], work.operation))
     drive_bounded(subject)
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="same-head")
+    admit(subject, "h1", "same-head", drain_after=False)
     drive_bounded(subject)
     assert not pending_all(dispatch, "review")
     assert snapshot(subject).dump()["review_attempts"] == 1
 
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h2", "base", True)), identity="new-head")
+    admit(subject, "h2", "new-head", drain_after=False)
     _, invocation = drive_until_activity(subject, dispatch, "review")
     new_work = work_input(invocation)
     assert (new_work.epoch, new_work.head) == (2, "h2")
@@ -663,7 +724,7 @@ def test_unauthorized_conversation_and_read_only_intent_leave_no_residue() -> No
 
 def test_terminal_conversation_publication_retains_one_logical_operation_without_reissue() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    admit(subject, "h1", "admit", drain_after=False)
     drive_bounded(subject)
     subject.deliver(
         "conversation_observation",
@@ -714,7 +775,7 @@ def test_terminal_conversation_publication_retains_one_logical_operation_without
 
 def test_dashboard_capability_terminal_retains_ownership_without_a_new_activity() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    admit(subject, "h1", "admit", drain_after=False)
     drive_bounded(subject)
     occurrence, invocation = drive_until_activity(subject, dispatch, "dashboard_publish")
     first_work = work_input(invocation)
@@ -742,7 +803,7 @@ def test_dashboard_capability_terminal_retains_ownership_without_a_new_activity(
 
 def test_readiness_capability_terminal_retains_ownership_without_a_new_activity() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    admit(subject, "h1", "admit", drain_after=False)
     drive_bounded(subject)
     subject.deliver(
         "human_observation",
@@ -776,7 +837,7 @@ def test_readiness_capability_terminal_retains_ownership_without_a_new_activity(
 
 def test_conversation_publication_terminal_exhaustion_latches_original_operation() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    admit(subject, "h1", "admit", drain_after=False)
     drive_bounded(subject)
     subject.deliver(
         "conversation_observation",
@@ -841,13 +902,13 @@ def test_conversation_publication_terminal_exhaustion_latches_original_operation
 def test_draft_resumes_new_epoch_and_terminal_absorbs_late_facts() -> None:
     subject = engine()
     admit(subject, "h1", "a")
-    deliver(subject, "lifecycle_observation", Lifecycle("draft", "h1"), "draft")
+    stop(subject, "draft", "h1", "draft")
     assert_no_active_cohort(subject)
     assert values(subject, "dormant")[0]["last_epoch"] == 1
     admit(subject, "h1", "resume")
     assert_active_cohort(subject)
     assert snapshot(subject).dump()["epoch"] == 2
-    deliver(subject, "lifecycle_observation", Lifecycle("merged", "provider-head"), "merged")
+    stop(subject, "merged", "provider-head", "merged")
     assert_no_active_cohort(subject)
     before = len(requests(subject))
     deliver(
@@ -863,7 +924,7 @@ def test_draft_resumes_new_epoch_and_terminal_absorbs_late_facts() -> None:
 def test_closed_is_abort_and_activity_mapping_is_exact() -> None:
     subject = engine()
     admit(subject, "h1", "a")
-    deliver(subject, "lifecycle_observation", Lifecycle("closed", "anything"), "closed")
+    stop(subject, "closed", "anything", "closed")
     assert_no_active_cohort(subject)
     assert values(subject, "terminal")[0]["status"] == "abort"
     assert set(ACTIVITY_TRANSITIONS) == {
@@ -918,7 +979,7 @@ def test_same_head_refreshes_verified_base_without_creating_a_generation() -> No
 
 def test_same_head_basis_refresh_retires_stale_publication_result() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="first")
+    admit(subject, "h1", "first", drain_after=False)
     drive_bounded(subject)
     old_occurrence, old_invocation = drive_until_activity(subject, dispatch, "dashboard_publish")
     old_work = work_input(old_invocation)
@@ -942,7 +1003,7 @@ def test_same_head_basis_refresh_retires_stale_publication_result() -> None:
 
 def test_same_head_basis_refresh_retires_stale_conversation_result() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="first")
+    admit(subject, "h1", "first", drain_after=False)
     drive_bounded(subject)
     subject.deliver(
         "conversation_observation",
@@ -975,7 +1036,7 @@ def test_same_head_basis_refresh_retires_stale_conversation_result() -> None:
 
 def test_two_reply_intents_serialize_until_first_success() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="first")
+    admit(subject, "h1", "first", drain_after=False)
     drive_bounded(subject)
     subject.deliver(
         "conversation_observation",
@@ -1007,7 +1068,7 @@ def test_two_reply_intents_serialize_until_first_success() -> None:
 
 def test_conversation_blocker_latch_keeps_second_reply_queued() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="first")
+    admit(subject, "h1", "first", drain_after=False)
     drive_bounded(subject)
     subject.deliver(
         "conversation_observation",
@@ -1071,15 +1132,20 @@ def test_advanced_guards_hydrate_defaults_for_replayed_concern_tokens() -> None:
     assert guard.implementation(binding) is True
 
 
-def test_irrelevant_lifecycle_fact_is_retired_while_dormant() -> None:
+def test_uncertain_generation_fact_is_quarantined_while_dormant() -> None:
     subject = engine()
     admit(subject, "h1", "admit")
-    deliver(subject, "lifecycle_observation", Lifecycle("draft", "h1"), "draft")
-    deliver(subject, "lifecycle_observation", Lifecycle(status="draft", head="other"), "irrelevant")
+    stop(subject, "draft", "h1", "draft")
+    result = subject.deliver(
+        "human_observation",
+        token(HumanObservation(1, "h1", True, True, False, 0, False, False, True, False, True)),
+        identity="uncertain",
+        scope="readiness-generation",
+    )
 
     assert values(subject, "dormant")
-    assert not values(subject, "lifecycle")
     assert not values(subject, "terminal")
+    assert result.disposition.value == "quarantined"
 
 
 def test_failed_repair_spends_the_automatic_budget() -> None:
@@ -1281,7 +1347,7 @@ def test_real_delay_reminder_rearms_and_pauses_for_approval_and_snooze() -> None
 
     definitions = tuple(reminder_intent if item.declaration.name == "conversation" else item for item in ACTIVITIES)
     subject, dispatch = asynchronous_engine(reminder_delay=5, definitions=definitions)
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    admit(subject, "h1", "admit", drain_after=False)
     drive_bounded(subject)
     _, review_invocation = drive_until_activity(subject, dispatch, "review")
     review_work = work_input(review_invocation)
@@ -1410,10 +1476,10 @@ def test_quiescent_control_projects_one_priority_ordered_external_wait() -> None
 
 def test_late_review_and_dashboard_results_retire_after_supersession_and_terminal() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="a1")
+    admit(subject, "h1", "a1", drain_after=False)
     drive_bounded(subject)
     old_review, review_invocation = drive_until_activity(subject, dispatch, "review")
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h2", "base", True)), identity="a2")
+    admit(subject, "h2", "a2", drain_after=False)
     drive_bounded(subject)
     publication_count = len(
         [record for record in requests(subject) if record.activity in {"finding_publish", "readiness_publish"}]
@@ -1441,7 +1507,7 @@ def test_late_review_and_dashboard_results_retire_after_supersession_and_termina
         len([record for record in requests(subject) if record.activity in {"finding_publish", "readiness_publish"}])
         == publication_count
     )
-    subject.deliver("lifecycle_observation", token(Lifecycle("closed", "h2")), identity="closed")
+    stop(subject, "closed", "h2", "closed")
     for _ in range(20):
         drive_bounded(subject)
         if values(subject, "terminal"):
@@ -1464,11 +1530,11 @@ def test_late_review_and_dashboard_results_retire_after_supersession_and_termina
 
 def test_specialized_retirement_absorbs_stale_actions_result() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="a1")
+    admit(subject, "h1", "a1", drain_after=False)
     drive_bounded(subject)
     old_actions, invocation = drive_until_activity(subject, dispatch, "actions_discovery")
 
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h2", "base", True)), identity="a2")
+    admit(subject, "h2", "a2", drain_after=False)
     drive_bounded(subject)
     dispatch.complete(old_actions, action_result(work_input(invocation), "old-run", 1, "success").dump())
     drive_bounded(subject)
@@ -1511,7 +1577,7 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
 
     definitions = tuple(change_intent if item.declaration.name == "conversation" else item for item in ACTIVITIES)
     subject, dispatch = asynchronous_engine(definitions=definitions)
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="a1")
+    admit(subject, "h1", "a1", drain_after=False)
     drive_bounded(subject)
     subject.deliver(
         "conversation_observation", token(ConversationObservation(1, "h1", True, "change")), identity="change"
@@ -1539,7 +1605,7 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
     )
     drive_bounded(subject)
     occurrence, invocation = pending(dispatch, "change")
-    subject.deliver("verified_admission", token(Admission("repo", 7, "human-head", "base", True)), identity="human")
+    admit(subject, "human-head", "human", drain_after=False)
     drive_bounded(subject)
     dispatch.complete(
         occurrence,
@@ -1554,7 +1620,7 @@ def test_late_authorized_change_cannot_make_a_superseding_head_provisional() -> 
 
 def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprint() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="a1")
+    admit(subject, "h1", "a1", drain_after=False)
     drive_bounded(subject)
     dashboard_occurrence, dashboard_invocation = drive_until_activity(subject, dispatch, "dashboard_publish")
     dashboard_work = work_input(dashboard_invocation)
@@ -1585,7 +1651,7 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
     )
     drive_bounded(subject)
     assert snapshot(subject).dump()["provisional_head"] == "h2"
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h2", "base", True)), identity="confirm")
+    admit(subject, "h2", "confirm", drain_after=False)
     drive_bounded(subject)
     assert snapshot(subject).dump()["repair_used"] is True
     for _ in range(20):
@@ -1654,7 +1720,7 @@ def test_repair_budget_survives_provisional_admission_and_blocks_same_fingerprin
 
 def test_terminal_actions_observation_does_not_release_a_pending_repair() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="admit")
+    admit(subject, "h1", "admit", drain_after=False)
     drive_bounded(subject)
     discovery_occurrence, discovery_invocation = drive_until_activity(subject, dispatch, "actions_discovery")
     discovery_work = work_input(discovery_invocation)
@@ -1692,7 +1758,7 @@ def test_terminal_actions_observation_does_not_release_a_pending_repair() -> Non
     assert snapshot(subject).repair_in_flight is False
 
 
-def test_activity_topology_has_complete_retirement_and_no_authority_outputs() -> None:
+def test_activity_topology_delegates_generation_cleanup_without_losing_operation_ownership() -> None:
     net = build_net(1).net
     assert all("merge" not in str(transition) for transition in net.transitions)
     assert NetPath("current") not in net.places
@@ -1749,31 +1815,24 @@ def test_activity_topology_has_complete_retirement_and_no_authority_outputs() ->
         inputs = net.inputs(transition)
         outputs = net.outputs(transition)
         assert len(inputs) == 1
-        input_place = inputs[0].source
         assert not ({str(arc.target) for arc in outputs} & authority)
-        output_places = {arc.target for arc in outputs}
-        for place, result in ((input_place, False), *((item, True) for item in output_places)):
+        for place in {arc.target for arc in outputs}:
             consumers = {arc.target for arc in net.arcs if arc.source == place}
             names = {str(item) for item in consumers}
-            assert any(name.startswith("retire.dormant_") for name in names)
-            assert any(name.startswith("retire.terminal_") for name in names)
-            if not result:
-                assert any(name.startswith("retire.stale_") for name in names)
-            else:
-                assert any(
-                    name in result_consumers
-                    or name.startswith("retire.")
-                    and any(word in name for word in ("operation", "duplicate"))
-                    for name in names
-                )
+            assert any(
+                name in result_consumers
+                or name.startswith("retire.")
+                and any(word in name for word in ("operation", "duplicate"))
+                for name in names
+            )
 
     retirement_names = {str(path) for path in net.transitions if str(path).startswith("retire.")}
     assert "retire.intent_noop" not in retirement_names
-    assert "retire.stale_work_dashboard" in retirement_names
-    assert "retire.dormant_dashboard_result" in retirement_names
-    assert "retire.terminal_dashboard_result" in retirement_names
+    assert not any(name.startswith("retire.stale_") for name in retirement_names)
+    assert not any("_result" in name or "_work_" in name for name in retirement_names)
     assert "retire.stale_dashboard_result" not in retirement_names
-    assert (len(net.places), len(net.transitions), len(net.arcs)) == (40, 138, 412)
+    assert len(retirement_names) == 16
+    assert (len(net.places), len(net.transitions), len(net.arcs)) == (41, 63, 244)
     assert NetPath("reissue_reply") not in net.transitions
     publication_paths = {str(path) for path in (*net.places, *net.transitions) if str(path).startswith("publication.")}
     assert not any(
@@ -1980,7 +2039,7 @@ def test_mismatched_subject_admission_cannot_rebind_an_instance() -> None:
 
 def test_same_generation_stale_dashboard_ack_cannot_ack_newer_projection() -> None:
     subject, dispatch = asynchronous_engine()
-    subject.deliver("verified_admission", token(Admission("repo", 7, "h1", "base", True)), identity="a")
+    admit(subject, "h1", "a", drain_after=False)
     drive_bounded(subject)
     old_occurrence, old_invocation = drive_until_activity(subject, dispatch, "dashboard_publish")
     subject.deliver(

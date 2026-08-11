@@ -72,12 +72,6 @@ class GenerationStop(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
-class Lifecycle(WorkflowModel):
-    status: Literal["draft", "merged", "closed"]
-    head: str
-
-
-@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class Authority(WorkflowModel):
     repository_id: str
     pr_number: int
