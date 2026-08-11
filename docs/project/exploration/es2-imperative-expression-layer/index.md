@@ -309,33 +309,59 @@ Findings:
    eight vocabulary items; guard grids prove kind splitting and target
    dispatch identical.
 
-The remaining 31 transitions fall into four groups:
+9. Entries and the simple acceptance family (commit `fb0f03e`). `Entry`
+   declares the bare typed places where verified external observations
+   appear — admission, generation boundaries, human/actions/conversation —
+   honestly host-fed, not disguised Activities. `Acceptance` folds one
+   result into its owning concern states: read current `Authority`,
+   consume the owners plus the result, reproduce the owners with optional
+   emissions (actions' basis copy, review's publication request); a
+   handler-less acceptance (`accept_reminder`) simply absorbs.
+   `retire.actions_basis` confirmed `Retirement(reads=...)` handles
+   relational basis completion. Coverage: 51 of 69.
 
-1. Simple owner accepts (`accept_actions`, `accept_human`,
-   `accept_review`, `accept_finding`, `accept_reminder`,
-   `retire.actions_basis`) — likely existing/small items.
-2. Observation entries (`verified_admission`, `actions_observation`,
-   `conversation_observation`, `human_observation`,
-   `begin/end/commit_generation`).
-3. Generation lifecycle and admission (`generation.*`,
-   `refresh_admission`, `refresh_basis`, `rearm`,
-   `retire.*_admission`) — the cohort creation family.
-4. Snapshot joins (`request_dashboard`, `authorize_readiness`,
-   `start_conversation`, `reminder_due`, `retry_review`) — the
-   relational-read open question.
+10. Generation lifecycle, admission folds, and marker retirement (commit
+    `d0c6cbe`). Four results, coverage 65 of 69:
 
-Groups 1–2 look high-confidence; groups 3–4 are where vocabulary shape
-choices start dictating the eventual Petrus grammar and deserve Navigator
-judgment before committing to a design.
+    - `GenerationBirth` and `GenerationStopRoute` made the concern cohort
+      a first-class constant: births (initial, resume, supersede) consume
+      a committed start plus an optional prior marker and always emit the
+      full nine-state cohort, initial review/actions work, and the
+      reminder timer; stops route between markers. The family owns the
+      commit-matching plumbing that every hand-written guard repeated;
+      admitted-relation sets and per-route predicates stay visible.
+    - `refresh_basis`, `refresh_admission`, and `retry_review` are
+      `Acceptance` instances whose owner is `Authority` itself: the rule
+      "read authority unless folding into it" plus adjacent `reads`
+      absorbed all three without a new family. Retry precedence is proven
+      by a verdict grid.
+    - `Retirement` gained an `anchor`: pre-generation admissions retire
+      against the seed/dormant/terminal marker that observed them rather
+      than `Authority`, and a `None` predicate expresses terminal's
+      unconditional retirement. Retirement's true shape is "against a
+      watching state", not "against authority".
+    - `PureStep` expresses `rearm` as a pure typed transformation; the
+      lowered derived transforms compare equal across both nets.
+
+    Regeneration again surfaced incidental drift: the hand-written net
+    leaves `p.terminal` colorless while typing every sibling marker, and
+    the birth guards compare one exact relation where the family declares
+    an admitted set. Behavioral grids prove all judgments identical.
+
+The remaining 4 transitions are the relational snapshot decisions
+(`request_dashboard`, `authorize_readiness`, `start_conversation`,
+`reminder_due`): each reads a broad cohort snapshot and turns one owner,
+basis, or timer token into work. Their vocabulary shape dictates how a
+Petrus grammar would treat relational joins and deserves Navigator
+judgment before a design is committed.
 
 ## Open questions
 
-- Can the eight emerging fragment families survive the direct-acceptance
+- Can the emerging fragment families survive the direct-acceptance
   production change without depending on application-private binding helpers?
-- Which of the remaining 31 transitions represent repeated semantic fragments,
-  rather than merely repeated arc shapes?
-- Where do relational reads (snapshot projection) and multi-owner folds fit a
-  fragment grammar without hiding workflow decisions?
+- Do the four snapshot decisions deserve a named family (explicit `reads`
+  over a decision fragment), first-class Petrus snapshot/cohort joins, or
+  hand-written declarations — without hiding workflow decisions?
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —
   generated `NetSpec`, a serialized IR, or both?
 - Is generator-based sugar worth its tracing/static-analysis cost over a
