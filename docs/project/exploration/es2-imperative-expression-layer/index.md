@@ -379,18 +379,45 @@ Findings:
     the open question about surviving the direct-acceptance change without
     application-private binding helpers answered in the affirmative.
 
-The remaining 4 transitions are the relational snapshot decisions
-(`request_dashboard`, `authorize_readiness`, `start_conversation`,
-`reminder_due`): each reads a broad cohort snapshot and turns one owner,
-basis, or timer token into work. Their vocabulary shape dictates how a
-Petrus grammar would treat relational joins and deserves Navigator
-judgment before a design is committed.
+12. Snapshot gates and explicit boundaries complete the net (commit
+    `20ab9dd`). The Navigator chose Option 2 for the four relational
+    snapshot decisions: name only the genuine twins, keep the genuinely
+    relational ones verbatim.
+
+    - `SnapshotGate` captures exactly the two semantically identical
+      publication gates, `request_dashboard` and `authorize_readiness`:
+      read every `COHORT` state except the gate's own owner, consume and
+      reproduce the owner, emit one typed work token when the named
+      snapshot predicate opens. The reads derive from the first-class
+      cohort constant; predicate and handler stay named workflow
+      functions.
+    - `start_conversation` and `reminder_due` remain verbatim relational
+      Petri declarations inside the experimental builder — deliberately.
+      Their topology is their meaning: a full-cohort snapshot joined with
+      one authorized observation or one armed timer into a single typed
+      decision. Forcing them under a universal `reads/consumes/emits`
+      combinator would serialize the workflow decision into configuration,
+      the exact failure mode the first production refinement rejected.
+      This is evidence, not an incomplete abstraction.
+    - Coverage: the vocabulary honestly expresses 67 of 69 transitions
+      through 14 named fragment families; the compiled experimental net
+      regenerates all 69. The decisive whole-net tests assert exact
+      equality of every place, transition (including the configurable
+      `Delay`), and all 309 arcs — at the default and a non-default
+      reminder delay. Behavioral grids prove the gate, conversation, and
+      reminder guards judge identically over open/closed snapshots
+      (including the dashboard format-upgrade case), and every lowered
+      handler compares equal as a derived typed transform.
+    - Validation: 24 fragment tests, `scripts/check quick`, and
+      `scripts/check full` (608 passed) all green.
+
+    This closes Experiment 1 with the universal-combinator approach
+    rejected on concrete evidence: a small grammar of named semantic
+    fragment families plus a visible residue of irreducibly relational
+    declarations regenerates the production net exactly.
 
 ## Open questions
 
-- Do the four snapshot decisions deserve a named family (explicit `reads`
-  over a decision fragment), first-class Petrus snapshot/cohort joins, or
-  hand-written declarations — without hiding workflow decisions?
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —
   generated `NetSpec`, a serialized IR, or both?
 - Is generator-based sugar worth its tracing/static-analysis cost over a
