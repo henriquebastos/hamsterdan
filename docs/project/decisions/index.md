@@ -8,3 +8,4 @@ settled direction by superseding its record explicitly rather than drifting.
 - [Agenticus routing is explicit, host-owned, and fail-closed](records/2026-08-05T1254Z-agenticus-routing-is-explicit-host-owned-and-fail-closed.md)
 - [Empty qualification targets require atomic smart-HTTP initialization](records/2026-08-08T0221Z-empty-qualification-targets-require-atomic-smart-http-initialization.md)
 - [Explicit authorized mutations execute without confirmation ceremony](records/2026-08-09T2321Z-explicit-authorized-mutations-execute-without-confirmation-ceremony.md)
+- [Lifecycle scopes close generations before canceling effects](records/2026-08-11T0000Z-lifecycle-scopes-close-generations-before-canceling-effects.md)

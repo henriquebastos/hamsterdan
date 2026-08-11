@@ -1,5 +1,5 @@
 ---
-status: Thickening
+status: Promoted
 opened: 2026-08-10
 navigator: Henrique
 ---
@@ -536,6 +536,12 @@ The Navigator accepted the candidate on 2026-08-10 with two parallel lanes:
 
 The independent study remains in this Exploratory Story. The accepted
 production candidate is promoted to Workbench RS-002.
+
+The Navigator accepted the remaining lifecycle-scope candidate on 2026-08-11.
+Production implementation is owned by
+[RS-003](../../workbench/rs-003-first-class-lifecycle-scopes.md). Lane 3 remains
+disposable evidence; production starts again from current accepted Petrus and
+Hamsterdan `main`.
 
 ### Production execution-scope conclusion
 
