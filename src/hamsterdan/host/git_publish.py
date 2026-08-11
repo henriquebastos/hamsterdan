@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import re
 import subprocess
@@ -14,7 +13,7 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
 from hamsterdan.agents import CodingResult
-from hamsterdan.github_app.gateway import GitHubAuthority
+from hamsterdan.github_app.gateway import GitHubAuthority, GitHubObjectWriteError
 from hamsterdan.github_app.models import GitHubBoundaryError
 
 _SAFE_REF = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}\Z")
@@ -207,11 +206,11 @@ class HostGitPublisher:
         parents: list[str],
         message: str,
     ) -> str:
-        entries: list[dict[str, object]] = []
+        entries: list[tuple[str, str, bytes | None]] = []
         for path in changed:
             index = self._git("-C", str(root), "ls-files", "--stage", "-z", "--", path, capture=True)
             if not index:
-                entries.append({"path": path, "mode": "100644", "type": "blob", "sha": None})
+                entries.append((path, "100644", None))
                 continue
             metadata, separator, observed = index.removesuffix("\0").partition("\t")
             fields = metadata.split()
@@ -220,34 +219,32 @@ class HostGitPublisher:
                     PublicationCategory.PATCH_ADMISSION, "staged tree contains an unsafe mode or unmerged entry"
                 )
             mode = fields[0]
-            response = self.authority.transport.request(
-                "POST",
-                f"{self.authority.root}/git/blobs",
-                {"content": base64.b64encode((root / path).read_bytes()).decode(), "encoding": "base64"},
+            entries.append((path, mode, (root / path).read_bytes()))
+        try:
+            created_tree = self.authority.create_tree(
+                base_tree=base_tree,
+                entries=entries,
             )
-            entries.append({"path": path, "mode": mode, "type": "blob", "sha": _created_sha(response, "blob")})
-        tree_response = self.authority.transport.request(
-            "POST",
-            f"{self.authority.root}/git/trees",
-            {"base_tree": base_tree, "tree": entries},
-        )
-        created_tree = _created_sha(tree_response, "tree")
+        except GitHubObjectWriteError:
+            raise GitPublishError(
+                PublicationCategory.OBJECT_WRITE, "GitHub did not prove Git object creation"
+            ) from None
         if created_tree != expected_tree:
             raise GitPublishError(
                 PublicationCategory.OBJECT_WRITE, "GitHub-created tree differs from the host-validated tree"
             )
-        commit_response = self.authority.transport.request(
-            "POST",
-            f"{self.authority.root}/git/commits",
-            {
-                "message": message,
-                "tree": created_tree,
-                "parents": parents,
-                "author": {"name": self.commit_name, "email": self.commit_email},
-                "committer": {"name": self.commit_name, "email": self.commit_email},
-            },
-        )
-        return _created_sha(commit_response, "commit")
+        try:
+            return self.authority.create_commit(
+                tree=created_tree,
+                parents=parents,
+                message=message,
+                name=self.commit_name,
+                email=self.commit_email,
+            )
+        except GitHubObjectWriteError:
+            raise GitPublishError(
+                PublicationCategory.OBJECT_WRITE, "GitHub did not prove Git object creation"
+            ) from None
 
     def _advance_ref(self, ref: str, expected_head: str, commit: str) -> None:
         destination = f"refs/heads/{ref}"
@@ -343,14 +340,6 @@ def _same_pull(current: object, original: object) -> bool:
 
 def _has_conflict_markers(diff: str) -> bool:
     return any(line.startswith(("+<<<<<<<", "+=======", "+>>>>>>>")) for line in diff.splitlines())
-
-
-def _created_sha(response: object, kind: str) -> str:
-    status, body = getattr(response, "status", None), getattr(response, "body", None)
-    sha = body.get("sha") if isinstance(body, dict) else None
-    if status != 201 or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
-        raise GitPublishError(PublicationCategory.OBJECT_WRITE, f"GitHub did not prove {kind} creation")
-    return sha
 
 
 def payload_digest(value: object) -> str:

@@ -735,6 +735,22 @@ composition edge, and let provider adapters derive provider-local identity. A
 general scope container, ambient runtime scope, or serialized execution object
 would be larger and less explicit. No Net topology changed.
 
+### Production Git-object ownership conclusion
+
+RS-012 moved GitHub's blob, tree, and commit request/response protocol from
+`HostGitPublisher` to `GitHubAuthority`. Provider methods now own base64 wire
+encoding, endpoint selection, and exact `201` plus lowercase-SHA proof. Each
+phase returns only its proven object identity.
+
+The extraction preserved a consequential host-owned authorization boundary:
+tree creation and commit creation are separate provider methods. The host first
+compares GitHub's created tree with the locally admitted tree and refuses before
+commit creation if they differ. Patch/path/mode admission, parents, operation
+trailers, current PR authority, compare-and-swap, and publication categories
+remain host policy. A one-shot provider method was rejected because it would
+move that comparison after an unauthorized orphan commit had already been
+created. No Net topology changed.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

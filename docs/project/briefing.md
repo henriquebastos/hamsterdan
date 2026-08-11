@@ -53,6 +53,9 @@ first sandbox organization for real-provider validation.
 - GitHub App registration evidence is provider-owned. One validated immutable
   `RegistrationInventory` crosses into the host; only then does the host
   atomically replace admitted routes and record the selected installation.
+- GitHub blob, tree, and commit wire protocols are provider-owned. The host
+  still admits patches, proves the expected local tree, checks that proof before
+  authorizing commit creation, and owns current-authority and ref-update policy.
 - Agent execution identity is explicit. Activities pass one logical operation
   and Attempt to a host-owned routed runner, which claims durable composition
   ownership before provider execution. Pi alone derives its stable per-Attempt

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -27,8 +28,20 @@ _SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
 MAX_PAGES = 20
 
 
+class GitHubObjectWriteError(GitHubBoundaryError):
+    """GitHub did not prove creation of an exact requested Git object."""
+
+
 def _digest(value: object) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _created_sha(response: object, kind: str) -> str:
+    status, body = getattr(response, "status", None), getattr(response, "body", None)
+    sha = body.get("sha") if isinstance(body, dict) else None
+    if status != 201 or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        raise GitHubObjectWriteError(f"GitHub did not prove {kind} creation")
+    return sha
 
 
 class GitHubAuthority:
@@ -52,6 +65,52 @@ class GitHubAuthority:
         if response.status not in statuses:
             raise GitHubBoundaryError(f"GitHub GET {path.split('?', 1)[0]} returned status {response.status}")
         return response.body
+
+    def create_tree(
+        self,
+        *,
+        base_tree: str,
+        entries: Sequence[tuple[str, str, bytes | None]],
+    ) -> str:
+        """Create one GitHub tree from host-admitted Git entries."""
+
+        tree: list[dict[str, object]] = []
+        for path, mode, content in entries:
+            sha = None
+            if content is not None:
+                response = self.transport.request(
+                    "POST",
+                    f"{self.root}/git/blobs",
+                    {"content": base64.b64encode(content).decode(), "encoding": "base64"},
+                )
+                sha = _created_sha(response, "blob")
+            tree.append({"path": path, "mode": mode, "type": "blob", "sha": sha})
+        tree_response = self.transport.request("POST", f"{self.root}/git/trees", {"base_tree": base_tree, "tree": tree})
+        return _created_sha(tree_response, "tree")
+
+    def create_commit(
+        self,
+        *,
+        tree: str,
+        parents: Sequence[str],
+        message: str,
+        name: str,
+        email: str,
+    ) -> str:
+        """Create one GitHub commit after the caller authorizes its proven tree."""
+
+        commit_response = self.transport.request(
+            "POST",
+            f"{self.root}/git/commits",
+            {
+                "message": message,
+                "tree": tree,
+                "parents": list(parents),
+                "author": {"name": name, "email": email},
+                "committer": {"name": name, "email": email},
+            },
+        )
+        return _created_sha(commit_response, "commit")
 
     def pull_request(self) -> PullRequestSnapshot:
         value = self._get(f"{self.root}/pulls/{self.pr_number}")

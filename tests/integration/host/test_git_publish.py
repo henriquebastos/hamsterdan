@@ -10,6 +10,7 @@ from petrus.motus.execution.archive import extract_workspace_archive, workspace_
 
 from hamsterdan.agents import CodingRequest, CodingResult
 from hamsterdan.contracts.readiness import ChangeResult
+from hamsterdan.github_app.gateway import GitHubAuthority, GitHubObjectWriteError
 from hamsterdan.github_app.models import PullRequestSnapshot, WireResponse
 from hamsterdan.host.git_publish import (
     GitPublishError,
@@ -70,6 +71,12 @@ class Authority:
     def __init__(self):
         self.transport = Transport()
         self.graphql = GraphQL()
+
+    def create_tree(self, **kwargs):
+        return GitHubAuthority.create_tree(self, **kwargs)
+
+    def create_commit(self, **kwargs):
+        return GitHubAuthority.create_commit(self, **kwargs)
 
 
 class GraphQL:
@@ -210,6 +217,12 @@ class LocalPublicationAuthority:
             self.repository,
         )
 
+    def create_tree(self, **kwargs):
+        return GitHubAuthority.create_tree(self, **kwargs)
+
+    def create_commit(self, **kwargs):
+        return GitHubAuthority.create_commit(self, **kwargs)
+
 
 def publisher(remote: Path, authority: Authority | None = None) -> HostGitPublisher:
     return HostGitPublisher(authority or Authority(), str(remote))  # type: ignore[arg-type]
@@ -316,6 +329,57 @@ def test_commit_upload_preserves_staged_modes_parents_and_binary_content(
             "committer": {"name": "Hamsterdan", "email": "hamster-dan[bot]@users.noreply.github.com"},
         },
     )
+
+
+@pytest.mark.parametrize("failure", ("blob", "tree", "commit"))
+def test_provider_object_creation_requires_exact_proof_before_continuing(failure: str) -> None:
+    authority = Authority()
+    valid = {
+        "blob": WireResponse(201, {"sha": "a" * 40}),
+        "tree": WireResponse(201, {"sha": "b" * 40}),
+        "commit": WireResponse(201, {"sha": "c" * 40}),
+    }
+    order = ("blob", "tree", "commit")
+    authority.transport.responses.extend(
+        WireResponse(200, {"sha": "f" * 40}) if kind == failure else valid[kind] for kind in order
+    )
+
+    with pytest.raises(GitHubObjectWriteError, match=f"{failure} creation"):
+        tree = authority.create_tree(
+            base_tree="d" * 40,
+            entries=(("file.txt", "100644", b"content"),),
+        )
+        authority.create_commit(
+            tree=tree,
+            parents=("e" * 40,),
+            message="message",
+            name="Hamsterdan",
+            email="hamster-dan[bot]@users.noreply.github.com",
+        )
+
+    assert len(authority.transport.calls) == order.index(failure) + 1
+
+
+def test_host_refuses_unexpected_created_tree_before_commit_or_ref_update(
+    repository: tuple[Path, Path, str, str],
+) -> None:
+    root, remote, first, _ = repository
+    (root / "file.txt").write_text("changed\n")
+    git(root, "add", "file.txt")
+    base_tree = git(root, "rev-parse", f"{first}^{{tree}}")
+    expected_tree = git(root, "write-tree")
+    authority = Authority()
+    authority.transport.responses.extend((WireResponse(201, {"sha": "a" * 40}), WireResponse(201, {"sha": "b" * 40})))
+
+    with pytest.raises(GitPublishError) as caught:
+        publisher(remote, authority)._create_commit(root, base_tree, expected_tree, ["file.txt"], [first], "message")
+
+    assert caught.value.category is PublicationCategory.OBJECT_WRITE
+    assert [path for _, path, _ in authority.transport.calls] == [
+        "/repos/owner/repo/git/blobs",
+        "/repos/owner/repo/git/trees",
+    ]
+    assert authority.graphql.calls == []
 
 
 @pytest.mark.parametrize(("mode", "content"), [("120000", "file.txt"), ("160000", None)])

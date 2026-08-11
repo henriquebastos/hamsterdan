@@ -44,3 +44,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-11 — False host-runtime surfaces removed](entries/2026-08-11T2355Z-false-host-runtime-surfaces-removed.md)
 - [2026-08-11 — Registration evidence given one provider owner](entries/2026-08-11T2359Z-registration-evidence-provider-owned.md)
 - [2026-08-11 — Agent execution identity made explicit](entries/2026-08-11T2359Z-agent-execution-identity-explicit.md)
+- [2026-08-11 — Git object protocol given one provider owner](entries/2026-08-11T2359Z-git-object-protocol-provider-owned.md)
