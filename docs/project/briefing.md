@@ -50,6 +50,9 @@ first sandbox organization for real-provider validation.
   normalizes queued/in-progress state, and identifies failed required jobs.
   Reconciliation and Activities add their own workflow identity and authority
   context without duplicating provider interpretation.
+- GitHub App registration evidence is provider-owned. One validated immutable
+  `RegistrationInventory` crosses into the host; only then does the host
+  atomically replace admitted routes and record the selected installation.
 - Each active PR generation has one exact Petrus lifecycle scope. Unscoped
   lifecycle commands survive generation cleanup; a staged command, exact scope
   reset/close, and matching commit form a restart-repairable boundary. Scope

@@ -44,21 +44,6 @@ from .runnable import RunnableIndex
 
 LOG = logging.getLogger("hamsterdan.host")
 ApplicationFactory = Callable[..., PrReadinessApplication]
-MAX_INVENTORY_PAGES = 20
-APP_PERMISSIONS = {
-    "administration": "read",
-    "actions": "read",
-    "contents": "write",
-    "issues": "write",
-    "pull_requests": "write",
-}
-APP_EVENTS = {
-    "issue_comment",
-    "pull_request",
-    "pull_request_review",
-    "pull_request_review_comment",
-    "workflow_run",
-}
 _FAULT_BOUNDARIES = frozenset({"agent", "comment"})
 _FAULT_PHASES = frozenset({"timed_out", "malformed", "before_call", "after_call"})
 _INSTANCE_PATTERN = re.compile(r"github:([1-9][0-9]*):([1-9][0-9]*):pr:([1-9][0-9]*)\Z")
@@ -161,10 +146,6 @@ class QualificationFault:
         if self.phase == "timed_out":
             raise AgentProtocolError("qualified agent execution timed out", timed_out=True)
         raise AgentProtocolError("qualified agent result is malformed")
-
-
-def _json(response: Any) -> Any:
-    return response.json()
 
 
 class HostService:
@@ -302,102 +283,13 @@ class HostService:
         )
 
     def reconcile_registration(self) -> dict[str, object]:
-        app = _json(self.clients.app.request("GET", "/app"))
-        if not isinstance(app, dict) or (app.get("id"), app.get("client_id"), str(app.get("slug", "")).casefold()) != (
-            self.config.app_id,
-            self.config.client_id,
-            self.config.app_slug,
-        ):
-            raise RuntimeError("configured GitHub App identity does not match provider authority")
-        permissions = app.get("permissions")
-        events = app.get("events")
-        if not isinstance(permissions, dict):
-            raise RuntimeError("GitHub App permissions are malformed")  # noqa: TRY004
-        observed_permissions = {str(key): str(value) for key, value in permissions.items() if key != "metadata"}
-        if observed_permissions != APP_PERMISSIONS or permissions.get("metadata", "read") != "read":
-            raise RuntimeError(
-                "GitHub App permissions do not match the required first-demo contract: "
-                f"expected={sorted(APP_PERMISSIONS.items())!r} observed={sorted(observed_permissions.items())!r}"
-            )
-        if not isinstance(events, list):
-            raise RuntimeError("GitHub App events are malformed")  # noqa: TRY004
-        observed_events = sorted(str(item) for item in events)
-        if set(observed_events) != APP_EVENTS or len(observed_events) != len(APP_EVENTS):
-            raise RuntimeError(
-                "GitHub App events do not match the required first-demo contract: "
-                f"expected={sorted(APP_EVENTS)!r} observed={observed_events!r}"
-            )
-        installations: list[dict[str, Any]] = []
-        for page in range(1, MAX_INVENTORY_PAGES + 1):
-            batch = _json(self.clients.app.request("GET", f"/app/installations?per_page=100&page={page}"))
-            if not isinstance(batch, list):
-                raise RuntimeError("GitHub installation inventory is malformed")  # noqa: TRY004
-            installations.extend(cast(list[dict[str, Any]], batch))
-            if len(batch) < 100:
-                break
-        else:
-            raise RuntimeError("GitHub installation inventory exceeds the bounded pagination limit")
-        matches = [
-            item
-            for item in installations
-            if isinstance(item, dict)
-            and isinstance(item.get("account"), dict)
-            and item["account"].get("id") == self.config.account_id
-            and str(item["account"].get("login", "")).casefold() == self.config.account_login.casefold()
-        ]
-        if len(matches) != 1:
-            raise RuntimeError("configured installation account is missing or ambiguous")
-        selected = matches[0]
-        if selected.get("suspended_at") is not None:
-            raise RuntimeError("configured installation is suspended")
-        installation_permissions = selected.get("permissions")
-        if not isinstance(installation_permissions, dict):
-            raise RuntimeError("configured installation permissions are malformed")  # noqa: TRY004
-        observed_installation_permissions = {
-            str(key): str(value) for key, value in installation_permissions.items() if key != "metadata"
-        }
-        if (
-            observed_installation_permissions != APP_PERMISSIONS
-            or installation_permissions.get("metadata", "read") != "read"
-        ):
-            raise RuntimeError(
-                "configured installation permissions do not match the required first-demo contract: "
-                f"expected={sorted(APP_PERMISSIONS.items())!r} "
-                f"observed={sorted(observed_installation_permissions.items())!r}"
-            )
-        installation_id = selected.get("id")
-        if type(installation_id) is not int or installation_id <= 0:
-            raise RuntimeError("configured installation identity is malformed")
-        client = self.clients.inventory(installation_id)
-        repositories: list[dict[str, Any]] = []
-        total: int | None = None
-        for page in range(1, MAX_INVENTORY_PAGES + 1):
-            payload = _json(client.request("GET", f"/installation/repositories?per_page=100&page={page}"))
-            batch = payload.get("repositories") if isinstance(payload, dict) else None
-            current_total = payload.get("total_count") if isinstance(payload, dict) else None
-            if not isinstance(batch, list) or type(current_total) is not int or current_total < 0:
-                raise RuntimeError("selected repository inventory is malformed")
-            total = current_total if total is None else total
-            if current_total != total:
-                raise RuntimeError("selected repository inventory changed during pagination")
-            repositories.extend(cast(list[dict[str, Any]], batch))
-            if len(repositories) >= total:
-                if len(repositories) != total:
-                    raise RuntimeError("selected repository inventory is inconsistent")
-                break
-        else:
-            raise RuntimeError("selected repository inventory exceeds the bounded pagination limit")
-        normalized = tuple(
-            (item["id"], item["full_name"])
-            for item in repositories
-            if isinstance(item, dict) and type(item.get("id")) is int and isinstance(item.get("full_name"), str)
-        )
-        count = self.registry.reconcile(installation_id, normalized)
-        self.installation_id = installation_id
+        inventory = self.clients.registration_inventory(self.config)
+        count = self.registry.reconcile(inventory.installation_id, inventory.repositories)
+        self.installation_id = inventory.installation_id
         return {
             "app_id": self.config.app_id,
             "app_slug": self.config.app_slug,
-            "installation_id": installation_id,
+            "installation_id": inventory.installation_id,
             "admitted_repositories": count,
         }
 

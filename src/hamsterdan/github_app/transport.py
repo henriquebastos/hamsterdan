@@ -69,7 +69,15 @@ class GitHubKitTransport:
                     raw_response.close()
         except GitHubBoundaryError:
             raise
-        except GitHubException, httpx.HTTPError, UnicodeDecodeError, json.JSONDecodeError, OSError, RuntimeError:
+        except (
+            GitHubException,
+            httpx.HTTPError,
+            UnicodeDecodeError,
+            json.JSONDecodeError,
+            OSError,
+            RuntimeError,
+            ValueError,
+        ):
             raise GitHubBoundaryError("GitHub request failed without a proven outcome") from None
 
     @staticmethod
@@ -253,11 +261,27 @@ class GitHubGraphQL:
 def _next(link: str | None) -> str | None:
     if not link:
         return None
+    found: str | None = None
     for part in link.split(","):
         target, *parameters = part.strip().split(";")
         if any(parameter.strip() == 'rel="next"' for parameter in parameters):
-            parsed = urlsplit(target.strip()[1:-1])
-            if parsed.scheme != "https" or parsed.hostname != API_HOST or parsed.port is not None:
+            target = target.strip()
+            if found is not None or len(target) < 3 or not target.startswith("<") or not target.endswith(">"):
+                raise GitHubBoundaryError("GitHub pagination evidence is malformed or ambiguous")
+            try:
+                parsed = urlsplit(target[1:-1])
+                invalid = (
+                    parsed.scheme != "https"
+                    or parsed.hostname != API_HOST
+                    or parsed.port is not None
+                    or parsed.username is not None
+                    or parsed.password is not None
+                    or bool(parsed.fragment)
+                    or not parsed.path.startswith("/")
+                )
+            except ValueError:
+                invalid = True
+            if invalid:
                 raise GitHubBoundaryError("GitHub pagination escaped the admitted origin")
-            return parsed.path + (("?" + parsed.query) if parsed.query else "")
-    return None
+            found = parsed.path + (("?" + parsed.query) if parsed.query else "")
+    return found

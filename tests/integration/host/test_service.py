@@ -16,11 +16,12 @@ from petrus.motus.activity import ActivityError, ActivityInvocation
 
 from hamsterdan.contracts.readiness import AdmittedConversation, ConversationPublicationRequest, Intent
 from hamsterdan.github_app.config import HostConfig
+from hamsterdan.github_app.models import RegistrationInventory
 from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host.__main__ import inspect_instance
 from hamsterdan.host.agenticus import AgentConfig, AgentMode, AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
-from hamsterdan.host.service import APP_EVENTS, APP_PERMISSIONS, HostService, QualificationFault
+from hamsterdan.host.service import HostService, QualificationFault
 
 
 class Response:
@@ -42,9 +43,15 @@ class Client:
 
 
 class Clients:
-    def __init__(self, app: Client | None = None, inventory: Client | None = None):
+    def __init__(
+        self,
+        app: Client | None = None,
+        inventory: Client | None = None,
+        registration: RegistrationInventory | Exception | None = None,
+    ):
         self.app = app or Client()
         self.inventory_client = inventory or Client()
+        self.registration = registration
         self.operation_calls: list[tuple[int, tuple[int, ...]]] = []
         self.operation_client = Client()
         self.closed = 0
@@ -52,6 +59,13 @@ class Clients:
     def inventory(self, installation_id: int) -> Client:
         assert installation_id == 44
         return self.inventory_client
+
+    def registration_inventory(self, config: HostConfig) -> RegistrationInventory:
+        if isinstance(self.registration, Exception):
+            raise self.registration
+        if self.registration is None:
+            raise AssertionError("registration inventory was not configured")
+        return self.registration
 
     def installation(self, installation_id: int, repository_ids: list[int] | tuple[int, ...]) -> Client:
         self.operation_calls.append((installation_id, tuple(repository_ids)))
@@ -1312,44 +1326,8 @@ def test_sweep_failure_on_one_pr_does_not_block_another(tmp_path: Path) -> None:
     assert len(made) == 2 and made[1].reconciles == ["periodic:44:31:8"]
 
 
-def registration_clients(
-    *,
-    app_changes: dict[str, object] | None = None,
-    installations: object | None = None,
-    repositories: object | None = None,
-) -> Clients:
-    app: dict[str, object] = {
-        "id": 17,
-        "client_id": "Iv1.client-secret-looking",
-        "slug": "hamsterdan-test",
-        "permissions": APP_PERMISSIONS | {"metadata": "read"},
-        "events": sorted(APP_EVENTS),
-    }
-    app.update(app_changes or {})
-    installation_value = (
-        installations
-        if installations is not None
-        else [
-            {
-                "id": 44,
-                "account": {"id": 23, "login": "Owner"},
-                "suspended_at": None,
-                "permissions": APP_PERMISSIONS | {"metadata": "read"},
-            }
-        ]
-    )
-    repository_value = (
-        repositories
-        if repositories is not None
-        else {
-            "total_count": 2,
-            "repositories": [{"id": 31, "full_name": "owner/one"}, {"id": 32, "full_name": "owner/two"}],
-        }
-    )
-    return Clients(
-        Client({"/app": app, "/app/installations?per_page=100&page=1": installation_value}),
-        Client({"/installation/repositories?per_page=100&page=1": repository_value}),
-    )
+def registration_clients(repositories: tuple[tuple[int, str], ...] = ((31, "owner/one"), (32, "owner/two"))) -> Clients:
+    return Clients(registration=RegistrationInventory(44, repositories))
 
 
 def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_path: Path) -> None:
@@ -1364,51 +1342,26 @@ def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_
     )
     assert host.reconcile_registration()["admitted_repositories"] == 2
     assert host.registry.route(44, 32) is not None
-    host.clients = registration_clients(
-        repositories={"total_count": 1, "repositories": [{"id": 31, "full_name": "owner/one"}]}
-    )
+    host.clients = registration_clients(((31, "owner/one"),))
     assert host.reconcile_registration()["admitted_repositories"] == 1
     assert host.registry.route(44, 32) is None
 
 
-@pytest.mark.parametrize(
-    ("changes", "installations", "message"),
-    [
-        ({"id": 18}, None, "identity"),
-        ({"client_id": "wrong"}, None, "identity"),
-        ({"slug": "wrong"}, None, "identity"),
-        ({}, [], "missing or ambiguous"),
-        ({}, [{"id": 44, "account": {"id": 23, "login": "Owner"}, "suspended_at": "now"}], "suspended"),
-        (
-            {},
-            [
-                {
-                    "id": 44,
-                    "account": {"id": 23, "login": "Owner"},
-                    "suspended_at": None,
-                    "permissions": APP_PERMISSIONS | {"metadata": "read", "pull_requests": "read"},
-                }
-            ],
-            "installation permissions",
-        ),
-        ({"permissions": APP_PERMISSIONS | {"checks": "write"}}, None, "permissions"),
-        ({"events": sorted(APP_EVENTS | {"check_run"})}, None, "events"),
-    ],
-)
-def test_startup_rejects_identity_account_suspension_and_broad_contract_safely(
-    tmp_path: Path, changes: dict[str, object], installations: object | None, message: str
-) -> None:
+def test_registration_failure_preserves_the_current_registry_and_host_identity(tmp_path: Path) -> None:
     composition, routes = agent_custody(tmp_path)
     host = HostService(
         config(tmp_path),
-        clients=registration_clients(app_changes=changes, installations=installations),
+        clients=registration_clients(),
         runner=object(),
         agent_composition=composition,
         agent_routes=routes,
         application_factory=Application,
     )
-    with pytest.raises(RuntimeError, match=message) as caught:
+    host.reconcile_registration()
+    host.clients = Clients(registration=RuntimeError("selected repository inventory is malformed"))
+
+    with pytest.raises(RuntimeError, match="inventory is malformed"):
         host.reconcile_registration()
-    assert all(
-        secret not in str(caught.value) for secret in ("client-secret-looking", "private-key-secret", "hook-secret")
-    )
+    assert host.installation_id == 44
+    assert host.registry.route(44, 31) is not None
+    assert host.registry.route(44, 32) is not None

@@ -12,6 +12,24 @@ from githubkit.auth import AppAuthStrategy
 from githubkit.cache import MemCacheStrategy
 
 from .config import HostConfig
+from .models import GitHubBoundaryError, RegistrationInventory
+from .transport import GitHubKitTransport
+
+MAX_INVENTORY_PAGES = 20
+APP_PERMISSIONS = {
+    "administration": "read",
+    "actions": "read",
+    "contents": "write",
+    "issues": "write",
+    "pull_requests": "write",
+}
+APP_EVENTS = {
+    "issue_comment",
+    "pull_request",
+    "pull_request_review",
+    "pull_request_review_comment",
+    "workflow_run",
+}
 
 
 @dataclass(frozen=True)
@@ -110,6 +128,106 @@ class GitHubAppClients:
             self._clients[key] = self._make(self._auth.as_installation(installation_id))
         return self._clients[key]
 
+    def registration_inventory(self, config: HostConfig) -> RegistrationInventory:
+        """Validate one configured App registration and read its selected repository portfolio."""
+        app_transport = GitHubKitTransport(self.app)
+        app_response = app_transport.request("GET", "/app")
+        if app_response.status != 200:
+            raise GitHubBoundaryError("GitHub App registration evidence is unavailable")
+        app = app_response.body
+        if not isinstance(app, dict):
+            raise RuntimeError("configured GitHub App identity does not match provider authority")  # noqa: TRY004
+        app_id, client_id, slug = app.get("id"), app.get("client_id"), app.get("slug")
+        if (
+            type(app_id) is not int
+            or app_id != config.app_id
+            or type(client_id) is not str
+            or client_id != config.client_id
+            or type(slug) is not str
+            or slug.casefold() != config.app_slug
+        ):
+            raise RuntimeError("configured GitHub App identity does not match provider authority")
+        _validate_permissions(app.get("permissions"), "GitHub App")
+        events = app.get("events")
+        if not isinstance(events, list):
+            raise RuntimeError("GitHub App events are malformed")  # noqa: TRY004
+        observed_events = sorted(str(item) for item in events)
+        if set(observed_events) != APP_EVENTS or len(observed_events) != len(APP_EVENTS):
+            raise RuntimeError(
+                "GitHub App events do not match the required first-demo contract: "
+                f"expected={sorted(APP_EVENTS)!r} observed={observed_events!r}"
+            )
+        installations: list[dict[str, Any]] = []
+        current: str | None = "/app/installations?per_page=100"
+        for _ in range(MAX_INVENTORY_PAGES):
+            response = app_transport.request("GET", current)
+            if response.status != 200:
+                raise GitHubBoundaryError("GitHub installation inventory is unavailable")
+            batch = response.body
+            if not isinstance(batch, list):
+                raise RuntimeError("GitHub installation inventory is malformed")  # noqa: TRY004
+            installations.extend(cast(list[dict[str, Any]], batch))
+            current = response.next_path
+            if current is None:
+                break
+        else:
+            raise RuntimeError("GitHub installation inventory exceeds the bounded pagination limit")
+        matches = [
+            item
+            for item in installations
+            if isinstance(item, dict)
+            and isinstance(item.get("account"), dict)
+            and type(item["account"].get("id")) is int
+            and item["account"]["id"] == config.account_id
+            and type(item["account"].get("login")) is str
+            and item["account"]["login"].casefold() == config.account_login.casefold()
+        ]
+        if len(matches) != 1:
+            raise RuntimeError("configured installation account is missing or ambiguous")
+        selected = matches[0]
+        if "suspended_at" not in selected:
+            raise RuntimeError("configured installation suspension evidence is malformed")
+        if selected.get("suspended_at") is not None:
+            raise RuntimeError("configured installation is suspended")
+        _validate_permissions(selected.get("permissions"), "configured installation")
+        installation_id = selected.get("id")
+        if type(installation_id) is not int or installation_id <= 0:
+            raise RuntimeError("configured installation identity is malformed")
+        transport = GitHubKitTransport(self.inventory(installation_id))
+        repositories: list[dict[str, Any]] = []
+        total: int | None = None
+        current = "/installation/repositories?per_page=100"
+        for _ in range(MAX_INVENTORY_PAGES):
+            response = transport.request("GET", current)
+            if response.status != 200:
+                raise GitHubBoundaryError("GitHub repository inventory is unavailable")
+            payload = response.body
+            batch = payload.get("repositories") if isinstance(payload, dict) else None
+            current_total = payload.get("total_count") if isinstance(payload, dict) else None
+            if not isinstance(batch, list) or type(current_total) is not int or current_total < 0:
+                raise RuntimeError("selected repository inventory is malformed")
+            total = current_total if total is None else total
+            if current_total != total:
+                raise RuntimeError("selected repository inventory changed during pagination")
+            repositories.extend(cast(list[dict[str, Any]], batch))
+            if len(repositories) > total or (len(repositories) == total and response.next_path is not None):
+                raise RuntimeError("selected repository inventory is inconsistent")
+            current = response.next_path
+            if current is None:
+                break
+        else:
+            raise RuntimeError("selected repository inventory exceeds the bounded pagination limit")
+        if len(repositories) != total:
+            raise RuntimeError("selected repository inventory is inconsistent")
+        if any(not _valid_repository(item) for item in repositories):
+            raise RuntimeError("selected repository inventory is malformed")
+        normalized = tuple((cast(int, item["id"]), cast(str, item["full_name"])) for item in repositories)
+        if len({item[0] for item in normalized}) != len(normalized) or len(
+            {item[1].casefold() for item in normalized}
+        ) != len(normalized):
+            raise RuntimeError("selected repository inventory is inconsistent")
+        return RegistrationInventory(installation_id, normalized)
+
     def close(self) -> None:
         if self._closed:
             return
@@ -120,3 +238,30 @@ class GitHubAppClients:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+
+def _validate_permissions(value: object, owner: str) -> None:
+    if not isinstance(value, dict):
+        raise RuntimeError(f"{owner} permissions are malformed")  # noqa: TRY004
+    observed = {str(key): str(permission) for key, permission in value.items() if key != "metadata"}
+    if observed != APP_PERMISSIONS or value.get("metadata", "read") != "read":
+        raise RuntimeError(
+            f"{owner} permissions do not match the required first-demo contract: "
+            f"expected={sorted(APP_PERMISSIONS.items())!r} observed={sorted(observed.items())!r}"
+        )
+
+
+def _valid_repository(value: object) -> bool:
+    if not isinstance(value, dict):
+        return False
+    repository_id, full_name = value.get("id"), value.get("full_name")
+    return (
+        type(repository_id) is int
+        and repository_id > 0
+        and type(full_name) is str
+        and 1 <= len(full_name) <= 201
+        and full_name.isascii()
+        and full_name.isprintable()
+        and full_name.count("/") == 1
+        and all(part and part.strip() == part for part in full_name.split("/"))
+    )

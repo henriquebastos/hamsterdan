@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import sqlite3
+import traceback
 import uuid
 from contextvars import Context
 from pathlib import Path
@@ -14,8 +15,9 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from hamsterdan.github_app.auth import GitHubAppClients, RequestMetadata
+from hamsterdan.github_app.auth import APP_EVENTS, APP_PERMISSIONS, GitHubAppClients, RequestMetadata
 from hamsterdan.github_app.config import ConfigurationError, HostConfig
+from hamsterdan.github_app.models import GitHubBoundaryError
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubKitTransport
 from hamsterdan.github_app.webhooks import (
@@ -183,6 +185,363 @@ def test_app_and_installation_auth_use_jwt_then_scoped_token_and_safe_metadata(t
     assert "installation-secret" not in repr(metadata) and not hasattr(metadata[-1], "headers")
     clients.close()
     clients.close()
+
+
+def test_registration_inventory_validates_provider_contract_before_returning_portfolio(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path.endswith("/access_tokens"):
+            return httpx.Response(201, json={"token": "installation-secret", "expires_at": "2099-01-01T00:00:00Z"})
+        if request.url.path == "/app":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 17,
+                    "client_id": "Iv1.explicit",
+                    "slug": "hamsterdan-test",
+                    "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    "events": sorted(APP_EVENTS),
+                },
+            )
+        if request.url.path == "/app/installations":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 44,
+                        "account": {"id": 23, "login": "Owner"},
+                        "suspended_at": None,
+                        "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    }
+                ],
+            )
+        if request.url.path == "/installation/repositories":
+            return httpx.Response(
+                200,
+                json={
+                    "total_count": 2,
+                    "repositories": [
+                        {"id": 31, "full_name": "owner/one"},
+                        {"id": 32, "full_name": "owner/two"},
+                    ],
+                },
+            )
+        raise AssertionError(request.url)
+
+    config = HostConfig.from_environment(environment(tmp_path))
+    with GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients:
+        inventory = clients.registration_inventory(config)
+
+    assert (inventory.installation_id, inventory.repositories) == (
+        44,
+        ((31, "owner/one"), (32, "owner/two")),
+    )
+    assert calls == [
+        "/app",
+        "/app/installations",
+        "/app/installations/44/access_tokens",
+        "/installation/repositories",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("app_changes", "installations", "message"),
+    [
+        ({"id": 18}, None, "identity"),
+        ({"client_id": "wrong"}, None, "identity"),
+        ({"slug": "wrong"}, None, "identity"),
+        ({"permissions": APP_PERMISSIONS | {"checks": "write"}}, None, "permissions"),
+        ({"events": sorted(APP_EVENTS | {"check_run"})}, None, "events"),
+        ({}, [], "missing or ambiguous"),
+        ({}, [{"id": 44, "account": {"id": "23", "login": "Owner"}, "suspended_at": None}], "missing or ambiguous"),
+        ({}, [{"id": 44, "account": {"id": 23, "login": 23}, "suspended_at": None}], "missing or ambiguous"),
+        (
+            {},
+            [
+                {
+                    "id": 44,
+                    "account": {"id": 23, "login": "Owner"},
+                    "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                }
+            ],
+            "suspension evidence",
+        ),
+        ({}, [{"id": 44, "account": {"id": 23, "login": "Owner"}, "suspended_at": "now"}], "suspended"),
+        (
+            {},
+            [
+                {
+                    "id": 44,
+                    "account": {"id": 23, "login": "Owner"},
+                    "suspended_at": None,
+                    "permissions": APP_PERMISSIONS | {"metadata": "read", "pull_requests": "read"},
+                }
+            ],
+            "installation permissions",
+        ),
+    ],
+)
+def test_registration_rejects_invalid_app_and_installation_before_token_mint(
+    tmp_path: Path, app_changes: dict[str, object], installations: object | None, message: str
+) -> None:
+    access_tokens = 0
+    app: dict[str, object] = {
+        "id": 17,
+        "client_id": "Iv1.explicit",
+        "slug": "hamsterdan-test",
+        "permissions": APP_PERMISSIONS | {"metadata": "read"},
+        "events": sorted(APP_EVENTS),
+    }
+    app.update(app_changes)
+    installation_value = (
+        installations
+        if installations is not None
+        else [
+            {
+                "id": 44,
+                "account": {"id": 23, "login": "Owner"},
+                "suspended_at": None,
+                "permissions": APP_PERMISSIONS | {"metadata": "read"},
+            }
+        ]
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal access_tokens
+        if request.url.path.endswith("/access_tokens"):
+            access_tokens += 1
+            return httpx.Response(201, json={"token": "installation-secret", "expires_at": "2099-01-01T00:00:00Z"})
+        if request.url.path == "/app":
+            return httpx.Response(200, json=app)
+        if request.url.path == "/app/installations":
+            return httpx.Response(200, json=installation_value)
+        raise AssertionError(request.url)
+
+    config = HostConfig.from_environment(environment(tmp_path))
+    with (
+        GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients,
+        pytest.raises(RuntimeError, match=message),
+    ):
+        clients.registration_inventory(config)
+    assert access_tokens == 0
+
+
+def test_registration_rejects_one_malformed_repository_instead_of_returning_a_partial_portfolio(
+    tmp_path: Path,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/access_tokens"):
+            return httpx.Response(201, json={"token": "installation-secret", "expires_at": "2099-01-01T00:00:00Z"})
+        if request.url.path == "/app":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 17,
+                    "client_id": "Iv1.explicit",
+                    "slug": "hamsterdan-test",
+                    "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    "events": sorted(APP_EVENTS),
+                },
+            )
+        if request.url.path == "/app/installations":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 44,
+                        "account": {"id": 23, "login": "Owner"},
+                        "suspended_at": None,
+                        "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    }
+                ],
+            )
+        return httpx.Response(
+            200,
+            json={
+                "total_count": 2,
+                "repositories": [{"id": 31, "full_name": "owner/one"}, {"id": "32", "full_name": "owner/two"}],
+            },
+        )
+
+    config = HostConfig.from_environment(environment(tmp_path))
+    with (
+        GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients,
+        pytest.raises(RuntimeError, match="repository inventory is malformed"),
+    ):
+        clients.registration_inventory(config)
+
+
+def test_registration_rejects_conflicting_duplicate_repository_identity(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/access_tokens"):
+            return httpx.Response(201, json={"token": "installation-secret", "expires_at": "2099-01-01T00:00:00Z"})
+        if request.url.path == "/app":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 17,
+                    "client_id": "Iv1.explicit",
+                    "slug": "hamsterdan-test",
+                    "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    "events": sorted(APP_EVENTS),
+                },
+            )
+        if request.url.path == "/app/installations":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 44,
+                        "account": {"id": 23, "login": "Owner"},
+                        "suspended_at": None,
+                        "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    }
+                ],
+            )
+        return httpx.Response(
+            200,
+            json={
+                "total_count": 2,
+                "repositories": [{"id": 31, "full_name": "owner/one"}, {"id": 31, "full_name": "owner/renamed"}],
+            },
+        )
+
+    config = HostConfig.from_environment(environment(tmp_path))
+    with (
+        GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients,
+        pytest.raises(RuntimeError, match="repository inventory is inconsistent"),
+    ):
+        clients.registration_inventory(config)
+
+
+def test_registration_follows_provider_next_link_even_after_a_short_page(tmp_path: Path) -> None:
+    installation_queries: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/access_tokens"):
+            return httpx.Response(201, json={"token": "installation-secret", "expires_at": "2099-01-01T00:00:00Z"})
+        if request.url.path == "/app":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 17,
+                    "client_id": "Iv1.explicit",
+                    "slug": "hamsterdan-test",
+                    "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    "events": sorted(APP_EVENTS),
+                },
+            )
+        if request.url.path == "/app/installations":
+            installation_queries.append(request.url.query.decode())
+            if request.url.params.get("page") is None:
+                return httpx.Response(
+                    200,
+                    headers={"link": '<https://api.github.com/app/installations?per_page=100&page=2>; rel="next"'},
+                    json=[],
+                )
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 44,
+                        "account": {"id": 23, "login": "Owner"},
+                        "suspended_at": None,
+                        "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    }
+                ],
+            )
+        return httpx.Response(
+            200,
+            json={"total_count": 1, "repositories": [{"id": 31, "full_name": "owner/one"}]},
+        )
+
+    config = HostConfig.from_environment(environment(tmp_path))
+    with GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients:
+        assert clients.registration_inventory(config).repositories == ((31, "owner/one"),)
+    assert installation_queries == ["per_page=100", "per_page=100&page=2"]
+
+
+def test_registration_token_parse_failure_is_secret_safe(tmp_path: Path) -> None:
+    token = "installation-token-must-not-escape"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/access_tokens"):
+            return httpx.Response(201, json={"token": token, "expires_at": "not-a-timestamp"})
+        if request.url.path == "/app":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 17,
+                    "client_id": "Iv1.explicit",
+                    "slug": "hamsterdan-test",
+                    "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    "events": sorted(APP_EVENTS),
+                },
+            )
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 44,
+                    "account": {"id": 23, "login": "Owner"},
+                    "suspended_at": None,
+                    "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                }
+            ],
+        )
+
+    config = HostConfig.from_environment(environment(tmp_path))
+    with (
+        GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients,
+        pytest.raises(GitHubBoundaryError) as caught,
+    ):
+        clients.registration_inventory(config)
+    rendered = "".join(traceback.format_exception(caught.value))
+    assert token not in rendered
+    assert "installation-secret" not in rendered
+
+
+def test_registration_rejects_non_success_even_with_valid_shaped_app_evidence(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            503,
+            json={
+                "id": 17,
+                "client_id": "Iv1.explicit",
+                "slug": "hamsterdan-test",
+                "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                "events": sorted(APP_EVENTS),
+            },
+        )
+
+    config = HostConfig.from_environment(environment(tmp_path))
+    with (
+        GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients,
+        pytest.raises(GitHubBoundaryError, match="registration evidence is unavailable"),
+    ):
+        clients.registration_inventory(config)
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        '[https://api.github.com/items?page=2]; rel="next"',
+        '<https://example.invalid/items?page=2>; rel="next"',
+        '<https://api.github.com/items?page=2>; rel="next", <https://api.github.com/items?page=3>; rel="next"',
+    ],
+)
+def test_github_transport_rejects_malformed_escaped_or_ambiguous_next_link(tmp_path: Path, link: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"link": link}, json={})
+
+    config = HostConfig.from_environment(environment(tmp_path))
+    with (
+        GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients,
+        pytest.raises(GitHubBoundaryError),
+    ):
+        GitHubKitTransport(clients.app).request("GET", "/items")
 
 
 def test_new_client_lifecycle_remints_without_a_host_token_cache(tmp_path: Path) -> None:

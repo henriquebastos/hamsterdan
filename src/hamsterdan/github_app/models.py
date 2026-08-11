@@ -14,6 +14,12 @@ class GitHubBoundaryError(RuntimeError):
 
 
 @dataclass(frozen=True)
+class RegistrationInventory:
+    installation_id: int
+    repositories: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
 class WireResponse:
     status: int
     body: object

@@ -692,6 +692,28 @@ Activity execution, scheduler, storage schema, or Petrus behavior changed. The
 clarity gain is that required recovery behavior is now syntactically required,
 while route custody exposes only the operations production actually composes.
 
+### Production registration-evidence conclusion
+
+RS-010 separated GitHub registration interpretation from host composition.
+`GitHubAppClients.registration_inventory(config)` now owns exact App and
+installation authority, permissions/events, suspension, bounded same-origin
+pagination, repository cardinality and shape, and duplicate identity rejection.
+It returns one immutable `RegistrationInventory`; `HostService` atomically
+reconciles routes only after that complete value exists.
+
+Adversarial review showed why this was more than moving code. The old host
+parser could silently discard malformed repository rows and then replace a
+valid registry with a partial portfolio. The provider boundary is now
+all-or-nothing, status-checked, continuation-authoritative, exact-type checked,
+and secret-safe across installation-token parsing failures. Provider failure
+cannot mutate the current registry or host installation identity.
+
+No new provider facade or file was required: App authentication already owned
+registration and unrestricted inventory clients, frozen provider values already
+had a home, and the existing bounded transport supplied safe HTTP and Link
+semantics. No Net, lifecycle, Activity execution, scheduler, storage schema, or
+Petrus behavior changed.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or
