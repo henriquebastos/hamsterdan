@@ -213,13 +213,26 @@ class WebhookCustody:
         else:
             self._registry.repositories(item.action, item.installation_id, item.account_id, item.repositories)
 
-    def pending(self, limit: int = 100) -> tuple[Observation, ...]:
+    def pending(
+        self,
+        limit: int = 100,
+        *,
+        subject: tuple[int, int, int] | None = None,
+    ) -> tuple[Observation, ...]:
         limit = max(1, min(limit, 1000))
+        where = "status='pending' AND next_attempt_at<=?"
+        parameters: tuple[object, ...] = (self._clock(), limit)
+        if subject is not None:
+            where += (
+                " AND json_extract(observation,'$.installation_id')=?"
+                " AND json_extract(observation,'$.repository_id')=?"
+                " AND json_extract(observation,'$.pull_request_number')=?"
+            )
+            parameters = (self._clock(), *subject, limit)
         with self._lock:
             rows = self._db.execute(
-                "SELECT observation,attempts FROM inbox "
-                "WHERE status='pending' AND next_attempt_at<=? ORDER BY rowid LIMIT ?",
-                (self._clock(), limit),
+                f"SELECT observation,attempts FROM inbox WHERE {where} ORDER BY rowid LIMIT ?",
+                parameters,
             ).fetchall()
         return tuple(
             Observation(
@@ -233,6 +246,17 @@ class WebhookCustody:
             )
             for raw, attempts in rows
         )
+
+    def has_pending(self, *, subject: tuple[int, int, int]) -> bool:
+        with self._lock:
+            row = self._db.execute(
+                "SELECT 1 FROM inbox WHERE status='pending'"
+                " AND json_extract(observation,'$.installation_id')=?"
+                " AND json_extract(observation,'$.repository_id')=?"
+                " AND json_extract(observation,'$.pull_request_number')=? LIMIT 1",
+                subject,
+            ).fetchone()
+        return row is not None
 
     def acknowledge(self, delivery_id: str, reason: str = "processed") -> None:
         with self._lock, self._db:

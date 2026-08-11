@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -27,6 +27,19 @@ from hamsterdan.github_app.gateway import GitHubAuthority
 from .activities import AgentFault, PrReadinessActivities
 from .git_publish import HostGitPublisher
 from .runtime import AuthorityLease, PrReadinessHost
+
+
+@dataclass(frozen=True)
+class NormalizedComment:
+    """Host-normalized conversation input, free of provider SDK values."""
+
+    delivery_id: str
+    comment_id: int
+    actor_id: int
+    actor_login: str
+    actor_type: str
+    association: str
+    text: str
 
 
 def _digest(value: object) -> str:
@@ -272,6 +285,33 @@ class PrReadinessApplication:
             self._observe_actions(current, policy.required_checks)
         return self.projection(pull.state)
 
+    def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> dict[str, object]:
+        """Reconcile provider truth once, then optionally deliver a conversation."""
+        outcome = self.reconcile(trigger)
+        if comment is None:
+            return outcome
+        if self.host is None or self.host.control is None:
+            return {"routed": False, "reason": "PR has no active reviewable generation"}
+        control = self.host.control
+        normalized_text = comment.text.strip()
+        is_bot = comment.actor_login.strip().casefold() == self.bot_login
+        addressed = self._addressed_text(normalized_text)
+        authorized = comment.actor_type == "User" and comment.association.upper() in self.trusted_associations
+        if is_bot or not authorized or addressed is None:
+            return {"routed": False, "reason": "comment is not an authorized Hamsterdan conversation"}
+        value = ConversationObservation(
+            control.epoch,
+            control.head,
+            True,
+            addressed,
+            comment.comment_id,
+            comment.actor_id,
+            comment.actor_login,
+            comment.association,
+        )
+        self._deliver("conversation_observation", value, f"github-delivery:{comment.delivery_id}")
+        return {"routed": True, "epoch": control.epoch, "head": control.head}
+
     def route_comment(
         self,
         *,
@@ -283,29 +323,10 @@ class PrReadinessApplication:
         association: str,
         text: str,
     ) -> dict[str, object]:
-        self.reconcile(f"comment-preflight:{delivery_id}")
-        if self.host is None or self.host.control is None:
-            return {"routed": False, "reason": "PR has no active reviewable generation"}
-        control = self.host.control
-        assert control is not None
-        normalized_text = text.strip()
-        is_bot = actor_login.strip().casefold() == self.bot_login
-        addressed = self._addressed_text(normalized_text)
-        authorized = actor_type == "User" and association.upper() in self.trusted_associations
-        if is_bot or not authorized or addressed is None:
-            return {"routed": False, "reason": "comment is not an authorized Hamsterdan conversation"}
-        value = ConversationObservation(
-            control.epoch,
-            control.head,
-            True,
-            addressed,
-            comment_id,
-            actor_id,
-            actor_login,
-            association,
+        return self.activate(
+            f"comment-preflight:{delivery_id}",
+            comment=NormalizedComment(delivery_id, comment_id, actor_id, actor_login, actor_type, association, text),
         )
-        self._deliver("conversation_observation", value, f"github-delivery:{delivery_id}")
-        return {"routed": True, "epoch": control.epoch, "head": control.head}
 
     def _addressed_text(self, text: str) -> str | None:
         """Strip the exact, case-insensitive configured App mention."""

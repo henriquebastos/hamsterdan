@@ -587,6 +587,28 @@ No new Petrus contract or host infrastructure was needed. This reinforces the
 boundary: Motus owns execution, lifecycle scopes own generation cleanup, each
 business publication owns its state, and the host composes them.
 
+### Production host-activation conclusion
+
+The post-publication review retained `ActionsState` because observation and
+rerun form one protocol, and retained `MutationState` because it is the exact
+change/repair mutual-exclusion boundary. Splitting either would add relational
+joins or recreate locking rather than expose independent business ownership.
+
+The actual false coupling was outside the Net. Webhooks, runnable timers,
+Activity terminals, and sweeps advanced one PR through different host call
+stacks. RS-005 converged them on one per-Instance activation: pre-settle frozen
+terminals, apply selected custody or provider reconciliation, post-settle,
+record runnable posture, then acknowledge custody under one lock. Deferred and
+bounded webhook batches fence sweep reconciliation; strict-bound inactive
+Instances remain settlement-repairable even when their noncanonical wake is
+lost.
+
+The Net remains at 46 places, 69 transitions, 309 arcs, and 17 retirements.
+Conceptual clarity improved without changing workflow topology or adding a
+Petrus, database, actor-runtime, or HA abstraction. This confirms that a
+complicated call graph can be infrastructure leakage even when the Petri graph
+is already expressing the right business ownership.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

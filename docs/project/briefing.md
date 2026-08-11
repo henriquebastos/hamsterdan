@@ -30,6 +30,11 @@ first sandbox organization for real-provider validation.
   Activity implementations for one shared Worker, serializes advancement per
   PR, and stores only reconstructible scheduling hints outside canonical
   webhook, History, and Dispatch custody.
+- Webhook delivery, runnable timers, Activity terminals, and repair sweeps enter
+  one per-Instance host activation boundary. It settles frozen terminals before
+  provider observation, records final runnable posture, and only then
+  acknowledges webhook custody. Subject-filtered custody and strict-bound
+  inactive repair prevent deferred work or lost hints from bypassing recovery.
 - Each active PR generation has one exact Petrus lifecycle scope. Unscoped
   lifecycle commands survive generation cleanup; a staged command, exact scope
   reset/close, and matching commit form a restart-repairable boundary. Scope

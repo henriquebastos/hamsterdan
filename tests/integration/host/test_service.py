@@ -20,6 +20,7 @@ from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host.__main__ import inspect_instance
 from hamsterdan.host.agenticus import AgentConfig, AgentMode, AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
+from hamsterdan.host.application import NormalizedComment
 from hamsterdan.host.service import APP_EVENTS, APP_PERMISSIONS, HostService, QualificationFault
 
 
@@ -72,6 +73,12 @@ class Application:
         self.reconciles.append(trigger)
         if self.fail:
             raise RuntimeError("provider secret must not escape")
+
+    def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> dict[str, object]:
+        self.reconcile(trigger)
+        if comment is not None:
+            self.comments.append(comment.__dict__)
+        return {"reason": "activated", "trigger": trigger}
 
     def route_comment(self, **kwargs: object) -> None:
         self.comments.append(kwargs)
@@ -408,6 +415,86 @@ def test_addressed_trusted_human_comment_is_routed(tmp_path: Path) -> None:
     assert len(made) == 1
     assert made[0].comments[0]["comment_id"] == 9
     assert made[0].comments[0]["text"] == "@hamsterdan-test help"
+    assert made[0].reconciles == ["github-delivery:comment"]
+
+
+def test_delivery_remains_pending_when_post_activation_settlement_fails(tmp_path: Path) -> None:
+    class SettlementFailure(Application):
+        settlements = 0
+
+        def settle(self) -> None:
+            self.settlements += 1
+            if self.settlements == 2:
+                raise RuntimeError("settlement failed")
+
+    host = service(tmp_path, factory=SettlementFailure)
+    delivery, body = str(uuid.uuid4()), envelope()
+    host.custody.receive(signed(body, delivery).items() | {("content-length", str(len(body)))}, body)
+
+    host.process(host.custody.pending()[0])
+
+    application = host._apps[(44, 31, 7)]
+    assert application.reconciles == [f"github-delivery:{delivery}"]
+    assert host.custody.status(delivery) == "pending"
+    host.close()
+
+
+def test_delivery_factory_failure_is_recorded_for_durable_retry(tmp_path: Path) -> None:
+    def fail_factory(*args: object, **kwargs: object) -> Application:
+        raise RuntimeError("application open failed")
+
+    host = service(tmp_path, factory=fail_factory)
+    delivery, body = str(uuid.uuid4()), envelope()
+    host.custody.receive(signed(body, delivery).items() | {("content-length", str(len(body)))}, body)
+
+    host.process(host.custody.pending()[0])
+
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        attempts, next_attempt_at = database.execute(
+            "SELECT attempts,next_attempt_at FROM inbox WHERE delivery_id=?", (delivery,)
+        ).fetchone()
+    assert attempts == 1
+    assert next_attempt_at > 0
+    assert host.custody.status(delivery) == "pending"
+    host.close()
+
+
+def test_delivery_is_acknowledged_only_after_runnable_posture_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = service(tmp_path)
+    delivery, body = str(uuid.uuid4()), envelope()
+    host.custody.receive(signed(body, delivery).items() | {("content-length", str(len(body)))}, body)
+    observed_statuses: list[str | None] = []
+    record = host._record_posture
+
+    def observe_posture(instance: str, outcome: object | None) -> None:
+        observed_statuses.append(host.custody.status(delivery))
+        record(instance, outcome)
+
+    monkeypatch.setattr(host, "_record_posture", observe_posture)
+
+    host.process(host.custody.pending()[0])
+
+    assert observed_statuses == ["pending"]
+    assert host.custody.status(delivery) == "terminal"
+    host.close()
+
+
+def test_delivery_remains_pending_when_runnable_posture_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    host = service(tmp_path)
+    delivery, body = str(uuid.uuid4()), envelope()
+    host.custody.receive(signed(body, delivery).items() | {("content-length", str(len(body)))}, body)
+
+    def fail_posture(instance: str, outcome: object | None) -> None:
+        raise RuntimeError("posture failed")
+
+    monkeypatch.setattr(host, "_record_posture", fail_posture)
+
+    host.process(host.custody.pending()[0])
+
+    assert host.custody.status(delivery) == "pending"
+    host.close()
 
 
 def test_retry_does_not_block_later_delivery_and_new_process_resumes_same_custody(tmp_path: Path) -> None:
@@ -434,7 +521,7 @@ def test_retry_does_not_block_later_delivery_and_new_process_resumes_same_custod
     second.close()
 
 
-def test_periodic_sweep_reopens_durable_instances_and_skips_inactive_routes(tmp_path: Path) -> None:
+def test_periodic_sweep_reopens_active_instances_and_skips_unbound_inactive_roots(tmp_path: Path) -> None:
     for repository, pr in ((31, 7), (31, 8), (999, 9)):
         root = tmp_path / "applications" / "44" / str(repository) / str(pr)
         root.mkdir(parents=True)
@@ -447,6 +534,153 @@ def test_periodic_sweep_reopens_durable_instances_and_skips_inactive_routes(tmp_
     assert [item.reconciles for item in made] == [["startup:44:31:7"], ["startup:44:31:8"]]
     assert host.sweep() == 2
     assert [item.reconciles[-1] for item in made] == ["periodic:44:31:7", "periodic:44:31:8"]
+
+
+def test_startup_sweep_applies_pending_comment_without_duplicate_provider_reconciliation(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
+    delivery = str(uuid.uuid4())
+    body = json.dumps(
+        {
+            "action": "created",
+            "installation": {"id": 44, "account": {"id": 23}},
+            "repository": {"id": 31, "full_name": "owner/one"},
+            "issue": {"number": 7, "pull_request": {"url": "https://api.github.test/pulls/7"}},
+            "comment": {
+                "id": 9,
+                "body": "@hamsterdan-test help",
+                "author_association": "MEMBER",
+                "user": {"id": 5, "login": "human", "type": "User"},
+            },
+        }
+    ).encode()
+    host.custody.receive(signed(body, delivery, "issue_comment").items() | {("content-length", str(len(body)))}, body)
+
+    assert host.sweep("startup") == 1
+    assert len(made) == 1
+    assert made[0].reconciles == [f"github-delivery:{delivery}"]
+    assert len(made[0].comments) == 1
+    assert host.custody.status(delivery) == "terminal"
+    host.close()
+
+
+def test_startup_sweep_finds_instance_comment_beyond_global_pending_batch(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
+    unrelated = [
+        (
+            str(uuid.uuid4()),
+            "pull_request",
+            json.dumps(observation(str(uuid.uuid4()), repository=32, pr=8).__dict__, separators=(",", ":")),
+        )
+        for _ in range(1000)
+    ]
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        database.executemany(
+            "INSERT INTO inbox(delivery_id,event,observation,status) VALUES(?,?,?,'pending')", unrelated
+        )
+    delivery = str(uuid.uuid4())
+    body = json.dumps(
+        {
+            "action": "created",
+            "installation": {"id": 44, "account": {"id": 23}},
+            "repository": {"id": 31, "full_name": "owner/one"},
+            "issue": {"number": 7, "pull_request": {"url": "https://api.github.test/pulls/7"}},
+            "comment": {
+                "id": 9,
+                "body": "@hamsterdan-test help",
+                "author_association": "MEMBER",
+                "user": {"id": 5, "login": "human", "type": "User"},
+            },
+        }
+    ).encode()
+    host.custody.receive(signed(body, delivery, "issue_comment").items() | {("content-length", str(len(body)))}, body)
+
+    assert host.sweep("startup") == 1
+    assert made[0].reconciles == [f"github-delivery:{delivery}"]
+    assert len(made[0].comments) == 1
+    assert host.custody.status(delivery) == "terminal"
+    host.close()
+
+
+def test_sweep_does_not_reconcile_while_addressed_comment_retry_is_deferred(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
+    delivery = str(uuid.uuid4())
+    item = observation(
+        delivery,
+        event="issue_comment",
+        action="created",
+        comment_body="@hamsterdan-test help",
+        actor_login="human",
+        actor_type="User",
+        author_association="MEMBER",
+    )
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        database.execute(
+            "INSERT INTO inbox(delivery_id,event,observation,status) VALUES(?,?,?,'pending')",
+            (delivery, item.event, json.dumps(item.__dict__, separators=(",", ":"))),
+        )
+    host.custody.retry(delivery, RuntimeError("deferred"))
+
+    assert host.sweep("startup") == 1
+    assert len(made) == 1
+    assert made[0].reconciles == []
+    assert made[0].comments == []
+    assert host.custody.status(delivery) == "pending"
+    host.close()
+
+
+def test_sweep_waits_for_actionable_comment_beyond_same_instance_batch(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
+    items = []
+    for _ in range(1000):
+        delivery = str(uuid.uuid4())
+        item = observation(
+            delivery,
+            event="issue_comment",
+            action="created",
+            comment_body="not addressed",
+            actor_login="human",
+            actor_type="User",
+            author_association="MEMBER",
+        )
+        items.append((delivery, item.event, json.dumps(item.__dict__, separators=(",", ":"))))
+    target_delivery = str(uuid.uuid4())
+    target = observation(
+        target_delivery,
+        event="issue_comment",
+        action="created",
+        comment_body="@hamsterdan-test help",
+        actor_login="human",
+        actor_type="User",
+        author_association="MEMBER",
+    )
+    items.append((target_delivery, target.event, json.dumps(target.__dict__, separators=(",", ":"))))
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        database.executemany("INSERT INTO inbox(delivery_id,event,observation,status) VALUES(?,?,?,'pending')", items)
+
+    assert host.sweep("startup") == 1
+    assert made[0].reconciles == []
+    assert host.custody.status(target_delivery) == "pending"
+    assert host.sweep("periodic") == 1
+    assert made[0].reconciles == [f"github-delivery:{target_delivery}"]
+    assert len(made[0].comments) == 1
+    assert host.custody.status(target_delivery) == "terminal"
+    host.close()
 
 
 def test_scoped_resolver_reconstructs_persisted_application_and_rejects_non_publication_names(tmp_path: Path) -> None:
@@ -711,7 +945,7 @@ def test_run_due_contains_instance_failure_rewakes_and_recovers_scheduler_health
             raise RuntimeError("sensitive scheduler failure")
         return True
 
-    monkeypatch.setattr(host, "_run_instance", run)
+    monkeypatch.setattr(host, "_activate_instance", run)
     host.runnable.wake(first, 0, "petri-timer", "next-maturation")
     host.runnable.wake(second, 0, "webhook", "delivery")
 
@@ -771,6 +1005,121 @@ def test_startup_sweep_settles_frozen_terminal_before_provider_reconciliation(tm
     assert host.sweep("startup") == 1
     assert events == ["settle", "reconcile:True", "settle"]
     assert "duplicate-publication" not in events
+    host.close()
+
+
+def test_sweep_route_deactivation_during_pre_settlement_skips_reconciliation_and_second_settle(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    host = service(tmp_path)
+    application = host._application(44, 31, 7)
+    settlements: list[str] = []
+
+    def deactivate() -> None:
+        settlements.append("settle")
+        host.registry.installation("suspend", 44, 23)
+
+    application.settle = deactivate  # type: ignore[method-assign]
+
+    assert host.sweep("periodic") == 1
+    assert settlements == ["settle"]
+    host.close()
+
+
+def test_activity_terminal_wake_only_settles_once_without_provider_reconciliation(tmp_path: Path) -> None:
+    events: list[str] = []
+
+    class TerminalApplication(Application):
+        def settle(self) -> None:
+            events.append("settle")
+
+    host = service(tmp_path, factory=TerminalApplication)
+    host._application(44, 31, 7)
+    instance = "github:44:31:pr:7"
+    host.runnable.wake(instance, 0, "activity-terminal", "dashboard_publish")
+
+    assert host.run_due() == 1
+    assert events == ["settle"]
+    assert host._apps[(44, 31, 7)].reconciles == []
+    host.close()
+
+
+def test_due_wake_reconstructs_uncached_persisted_instance_and_settles_once(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    events: list[str] = []
+
+    class TerminalApplication(Application):
+        def settle(self) -> None:
+            events.append("settle")
+
+    host = service(tmp_path, factory=TerminalApplication)
+    instance = "github:44:31:pr:7"
+    host.runnable.wake(instance, 0, "petri-timer", "next-maturation")
+
+    assert host.run_due() == 1
+    assert (44, 31, 7) in host._apps
+    assert events == ["settle"]
+    host.close()
+
+
+def test_due_wake_reconstructs_inactive_bound_instance_to_settle_terminal(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    (root / "binding.json").write_text(
+        json.dumps(
+            {"instance_id": "github:44:31:pr:7", "repository": "owner/one", "pull_request": 7},
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    events: list[str] = []
+
+    class TerminalApplication(Application):
+        def settle(self) -> None:
+            events.append("settle")
+
+    host = service(tmp_path, factory=TerminalApplication)
+    host.registry.installation("suspend", 44, 23)
+    instance = "github:44:31:pr:7"
+    host.runnable.wake(instance, 0, "activity-terminal", "dashboard_publish")
+
+    assert host.run_due() == 1
+    assert (44, 31, 7) in host._apps
+    assert events == ["settle"]
+    assert host._apps[(44, 31, 7)].reconciles == []
+    host.close()
+
+
+def test_startup_sweep_repairs_inactive_bound_instance_without_runnable_hint(tmp_path: Path) -> None:
+    root = tmp_path / "applications/44/31/7"
+    root.mkdir(parents=True)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    (root / "binding.json").write_text(
+        json.dumps(
+            {"instance_id": "github:44:31:pr:7", "repository": "owner/one", "pull_request": 7},
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        encoding="utf-8",
+    )
+    events: list[str] = []
+
+    class TerminalApplication(Application):
+        def settle(self) -> None:
+            events.append("settle")
+
+    host = service(tmp_path, factory=TerminalApplication)
+    host.registry.installation("suspend", 44, 23)
+
+    assert host.runnable.count() == 0
+    assert host.sweep("startup") == 1
+    assert events == ["settle"]
+    assert host._apps[(44, 31, 7)].reconciles == []
     host.close()
 
 

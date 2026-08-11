@@ -37,7 +37,7 @@ from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 from hamsterdan.github_app.webhooks import Observation, WebhookCustody
 
 from .agenticus import AgentComposition, AgentRouteStore
-from .application import PrReadinessApplication
+from .application import NormalizedComment, PrReadinessApplication
 from .payloads import PydanticPayloadConverter
 from .runnable import RunnableIndex
 
@@ -498,11 +498,9 @@ class HostService:
                 continue
             if min(installation_id, repository_id, pull_request_number) <= 0:
                 continue
-            if self.registry.route(installation_id, repository_id) is None:
-                continue
             try:
                 instance = f"github:{installation_id}:{repository_id}:pr:{pull_request_number}"
-                reconciled += self._run_instance(instance, reconcile_trigger=trigger)
+                reconciled += self._activate_instance(instance, reconcile_trigger=trigger)
             except Exception as error:  # noqa: BLE001 -- one PR must not prevent repair of another
                 LOG.warning(
                     "application_sweep_retry installation_id=%s repository_id=%s pull_request_number=%s error_class=%s",
@@ -520,42 +518,32 @@ class HostService:
         return reconciled
 
     def process(self, item: Observation) -> None:
-        self._process(item, lock_owned=False)
         instance = self._instance(item)
         if instance is None:
+            self._observation_actionable(item)
             return
-        match = _INSTANCE_PATTERN.fullmatch(instance)
-        assert match is not None
-        installation_id, repository_id, pull_request_number = (int(value) for value in match.groups())
-        key = installation_id, repository_id, pull_request_number
-        application = self._apps.get(key)
-        if application is None:
+        try:
+            self._activate_instance(instance, observation=item)
+        except Exception:  # noqa: BLE001 -- activation already retains and classifies custody
+            # Activation has already retained and classified the delivery;
+            # direct callers do not own scheduler health.
             return
-        with self._locks[key]:
-            settle = getattr(application, "settle", None)
-            self._record_posture(instance, None if settle is None else settle())
 
-    def _process(self, item: Observation, *, lock_owned: bool) -> None:
-        fields = {
-            "delivery_id": item.delivery_id,
-            "event": item.event,
-            "installation_id": item.installation_id,
-            "repository_id": item.repository_id,
-            "pull_request_number": item.pull_request_number,
-        }
+    def _observation_actionable(self, item: Observation) -> bool:
+        """Terminally dispose observations which cannot address a PR Instance."""
         if item.event in {"ping", "installation", "installation_repositories"}:
             self.custody.acknowledge(item.delivery_id, "non-workflow event")
-            return
+            return False
         if (
             item.installation_id is None
             or item.repository_id is None
             or self.registry.route(item.installation_id, item.repository_id) is None
         ):
             self.custody.acknowledge(item.delivery_id, "inactive route")
-            return
+            return False
         if item.pull_request_number is None:
             self.custody.acknowledge(item.delivery_id, "no pull request")
-            return
+            return False
         if item.event == "issue_comment":
             addressed = (item.comment_body or "").strip().casefold()
             mention = f"@{self.config.app_slug}"
@@ -567,61 +555,68 @@ class HostService:
                 or not (addressed == mention or addressed.startswith(mention + " "))
             ):
                 self.custody.acknowledge(item.delivery_id, "comment not addressed")
-                return
-        try:
-            installation_id = item.installation_id
-            repository_id = item.repository_id
-            pull_request_number = item.pull_request_number
-            application = self._application(installation_id, repository_id, pull_request_number)
-            key = installation_id, repository_id, pull_request_number
-            lock = self._locks[key]
+                return False
+        return True
 
-            def perform() -> None:
-                if self.registry.route(installation_id, repository_id) is None:
-                    self.custody.acknowledge(item.delivery_id, "route inactive before work")
-                    return
-                if item.event == "issue_comment":
-                    application.route_comment(
-                        delivery_id=item.delivery_id,
-                        comment_id=item.comment_id or 0,
-                        actor_id=item.actor_id or 0,
-                        actor_login=item.actor_login or "",
-                        actor_type=item.actor_type or "",
-                        association=item.author_association or "",
-                        text=item.comment_body or "",
-                    )
-                else:
-                    application.reconcile(f"github-delivery:{item.delivery_id}")
+    def _apply_observation(self, application: PrReadinessApplication, item: Observation) -> tuple[bool, str | None]:
+        """Apply one eligible observation under its Instance lock, without custody effects."""
+        assert item.installation_id is not None and item.repository_id is not None
+        if self.registry.route(item.installation_id, item.repository_id) is None:
+            return False, "route inactive before work"
+        trigger = f"github-delivery:{item.delivery_id}"
+        if item.event == "issue_comment":
+            application.activate(
+                trigger,
+                comment=NormalizedComment(
+                    item.delivery_id,
+                    item.comment_id or 0,
+                    item.actor_id or 0,
+                    item.actor_login or "",
+                    item.actor_type or "",
+                    item.author_association or "",
+                    item.comment_body or "",
+                ),
+            )
+        else:
+            application.activate(trigger)
+        return True, None
 
-            if lock_owned:
-                perform()
-            else:
-                with lock:
-                    perform()
-            self.custody.acknowledge(item.delivery_id)
-            LOG.info(
-                "webhook_terminal delivery_id=%s event=%s installation_id=%s repository_id=%s "
-                "pull_request_number=%s disposition=processed",
-                item.delivery_id,
-                item.event,
-                item.installation_id,
-                item.repository_id,
-                item.pull_request_number,
-                extra=fields | {"disposition": "processed"},
-            )
-        except Exception as error:  # noqa: BLE001 -- provider/Engine failures must leave every delivery retryable
-            self.custody.retry(item.delivery_id, error)
-            LOG.warning(
-                "webhook_retry delivery_id=%s event=%s installation_id=%s repository_id=%s "
-                "pull_request_number=%s disposition=retry error_class=%s",
-                item.delivery_id,
-                item.event,
-                item.installation_id,
-                item.repository_id,
-                item.pull_request_number,
-                type(error).__name__,
-                extra=fields | {"disposition": "retry", "error_class": type(error).__name__},
-            )
+    @staticmethod
+    def _observation_fields(item: Observation) -> dict[str, object]:
+        return {
+            "delivery_id": item.delivery_id,
+            "event": item.event,
+            "installation_id": item.installation_id,
+            "repository_id": item.repository_id,
+            "pull_request_number": item.pull_request_number,
+        }
+
+    def _acknowledge_observation(self, item: Observation, reason: str | None = None) -> None:
+        self.custody.acknowledge(item.delivery_id, reason or "processed")
+        LOG.info(
+            "webhook_terminal delivery_id=%s event=%s installation_id=%s repository_id=%s "
+            "pull_request_number=%s disposition=processed",
+            item.delivery_id,
+            item.event,
+            item.installation_id,
+            item.repository_id,
+            item.pull_request_number,
+            extra=self._observation_fields(item) | {"disposition": "processed"},
+        )
+
+    def _retry_observation(self, item: Observation, error: Exception) -> None:
+        self.custody.retry(item.delivery_id, error)
+        LOG.warning(
+            "webhook_retry delivery_id=%s event=%s installation_id=%s repository_id=%s "
+            "pull_request_number=%s disposition=retry error_class=%s",
+            item.delivery_id,
+            item.event,
+            item.installation_id,
+            item.repository_id,
+            item.pull_request_number,
+            type(error).__name__,
+            extra=self._observation_fields(item) | {"disposition": "retry", "error_class": type(error).__name__},
+        )
 
     async def worker(self) -> None:
         loop = asyncio.get_running_loop()
@@ -680,30 +675,77 @@ class HostService:
     def _record_posture(self, instance: str, outcome: object | None) -> None:
         self.runnable.replace_timer(instance, getattr(outcome, "next_maturation", None))
 
-    def _run_instance(self, instance: str, *, reconcile_trigger: str | None = None) -> bool:
+    def _activate_instance(
+        self,
+        instance: str,
+        *,
+        observation: Observation | None = None,
+        reconcile_trigger: str | None = None,
+    ) -> bool:
         match = _INSTANCE_PATTERN.fullmatch(instance)
         if match is None:
             return False
         installation_id, repository_id, pull_request_number = (int(value) for value in match.groups())
         key = installation_id, repository_id, pull_request_number
+        candidates = (observation,) if observation is not None else self.custody.pending(limit=1000, subject=key)
+        selected = tuple(item for item in candidates if self._observation_actionable(item))
         route_active = self.registry.route(key[0], key[1]) is not None
-        if not route_active and key not in self._apps:
+        if observation is not None and not selected:
             return False
-        application = self._apps[key] if not route_active else self._application(*key)
-        with self._locks[key]:
-            if route_active:
-                for item in self.custody.pending(limit=1000):
-                    if self._instance(item) == instance:
-                        self._process(item, lock_owned=True)
-            settle = getattr(application, "settle", None)
-            if route_active and reconcile_trigger is not None and settle is not None:
-                # Repair a frozen terminal before provider reconciliation can
-                # infer that the same logical publication is still pending.
-                self._record_posture(instance, settle())
-            if route_active and reconcile_trigger is not None:
-                application.reconcile(f"{reconcile_trigger}:{key[0]}:{key[1]}:{key[2]}")
-            outcome = None if settle is None else settle()
-            self._record_posture(instance, outcome)
+        if (
+            not route_active
+            and key not in self._apps
+            and not (self.root / "applications" / str(key[0]) / str(key[1]) / str(key[2]) / "history.jsonl").is_file()
+        ):
+            return False
+        succeeded: list[tuple[Observation, str | None]] = []
+        handled: set[str] = set()
+        activation_error: Exception | None = None
+        try:
+            application = (
+                self._apps[key]
+                if key in self._apps
+                else self._application(*key, allow_inactive_binding=not route_active)
+            )
+            with self._locks[key]:
+                settle = getattr(application, "settle", None)
+                outcome = None
+                if settle is not None:
+                    # Consume frozen provider terminals before observing provider
+                    # state that could otherwise infer the operation is pending.
+                    outcome = settle()
+                activated = False
+                for item in selected:
+                    try:
+                        applied, reason = self._apply_observation(application, item)
+                        activated = activated or applied
+                        succeeded.append((item, reason))
+                    except Exception as error:  # noqa: BLE001 -- isolate one delivery in a claimed Instance
+                        self._retry_observation(item, error)
+                        handled.add(item.delivery_id)
+                        if activation_error is None:
+                            activation_error = error
+                if (
+                    reconcile_trigger is not None
+                    and not selected
+                    and not self.custody.has_pending(subject=key)
+                    and self.registry.route(key[0], key[1]) is not None
+                ):
+                    application.activate(f"{reconcile_trigger}:{key[0]}:{key[1]}:{key[2]}")
+                    activated = True
+                if settle is not None and activated:
+                    outcome = settle()
+                self._record_posture(instance, outcome)
+                for item, reason in succeeded:
+                    self._acknowledge_observation(item, reason)
+                    handled.add(item.delivery_id)
+                if activation_error is not None:
+                    raise activation_error
+        except Exception as error:
+            for item in selected:
+                if item.delivery_id not in handled:
+                    self._retry_observation(item, error)
+            raise
         return True
 
     def run_due(self, limit: int = 100) -> int:
@@ -711,7 +753,7 @@ class HostService:
         processed = 0
         for instance in instances:
             try:
-                processed += self._run_instance(instance)
+                processed += self._activate_instance(instance)
                 self._scheduler_errors.pop(instance, None)
             except Exception as error:  # noqa: BLE001 -- one damaged Instance must not consume later due wakes
                 error_class = type(error).__name__

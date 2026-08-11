@@ -13,3 +13,4 @@ None.
 - [RS-002 — Move Activity execution mechanics into Motus](rs-002-motus-owned-activity-execution.md)
 - [RS-003 — Introduce first-class lifecycle scopes](rs-003-first-class-lifecycle-scopes.md)
 - [RS-004 — Separate publication concern ownership](rs-004-separate-publication-concern-ownership.md)
+- [RS-005 — Unify per-Instance host activation](rs-005-unify-per-instance-host-activation.md)
