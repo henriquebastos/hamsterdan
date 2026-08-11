@@ -1013,6 +1013,7 @@ def _recover_publication(binding, outputs):
     return _route(outputs, routed)
 
 
+@direct(converter=PydanticPayloadConverter())
 def conversation_work(
     a: Authority,
     ac: ActionsState,
@@ -1036,23 +1037,6 @@ def conversation_work(
         comment=value,
         control=snapshot,
     )
-
-
-def _conversation_work(binding, outputs):
-    values = _values(
-        binding,
-        Authority,
-        ActionsState,
-        ReviewState,
-        HumanState,
-        MutationState,
-        FindingPublicationState,
-        ConversationPublicationState,
-        DashboardPublicationState,
-        ReadinessPublicationState,
-        ConversationObservation,
-    )
-    return _put(outputs, (conversation_work(*values),))
 
 
 def ready(snapshot: ReadinessSnapshot) -> bool:
@@ -1493,7 +1477,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     # Conversation classification fans exact intents into independent mutation,
     # disposition, reminder, and reply paths.
     start = t.start_conversation(
-        handler=petri_handler(_conversation_work),
+        handler=conversation_work,
         guards=_typed_guard(
             (Authority, ConversationObservation), lambda a, value: _current(a, value) and value.authorized
         ),

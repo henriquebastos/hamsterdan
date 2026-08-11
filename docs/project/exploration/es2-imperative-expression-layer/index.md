@@ -176,6 +176,25 @@ prototype's next rebase must reconstruct these acceptance fragments through
 public typed direct transformations rather than depend on that accidental
 helper.
 
+### The relational conversation join is also an honest direct transformation
+
+RS-015 inspected every remaining use of `_hydrate`, `_values`, `_put`,
+`_route`, `_guard`, and `_typed_guard`. One more adapter was accidental:
+`start_conversation` reads the nine current concern states, consumes one
+authorized `ConversationObservation`, and produces exactly one
+`ConversationClassificationRequest`. The domain function already declared
+that complete ten-input/one-output contract; its Petri adapter only repeated
+the types, searched the binding, and serialized the result.
+
+The domain function is now the direct Petrus handler. Its arcs still expose the
+relational join, and the readiness Pydantic converter owns strict replay
+hydration. The other residual helpers were retained: they implement
+heterogeneous output, optional/target routing, enabledness, retirement, or
+advanced Petri handlers. This reinforces the production rule: direct typed
+functions are sufficient for one unambiguous result even when the read set is
+large; a fragment grammar must address the remaining *topological* semantics,
+not reproduce typed function binding.
+
 ## Language evaluation
 
 1. **Stay in Python.** Machinery, team, and the compile-to-net strategy all
