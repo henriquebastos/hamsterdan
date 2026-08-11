@@ -1,0 +1,212 @@
+---
+status: Thickening
+opened: 2026-08-11
+navigator: Henrique
+---
+
+# ES-002 — Imperative expression layer compiled to the readiness Net
+
+## Inquiry
+
+Can Hamsterdan's workflow logic be expressed in an imperative-ish, direct-style
+DSL — sugar that compiles to the existing Petri-net topology — so the durable
+machinery (Petrus Engine, marking, History, Motus Activities, lifecycle scopes,
+host composition) stays exactly as it is while the expression surface stops
+feeling low-level and ad hoc? And separately: does any other language or
+paradigm offer enough leverage to justify leaving Python, given that adoption
+demands simplicity and strong developer experience?
+
+This inquiry is distinct from ES-001. ES-001 resolved *which layer owns which
+execution mechanics*; ES-002 asks *how the remaining genuine workflow should be
+written down*.
+
+## Signals
+
+- Navigator hunch (2026-08-11): the way we express Petri nets and transitions
+  "feels very low-level and very ad hoc"; effect-oriented programming's
+  isolation of side effects resembles what Petrus/Hamsterdan already do at the
+  host boundary.
+- GOTO Book Club episode on *Effect Oriented Programming* (Frasure, Eckel,
+  Ward — the ZIO/Scala book, Feb 2026): effects as typed, deferred, composable
+  descriptions; retry/timeout/fallback/test substitution as value
+  transformations.
+- `suned/stateless`: generator-based one-shot algebraic effects in Python.
+- `readiness/net/topology.py` after the ES-001 refinements: 46 places, 69
+  transitions, 17 retirements — but 1,672 lines of hand-wired arcs, string
+  place names, `_hydrate`/`_guard`/`_put` binding plumbing, and one
+  "authorize → typed request → result rejoins current marking →
+  accept/supersede/retire" fragment repeated per concern.
+
+## Assemblage — evidence gathered 2026-08-11
+
+### Hamsterdan is already effect-oriented; the gap is notation
+
+Activities are the typed effect descriptions (exact Pydantic request/result
+contracts), the host is the handler/environment, and the Net is the durable
+program that sequences them. ES-001 independently named the Activity module
+"an effect interpreter." What the effect ecosystems add is a direct-style
+surface, not better durability.
+
+### The literature splits into two families
+
+**Code-is-the-workflow (durable execution).** Temporal, Azure Durable
+Functions, DBOS, Restate, Resonate obtain an imperative surface by
+deterministic replay against a journal or step-result checkpointing in a
+database. Costs: determinism sandboxes, versioning/patching pain
+(`workflow.patched()`, immutable deployments, drained workers), durable state
+implicit in code position. No production system persists continuations; all
+re-derive them. OCaml 5 continuations are explicitly one-shot in-memory;
+Unison Cloud verifies only typed value storage; Golem replays an oplog.
+
+**Compile a structured surface onto a coordination substrate.** Direct
+precedent exists: BPMN→Petri-net transformations (Dijkman/Dumas/Ouyang), van
+der Aalst's Task Structures→workflow nets, process-algebra net semantics, and
+Colored Petri Nets/CPN ML (net owns concurrency and synchronization; a real
+language owns guards and data). The Workflow Patterns catalogue plus WF-net
+soundness supply acceptance criteria. No mainstream compiler exists from
+imperative Python-like syntax to net topology; the sound approach in every
+precedent is a *restricted* workflow language compiled construct-by-construct
+into verified fragments, never arbitrary code.
+
+Petrus's marking + typed History is a more declarative and inspectable durable
+representation than any replay journal. The missing piece is expressiveness,
+not machinery.
+
+### `stateless`: right syntax, wrong persistence
+
+Business logic `yield from`s typed Ability values; handlers interpret and
+`send()` results back; the suspended generator frame is the continuation. Best
+current Python syntax precedent (same shape as Effect-TS `Effect.gen`), typed
+through unions without a checker plugin, actively maintained — but small,
+single-maintainer, pre-1.0, and a suspended generator is live process state,
+not durable data. Role here: design reference for the surface, never the
+runtime or the workflow representation.
+
+## Hypothesis — three-layer model
+
+```text
+Surface   restricted imperative-ish Python DSL
+          authorize / effect / accept / race / retry-scope
+          (builder or generator syntax — sugar only)
+              | compiles at build time, never at runtime
+IR        typed net fragments — the durable program
+          places, transitions, arcs; WF-net soundness and
+          workflow-pattern checks; diffable, inspectable
+              | executes unchanged
+Machinery Petrus Engine, marking, History, Motus Activities,
+          lifecycle scopes, host composition
+```
+
+The Net remains the durable "free program" (the effect world's description
+value). Mapping: operation declaration = Activity contract; performing an
+operation = the request/result place pair ES-001 proved must exist; handler =
+host-composed Activity module. Nothing about markings, History, Motus custody,
+authority fencing, or recovery changes even in principle.
+
+## Candidate experiments
+
+1. **Combinator layer first.** Define `sequence`,
+   `authorized_effect(owner, request, accept, supersede)`, `race`, and
+   retirement-scope combinators, each lowering to a verified net fragment.
+   Decisive test: regenerate the current readiness topology from combinators
+   and diff it against the hand-written net. No semantic change; pure
+   expression change.
+2. **Imperative sugar second**, only after fragment semantics are stable —
+   possibly `stateless`-style generator syntax traced or compiled statically,
+   never executed as a live continuation.
+3. Each surface construct documents its generated fragment, delivery
+   semantics, cancellation behavior, and soundness assumptions, using the
+   Workflow Patterns catalogue as the test suite.
+
+## Language evaluation
+
+1. **Stay in Python.** Machinery, team, and the compile-to-net strategy all
+   favor it. Weakness: no effect rows, so unhandled-effect tracking is encoded
+   in unions with the limits `stateless` demonstrates. Tolerable, because
+   durability guarantees come from the Net, not the type system.
+2. **TypeScript + Effect** is the only ecosystem move worth revisiting later:
+   production core, best direct-style DX (`Effect.gen`, typed errors, Layers),
+   but `@effect/workflow` was still alpha in 2026 and the move means rewriting
+   Petrus, not sugaring it.
+3. **Scala (ZIO/Kyo)**: most mature typed-effect ecosystem; maximizes exactly
+   the adoption friction Hamsterdan wants to minimize. Kyo advertises durable
+   workflows but is pre-1.0.
+4. **Unison, Koka, Effekt, Flix, OCaml 5**: design references only. None has
+   verified durable continuations; Koka self-describes as not production-ready.
+
+Decisive negative finding: switching languages buys syntax and types, never
+durability. The language question is separable from, and subordinate to, the
+expression-layer question.
+
+## What must not change
+
+- The Net stays the single durable workflow representation; no live
+  continuation (generator, fiber, coroutine) may become workflow state.
+- ES-001's boundary holds: Motus owns execution, lifecycle scopes own
+  generation cleanup, the Net owns authorization/acceptance, the host composes.
+- Any Petrus enhancement must preserve the trivial application path.
+
+## Ownership — Navigator direction 2026-08-11
+
+The DSL's destination is Petrus; the inquiry's home is Hamsterdan. The tension
+between those was resolved by observing that the comparison experiment needs no
+Petrus change: the combinators lower to the existing public
+`petrus.impetus.dsl` surface (`NetSpec`, `arc`, `petri_guard`,
+`petri_handler`) that `topology.py` already calls by hand.
+
+- Exploration and prototyping happen in Hamsterdan as application-local code.
+  Hamsterdan owns the pressure, the comparison target, and acceptance —
+  regenerating the real readiness topology and diffing it against the
+  hand-written net — which only the application can own.
+- On promotion, the validated vocabulary graduates upstream as a Petrus
+  `impetus.dsl` evolution owned by a Petrus story/subthread, following the
+  ES-001 lane pattern: accepted Petrus lands first, Hamsterdan re-pins and
+  deletes its local copy.
+
+Petrus cannot prove the DSL is good enough; only a real Net can. Exploration
+evidence therefore precedes framework contract.
+
+## Open questions
+
+- Which combinator vocabulary covers the current 69 transitions without
+  hiding workflow decisions? Where do relational reads (snapshot projection)
+  and multi-owner folds fit a fragment grammar?
+- Build-time compilation artifact: what is diffed, versioned, and reviewed —
+  generated `NetSpec`, a serialized IR, or both?
+- Is generator-based sugar worth its tracing/static-analysis cost over a
+  plain builder API, given the Navigator's DX goal?
+
+## Sources
+
+- GOTO Book Club, "Effect Oriented Programming" (Frasure, Eckel, Ward,
+  interviewer Harmel-Law), episode page:
+  <https://gotopia.tech/episodes/420/effective-oriented-programming>;
+  book: <https://effectorientedprogramming.com/>.
+- `suned/stateless`: <https://github.com/suned/stateless> (v0.6.1, active
+  2026; one-shot generator effects, `Effect[A, E, R]` aliases, `handle`,
+  `supply`, `run`).
+- ZIO `ZIO[R, E, A]` semantics: <https://zio.dev/reference/core/zio/>.
+- Effect-TS: <https://effect.website/> (`Effect.gen`, Layers;
+  `@effect/workflow` alpha as of 2026-07).
+- Temporal Python determinism/versioning:
+  <https://docs.temporal.io/develop/python>,
+  <https://docs.temporal.io/develop/safe-deployments>.
+- DBOS Transact Python step checkpointing:
+  <https://docs.dbos.dev/python/tutorials/workflow-tutorial>.
+- Restate journaling and immutable deployments:
+  <https://docs.restate.dev/foundations/key-concepts>.
+- Golem oplog replay and snapshotting:
+  <https://learn.golem.cloud/develop/snapshotting>.
+- Plotkin & Pretnar, Handlers of Algebraic Effects:
+  <https://homepages.inf.ed.ac.uk/gdp/publications/Effect_Handlers.pdf>.
+- OCaml 5 one-shot effect handlers: <https://ocaml.org/manual/effects.html>.
+- van der Aalst, Application of Petri Nets to Workflow Management:
+  <https://www.worldscientific.com/doi/10.1142/S0218126698000043>.
+- Dijkman, Dumas & Ouyang, Semantics and Analysis of Business Process Models
+  in BPMN: <https://doi.org/10.1016/j.infsof.2008.02.006>.
+- Workflow Patterns Initiative: <http://www.workflowpatterns.com/>.
+- Jensen, Kristensen & Wells, Coloured Petri Nets and CPN Tools:
+  <https://cs.au.dk/fileadmin/site_files/cs/research_areas/centers_and_projects/sttt2007.pdf>;
+  CPN Tools superseded by CPN IDE: <https://cpntools.org/>.
+- SNAKES (Python high-level Petri nets): <https://github.com/fpom/snakes>.
+- XState (machines as inspectable data): <https://stately.ai/docs/xstate>.
