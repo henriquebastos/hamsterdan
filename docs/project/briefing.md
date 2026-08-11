@@ -21,6 +21,10 @@ first sandbox organization for real-provider validation.
   conversation-publication, dashboard-publication, and readiness-publication
   concern tokens. `ReadinessSnapshot` is a relational projection, never a place
   color or mutable aggregate; internal recovery requests are not projected.
+- Fixed-shape readiness transformations and guards use Petrus typed plans with
+  Hamsterdan's strict Pydantic converter. Petri-aware binding remains explicit
+  for subset selection, dynamic routing, and broad relational joins; typed
+  authoring is not used to conceal topology.
 - Activities perform external work through exact strict Pydantic request/result
   contracts. Conversation, dashboard, and readiness publication use one
   immutable logical Motus execution with classified bounded retry in shared

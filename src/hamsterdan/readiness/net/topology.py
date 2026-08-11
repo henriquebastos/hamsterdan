@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from petrus.impetus.dsl import BuiltNet, NetSpec, arc, direct, petri_guard, petri_handler
+from petrus.impetus.dsl import BuiltNet, NetSpec, arc, direct, petri_guard, petri_handler, typed_guard
 from petrus.impetus.petrinet import Delay, Token
 from pydantic import TypeAdapter
 
@@ -575,8 +575,12 @@ def _refresh_admission(binding, outputs):
     return _route(outputs, {"authority": a})
 
 
-def _retryable_review(a, r, admission):
+def _retryable_review(a: Authority, r: ReviewState, admission: Admission) -> bool:
     return _same_basis(a, admission) and r.review == "unable" and max(r.review_attempts, 1) < MAX_REVIEW_ATTEMPTS
+
+
+def _refreshable_admission(a: Authority, r: ReviewState, admission: Admission) -> bool:
+    return _same_basis(a, admission) and not _retryable_review(a, r, admission)
 
 
 def _retry_review(binding, outputs):
@@ -826,7 +830,7 @@ def _accept_intent(binding, outputs, owner_type):
     )
 
 
-def _first_failure(a, s, m, value):
+def _first_failure(a: Authority, s: ActionsState, m: MutationState, value: ActionsObservation) -> bool:
     return (
         _current(a, value)
         and s.actions == "failed"
@@ -837,7 +841,7 @@ def _first_failure(a, s, m, value):
     )
 
 
-def _repairable(a, s, m, value):
+def _repairable(a: Authority, s: ActionsState, m: MutationState, value: ActionsObservation) -> bool:
     return (
         _current(a, value)
         and value.conclusion == "failure"
@@ -853,7 +857,7 @@ def _repairable(a, s, m, value):
     )
 
 
-def _basis_done(a, s, m, value):
+def _basis_done(a: Authority, s: ActionsState, m: MutationState, value: ActionsObservation) -> bool:
     if not _current(a, value) or not _actions_matches(a, s, value) or value.attempt < s.attempt:
         return True
     if s.rerun_requested and value.conclusion == "failure" and value.attempt <= s.rerun_attempt:
@@ -925,11 +929,11 @@ def _authorize_change(binding, outputs):
     return _put(outputs, (m, work))
 
 
-def _valid_reply(a, value):
+def _valid_reply(a: Authority, value: Intent) -> bool:
     return _current(a, value) and value.authorized and value.kind == "reply" and bool(value.arguments.get("message"))
 
 
-def _replyable(a, p, value):
+def _replyable(a: Authority, p: ConversationPublicationState, value: Intent) -> bool:
     return _valid_reply(a, value) and not p.conversation_requested and not p.conversation_capability_blocking
 
 
@@ -1345,10 +1349,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     refresh = t.refresh_admission(
         handler=petri_handler(_refresh_admission),
-        guards=_typed_guard(
-            (Authority, ReviewState, Admission),
-            lambda a, r, ad: _same_basis(a, ad) and not _retryable_review(a, r, ad),
-        ),
+        guards=typed_guard(_refreshable_admission, converter=PydanticPayloadConverter()),
     )
     p.review_state >> arc.read() >> refresh
     (p.authority, p.admission) >> refresh >> p.authority
@@ -1357,14 +1358,14 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (p.authority, p.review_state, p.admission)
         >> t.retry_review(
             handler=petri_handler(_retry_review),
-            guards=_typed_guard((Authority, ReviewState, Admission), _retryable_review),
+            guards=typed_guard(_retryable_review, converter=PydanticPayloadConverter()),
         )
         >> (p.authority, p.review_state, work.p.review)
     )
     # Routine observations fold only into the concern tokens they own.
     accept_actions = t.accept_actions(
         handler=petri_handler(_accept_actions),
-        guards=_typed_guard((Authority, ActionsState, ActionsObservation), _new_actions),
+        guards=typed_guard(_new_actions, converter=PydanticPayloadConverter()),
     )
     p.authority >> arc.read() >> accept_actions
     (p.actions_state, p.actions_result) >> accept_actions >> (p.actions_state, p.actions_basis(ActionsObservation))
@@ -1399,7 +1400,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     authorize_change = t.authorize_change(
         handler=petri_handler(_authorize_change),
-        guards=_typed_guard((Authority, MutationState, Intent), _mutation),
+        guards=typed_guard(_mutation, converter=PydanticPayloadConverter()),
     )
     p.authority >> arc.read() >> authorize_change
     (
@@ -1458,19 +1459,17 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
 
     rerun = t.authorize_rerun(
         handler=petri_handler(_rerun),
-        guards=_guard(lambda a, m, s, v: _first_failure(a, s, m, v)),
+        guards=typed_guard(_first_failure, converter=PydanticPayloadConverter()),
     )
     (p.authority, p.mutation_state) >> arc.read() >> rerun
     ((p.actions_state, p.actions_basis) >> rerun >> (p.actions_state, work.p.actions_rerun))
     repair_work = t.authorize_repair(
         handler=petri_handler(_repair),
-        guards=_guard(lambda a, s, m, v: _repairable(a, s, m, v)),
+        guards=typed_guard(_repairable, converter=PydanticPayloadConverter()),
     )
     (p.authority, p.actions_state) >> arc.read() >> repair_work
     ((p.mutation_state, p.actions_basis) >> repair_work >> (p.mutation_state, work.p.repair))
-    basis_retire = retire.t.actions_basis(
-        guards=_typed_guard((Authority, ActionsState, MutationState, ActionsObservation), _basis_done)
-    )
+    basis_retire = retire.t.actions_basis(guards=typed_guard(_basis_done, converter=PydanticPayloadConverter()))
     for place in (p.authority, p.actions_state, p.mutation_state):
         place >> arc.read() >> basis_retire
     p.actions_basis >> basis_retire
@@ -1506,7 +1505,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (owner, p.intent_result) >> tr >> owner
     authorize_reply = t.authorize_reply(
         handler=petri_handler(_authorize_reply),
-        guards=_typed_guard((Authority, ConversationPublicationState, Intent), _replyable),
+        guards=typed_guard(_replyable, converter=PydanticPayloadConverter()),
     )
     p.authority >> arc.read() >> authorize_reply
     (

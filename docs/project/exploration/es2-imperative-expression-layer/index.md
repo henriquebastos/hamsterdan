@@ -516,6 +516,28 @@ predicates only where genuine domain computation exists (digest
 currency, findings scan). This is the concrete spec the earlier
 `MatchSpec` open question asked for; that open question is resolved.
 
+## Typed-guard carrier production evidence — 2026-08-11
+
+The first delegated Petrus kernel slice landed as
+`3b41f19aa68ed228e68324f7c6888371f805b560`. Its public
+`typed_guard(..., converter=...)` declaration exposes converter-backed typed
+guard derivation without adding Pydantic, correlation expressions, routing,
+fragments, or application concepts to Petrus.
+
+RS-016 pins that revision and converts eight production guards whose selected
+arcs and typed function signatures correspond exactly: admission refresh,
+review retry, Actions acceptance, change/rerun/repair/reply authorization, and
+Actions-basis retirement. Strict Pydantic hydration now occurs through the
+public Petrus typed plan, and Net construction checks each selected typed arc
+against the predicate signature.
+
+This is deliberately not a mechanical conversion campaign. Guards that inspect
+only a subset of a broad relational binding, arise from heterogeneous dynamic
+families, or construct cohort snapshots remain Petri-aware. The production
+result establishes the typed carrier needed for future executable correlation
+evidence; it does not turn the manual 45/48 decomposition into a theorem or
+approve a `MatchSpec` language.
+
 ## Open questions
 
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —

@@ -24,3 +24,4 @@ None.
 - [RS-013 — Remove legacy Amp agent execution](rs-013-remove-legacy-amp-agent-execution.md)
 - [RS-014 — Express typed acceptance directly](rs-014-express-typed-acceptance-directly.md)
 - [RS-015 — Express the conversation join directly](rs-015-express-conversation-join-directly.md)
+- [RS-016 — Adopt strict typed guards](rs-016-adopt-strict-typed-guards.md)

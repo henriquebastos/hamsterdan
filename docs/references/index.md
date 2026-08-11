@@ -44,6 +44,13 @@
   cancellation, restart repair, and deterministic late-terminal quarantine.
   This revision supersedes the shared-Worker pin without moving scheduling or
   provider custody into Petrus.
+- Accepted custom typed-guard dependency:
+  `henriquebastos/petrus@3b41f19aa68ed228e68324f7c6888371f805b560`,
+  implemented, release-qualified, and accepted 2026-08-11. This revision
+  supersedes the lifecycle-scope pin and adds only public
+  `typed_guard(..., converter=...)` authoring over the existing typed guard
+  plan. Ordinary guards and canonical Net, History, wire, runtime, handler, and
+  Activity contracts remain unchanged.
 
 ## GitHub documentation
 
