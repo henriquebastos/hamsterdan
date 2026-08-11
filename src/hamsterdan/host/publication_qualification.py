@@ -40,6 +40,21 @@ class SetupCategory(StrEnum):
     BOUNDARY_UNAVAILABLE = "boundary_unavailable"
     OBSERVATION_UNCONFIRMED = "observation_unconfirmed"
     PUSH_UNCONFIRMED = "push_unconfirmed"
+    INPUT_UNAVAILABLE = "input_unavailable"
+
+
+class SetupPhase(StrEnum):
+    """Closed phases for retained setup evidence."""
+
+    PREPARATION = "setup_preparation"
+    IDENTITY = "identity"
+    TARGET = "target"
+    PRE_PUSH = "pre_push"
+    PUSH = "push"
+    READBACK = "readback"
+    PULL_REQUEST = "pull_request"
+    CURRENT_CAS = "current_cas"
+    STALE_CAS = "stale_cas"
 
 
 @dataclass(frozen=True)
@@ -72,6 +87,149 @@ class SetupObservationResult:
         }
 
 
+@dataclass(frozen=True)
+class SetupQualificationResult:
+    """Fixed-shape evidence for the bounded qualification-setup sequence."""
+
+    identity: SetupObservationResult | None
+    target: SetupObservationResult | None
+    pre_push: SetupObservationResult | None
+    push: SetupPushResult | None
+    readback: SetupObservationResult | None
+    pull_request: SetupObservationResult | None
+    current_cas: SetupObservationResult | None
+    stale_cas: SetupObservationResult | None
+    cleanup: SetupObservationResult
+    first_cause_phase: SetupPhase | None
+    first_cause_category: SetupCategory | None
+
+    @property
+    def accepted(self) -> bool:
+        return (
+            all(
+                item is not None and item.confirmed
+                for item in (
+                    self.identity,
+                    self.target,
+                    self.pre_push,
+                    self.readback,
+                    self.pull_request,
+                    self.current_cas,
+                    self.stale_cas,
+                )
+            )
+            and self.push is not None
+            and self.push.command_succeeded
+            and self.first_cause_category is None
+            and self.cleanup.confirmed
+        )
+
+    def sanitized(self) -> dict[str, object]:
+        def observation(value: SetupObservationResult | None) -> dict[str, object] | None:
+            return None if value is None else value.sanitized()
+
+        return {
+            "accepted": self.accepted,
+            "identity": observation(self.identity),
+            "target": observation(self.target),
+            "pre_push": observation(self.pre_push),
+            "push": None if self.push is None else self.push.sanitized(),
+            "readback": observation(self.readback),
+            "pull_request": observation(self.pull_request),
+            "current_cas": observation(self.current_cas),
+            "stale_cas": observation(self.stale_cas),
+            "cleanup": self.cleanup.sanitized(),
+            "first_cause_phase": "" if self.first_cause_phase is None else self.first_cause_phase.value,
+            "first_cause_category": "" if self.first_cause_category is None else self.first_cause_category.value,
+        }
+
+
+def qualify_setup(
+    *,
+    identity: Callable[[], bool],
+    target: Callable[[], bool],
+    pre_push: Callable[[], bool],
+    push: AtomicSetupPush,
+    remote: str,
+    base: str,
+    head: str,
+    runner: Callable[[tuple[str, ...]], int],
+    readback: Callable[[], bool],
+    pull_request: Callable[[], bool],
+    current_cas: Callable[[], bool],
+    stale_cas: Callable[[], bool],
+    cleanup: Callable[[], bool],
+) -> SetupQualificationResult:
+    """Run one setup attempt; the atomic push is its sole mutation.
+
+    Every callback is an observation except ``AtomicSetupPush``. Later phases
+    are structurally unreachable until exact readback confirms both refs.
+    """
+
+    values: dict[str, SetupObservationResult | SetupPushResult | None] = {
+        "identity": None,
+        "target": None,
+        "pre_push": None,
+        "push": None,
+        "readback": None,
+        "pull_request": None,
+        "current_cas": None,
+        "stale_cas": None,
+    }
+    first_phase: SetupPhase | None = None
+    first_category: SetupCategory | None = None
+    try:
+        for phase, callback in (
+            (SetupPhase.IDENTITY, identity),
+            (SetupPhase.TARGET, target),
+            (SetupPhase.PRE_PUSH, pre_push),
+        ):
+            outcome = observe_setup_boundary(callback)
+            values[phase.value] = outcome
+            if not outcome.confirmed:
+                first_phase, first_category = phase, outcome.category
+                break
+        else:
+            push_result = push.push(remote, base, head, runner)
+            values["push"] = push_result
+            if not push_result.command_succeeded:
+                first_phase, first_category = SetupPhase.PUSH, push_result.category
+            # Once execution was attempted, uncertainty is resolved only by the
+            # one exact readback. A rejected command is treated the same way.
+            if push_result.attempted:
+                exact = observe_setup_boundary(readback)
+                values["readback"] = exact
+                if not exact.confirmed and not first_phase:
+                    first_phase, first_category = SetupPhase.READBACK, exact.category
+                if exact.confirmed:
+                    for phase, callback in (
+                        (SetupPhase.PULL_REQUEST, pull_request),
+                        (SetupPhase.CURRENT_CAS, current_cas),
+                        (SetupPhase.STALE_CAS, stale_cas),
+                    ):
+                        outcome = observe_setup_boundary(callback)
+                        values[phase.value] = outcome
+                        if not outcome.confirmed:
+                            if not first_phase:
+                                first_phase, first_category = phase, outcome.category
+                            break
+    finally:
+        cleanup_result = observe_setup_boundary(cleanup)
+    return SetupQualificationResult(
+        identity=values["identity"] if isinstance(values["identity"], SetupObservationResult) else None,
+        target=values["target"] if isinstance(values["target"], SetupObservationResult) else None,
+        pre_push=values["pre_push"] if isinstance(values["pre_push"], SetupObservationResult) else None,
+        push=values["push"] if isinstance(values["push"], SetupPushResult) else None,
+        readback=values["readback"] if isinstance(values["readback"], SetupObservationResult) else None,
+        pull_request=(values["pull_request"] if isinstance(values["pull_request"], SetupObservationResult) else None),
+        current_cas=(values["current_cas"] if isinstance(values["current_cas"], SetupObservationResult) else None),
+        stale_cas=values["stale_cas"] if isinstance(values["stale_cas"], SetupObservationResult) else None,
+        cleanup=cleanup_result,
+        first_cause_phase=first_phase,
+        first_cause_category=first_category,
+    )
+
+
 def observe_setup_boundary(observer: Callable[[], bool]) -> SetupObservationResult:
     """Run a private setup observation without allowing its exception to render."""
 
@@ -99,7 +257,10 @@ class AtomicSetupPush:
         head: str,
         runner: Callable[[tuple[str, ...]], int],
     ) -> SetupPushResult:
-        command = _setup_command(remote, base, head)
+        try:
+            command = _setup_command(remote, base, head)
+        except Exception:  # noqa: BLE001 - construction may inspect hostile private values
+            return SetupPushResult(False, False, SetupCategory.BOUNDARY_UNAVAILABLE)
         try:
             fence = self._spend()
         except Exception:  # noqa: BLE001 - private fence exceptions must never cross the evidence boundary

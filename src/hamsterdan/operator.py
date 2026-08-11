@@ -1,7 +1,8 @@
-"""Bounded human-operator tooling for the HBNetwork qualification fixture.
+"""Bounded human-operator tooling for Hamsterdan qualification.
 
-This module deliberately uses the operator's existing ``gh``/git credentials.
-It is not imported by the host and no credential value is accepted as input.
+Existing demo commands use the operator's configured ``gh``/Git identity. The
+DS11 setup command instead consumes one private credential file into a bounded
+child environment; neither route accepts credential values as CLI arguments.
 """
 
 from __future__ import annotations
@@ -9,7 +10,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import shlex
+import shutil
+import stat
 import subprocess
 import tempfile
 import time
@@ -17,6 +22,15 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import quote
+
+from hamsterdan.host.publication_qualification import (
+    AtomicSetupPush,
+    SetupCategory,
+    SetupObservationResult,
+    SetupPhase,
+    SetupQualificationResult,
+    qualify_setup,
+)
 
 REPOSITORY = "HBNetwork/demo-pr-readiness"
 ORG_ID = 108842540
@@ -74,10 +88,383 @@ query($owner:String!,$repository:String!,$number:Int!) {
 }
 """
 Runner = Callable[[Sequence[str], Path | None], subprocess.CompletedProcess[str]]
+SetupRunner = Callable[[tuple[str, ...], Path, dict[str, str], bytes | None], subprocess.CompletedProcess[bytes]]
+_PRIVATE_INPUT_LIMIT = 4096
+_SETUP_REF = re.compile(r"refs/[A-Za-z0-9][A-Za-z0-9._/-]{0,255}\Z", re.ASCII)
 
 
 class OperatorError(RuntimeError):
     """A bounded operator failure safe to display."""
+
+
+def _consume_private_file(path: Path) -> bytearray:
+    """Read and remove one owned 0600 regular file without following links."""
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        metadata = os.fstat(descriptor)
+        entry = path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or metadata.st_uid != os.geteuid()
+            or metadata.st_nlink != 1
+            or (metadata.st_dev, metadata.st_ino) != (entry.st_dev, entry.st_ino)
+            or metadata.st_size < 1
+            or metadata.st_size > _PRIVATE_INPUT_LIMIT
+        ):
+            raise OperatorError("private input file is unavailable")
+        value = bytearray(os.read(descriptor, _PRIVATE_INPUT_LIMIT + 1))
+        if len(value) != metadata.st_size:
+            raise OperatorError("private input file is unavailable")
+        path.unlink()
+        if path.exists():
+            raise OperatorError("private input file is unavailable")
+        return value
+    except OSError:
+        raise OperatorError("private input file is unavailable") from None
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        # The entry-level cleanup owner independently retries and verifies removal.
+
+
+def _setup_subprocess(
+    command: tuple[str, ...], cwd: Path, environment: dict[str, str], input_bytes: bytes | None
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=environment,
+        input=input_bytes,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+
+
+def _parse_setup_refs(raw: bytes) -> dict[str, str]:
+    """Parse an exact smart-HTTP ref projection without ignoring malformed data."""
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError:
+        raise OperatorError("Git ref observation is malformed") from None
+    if any(separator in text for separator in ("\r", "\v", "\f")):
+        raise OperatorError("Git ref observation is malformed")
+    lines = text.split("\n")
+    if lines and lines[-1] == "":
+        lines.pop()
+    if any(not line for line in lines):
+        raise OperatorError("Git ref observation is malformed")
+    found: dict[str, str] = {}
+    for line in lines:
+        fields = line.split("\t")
+        reference = fields[1] if len(fields) == 2 else ""
+        components = reference.split("/")
+        if (
+            len(fields) != 2
+            or re.fullmatch(r"[0-9a-f]{40}", fields[0]) is None
+            or _SETUP_REF.fullmatch(reference) is None
+            or ".." in reference
+            or "@{" in reference
+            or reference.endswith(("/", "."))
+            or any(
+                not component or component.startswith(".") or component.endswith(".lock") for component in components
+            )
+            or reference in found
+        ):
+            raise OperatorError("Git ref observation is malformed")
+        found[reference] = fields[0]
+    return found
+
+
+def qualification_setup(
+    credential_file: Path,
+    target_file: Path,
+    spent_path: Path,
+    *,
+    runner: SetupRunner = _setup_subprocess,
+) -> dict[str, object]:
+    """Run the one-mutation setup route with isolated, managed authority."""
+    credential = bytearray()
+    target_input = bytearray()
+    root: Path | None = None
+    inputs: tuple[Path, Path] = (Path(credential_file), Path(target_file))
+    cleanup_confirmed = False
+    cleanup_attempted = False
+    environment: dict[str, str] | None = None
+
+    def cleanup() -> bool:
+        nonlocal cleanup_attempted, cleanup_confirmed
+        cleanup_attempted = True
+        for value in (credential, target_input):
+            value[:] = b"\0" * len(value)
+            value.clear()
+        if environment is not None:
+            environment.pop("GH_TOKEN", None)
+
+        def remove_file(path: Path) -> bool:
+            for _ in range(2):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    break
+                except OSError:
+                    continue
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                return True
+            except OSError:
+                return False
+            return False
+
+        absent = True
+        for path in inputs:
+            absent = remove_file(path) and absent
+        if root is not None:
+            for _ in range(2):
+                try:
+                    shutil.rmtree(root)
+                except FileNotFoundError:
+                    break
+                except OSError:
+                    continue
+            try:
+                root.lstat()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                absent = False
+            else:
+                absent = False
+        cleanup_confirmed = absent
+        return absent
+
+    def preparation_failure() -> dict[str, object]:
+        cleanup()
+        cleanup_result = SetupObservationResult(
+            cleanup_confirmed,
+            None if cleanup_confirmed else SetupCategory.OBSERVATION_UNCONFIRMED,
+        )
+        result = SetupQualificationResult(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            cleanup_result,
+            SetupPhase.PREPARATION,
+            SetupCategory.INPUT_UNAVAILABLE,
+        )
+        return {"command": "qualification-setup", "ok": False, "evidence": result.sanitized()}
+
+    try:
+        raw_paths = (Path(credential_file), Path(target_file), Path(spent_path))
+        if any(not path.is_absolute() for path in raw_paths):
+            return preparation_failure()
+        normalized = tuple(Path(os.path.abspath(path)) for path in raw_paths)
+        if len(set(normalized)) != 3:
+            return preparation_failure()
+        inputs = (normalized[0], normalized[1])
+        marker = normalized[2]
+        git_executable = shutil.which("git")
+        gh_executable = shutil.which("gh")
+        if git_executable is None or gh_executable is None:
+            return preparation_failure()
+        git_executable = str(Path(git_executable).resolve(strict=True))
+        gh_executable = str(Path(gh_executable).resolve(strict=True))
+        parent = marker.parent.stat(follow_symlinks=False)
+        if (
+            marker.parent.resolve(strict=True) != marker.parent
+            or not stat.S_ISDIR(parent.st_mode)
+            or stat.S_IMODE(parent.st_mode) != 0o700
+            or parent.st_uid != os.geteuid()
+        ):
+            return preparation_failure()
+        credential = _consume_private_file(inputs[0])
+        target_input = _consume_private_file(inputs[1])
+        try:
+            token = credential.decode("ascii")
+        except UnicodeDecodeError:
+            return preparation_failure()
+        if not token or token.strip() != token or any(character.isspace() for character in token):
+            return preparation_failure()
+        try:
+            envelope = json.loads(target_input)
+        except UnicodeError, json.JSONDecodeError:
+            return preparation_failure()
+        if not isinstance(envelope, dict) or set(envelope) != {"repository", "account_id", "repository_id"}:
+            return preparation_failure()
+        target = envelope["repository"]
+        account_id = envelope["account_id"]
+        repository_id = envelope["repository_id"]
+        if not isinstance(target, str) or type(account_id) is not int or type(repository_id) is not int:
+            return preparation_failure()
+        if re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}", target) is None:
+            return preparation_failure()
+        owner, repository = target.split("/", 1)
+        if ".." in repository or repository.startswith(".") or repository.endswith("."):
+            return preparation_failure()
+
+        root = Path(tempfile.mkdtemp(prefix="hamsterdan-qualification-"))
+        os.chmod(root, 0o700)
+        home, gh_config, fixture = root / "home", root / "gh", root / "fixture"
+        for directory in (home, gh_config, fixture):
+            directory.mkdir(mode=0o700)
+        environment = {
+            "PATH": os.defpath,
+            "HOME": str(home),
+            "GH_CONFIG_DIR": str(gh_config),
+            "GH_PROMPT_DISABLED": "1",
+            "GH_TOKEN": token,
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+        }
+        credential[:] = b"\0" * len(credential)
+        credential.clear()
+
+        def raw_run(
+            command: tuple[str, ...],
+            cwd: Path = fixture,
+            input_bytes: bytes | None = None,
+            env: dict[str, str] = environment,
+        ) -> subprocess.CompletedProcess[bytes]:
+            return runner(command, cwd, env, input_bytes)
+
+        git_options = (
+            "-c",
+            "credential.helper=",
+            "-c",
+            f"credential.helper=!{shlex.quote(gh_executable)} auth git-credential",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "http.followRedirects=false",
+            "-c",
+            "protocol.file.allow=never",
+        )
+
+        def git(
+            *arguments: str, cwd: Path = fixture, env: dict[str, str] = environment
+        ) -> subprocess.CompletedProcess[bytes]:
+            return raw_run((git_executable, *git_options, *arguments), cwd, env=env)
+
+        fixture_commands = (
+            ("init", "--quiet", "--initial-branch=main"),
+            ("config", "user.name", "Hamsterdan Qualification"),
+            ("config", "user.email", "qualification@invalid"),
+        )
+        if any(git(*command).returncode != 0 for command in fixture_commands):
+            return preparation_failure()
+        (fixture / "qualification.txt").write_text("hamsterdan qualification fixture v1\n")
+        commit_environment = dict(environment)
+        commit_environment.update(
+            {"GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z", "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z"}
+        )
+
+        def fixture_run(command: tuple[str, ...]) -> subprocess.CompletedProcess[bytes]:
+            return git(*command, env=commit_environment)
+
+        for command in (("add", "qualification.txt"), ("commit", "--quiet", "-m", "base")):
+            if fixture_run(command).returncode != 0:
+                return preparation_failure()
+        base_result = fixture_run(("rev-parse", "HEAD"))
+        base = base_result.stdout.decode().strip()
+        (fixture / "requested-change.txt").write_text("requested change\n")
+        for command in (("add", "requested-change.txt"), ("commit", "--quiet", "-m", "change")):
+            if fixture_run(command).returncode != 0:
+                return preparation_failure()
+        head_result = fixture_run(("rev-parse", "HEAD"))
+        head = head_result.stdout.decode().strip()
+        if (
+            base_result.returncode != 0
+            or head_result.returncode != 0
+            or not re.fullmatch(r"[0-9a-f]{40}", base)
+            or not re.fullmatch(r"[0-9a-f]{40}", head)
+        ):
+            return preparation_failure()
+        remote = f"https://github.com/{owner}/{repository}.git"
+
+        def refs(*names: str) -> dict[str, str] | None:
+            result = git("ls-remote", "--refs", remote, *names)
+            if result.returncode != 0:
+                return None
+            return _parse_setup_refs(result.stdout)
+
+        expected = {"refs/heads/main": base, "refs/heads/hamsterdan/ds11-live-v4": head}
+
+        def empty() -> bool:
+            return refs() == {}
+
+        def exact() -> bool:
+            return refs() == expected
+
+        def pull_request_ready() -> bool:
+            # GitHub exposes PR heads as read-only smart-HTTP refs. The target
+            # is ready only when no existing PR advertises this exact head.
+            advertised = refs("refs/pull/*/head")
+            return advertised is not None and head not in advertised.values()
+
+        def stale_cas_observed() -> bool:
+            current = refs("refs/heads/hamsterdan/ds11-live-v4")
+            return current == {"refs/heads/hamsterdan/ds11-live-v4": head} and current != {
+                "refs/heads/hamsterdan/ds11-live-v4": base
+            }
+
+        def gh_json(endpoint: str) -> object:
+            result = raw_run((gh_executable, "api", endpoint), root)
+            if result.returncode != 0:
+                raise RuntimeError
+            return json.loads(result.stdout)
+
+        def identity() -> bool:
+            value = gh_json("/user")
+            return isinstance(value, dict) and value.get("id") == account_id
+
+        def target_ready() -> bool:
+            value = gh_json(f"/repos/{owner}/{repository}")
+            permissions = value.get("permissions") if isinstance(value, dict) else None
+            return bool(
+                isinstance(value, dict)
+                and value.get("full_name") == target
+                and value.get("id") == repository_id
+                and value.get("private") is False
+                and value.get("archived") is False
+                and value.get("disabled") is False
+                and value.get("size") == 0
+                and value.get("default_branch") == "main"
+                and isinstance(permissions, dict)
+                and permissions.get("push") is True
+            )
+
+        result = qualify_setup(
+            identity=identity,
+            target=target_ready,
+            pre_push=lambda: target_ready() and empty(),
+            push=AtomicSetupPush(marker),
+            remote=remote,
+            base=base,
+            head=head,
+            runner=lambda command: raw_run((git_executable, *git_options, *command[1:])).returncode,
+            readback=exact,
+            # These are deliberately observations. No PR or ref mutation is
+            # performed by qualification setup.
+            pull_request=pull_request_ready,
+            current_cas=exact,
+            stale_cas=stale_cas_observed,
+            cleanup=cleanup,
+        )
+        return {"command": "qualification-setup", "ok": result.accepted, "evidence": result.sanitized()}
+    except Exception:  # noqa: BLE001 - fixed evidence must not retain private diagnostics
+        return preparation_failure()
+    finally:
+        if not cleanup_attempted:
+            cleanup()
 
 
 def command_runner(command: Sequence[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -798,6 +1185,10 @@ def parser() -> argparse.ArgumentParser:
     authority_parser = commands.add_parser("inspect-authority")
     authority_parser.add_argument("--pr", type=int, required=True)
     authority_parser.add_argument("--expect", choices=AUTHORITY_EXPECTATIONS, required=True)
+    setup_parser = commands.add_parser("qualification-setup")
+    setup_parser.add_argument("--credential-file", type=Path, required=True)
+    setup_parser.add_argument("--target-file", type=Path, required=True)
+    setup_parser.add_argument("--spent-marker", type=Path, required=True)
     return value
 
 
@@ -812,6 +1203,8 @@ def main() -> int:
             output = prepare_broker()
         elif args.command == "inspect":
             output = inspect(args.pr, bot_login=args.bot_login, expect_hero_review=args.expect_hero_review)
+        elif args.command == "qualification-setup":
+            output = qualification_setup(args.credential_file, args.target_file, args.spent_marker)
         else:
             output = inspect_authority(args.pr, args.expect)
     except OperatorError as error:

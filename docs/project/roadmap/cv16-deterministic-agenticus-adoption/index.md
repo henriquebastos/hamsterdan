@@ -110,3 +110,14 @@ subclasses, timeouts, arbitrary diagnostics, nonzero and malformed runners,
 restrictive umasks, sync/close/short-write failures, symlinks, and parent
 substitution. This resolves the rendering implementation gap only. Cleanup and
 live qualification remain separately authorized future work.
+
+The next local slice composes that boundary into the production operator as one
+`qualification-setup` command. Private files bind the admitted PAT, account ID,
+repository ID, and target coordinate; ambient credentials are excluded and the
+PAT exists only in the bounded child environment. Authenticated identity and
+target admission precede the durable one-push fence. Complete exact ref readback
+gates read-only PR/current-CAS/stale-CAS observations, while uncertainty remains
+terminal and cleanup evidence cannot replace the first cause. Local bare-remote,
+timeout, restart, isolation, cleanup, and diagnostic-canary portfolios pass.
+No credential, GitHub, provider, cleanup, paid, or DS12 operation occurred, so
+live support remains unaccepted.

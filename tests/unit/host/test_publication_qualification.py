@@ -14,6 +14,7 @@ from hamsterdan.host.publication_qualification import (
     QualificationCategory,
     SetupCategory,
     observe_setup_boundary,
+    qualify_setup,
 )
 
 
@@ -33,6 +34,60 @@ def result(
         agent_result_category=agent_result,
         agent_cleanup_category=agent_cleanup,
     )
+
+
+def test_setup_orchestration_stops_before_push_and_keeps_cleanup_separate(tmp_path: Path) -> None:
+    tmp_path.chmod(0o700)
+    calls: list[str] = []
+
+    outcome = qualify_setup(
+        identity=lambda: calls.append("identity") is None,
+        target=lambda: False,
+        pre_push=lambda: calls.append("pre_push") is None,
+        push=AtomicSetupPush(tmp_path / "spent"),
+        remote="https://github.com/example/fixture.git",
+        base="a" * 40,
+        head="b" * 40,
+        runner=lambda command: calls.append("push") or 0,
+        readback=lambda: calls.append("readback") is None,
+        pull_request=lambda: calls.append("pr") is None,
+        current_cas=lambda: calls.append("current") is None,
+        stale_cas=lambda: calls.append("stale") is None,
+        cleanup=lambda: False,
+    )
+
+    assert calls == ["identity"]
+    assert outcome.first_cause_phase == "target"
+    assert outcome.first_cause_category is SetupCategory.OBSERVATION_UNCONFIRMED
+    assert outcome.cleanup.category is SetupCategory.OBSERVATION_UNCONFIRMED
+    assert outcome.push is None
+
+
+def test_setup_orchestration_reads_back_once_without_retry_and_then_admits_observations(tmp_path: Path) -> None:
+    tmp_path.chmod(0o700)
+    calls: list[str] = []
+
+    outcome = qualify_setup(
+        identity=lambda: True,
+        target=lambda: True,
+        pre_push=lambda: True,
+        push=AtomicSetupPush(tmp_path / "spent"),
+        remote="https://github.com/example/fixture.git",
+        base="a" * 40,
+        head="b" * 40,
+        runner=lambda command: calls.append("push") or 1,
+        readback=lambda: calls.append("readback") is None,
+        pull_request=lambda: calls.append("pr") is None,
+        current_cas=lambda: calls.append("current") is None,
+        stale_cas=lambda: calls.append("stale") is None,
+        cleanup=lambda: True,
+    )
+
+    assert calls == ["push", "readback", "pr", "current", "stale"]
+    assert outcome.first_cause_phase == "push"
+    assert outcome.first_cause_category is SetupCategory.PUSH_UNCONFIRMED
+    assert outcome.readback is not None and outcome.readback.confirmed
+    assert not outcome.accepted
 
 
 def test_original_failure_is_retained_and_zero_publication_suppresses_every_assertion() -> None:
@@ -316,10 +371,10 @@ def test_invalid_atomic_setup_command_is_refused_before_spending(
     root.mkdir(mode=0o700)
     calls: list[tuple[str, ...]] = []
 
-    with pytest.raises(ValueError, match="atomic setup command is invalid"):
-        AtomicSetupPush(root / "push-spent").push(remote, base, head, lambda command: calls.append(command) or 0)
+    outcome = AtomicSetupPush(root / "push-spent").push(remote, base, head, lambda command: calls.append(command) or 0)
 
     assert calls == [] and not (root / "push-spent").exists()
+    assert outcome.category is SetupCategory.BOUNDARY_UNAVAILABLE
 
 
 def test_atomic_setup_rejects_string_subclasses_before_formatting_or_spending(tmp_path) -> None:
@@ -331,15 +386,15 @@ def test_atomic_setup_rejects_string_subclasses_before_formatting_or_spending(tm
     root.mkdir(mode=0o700)
     calls: list[tuple[str, ...]] = []
 
-    with pytest.raises(ValueError, match="atomic setup command is invalid"):
-        AtomicSetupPush(root / "push-spent").push(
-            "https://github.com/owner/target.git",
-            ForcedRef("a" * 40),
-            "b" * 40,
-            lambda command: calls.append(command) or 0,
-        )
+    outcome = AtomicSetupPush(root / "push-spent").push(
+        "https://github.com/owner/target.git",
+        ForcedRef("a" * 40),
+        "b" * 40,
+        lambda command: calls.append(command) or 0,
+    )
 
     assert calls == [] and not (root / "push-spent").exists()
+    assert outcome.category is SetupCategory.BOUNDARY_UNAVAILABLE
 
 
 def test_atomic_setup_fence_failure_is_closed_without_running(tmp_path) -> None:

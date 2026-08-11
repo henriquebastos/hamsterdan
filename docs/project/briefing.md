@@ -135,3 +135,12 @@ every subsequent call. File/directory sync, symlink, restrictive-umask, short
 write, parent-substitution, noncanonical URL, hostile string-subclass, and
 diagnostic canaries are qualified deterministically. This enables a future newly
 authorized setup attempt; it does not authorize one or establish live support.
+
+That boundary is now composed as the production `qualification-setup` operator
+command. It consumes private credential and target files, excludes ambient
+authority, verifies exact authenticated identity and target state, creates the
+deterministic fixture, performs at most one durably spent atomic push, and gates
+read-only PR/CAS observations on complete exact readback. Managed private and
+configuration material is removed with cleanup uncertainty retained separately.
+Credential-free local integration passes; no live setup or provider authority
+was used, so DS11 remains Qualified Locally and live support remains unaccepted.

@@ -17,6 +17,63 @@ def completed(value: object = "", returncode: int = 0) -> subprocess.CompletedPr
     return subprocess.CompletedProcess((), returncode, stdout, "sensitive stderr must never be emitted")
 
 
+def test_qualification_setup_rejects_unsafe_input_and_erases_both_files(tmp_path: Path) -> None:
+    credential = tmp_path / "credential"
+    target = tmp_path / "target"
+    credential.write_text("secret-canary")
+    target.write_text("coordinate-canary")
+    credential.chmod(0o644)
+    target.chmod(0o600)
+
+    outcome = operator.qualification_setup(credential, target, tmp_path / "spent")
+
+    assert not credential.exists()
+    assert not target.exists()
+    assert outcome["ok"] is False
+    assert outcome["evidence"]["first_cause_phase"] == "setup_preparation"
+
+
+def test_qualification_setup_parser_exposes_only_private_file_inputs() -> None:
+    setup = next(action for action in operator.parser()._actions if action.dest == "command")
+    choices = setup.choices["qualification-setup"]
+    destinations = {action.dest for action in choices._actions}
+    assert destinations == {"help", "credential_file", "target_file", "spent_marker"}
+
+
+def test_setup_ref_projection_is_strict_and_exact() -> None:
+    expected = operator._parse_setup_refs(f"{'a' * 40}\trefs/heads/main\n{'b' * 40}\trefs/pull/7/head\n".encode())
+    assert expected == {
+        "refs/heads/main": "a" * 40,
+        "refs/pull/7/head": "b" * 40,
+    }
+    assert (
+        operator._parse_setup_refs(
+            f"{'a' * 40}\trefs/heads/main\n{'b' * 40}\trefs/pull/7/head\n{'c' * 40}\trefs/tags/extra\n".encode()
+        )
+        != expected
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    (
+        b"private malformed diagnostic\n",
+        f"{'a' * 40}\trefs/heads/main\n{'b' * 40}\trefs/heads/main\n".encode(),
+        f"{'A' * 40}\trefs/heads/main\n".encode(),
+        f"{'a' * 40}\trefs/heads/private..branch\n".encode(),
+        f"{'a' * 40}\trefs/heads/x/\n".encode(),
+        f"{'a' * 40}\trefs/heads/x//y\n".encode(),
+        f"{'a' * 40}\trefs/heads/.hidden\n".encode(),
+        f"{'a' * 40}\trefs/heads/x.lock\n".encode(),
+        f"{'a' * 40}\trefs/heads/main\v{'b' * 40}\trefs/heads/other\n".encode(),
+        b"\xff",
+    ),
+)
+def test_setup_ref_projection_rejects_every_malformed_or_duplicate_line(raw: bytes) -> None:
+    with pytest.raises(operator.OperatorError, match="Git ref observation is malformed"):
+        operator._parse_setup_refs(raw)
+
+
 class FakeRunner:
     def __init__(self, responses: dict[str, object]) -> None:
         self.responses = responses

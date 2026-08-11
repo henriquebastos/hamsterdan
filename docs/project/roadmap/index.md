@@ -30,7 +30,9 @@ One fresh authorized restart then passed deterministic admission and rehearsal
 but stopped before its atomic push when the final target read timed out. The
 qualification traceback violated coordinate-free rendering; no remote mutation
 or provider work occurred. A credential-free follow-up now closes that rendering
-gap with sanitized private observations and a durable exact-command push fence.
+gap with sanitized private observations and a durable exact-command push fence;
+the production operator now composes those boundaries into one locally qualified
+one-shot setup command with exact readback and managed cleanup evidence.
 Both exact disposable targets remain explicit cleanup obligations externally
 deferred to Puck custody. The historical live causes remain unchanged and live
 support remains unaccepted; no setup, provider, or cleanup authority survives.

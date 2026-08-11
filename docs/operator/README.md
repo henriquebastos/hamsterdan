@@ -447,6 +447,44 @@ terminal History counts, and duplicate assessment. Before and after deployment,
 inspect PR20 read-only through existing runtime custody; allow only a normal
 sweep and do not edit its History or provider state.
 
+## 7. DS11 empty-target qualification setup
+
+`qualification-setup` is a separately authorized, one-shot initializer for one
+public, active, empty GitHub qualification target. It accepts no credential or
+repository coordinate on the command line. Prepare three absolute paths beneath
+an operator-owned mode `0700` custody directory:
+
+- a mode `0600` credential file containing one PAT and no surrounding
+  whitespace;
+- a mode `0600` target file containing exactly
+  `{"repository":"OWNER/REPOSITORY","account_id":123,"repository_id":456}`;
+- a nonexistent spent-marker path whose parent is the mode `0700` custody
+  directory.
+
+Run only after exact setup authorization:
+
+```sh
+scripts/hamsterdan-demo qualification-setup \
+  --credential-file /absolute/private/credential \
+  --target-file /absolute/private/target.json \
+  --spent-marker /absolute/private/setup-spent
+```
+
+The command consumes and removes both input files, strips ambient credential
+authority, supplies the admitted PAT only to its bounded child environment,
+and verifies authenticated account ID, exact repository ID/name, public active
+empty state, and push permission. It then creates the deterministic two-commit
+fixture and durably spends the marker before exactly one non-forced atomic push
+of `main` and `hamsterdan/ds11-live-v4`. An attempted or uncertain push may run
+one complete ref readback but can never push again. Exact readback must contain
+only those two expected refs before read-only PR/current-CAS/stale-CAS setup
+observations run. The command does not create a PR or perform a CAS mutation.
+
+The JSON result contains only closed phases, categories, booleans, and cleanup
+evidence. Keep the spent marker: deleting it discards the durable no-retry
+fence. A failed or uncertain result is terminal for that target and credential;
+do not repair, retry, force, or substitute another repository.
+
 ## Rotation, suspension, removal, and rollback
 
 For key rotation, generate and deploy a second private key, restart and

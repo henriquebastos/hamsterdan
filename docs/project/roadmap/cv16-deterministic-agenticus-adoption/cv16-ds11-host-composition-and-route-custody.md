@@ -234,6 +234,31 @@ gate passes 397 Python tests with one provider test deselected, nine Bun tests,
 formatting, Ruff, ty, and source/wheel builds. No secret, GitHub, target, provider,
 or remote operation was used.
 
+The production operator now owns the complete bounded setup sequence. One
+private mode-`0600` credential file and one private mode-`0600` target envelope
+carry PAT, account, repository, and coordinate custody without secret or
+coordinate CLI arguments. The command strips ambient authority, injects only
+the admitted PAT into its bounded child environment, verifies authenticated
+identity and exact public/active/empty target state, recreates the deterministic
+fixture, and invokes `AtomicSetupPush` once. Complete exact readback admits only
+the two expected refs before read-only PR/current-CAS/stale-CAS observations.
+Every attempted uncertain result is terminal without retry; managed credential,
+coordinate, fixture, HOME, and GitHub configuration material is removed, while
+cleanup uncertainty remains separate from the first cause and the durable spent
+marker survives.
+
+The credential-free local portfolio proves actual accepted and rejected atomic
+pushes against bare repositories, timeout before and after spend, one readback,
+zero retry, downstream suppression, current/stale observation behavior, marker
+restart refusal, strict ref projection, environment isolation, cleanup
+uncertainty, and secret/coordinate diagnostic canaries. After reconciliation
+with current `main`, the focused setup/operator portfolio passes 114 tests and
+the full gate passes 562
+Python tests with one provider test deselected, nine Bun tests, formatting, Ruff,
+ty, and source/wheel builds. The existing demo preflight also passes read-only.
+No DS11 credential, target, provider, cleanup, paid call, remote mutation, or
+DS12 operation was used.
+
 ## Limits
 
 The owned factory and production direct-key loader are deterministically
@@ -258,7 +283,8 @@ nothing. Future separately authorized cleanup may delete only each exact target
 under its own Puck custody and must verify exact not-found without enumeration or
 unrelated mutation. Any later qualification restart must use newly authorized
 clean revisions, a new target, fixture, credential, and handoff and must route
-every private observation and the one atomic push through the new closed setup
-boundary. Any closed or uncertain outcome stops without retry. Provider authority
-remains separate and may be requested only after setup passes. Native subscription
-and extra usage remain excluded, and DS12 must not begin before the live gate.
+every private observation and the one atomic push through the production
+`qualification-setup` command. Any closed or uncertain outcome stops without
+retry. Provider authority remains separate and may be requested only after setup
+passes. Native subscription and extra usage remain excluded, and DS12 must not
+begin before the live gate.
