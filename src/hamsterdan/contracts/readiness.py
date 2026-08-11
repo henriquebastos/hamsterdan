@@ -46,6 +46,7 @@ class GenerationStart(WorkflowModel):
     repository_id: str
     pr_number: int
     epoch: int
+    generation: int
     relation: Literal["new", "confirmed", "superseded", "resumed"]
     head: str
     base_head: str
@@ -66,9 +67,16 @@ class GenerationStop(WorkflowModel):
     repository_id: str
     pr_number: int
     last_epoch: int
+    generation: int
     status: Literal["draft", "merged", "closed"]
     head: str
     active: bool
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class GenerationCommit(WorkflowModel):
+    generation: int
+    boundary: Literal["start", "stop"]
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -161,15 +169,21 @@ class PublicationState(WorkflowModel):
     dashboard_requested_projection: str = ""
     dashboard_requested: bool = False
     dashboard_operation: str = ""
+    dashboard_recovery: dict = field(default_factory=dict)
     dashboard_format: int = 0
     conversation_requested: bool = False
     conversation_operation: str = ""
+    conversation_recovery: dict = field(default_factory=dict)
     conversation_capability_blocking: bool = False
+    conversation_publication_fault: bool = False
     finding_operation: str = ""
     dashboard_capability_blocking: bool = False
+    dashboard_publication_fault: bool = False
     finding_capability_blocking: bool = False
     readiness_capability_blocking: bool = False
+    readiness_publication_fault: bool = False
     readiness_operation: str = ""
+    readiness_recovery: dict = field(default_factory=dict)
     readiness_requested: bool = False
     announced: bool = False
 
@@ -236,10 +250,13 @@ class ReadinessSnapshot(WorkflowModel):
     dashboard_requested_projection: str = ""
     dashboard_requested: bool = False
     dashboard_operation: str = ""
+    dashboard_recovery: dict = field(default_factory=dict)
     dashboard_format: int = 0
     conversation_requested: bool = False
     conversation_operation: str = ""
+    conversation_recovery: dict = field(default_factory=dict)
     conversation_capability_blocking: bool = False
+    conversation_publication_fault: bool = False
     review_operation: str = ""
     review_attempts: int = 0
     actions_operation: str = ""
@@ -251,9 +268,12 @@ class ReadinessSnapshot(WorkflowModel):
     actions_capability_blocking: bool = False
     human_capability_blocking: bool = False
     dashboard_capability_blocking: bool = False
+    dashboard_publication_fault: bool = False
     finding_capability_blocking: bool = False
     readiness_capability_blocking: bool = False
+    readiness_publication_fault: bool = False
     readiness_operation: str = ""
+    readiness_recovery: dict = field(default_factory=dict)
     readiness_requested: bool = False
     announced: bool = False
     wait: str = "actions, coordinating review, and human review"
@@ -385,6 +405,7 @@ class Intent(WorkflowModel):
         "change",
         "update_base",
         "resolve_conflict",
+        "recover_publication",
     ]
     digest: str
     authorized: bool
@@ -484,6 +505,7 @@ class ConversationPublicationResult(WorkflowModel):
     ok: bool
     operation: str = ""
     capability_available: bool = True
+    faulted: bool = False
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -531,6 +553,7 @@ class DashboardPublicationResult(WorkflowModel):
     ok: bool
     operation: str = ""
     capability_available: bool = True
+    faulted: bool = False
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -549,6 +572,7 @@ class ReadinessPublicationResult(WorkflowModel):
     ok: bool
     operation: str = ""
     capability_available: bool = True
+    faulted: bool = False
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -609,10 +633,16 @@ def workflow_wait(control: ReadinessSnapshot) -> str:
         return "GitHub mergeability"
     if control.finding_capability_blocking:
         return "finding publication capability"
+    if control.dashboard_publication_fault:
+        return "dashboard publication fault"
     if control.dashboard_capability_blocking:
         return "dashboard update capability"
+    if control.conversation_publication_fault:
+        return "conversation publication fault"
     if control.conversation_capability_blocking:
         return "conversation reply capability"
+    if control.readiness_publication_fault:
+        return "readiness publication fault"
     if control.readiness_capability_blocking:
         return "readiness publication capability"
     return "terminal lifecycle"
@@ -662,6 +692,9 @@ def dashboard_projection_digest(
         "dashboard_requested_projection",
         "dashboard_requested",
         "dashboard_operation",
+        "dashboard_recovery",
+        "conversation_recovery",
+        "readiness_recovery",
         "dashboard_format",
     }
     facts = {
@@ -701,8 +734,11 @@ def workflow_gates_ready(control: ReadinessSnapshot) -> bool:
             not control.actions_capability_blocking,
             not control.human_capability_blocking,
             not control.dashboard_capability_blocking,
+            not control.dashboard_publication_fault,
             not control.finding_capability_blocking,
             not control.conversation_capability_blocking,
+            not control.conversation_publication_fault,
             not control.readiness_capability_blocking,
+            not control.readiness_publication_fault,
         )
     )

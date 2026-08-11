@@ -165,6 +165,24 @@ class Runner:
                     "confidence": 1,
                 }
             ]
+        elif text == "Retry the blocked publication":
+            target = next(
+                name
+                for name in ("conversation", "dashboard", "readiness")
+                if request.dashboard[f"{name}_capability_blocking"]
+            )
+            intents = [
+                {
+                    "type": "recover_publication",
+                    "arguments": {
+                        "target": target,
+                        "operation": request.dashboard[f"{target}_operation"],
+                    },
+                    "mutation": False,
+                    "explicit": True,
+                    "confidence": 1,
+                }
+            ]
         else:
             intents = [
                 {
@@ -311,6 +329,123 @@ def test_new_head_and_closed_terminal_absorb_late_poll(tmp_path: Path) -> None:
     history = (tmp_path / "state/history.jsonl").read_text()
     assert subject.reconcile("late")["status"] == "abort" and len(authority.transport.writes) == writes
     assert (tmp_path / "state/history.jsonl").read_text() == history
+    subject.close()
+
+
+def test_restart_repairs_generation_reset_after_scope_commit(tmp_path: Path) -> None:
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, runner)
+    first.reconcile("initial")
+    authority.pull = replace(authority.pull, head=HEAD_2)
+    authority.run = replace(authority.run, head=HEAD_2, id=12)
+    assert first.host is not None
+    reset = first.host.reset_generation
+
+    def crash_after_reset():
+        reset()
+        raise RuntimeError("simulated crash after scope reset")
+
+    first.host.reset_generation = crash_after_reset  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        first.reconcile("supersede")
+    first.close()
+
+    second = application(tmp_path, authority, Runner())
+    projection = second.reconcile("restart")
+    assert (projection["epoch"], projection["head"]) == (2, HEAD_2)
+    assert second.host is not None and not second.host.place("generation_start")
+    second.close()
+
+
+def test_restart_opens_missing_scope_after_initial_create_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from hamsterdan.host import runtime
+
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, runner)
+    open_scope = runtime.Engine.open_scope
+
+    def crash_before_scope(engine, name):
+        raise RuntimeError("simulated crash before initial scope")
+
+    monkeypatch.setattr(runtime.Engine, "open_scope", crash_before_scope)
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        first.reconcile("initial")
+    monkeypatch.setattr(runtime.Engine, "open_scope", open_scope)
+
+    second = application(tmp_path, authority, Runner())
+    projection = second.reconcile("restart")
+    assert (projection["epoch"], projection["head"]) == (1, HEAD)
+    second.close()
+
+
+@pytest.mark.parametrize(("state", "terminal"), [("draft", False), ("closed", True), ("merged", True)])
+def test_restart_disposes_seed_only_instance_after_scope_open_crash(tmp_path: Path, state: str, terminal: bool) -> None:
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, runner)
+
+    def crash_before_start(*args, **kwargs):
+        raise RuntimeError("simulated crash before generation start")
+
+    first._start_generation = crash_before_start  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        first.reconcile("initial")
+    first.close()
+
+    authority.pull = replace(
+        authority.pull,
+        draft=state == "draft",
+        closed=state in {"closed", "merged"},
+        merged=state == "merged",
+        state="closed" if terminal else "open",
+    )
+    second = application(tmp_path, authority, Runner())
+    projection = second.reconcile("restart")
+    assert projection["instance"] == ("terminal" if terminal else "dormant")
+    second.close()
+
+
+def test_restart_repairs_generation_stop_after_scope_commit(tmp_path: Path) -> None:
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, runner)
+    first.reconcile("initial")
+    authority.pull = replace(authority.pull, draft=True)
+    assert first.host is not None
+    close = first.host.close_generation
+
+    def crash_after_close():
+        close()
+        raise RuntimeError("simulated crash after scope close")
+
+    first.host.close_generation = crash_after_close  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        first.reconcile("draft")
+    first.close()
+
+    second = application(tmp_path, authority, Runner())
+    projection = second.reconcile("restart")
+    assert projection["instance"] == "dormant"
+    assert second.host is not None and not second.host.place("generation_stop")
+    second.close()
+
+
+def test_scope_cancellation_removes_publication_from_host_unresolved_index(tmp_path: Path) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    subject = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    subject.reconcile("enqueue")
+    assert subject.host is not None and subject.host.has_unresolved_publication()
+
+    authority.pull = replace(authority.pull, draft=True)
+    subject.reconcile("draft")
+
+    assert not subject.host.has_unresolved_publication()
     subject.close()
 
 
@@ -921,6 +1056,24 @@ def test_conversation_exhaustion_projects_one_blocker_and_retains_exact_operatio
         )
         == count
     )
+    subject.route_comment(
+        delivery_id="recover-reply",
+        comment_id=54,
+        text="@hamster-dan Retry the blocked publication",
+        actor_id=7,
+        actor_login="author",
+        actor_type="User",
+        association="OWNER",
+    )
+    recovered = [
+        record
+        for record in subject.host.engine.records  # type: ignore[union-attr]
+        if isinstance(record, ActivityRequested) and record.activity == "conversation_publish"
+    ]
+    assert len(recovered) == 2
+    assert recovered[1].occurrence != recovered[0].occurrence
+    assert recovered[1].idempotency == recovered[0].idempotency
+    assert recovered[1].input == recovered[0].input
     subject.close()
     worker.close()
 
@@ -1000,7 +1153,7 @@ def test_production_publication_capability_absence_completes_once_with_typed_blo
         ("readiness_publish", "hamsterdan:readiness"),
     ],
 )
-def test_production_publication_422_fails_once_and_projector_stays_loud(
+def test_production_publication_422_projects_one_nonrecoverable_fault_without_wedging_lifecycle(
     tmp_path: Path, activity: str, marker: str
 ) -> None:
     dispatch_path = tmp_path / "dispatch.sqlite3"
@@ -1027,13 +1180,13 @@ def test_production_publication_422_fails_once_and_projector_stays_loud(
 
     for _ in range(10):
         worker.run_available(limit=20)
-        try:
-            subject.settle()
-        except RuntimeError as error:
-            assert "unprojectable publication failure: ValueError" in str(error)
+        subject.settle()
+        control = subject.host.control  # type: ignore[union-attr]
+        target = activity.removesuffix("_publish")
+        if control is not None and getattr(control, f"{target}_publication_fault"):
             break
     else:
-        pytest.fail("definite publication rejection was not kept loud")
+        pytest.fail("definite publication rejection was not projected")
 
     records = [json.loads(line) for line in (tmp_path / "state/history.jsonl").read_text().splitlines()]
     failed = [
@@ -1050,10 +1203,8 @@ def test_production_publication_422_fails_once_and_projector_stays_loud(
     assert len(failed) == len(matching_writes) == 1 and firing_failed == []
     assert failed[0]["kind"] == "ValueError" and not failed[0]["retryable"]
     assert "provider detail" not in str(failed + firing_failed)
-    assert not any(
-        record["record"] == "ActivityCompleted" and record.get("transition") == f"execute.{activity}"
-        for record in records
-    )
+    authority.pull = replace(authority.pull, state="closed", closed=True)
+    assert subject.reconcile("closed-after-fault")["instance"] == "terminal"
     subject.close()
     worker.close()
 
@@ -1098,7 +1249,7 @@ def test_nonretryable_publication_boundary_failure_projects_typed_blocker_once(t
     worker.close()
 
 
-def test_wrapped_value_error_is_one_nonretryable_attempt_and_rejected_by_projector(tmp_path: Path) -> None:
+def test_wrapped_value_error_is_one_nonretryable_attempt_and_projects_fault(tmp_path: Path) -> None:
     dispatch_path = tmp_path / "dispatch.sqlite3"
     authority, runner = Authority(), Runner()
     ready(authority)
@@ -1127,14 +1278,13 @@ def test_wrapped_value_error_is_one_nonretryable_attempt_and_rejected_by_project
 
     worker = Worker(LocalDispatch(dispatch_path, instance="worker").worker(("publication",)), {}, resolver=resolver)
     for _ in range(10):
-        assert worker.run_available(limit=20) >= 1
-        try:
-            subject.settle()
-        except RuntimeError as error:
-            assert "unprojectable publication failure: ValueError" in str(error)
+        worker.run_available(limit=20)
+        subject.settle()
+        control = subject.host.control  # type: ignore[union-attr]
+        if control is not None and control.readiness_publication_fault:
             break
     else:
-        pytest.fail("ValueError terminal was not rejected by the publication projector")
+        pytest.fail("ValueError terminal was not projected as a publication fault")
 
     records = [json.loads(line) for line in (tmp_path / "state/history.jsonl").read_text().splitlines()]
     failed = [record for record in records if record["record"] == "ActivityFailed"]

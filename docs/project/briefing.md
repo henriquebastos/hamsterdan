@@ -29,6 +29,16 @@ first sandbox organization for real-provider validation.
   Activity implementations for one shared Worker, serializes advancement per
   PR, and stores only reconstructible scheduling hints outside canonical
   webhook, History, and Dispatch custody.
+- Each active PR generation has one exact Petrus lifecycle scope. Unscoped
+  lifecycle commands survive generation cleanup; a staged command, exact scope
+  reset/close, and matching commit form a restart-repairable boundary. Scope
+  cancellation replaces stale-generation cleanup topology while the Net keeps
+  same-generation operation ownership and current-authority decisions.
+- Terminal publication capability failure can be retried only by an explicit
+  authorized recovery intent naming the exact blocked operation. It creates one
+  fresh Activity occurrence with the stable provider-effect identity. Unknown
+  terminal publication failures become nonrecoverable workflow faults rather
+  than automatic retries or projection wedges.
 - Explicit authorized mutation instructions execute directly. Ambiguous
   instructions clarify without mutation; there is no confirmation ceremony.
 - GitHub credentials stay host-side and never enter agent territories.

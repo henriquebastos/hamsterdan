@@ -14,6 +14,7 @@ from hamsterdan.contracts.readiness import (
     ActionsObservation,
     Admission,
     ConversationObservation,
+    GenerationCommit,
     GenerationStart,
     GenerationStop,
     HumanObservation,
@@ -133,6 +134,7 @@ class PrReadinessApplication:
         temporary.replace(binding)
 
     def reconcile(self, trigger: str = "poll") -> dict[str, object]:
+        self._repair_generation_boundary()
         pull = self.authority.pull_request()
         if pull.closed or pull.merged:
             if self.host is not None:
@@ -141,17 +143,20 @@ class PrReadinessApplication:
                     self._stop_generation(status, pull.head, f"{trigger}:{status}:{pull.head}")
             return self.projection(pull.state)
         if pull.draft:
-            if self.host is not None and self.host.snapshot is not None:
-                control = self.host.snapshot
-                assert control is not None
-                self._stop_generation("draft", pull.head, f"{trigger}:draft:{control.epoch}:{pull.head}")
+            if self.host is not None and (self.host.snapshot is not None or self.host.place("seed")):
+                epoch = self.host.snapshot.epoch if self.host.snapshot is not None else 0
+                self._stop_generation("draft", pull.head, f"{trigger}:draft:{epoch}:{pull.head}")
             return self.projection(pull.state)
 
         policy = self.authority.policy(pull.base_ref)
         base_current = self.authority.base_current(pull)
         if self.host is None:
             self.host = self._open_host()
-        elif self.host.snapshot is None and self.host.place("dormant") and self.host.generation_scope is None:
+        elif (
+            self.host.snapshot is None
+            and (self.host.place("seed") or self.host.place("dormant"))
+            and self.host.generation_scope is None
+        ):
             self.host.open_generation()
         target_epoch = self._target_epoch(pull.head)
         admission = Admission(
@@ -353,17 +358,21 @@ class PrReadinessApplication:
 
     def _start_generation(self, admission: Admission, epoch: int, prior: ReadinessSnapshot | None) -> None:
         assert self.host is not None
+        scope = self.host.generation_scope
+        if scope is None:
+            raise RuntimeError("generation start has no active lifecycle scope")
+        generation = scope.generation + (prior is not None)
         if prior is None:
             relation = "resumed" if self.host.place("dormant") else "new"
         else:
             relation = "confirmed" if admission.head == prior.provisional_head else "superseded"
             self.host.drain()
-            self.host.reset_generation()
         confirmed = relation == "confirmed"
         start = GenerationStart(
             admission.repository_id,
             admission.pr_number,
             epoch,
+            generation,
             relation,
             admission.head,
             admission.base_head,
@@ -378,11 +387,11 @@ class PrReadinessApplication:
             bool(prior is not None and confirmed and prior.repair_used),
             "" if prior is None or not confirmed else prior.repair_fingerprint,
         )
-        self._deliver(
-            "begin_generation",
-            start,
-            f"generation:start:{epoch}:{relation}:{_digest(start.dump())}",
-        )
+        identity = f"generation:start:{epoch}:{relation}:{_digest(start.dump())}"
+        self.host.deliver("begin_generation", start, identity)
+        if prior is not None:
+            self.host.reset_generation()
+        self._deliver("commit_generation", GenerationCommit(generation, "start"), f"{identity}:commit")
 
     def _stop_generation(self, status: Literal["draft", "merged", "closed"], head: str, identity: str) -> None:
         assert self.host is not None
@@ -403,13 +412,63 @@ class PrReadinessApplication:
                 int(dormant[0]["last_epoch"]),
                 False,
             )
+        elif seed := self.host.place("seed"):
+            repository_id, pr_number, last_epoch, active = (
+                str(seed[0]["repository_id"]),
+                int(seed[0]["pr_number"]),
+                0,
+                False,
+            )
         else:
             raise RuntimeError("lifecycle stop has no active or dormant PR generation")
-        stop = GenerationStop(repository_id, pr_number, last_epoch, status, head, active)
+        generation = self.host.generation_scope.generation if self.host.generation_scope else last_epoch
+        stop = GenerationStop(repository_id, pr_number, last_epoch, generation, status, head, active)
         self.host.deliver("end_generation", stop, identity)
-        if active:
+        if self.host.generation_scope is not None:
             self.host.close_generation()
+        self.host.deliver("commit_generation", GenerationCommit(generation, "stop"), f"{identity}:commit")
         self.host.drain()
+
+    def _repair_generation_boundary(self) -> None:
+        if self.host is None:
+            return
+        stops = self.host.place("generation_stop")
+        if stops:
+            stop = GenerationStop(**stops[0])
+            if self.host.place("generation_commit"):
+                self.host.drain()
+                return
+            scope = self.host.generation_scope
+            if scope is not None:
+                if scope.generation != stop.generation:
+                    raise RuntimeError("pending generation stop does not match active lifecycle scope")
+                self.host.close_generation()
+            self.host.deliver(
+                "commit_generation",
+                GenerationCommit(stop.generation, "stop"),
+                f"generation:stop:{stop.generation}:{_digest(stop.dump())}:commit",
+            )
+            self.host.drain()
+        starts = self.host.place("generation_start")
+        if starts:
+            start = GenerationStart(**starts[0])
+            if self.host.place("generation_commit"):
+                self.host.drain()
+                return
+            scope = self.host.generation_scope
+            if scope is None:
+                scope = self.host.open_generation()
+            elif scope.generation < start.generation:
+                scope = self.host.reset_generation()
+            if scope.generation != start.generation:
+                raise RuntimeError("pending generation start does not match active lifecycle scope")
+            self.host.deliver(
+                "commit_generation",
+                GenerationCommit(start.generation, "start"),
+                f"generation:start:{start.generation}:{_digest(start.dump())}:commit",
+                scope=scope,
+            )
+            self.host.drain()
 
     def _deliver(self, source: str, value, identity: str) -> None:
         assert self.host is not None

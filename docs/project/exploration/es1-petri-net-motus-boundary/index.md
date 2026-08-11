@@ -543,6 +543,29 @@ Production implementation is owned by
 disposable evidence; production starts again from current accepted Petrus and
 Hamsterdan `main`.
 
+### Production lifecycle-scope conclusion
+
+The scoped target was validated from fresh accepted production branches rather
+than by merging the experiment. Petrus revision
+`b0bb336a077b70b6d702aef26acbf8ad1381f9b3` supplies exact lifecycle identity,
+provenance, append-ordered close/reset, commit-first cancellation, and late
+terminal disposition. Hamsterdan uses those mechanics through a staged
+command/scope-boundary/commit protocol repaired before ordinary reconciliation.
+
+The Net moved from 40 places, 138 transitions, 412 arcs, and 91 retirement
+transitions to 43 places, 67 transitions, 266 arcs, and 17 retirements. This
+confirms the experiment's architectural claim without forcing its numerical
+estimate: lifecycle cleanup belongs to the runtime boundary, while
+same-generation ownership and acceptance remain workflow. The extra explicit
+boundary and recovery facts are preferable to hidden host state or an assumed
+cross-component transaction.
+
+The work also resolved terminal exhaustion. Motus retries one logical execution;
+after exhaustion, only an exact trusted recovery intent may authorize one new
+occurrence, retaining stable provider-effect identity for lookup-first
+reconciliation. Unknown terminal failures are nonrecoverable workflow faults.
+Neither path creates an autonomous Petri retry loop.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

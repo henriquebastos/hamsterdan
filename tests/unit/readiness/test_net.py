@@ -31,6 +31,7 @@ from hamsterdan.contracts.readiness import (
     DashboardPublicationResult,
     FindingPublicationRequest,
     FindingPublicationResult,
+    GenerationCommit,
     GenerationStart,
     GenerationStop,
     HumanObservation,
@@ -404,6 +405,7 @@ def stop(subject: Engine, status: Literal["draft", "merged", "closed"], head: st
         "repo",
         7,
         control.epoch if control is not None else dormant[0]["last_epoch"],
+        scope.generation if scope is not None else dormant[0]["last_epoch"],
         status,
         head,
         control is not None,
@@ -411,6 +413,11 @@ def stop(subject: Engine, status: Literal["draft", "merged", "closed"], head: st
     subject.deliver("end_generation", token(value), identity=identity)
     if scope is not None:
         subject.close_scope(scope)
+    subject.deliver(
+        "commit_generation",
+        token(GenerationCommit(value.generation, "stop")),
+        identity=f"{identity}:commit",
+    )
     drain(subject)
 
 
@@ -516,14 +523,15 @@ def admit(subject: Engine, head: str, identity: str, *, drain_after: bool = True
         else "superseded"
     )
     epoch = 1 if prior is None and not dormant else dormant[0]["last_epoch"] + 1 if prior is None else prior.epoch + 1
-    if prior is not None:
-        subject.reset_scope(subject.active_scopes["readiness-generation"])
-    elif "readiness-generation" not in subject.active_scopes:
-        subject.open_scope("readiness-generation")
+    scope = subject.active_scopes.get("readiness-generation")
+    if scope is None:
+        scope = subject.open_scope("readiness-generation")
+    generation = scope.generation + (prior is not None)
     start = GenerationStart(
         "repo",
         7,
         epoch,
+        generation,
         relation,
         head,
         "base",
@@ -533,8 +541,16 @@ def admit(subject: Engine, head: str, identity: str, *, drain_after: bool = True
         repair_used=bool(prior is not None and relation == "confirmed" and prior.repair_used),
         repair_fingerprint="" if prior is None or relation != "confirmed" else prior.repair_fingerprint,
     )
+    subject.deliver("begin_generation", token(start), identity=identity)
+    if prior is not None:
+        scope = subject.reset_scope(scope)
     scope = subject.active_scopes["readiness-generation"]
-    subject.deliver("begin_generation", token(start), identity=identity, scope=scope)
+    subject.deliver(
+        "commit_generation",
+        token(GenerationCommit(generation, "start")),
+        identity=f"{identity}:commit",
+        scope=scope,
+    )
     if drain_after:
         drain(subject)
 
@@ -897,6 +913,33 @@ def test_conversation_publication_terminal_exhaustion_latches_original_operation
     )
     assert workflow_wait(otherwise_ready) == "conversation reply capability"
     assert workflow_gates_ready(otherwise_ready) is False
+
+    subject.deliver(
+        "conversation_observation",
+        token(ConversationObservation(1, "h1", True, "retry that publication", comment_id=33)),
+        identity="comment-33",
+        scope=subject.active_scopes["readiness-generation"],
+    )
+    drive_bounded(subject)
+    classify_occurrence, _ = drive_until_activity(subject, dispatch, "conversation")
+    recovery = Intent(
+        1,
+        "h1",
+        "recover_publication",
+        "recover-once",
+        True,
+        False,
+        {"target": "conversation", "operation": first_work.operation},
+        "base",
+    )
+    dispatch.complete(classify_occurrence, IntentBatch(1, "h1", [recovery]).dump())
+    drive_bounded(subject)
+
+    recovered_occurrence, recovered_invocation = pending(dispatch, "conversation_publish")
+    recovered_work = work_input(recovered_invocation)
+    assert recovered_occurrence != occurrence
+    assert recovered_work == first_work
+    assert snapshot(subject).conversation_capability_blocking is False
 
 
 def test_draft_resumes_new_epoch_and_terminal_absorbs_late_facts() -> None:
@@ -1789,6 +1832,7 @@ def test_activity_topology_delegates_generation_cleanup_without_losing_operation
     assert {str(item.target) for item in net.outputs(NetPath("unpack_intents"))} == {
         "change_basis",
         "intent_result",
+        "recovery_basis",
         "reply_basis",
     }
     reminder_inputs = {str(item.source): item.mode.value for item in net.inputs(NetPath("accept_reminder"))}
@@ -1831,8 +1875,8 @@ def test_activity_topology_delegates_generation_cleanup_without_losing_operation
     assert not any(name.startswith("retire.stale_") for name in retirement_names)
     assert not any("_result" in name or "_work_" in name for name in retirement_names)
     assert "retire.stale_dashboard_result" not in retirement_names
-    assert len(retirement_names) == 16
-    assert (len(net.places), len(net.transitions), len(net.arcs)) == (41, 63, 244)
+    assert len(retirement_names) == 17
+    assert (len(net.places), len(net.transitions), len(net.arcs)) == (43, 67, 266)
     assert NetPath("reissue_reply") not in net.transitions
     publication_paths = {str(path) for path in (*net.places, *net.transitions) if str(path).startswith("publication.")}
     assert not any(

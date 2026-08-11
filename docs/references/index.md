@@ -36,6 +36,14 @@
   supersedes the V2 pin and adds first-class Worker execution Instance,
   optional host-composed scoped resolution, and bounded non-waiting Worker
   pumping without introducing a scheduler or serialized Activity scope.
+- Accepted lifecycle-scope dependency:
+  `henriquebastos/petrus@b0bb336a077b70b6d702aef26acbf8ad1381f9b3`,
+  implemented, fully validated, and accepted 2026-08-11. Hamsterdan consumes
+  this exact revision for durable `LifecycleScope` identity, canonical
+  open/close/reset records, exact queue and Activity provenance, commit-first
+  cancellation, restart repair, and deterministic late-terminal quarantine.
+  This revision supersedes the shared-Worker pin without moving scheduling or
+  provider custody into Petrus.
 
 ## GitHub documentation
 

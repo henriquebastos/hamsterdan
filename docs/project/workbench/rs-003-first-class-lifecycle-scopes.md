@@ -1,5 +1,5 @@
 ---
-status: Active
+status: Completed
 pulled: 2026-08-11
 navigator: Henrique
 source: ../exploration/es1-petri-net-motus-boundary/index.md
@@ -58,14 +58,14 @@ modules, durable capability containers, or exactly-once side-effect claims.
 
 | Change Request | Outcome |
 | --- | --- |
-| CR-001 Petrus canonical scope records, replay, and race semantics | Planned |
-| CR-002 Petrus occurrence provenance and Engine close/reset | Planned |
-| CR-003 Petrus commit-first Dispatch cancellation and quarantine | Planned |
-| CR-004 Petrus scoped delivery and closed-scope ingress disposition | Planned |
-| CR-005 Pin accepted Petrus and integrate Hamsterdan scope lifecycle | Planned |
-| CR-006 Remove only behaviorally replaced retirement topology | Planned |
-| CR-007 Add explicit authorized recovery for terminal blockers | Planned |
-| CR-008 Cross-project review, validation, coherence, and closure | Planned |
+| CR-001 Petrus canonical scope records, replay, and race semantics | Completed in Petrus `b0bb336a077b70b6d702aef26acbf8ad1381f9b3` |
+| CR-002 Petrus occurrence provenance and Engine close/reset | Completed in the accepted Petrus revision |
+| CR-003 Petrus commit-first Dispatch cancellation and quarantine | Completed in the accepted Petrus revision |
+| CR-004 Petrus scoped delivery and closed-scope ingress disposition | Completed in the accepted Petrus revision |
+| CR-005 Pin accepted Petrus and integrate Hamsterdan scope lifecycle | Completed |
+| CR-006 Remove only behaviorally replaced retirement topology | Completed |
+| CR-007 Add explicit authorized recovery for terminal blockers | Completed |
+| CR-008 Cross-project review, validation, coherence, and closure | Completed |
 
 ## Validation contract
 
@@ -127,3 +127,97 @@ that identity; the Activity then performs lookup-first reconciliation. The
 remaining Hamsterdan design must preserve or reconstruct the original desired
 payload—especially conversation reply text—without treating History scanning as
 hidden Net state or restoring automatic retries.
+
+## Delivered result
+
+Hamsterdan pins Petrus
+`b0bb336a077b70b6d702aef26acbf8ad1381f9b3` and uses one exact lifecycle scope
+named `readiness-generation`. PR-lifetime lifecycle commands remain unscoped;
+generation-owned ingress, queued occurrences, firings, and Activity requests
+carry the exact `LifecycleScope(name, generation)` returned by Petrus.
+
+The production Net changed as follows:
+
+| Metric | Before RS-003 | After RS-003 |
+| --- | ---: | ---: |
+| Places | 40 | 43 |
+| Transitions | 138 | 67 |
+| Arcs | 412 | 266 |
+| Retirement transitions | 91 | 17 |
+
+The three additional places and remaining transitions are not lifecycle cleanup
+recreated under new names. They make generation start/stop commits and explicit
+publication recovery visible workflow facts. The 17 retained retirements decide
+same-generation operation ownership, stale or invalid basis, invalid admission,
+and invalid recovery—business questions that a lifecycle scope cannot answer.
+
+### Crash-safe lifecycle boundary
+
+Scope reset/close and Net state cannot be one cross-component transaction.
+Hamsterdan therefore uses a durable staged boundary protocol rather than
+assuming an in-memory call sequence is atomic:
+
+```text
+start
+  stage unscoped GenerationStart(generation=N)
+  -> reset/open exact scope N
+  -> deliver scoped GenerationCommit(N, "start")
+  -> Net admits generation N
+
+stop
+  stage unscoped GenerationStop(generation=N)
+  -> close exact scope N
+  -> deliver unscoped GenerationCommit(N, "stop")
+  -> Net makes the PR dormant or terminal
+```
+
+The matching commit is required by the Net, so a staged command cannot mutate
+business state before Petrus has established the lifecycle boundary. On every
+reconciliation, the host repairs an incomplete boundary before processing new
+provider state. Repair also opens a missing initial scope after a crash between
+Engine creation and `open_scope`, and permits a seed-only Instance to stop if
+the PR becomes draft or terminal before admission. Repetition is harmless
+because the exact generation and boundary are durable.
+
+### Cancellation and late outcomes
+
+Host Activity indexes treat occurrences named by `ScopeClosed.cancelled` and
+`ScopeReset.cancelled` as terminal, alongside completed, failed, and quarantined
+occurrences. A cancelled publication therefore cannot remain an artificial
+publisher fence after its generation is closed. Exact late terminal delivery is
+still governed by Petrus: it is acknowledged or quarantined and cannot mutate
+the closed generation.
+
+### Publication exhaustion and recovery
+
+Retryable operational failures stay inside one Motus logical execution.
+Terminal capability failures latch an explicit blocker and retain the immutable
+request needed for recovery. A trusted agent intent
+`recover_publication(target, operation)` may authorize exactly one fresh
+Activity occurrence only when its authority, target, exact blocked operation,
+and retained request all match current state. The fresh occurrence deliberately
+reuses the stable provider-effect operation so lookup-first reconciliation can
+discover an ambiguous prior effect. Invalid, stale, mismatched, and unauthorized
+recovery is consumed without effect; no timer or transition can self-authorize
+another logical execution.
+
+Unknown terminal publication failures project a typed nonrecoverable fault
+rather than remaining projection-pending or masquerading as a recoverable
+capability problem. This keeps scope close/replay deterministic while preventing
+readiness until a new basis supersedes the fault. A same-head basis refresh
+clears stale operation identities, recovery payloads, blockers, and faults.
+
+## Verification and limitations
+
+The final implementation was exercised through 524 Python tests (one explicit
+external-provider route skipped), including restart at every lifecycle seam,
+wrong-generation commits, old queued and in-flight cancellation, late-terminal
+quarantine, cancellation-aware host indexes, explicit one-shot recovery, and
+terminal failure projection. Static, format, type, JavaScript, source, and wheel
+gates and nine relay tests passed. An adversarial review returned `APPROVE` after the fresh-Instance
+create/open gap and seed-only termination gap were repaired.
+
+Scopes do not provide hard interruption, exactly-once side effects,
+same-generation business supersession, or a distributed scheduler. Provider
+effects remain operation-identified, freshly fenced, and lookup-first. The host
+still owns one advancing owner per Instance and reconstructible runnable hints.

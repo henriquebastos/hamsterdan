@@ -28,11 +28,25 @@ outside current authority.
 
 ## Consequences
 
-- Petrus needs first-class scope and occurrence provenance in real History,
-  Engine, and Dispatch contracts.
+- Petrus supplies first-class scope and occurrence provenance in real History,
+  Engine, and Dispatch contracts as of
+  `b0bb336a077b70b6d702aef26acbf8ad1381f9b3`.
 - Dispatch cancellation is post-commit outbox/reconciliation work.
 - Same-generation operation ownership remains in the Hamsterdan Net.
 - Scope generation does not automatically equal every business epoch or
   publication operation.
 - High availability, actor modules, and hard side-effect cancellation remain
   separate decisions.
+
+Hamsterdan stages each generation start or stop as an unscoped command, performs
+the exact scope reset or close, and then delivers a matching
+`GenerationCommit`. The Net requires both command and commit. Reconciliation
+repairs any interrupted boundary before ordinary provider reconciliation, so no
+cross-component transaction is implied.
+
+Terminal publication exhaustion does not reopen work automatically. Capability
+failure retains an immutable recovery request, and only an explicit authorized
+intent naming the exact target and blocked operation may create one fresh
+Activity occurrence. The stable provider-effect operation is reused for
+lookup-first reconciliation. Unknown terminal failures instead become typed
+nonrecoverable publication faults.

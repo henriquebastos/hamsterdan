@@ -51,7 +51,18 @@ Current = Callable[[int, str], bool]
 AgentFault = Callable[[str, str], None]
 AgentDispatch = Callable[[str, int], None]
 _MUTATIONS = {"change", "update_base", "resolve_conflict"}
-_ALLOWED = ("reply", "status", "acknowledge", "dismiss", "defer", "snooze", "resume", "reassign", *_MUTATIONS)
+_ALLOWED = (
+    "reply",
+    "status",
+    "acknowledge",
+    "dismiss",
+    "defer",
+    "snooze",
+    "resume",
+    "reassign",
+    "recover_publication",
+    *_MUTATIONS,
+)
 MAX_CODING_ATTEMPTS = 3
 LOG = logging.getLogger(__name__)
 CodeRequest = ChangeRequest | RepairRequest
@@ -644,13 +655,14 @@ class PrReadinessActivities:
             "change": ["request"],
             "update_base": ["request"],
             "resolve_conflict": ["request"],
+            "recover_publication": ["target", "operation"],
         }
         return [
             {
                 "type": name,
                 "mutation": name in _MUTATIONS,
                 "arguments": arguments[name],
-                "requires_explicit": name in _MUTATIONS,
+                "requires_explicit": name in _MUTATIONS or name == "recover_publication",
             }
             for name in _ALLOWED
         ]

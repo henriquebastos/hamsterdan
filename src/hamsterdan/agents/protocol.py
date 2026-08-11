@@ -391,6 +391,12 @@ def _validate_intent_arguments(arguments: JSONDict, mutation: bool) -> None:
                 not isinstance(item, str) or _FINDING_ID.fullmatch(item) is None for item in findings
             ):
                 _fail("invalid intent findings")
+        elif name == "target":
+            if value not in {"conversation", "dashboard", "readiness"}:
+                _fail("invalid publication recovery target")
+        elif name == "operation":
+            if not _text(value, "intent operation", limit=256).strip():
+                _fail("invalid publication recovery operation")
     if mutation and not arguments:
         _fail("mutation intent lacks concrete scope")
 

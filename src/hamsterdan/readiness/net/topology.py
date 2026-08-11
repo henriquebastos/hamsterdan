@@ -27,6 +27,7 @@ from hamsterdan.contracts.readiness import (
     Dormant,
     FindingPublicationRequest,
     FindingPublicationResult,
+    GenerationCommit,
     GenerationStart,
     GenerationStop,
     HumanObservation,
@@ -75,6 +76,7 @@ _TOKEN_TYPES = {
     for value in (
         Seed,
         Admission,
+        GenerationCommit,
         GenerationStart,
         GenerationStop,
         Authority,
@@ -183,6 +185,7 @@ def _unpack_intents(binding, outputs):
         "change_basis": {"change", "update_base", "resolve_conflict"},
         "intent_result": {"acknowledge", "dismiss", "defer", "snooze", "resume", "reassign"},
         "reply_basis": {"reply"},
+        "recovery_basis": {"recover_publication"},
     }
     intents = tuple(Intent(**raw) for raw in binding.tokens[0].data["intents"])
     return {
@@ -339,10 +342,19 @@ def fold_human(state: HumanState, value: HumanObservation) -> HumanState:
 
 def fold_effect(owner, result):
     if isinstance(result, ConversationPublicationResult):
+        if result.faulted:
+            return owner.validated_update(
+                conversation_capability_blocking=False,
+                conversation_publication_fault=True,
+            )
         if not result.capability_available:
             return owner.validated_update(conversation_capability_blocking=True)
         return owner.validated_update(
-            conversation_requested=False, conversation_operation="", conversation_capability_blocking=False
+            conversation_requested=False,
+            conversation_operation="",
+            conversation_recovery={},
+            conversation_capability_blocking=False,
+            conversation_publication_fault=False,
         )
     if isinstance(result, (ChangeResult, RepairResult)):
         repair = isinstance(result, RepairResult)
@@ -368,6 +380,11 @@ def fold_effect(owner, result):
             repair_lineage=result.lineage or owner.repair_lineage,
         )
     if isinstance(result, DashboardPublicationResult):
+        if result.faulted:
+            return owner.validated_update(
+                dashboard_capability_blocking=False,
+                dashboard_publication_fault=True,
+            )
         if not result.capability_available:
             return owner.validated_update(dashboard_capability_blocking=True)
         if result.ok:
@@ -376,18 +393,27 @@ def fold_effect(owner, result):
                 dashboard_requested_projection="",
                 dashboard_requested=False,
                 dashboard_operation="",
+                dashboard_recovery={},
                 dashboard_format=DASHBOARD_FORMAT,
                 dashboard_capability_blocking=False,
+                dashboard_publication_fault=False,
             )
     if isinstance(result, ReadinessPublicationResult):
+        if result.faulted:
+            return owner.validated_update(
+                readiness_capability_blocking=False,
+                readiness_publication_fault=True,
+            )
         if not result.capability_available:
             return owner.validated_update(readiness_capability_blocking=True)
         if result.ok:
             return owner.validated_update(
                 readiness_requested=False,
                 readiness_operation="",
+                readiness_recovery={},
                 announced=True,
                 readiness_capability_blocking=False,
+                readiness_publication_fault=False,
             )
     return owner
 
@@ -588,15 +614,25 @@ def _refresh_basis(binding, outputs):
     p = p.validated_update(
         findings_published=False,
         finding_publication_requested=False,
+        finding_operation="",
+        finding_capability_blocking=False,
         dashboard_requested_projection="",
         dashboard_requested=False,
         dashboard_operation="",
+        dashboard_recovery={},
+        dashboard_capability_blocking=False,
+        dashboard_publication_fault=False,
         conversation_requested=False,
         conversation_operation="",
+        conversation_recovery={},
         conversation_capability_blocking=False,
+        conversation_publication_fault=False,
         announced=False,
         readiness_operation="",
+        readiness_recovery={},
         readiness_requested=False,
+        readiness_capability_blocking=False,
+        readiness_publication_fault=False,
     )
     policy = {
         "strict_base": a.strict_base,
@@ -841,9 +877,70 @@ def _authorize_reply(binding, outputs):
     p = p.validated_update(
         conversation_requested=True,
         conversation_operation=work.operation,
+        conversation_recovery=work.dump(),
         conversation_capability_blocking=False,
     )
     return _route(outputs, {"publication_state": p, "work.conversation_reply": work})
+
+
+_RECOVERY_TARGETS = {
+    "conversation": (
+        "conversation_capability_blocking",
+        "conversation_operation",
+        "conversation_recovery",
+        ConversationPublicationRequest,
+        "work.conversation_reply",
+    ),
+    "dashboard": (
+        "dashboard_capability_blocking",
+        "dashboard_operation",
+        "dashboard_recovery",
+        DashboardPublicationRequest,
+        "work.dashboard",
+    ),
+    "readiness": (
+        "readiness_capability_blocking",
+        "readiness_operation",
+        "readiness_recovery",
+        ReadinessCommand,
+        "command.readiness",
+    ),
+}
+
+
+def _recoverable_publication(a: Authority, p: PublicationState, value: Intent) -> bool:
+    target = value.arguments.get("target")
+    operation = value.arguments.get("operation")
+    if not (_current(a, value) and value.authorized and value.kind == "recover_publication"):
+        return False
+    if not isinstance(target, str) or not isinstance(operation, str) or target not in _RECOVERY_TARGETS:
+        return False
+    blocker, operation_field, recovery_field, _, _ = _RECOVERY_TARGETS[target]
+    recovery = getattr(p, recovery_field)
+    return (
+        getattr(p, blocker)
+        and getattr(p, operation_field) == operation
+        and isinstance(recovery, dict)
+        and recovery.get("operation") == operation
+        and (
+            recovery.get("epoch"),
+            recovery.get("head"),
+            recovery.get("base_head"),
+            recovery.get("policy_digest"),
+        )
+        == (a.epoch, a.head, a.base_head, a.policy_digest)
+    )
+
+
+def _recover_publication(binding, outputs):
+    _a, publication, value = _values(binding, Authority, PublicationState, Intent)
+    target = value.arguments["target"]
+    blocker, _, recovery_field, request_type, output = _RECOVERY_TARGETS[target]
+    request = _TOKEN_ADAPTERS[request_type.__name__].validate_json(
+        json.dumps(getattr(publication, recovery_field), sort_keys=True, separators=(",", ":"))
+    )
+    publication = publication.validated_update(**{blocker: False})
+    return _route(outputs, {"publication_state": publication, output: request})
 
 
 def conversation_work(
@@ -914,6 +1011,7 @@ def _dashboard(binding, outputs):
     work = DashboardPublicationRequest(
         epoch=a.epoch, head=a.head, operation=op, base_head=a.base_head, policy_digest=a.policy_digest, control=after
     )
+    p = p.validated_update(dashboard_recovery=work.dump())
     return _route(
         outputs,
         {
@@ -933,6 +1031,7 @@ def _announce(binding, outputs):
     work = ReadinessCommand(
         epoch=a.epoch, head=a.head, operation=op, base_head=a.base_head, policy_digest=a.policy_digest
     )
+    p = p.validated_update(readiness_recovery=work.dump())
     return _route(
         outputs,
         {
@@ -996,6 +1095,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     t.verified_admission >> p.admission(Admission)
     t.begin_generation >> p.generation_start(GenerationStart)
     t.end_generation >> p.generation_stop(GenerationStop)
+    t.commit_generation >> p.generation_commit(GenerationCommit)
     t.human_observation >> p.human_result(HumanObservation)
     t.actions_observation >> p.actions_result(ActionsObservation)
     t.conversation_observation >> p.conversation_basis(ConversationObservation)
@@ -1055,12 +1155,17 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         transition = getattr(generation.t, name)(
             handler=petri_handler(_begin_generation),
             guards=_typed_guard(
-                (prior_type, GenerationStart),
-                lambda control, start, expected=relation: _subject(control, start) and start.relation == expected,
+                (prior_type, GenerationStart, GenerationCommit),
+                lambda control, start, commit, expected=relation: (
+                    _subject(control, start)
+                    and start.relation == expected
+                    and commit.boundary == "start"
+                    and commit.generation == start.generation
+                ),
             ),
         )
         (
-            (prior, p.generation_start)
+            (prior, p.generation_start, p.generation_commit)
             >> transition
             >> (
                 *cohort,
@@ -1070,39 +1175,65 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
             )
         )
     (
-        p.generation_start
+        (p.generation_start, p.generation_commit)
         >> generation.t.supersede(
             handler=petri_handler(_begin_generation),
             guards=_typed_guard(
-                (GenerationStart,),
-                lambda start: start.relation in {"confirmed", "superseded"},
+                (GenerationStart, GenerationCommit),
+                lambda start, commit: (
+                    start.relation in {"confirmed", "superseded"}
+                    and commit.boundary == "start"
+                    and commit.generation == start.generation
+                ),
             ),
         )
         >> (*cohort, work.p.review, work.p.actions_discovery, reminder.p.timer)
     )
     (
-        p.generation_stop
+        (p.generation_stop, p.generation_commit)
         >> generation.t.stop_active(
             handler=petri_handler(_route_generation_stop),
-            guards=_typed_guard((GenerationStop,), lambda stop: stop.active),
+            guards=_typed_guard(
+                (GenerationStop, GenerationCommit),
+                lambda stop, commit: stop.active and commit.boundary == "stop" and commit.generation == stop.generation,
+            ),
         )
         >> (p.dormant, p.terminal)
     )
     (
-        (p.dormant, p.generation_stop)
+        (p.dormant, p.generation_stop, p.generation_commit)
         >> generation.t.stop_dormant(
             handler=petri_handler(_route_generation_stop),
             guards=_typed_guard(
-                (Dormant, GenerationStop),
-                lambda dormant, stop: (
+                (Dormant, GenerationStop, GenerationCommit),
+                lambda dormant, stop, commit: (
                     not stop.active
                     and stop.status in {"merged", "closed"}
                     and _subject(dormant, stop)
                     and dormant.last_epoch == stop.last_epoch
+                    and commit.boundary == "stop"
+                    and commit.generation == stop.generation
                 ),
             ),
         )
         >> p.terminal
+    )
+    (
+        (p.seed, p.generation_stop, p.generation_commit)
+        >> generation.t.stop_seed(
+            handler=petri_handler(_route_generation_stop),
+            guards=_typed_guard(
+                (Seed, GenerationStop, GenerationCommit),
+                lambda seed, stop, commit: (
+                    not stop.active
+                    and stop.last_epoch == 0
+                    and _subject(seed, stop)
+                    and commit.boundary == "stop"
+                    and commit.generation == stop.generation
+                ),
+            ),
+        )
+        >> (p.dormant, p.terminal)
     )
     (
         (p.authority, p.actions_state, p.review_state, p.publication_state, p.admission)
@@ -1260,7 +1391,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     (
         p.intent_batch
         >> t.unpack_intents(handler=petri_handler(_unpack_intents))
-        >> (p.change_basis, p.intent_result(Intent), p.reply_basis(Intent))
+        >> (p.change_basis, p.intent_result(Intent), p.reply_basis(Intent), p.recovery_basis(Intent))
     )
     for name, owner_type, owner, kinds in (
         ("finding_intent", ReviewState, p.review_state, {"acknowledge", "dismiss", "defer"}),
@@ -1289,6 +1420,24 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
             work.p.conversation_reply,
         )
     )
+    recover_publication = t.recover_publication(
+        handler=petri_handler(_recover_publication),
+        guards=_typed_guard((Authority, PublicationState, Intent), _recoverable_publication),
+    )
+    p.authority >> arc.read() >> recover_publication
+    (
+        (p.publication_state, p.recovery_basis)
+        >> recover_publication
+        >> (p.publication_state, work.p.conversation_reply, work.p.dashboard, command.p.readiness)
+    )
+    reject_recovery = retire.t.recovery_basis(
+        guards=_typed_guard(
+            (Authority, PublicationState, Intent),
+            lambda authority, publication, value: not _recoverable_publication(authority, publication, value),
+        )
+    )
+    (p.authority, p.publication_state) >> arc.read() >> reject_recovery
+    p.recovery_basis >> reject_recovery
     # Full snapshots are relational joins only at projection/gate boundaries.
     dashboard = t.request_dashboard(
         handler=petri_handler(_dashboard),

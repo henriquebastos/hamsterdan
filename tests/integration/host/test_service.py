@@ -559,6 +559,7 @@ def test_cached_application_revalidates_route_and_returns_typed_stale_publicatio
         "ok": False,
         "operation": "dashboard:one",
         "capability_available": True,
+        "faulted": False,
     }
     assert provider_calls == []
     host.close()
@@ -607,6 +608,7 @@ def test_inactive_route_returns_exact_typed_stale_conversation_publication(tmp_p
         "ok": False,
         "operation": "conversation:stale",
         "capability_available": True,
+        "faulted": False,
     }
     assert provider_calls == []
     host.close()
@@ -663,6 +665,7 @@ def test_restart_reconstructs_revoked_route_and_settles_exact_stale_publication(
         "ok": False,
         "operation": "dashboard:restart",
         "capability_available": True,
+        "faulted": False,
     }
     assert provider_calls == []
     assert host.run_due() == 1

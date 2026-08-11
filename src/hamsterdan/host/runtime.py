@@ -10,7 +10,15 @@ from typing import Any, cast
 
 from petrus.engine import DriveOutcome, Engine, choose_throughput
 from petrus.impetus.binding import DerivedActivityHandler
-from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested, FiringFailed
+from petrus.impetus.history import (
+    ActivityCompleted,
+    ActivityFailed,
+    ActivityRequested,
+    ActivityTerminalQuarantined,
+    FiringFailed,
+    ScopeClosed,
+    ScopeReset,
+)
 from petrus.impetus.history_store import JsonlHistoryStore
 from petrus.impetus.petrinet import Binding, Marking, NetPath, Token
 from petrus.impetus.scope import LifecycleScope
@@ -48,6 +56,16 @@ _GENERATION_SCOPE = "readiness-generation"
 _PUBLICATION_POLICY = ExecutionPolicy(
     attempts=3, initial_interval=5, coefficient=2, max_interval=10, jitter=0, schedule_to_close=60
 )
+
+
+def _terminal_occurrences(records) -> set[int]:
+    terminal: set[int] = set()
+    for record in records:
+        if isinstance(record, (ActivityCompleted, ActivityFailed, ActivityTerminalQuarantined)):
+            terminal.add(record.occurrence)
+        elif isinstance(record, (ScopeClosed, ScopeReset)):
+            terminal.update(record.cancelled)
+    return terminal
 
 
 @dataclass(frozen=True)
@@ -90,10 +108,10 @@ class PublicationActivityHandler:
         return self.derived.project(binding, result)
 
     def project_failure(self, binding: Binding, failure: ActivityFailure):
-        # Only exhausted, classified operational boundary failures become a
-        # capability blocker. Unknown failures remain projection-pending/loud.
-        if failure.kind not in {"GitHubBoundaryError", "DeadlineExceeded"}:
-            raise RuntimeError(f"unprojectable publication failure: {failure.kind}")
+        # Capability failures remain explicitly recoverable; every other
+        # terminal failure projects a nonrecoverable fault so lifecycle close
+        # is never wedged behind projection-pending custody.
+        capability_failure = failure.kind in {"GitHubBoundaryError", "DeadlineExceeded"}
         activity = self.derived.activity.declaration.name
         expected_color = {
             "conversation_publish": "ConversationPublicationRequest",
@@ -115,7 +133,14 @@ class PublicationActivityHandler:
             "dashboard_publish": DashboardPublicationResult,
             "readiness_publish": ReadinessPublicationResult,
         }[activity]
-        result = result_type(epoch, head, False, operation, False)
+        result = result_type(
+            epoch,
+            head,
+            False,
+            operation,
+            capability_available=not capability_failure,
+            faulted=not capability_failure,
+        )
         return self.derived.project(binding, result.dump())
 
 
@@ -250,11 +275,7 @@ class AuthorityLease:
     def _active_requests(self) -> list[tuple[str, str, str]]:
         if self.engine is None:
             return []
-        terminal = {
-            record.occurrence
-            for record in self.engine.records
-            if isinstance(record, (ActivityCompleted, ActivityFailed))
-        }
+        terminal = _terminal_occurrences(self.engine.records)
         values: list[tuple[str, str, str]] = []
         for record in self.engine.records:
             if (
@@ -442,20 +463,18 @@ class PrReadinessHost:
         if self._agent_settle is None:
             return
         requested: dict[int, str] = {}
-        terminal: set[int] = set()
         for record in self.engine.records:
             if isinstance(record, ActivityRequested) and isinstance(record.input, dict):
                 work = record.input.get("work", record.input.get("command"))
                 operation = work.get("operation") if isinstance(work, dict) else None
                 if isinstance(operation, str):
                     requested[record.occurrence] = operation
-            elif isinstance(record, (ActivityCompleted, ActivityFailed)):
-                terminal.add(record.occurrence)
+        terminal = _terminal_occurrences(self.engine.records)
         self._agent_settle({requested[item] for item in terminal & requested.keys()})
 
     @staticmethod
     def _unresolved(records: tuple[object, ...]) -> dict[int, ActivityRequested]:
-        terminal = {record.occurrence for record in records if isinstance(record, (ActivityCompleted, ActivityFailed))}
+        terminal = _terminal_occurrences(records)
         return {
             record.occurrence: record
             for record in records
@@ -471,11 +490,7 @@ class PrReadinessHost:
 
     def has_unresolved_publication(self) -> bool:
         """Return whether this Instance has an uncollected durable publication request."""
-        terminal = {
-            record.occurrence
-            for record in self.engine.records
-            if isinstance(record, (ActivityCompleted, ActivityFailed))
-        }
+        terminal = _terminal_occurrences(self.engine.records)
         return any(
             isinstance(record, ActivityRequested)
             and record.occurrence not in terminal
