@@ -544,6 +544,44 @@ def _route_generation_stop(binding, outputs):
     return _route(outputs, {"dormant" if isinstance(value, Dormant) else "terminal": value})
 
 
+def _commits_start(start: GenerationStart, commit: GenerationCommit) -> bool:
+    return commit.boundary == "start" and commit.generation == start.generation
+
+
+def _initial_generation(seed: Seed, start: GenerationStart, commit: GenerationCommit) -> bool:
+    return _subject(seed, start) and start.relation == "new" and _commits_start(start, commit)
+
+
+def _resume_generation(dormant: Dormant, start: GenerationStart, commit: GenerationCommit) -> bool:
+    return _subject(dormant, start) and start.relation == "resumed" and _commits_start(start, commit)
+
+
+def _superseding_generation(start: GenerationStart, commit: GenerationCommit) -> bool:
+    return start.relation in {"confirmed", "superseded"} and _commits_start(start, commit)
+
+
+def _commits_stop(stop: GenerationStop, commit: GenerationCommit) -> bool:
+    return commit.boundary == "stop" and commit.generation == stop.generation
+
+
+def _stops_active_generation(stop: GenerationStop, commit: GenerationCommit) -> bool:
+    return stop.active and _commits_stop(stop, commit)
+
+
+def _stops_dormant_generation(dormant: Dormant, stop: GenerationStop, commit: GenerationCommit) -> bool:
+    return (
+        not stop.active
+        and stop.status in {"merged", "closed"}
+        and _subject(dormant, stop)
+        and dormant.last_epoch == stop.last_epoch
+        and _commits_stop(stop, commit)
+    )
+
+
+def _stops_seed_generation(seed: Seed, stop: GenerationStop, commit: GenerationCommit) -> bool:
+    return not stop.active and stop.last_epoch == 0 and _subject(seed, stop) and _commits_stop(stop, commit)
+
+
 def _subject(prior, admission):
     return (prior.repository_id, prior.pr_number) == (admission.repository_id, admission.pr_number)
 
@@ -1233,21 +1271,13 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         p.readiness_publication_state(ReadinessPublicationState),
     )
     generation = net.s.generation
-    for name, prior, prior_type, relation in (
-        ("initial", p.seed(Seed), Seed, "new"),
-        ("resume", p.dormant(Dormant), Dormant, "resumed"),
+    for name, prior, guard in (
+        ("initial", p.seed(Seed), _initial_generation),
+        ("resume", p.dormant(Dormant), _resume_generation),
     ):
         transition = getattr(generation.t, name)(
             handler=petri_handler(_begin_generation),
-            guards=_typed_guard(
-                (prior_type, GenerationStart, GenerationCommit),
-                lambda control, start, commit, expected=relation: (
-                    _subject(control, start)
-                    and start.relation == expected
-                    and commit.boundary == "start"
-                    and commit.generation == start.generation
-                ),
-            ),
+            guards=typed_guard(guard, converter=PydanticPayloadConverter()),
         )
         (
             (prior, p.generation_start, p.generation_commit)
@@ -1263,14 +1293,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (p.generation_start, p.generation_commit)
         >> generation.t.supersede(
             handler=petri_handler(_begin_generation),
-            guards=_typed_guard(
-                (GenerationStart, GenerationCommit),
-                lambda start, commit: (
-                    start.relation in {"confirmed", "superseded"}
-                    and commit.boundary == "start"
-                    and commit.generation == start.generation
-                ),
-            ),
+            guards=typed_guard(_superseding_generation, converter=PydanticPayloadConverter()),
         )
         >> (*cohort, work.p.review, work.p.actions_discovery, reminder.p.timer)
     )
@@ -1278,10 +1301,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (p.generation_stop, p.generation_commit)
         >> generation.t.stop_active(
             handler=petri_handler(_route_generation_stop),
-            guards=_typed_guard(
-                (GenerationStop, GenerationCommit),
-                lambda stop, commit: stop.active and commit.boundary == "stop" and commit.generation == stop.generation,
-            ),
+            guards=typed_guard(_stops_active_generation, converter=PydanticPayloadConverter()),
         )
         >> (p.dormant, p.terminal)
     )
@@ -1289,17 +1309,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (p.dormant, p.generation_stop, p.generation_commit)
         >> generation.t.stop_dormant(
             handler=petri_handler(_route_generation_stop),
-            guards=_typed_guard(
-                (Dormant, GenerationStop, GenerationCommit),
-                lambda dormant, stop, commit: (
-                    not stop.active
-                    and stop.status in {"merged", "closed"}
-                    and _subject(dormant, stop)
-                    and dormant.last_epoch == stop.last_epoch
-                    and commit.boundary == "stop"
-                    and commit.generation == stop.generation
-                ),
-            ),
+            guards=typed_guard(_stops_dormant_generation, converter=PydanticPayloadConverter()),
         )
         >> p.terminal
     )
@@ -1307,16 +1317,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (p.seed, p.generation_stop, p.generation_commit)
         >> generation.t.stop_seed(
             handler=petri_handler(_route_generation_stop),
-            guards=_typed_guard(
-                (Seed, GenerationStop, GenerationCommit),
-                lambda seed, stop, commit: (
-                    not stop.active
-                    and stop.last_epoch == 0
-                    and _subject(seed, stop)
-                    and commit.boundary == "stop"
-                    and commit.generation == stop.generation
-                ),
-            ),
+            guards=typed_guard(_stops_seed_generation, converter=PydanticPayloadConverter()),
         )
         >> (p.dormant, p.terminal)
     )

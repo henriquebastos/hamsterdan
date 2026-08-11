@@ -538,6 +538,20 @@ result establishes the typed carrier needed for future executable correlation
 evidence; it does not turn the manual 45/48 decomposition into a theorem or
 approve a `MatchSpec` language.
 
+### Lifecycle predicates become explicit without a lifecycle grammar
+
+RS-017 applies that carrier to the six generation boundaries. Initial, resumed,
+and superseding births and active, dormant, and seed stops previously embedded
+their authority in captured untyped lambdas. They now have named exact typed
+predicates, with commit/start and commit/stop matching factored as visible
+domain atoms.
+
+This is intentionally not promotion of the experimental `GenerationBirth` or
+`GenerationStopRoute` families. The production arcs still show cohort creation
+and distinct stop routing; only predicate binding and call-stack naming changed.
+It demonstrates that useful correlation atoms can become explicit ordinary
+Python rules before—and independently of—any declared correlation language.
+
 ## Open questions
 
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —

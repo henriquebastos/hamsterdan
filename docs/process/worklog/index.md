@@ -49,3 +49,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-11 — Typed acceptance expressed directly](entries/2026-08-11T2359Z-typed-acceptance-expressed-directly.md)
 - [2026-08-11 — Conversation join expressed directly](entries/2026-08-11T2359Z-conversation-join-expressed-directly.md)
 - [2026-08-11 — Strict typed guards adopted](entries/2026-08-11T2359Z-strict-typed-guards-adopted.md)
+- [2026-08-11 — Lifecycle guards named](entries/2026-08-11T2359Z-lifecycle-guards-named.md)

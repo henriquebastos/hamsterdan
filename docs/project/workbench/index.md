@@ -25,3 +25,4 @@ None.
 - [RS-014 — Express typed acceptance directly](rs-014-express-typed-acceptance-directly.md)
 - [RS-015 — Express the conversation join directly](rs-015-express-conversation-join-directly.md)
 - [RS-016 — Adopt strict typed guards](rs-016-adopt-strict-typed-guards.md)
+- [RS-017 — Name lifecycle guards](rs-017-name-lifecycle-guards.md)
