@@ -155,6 +155,8 @@ class PrReadinessApplication:
         base_current = self.authority.base_current(pull)
         if self.host is None:
             self.host = self._open_host()
+        elif self.host.snapshot is None and self.host.place("dormant") and self.host.generation_scope is None:
+            self.host.open_generation()
         target_epoch = self._target_epoch(pull.head)
         admission = Admission(
             self.authority.repository,
@@ -351,7 +353,7 @@ class PrReadinessApplication:
 
     def _deliver(self, source: str, value, identity: str) -> None:
         assert self.host is not None
-        self.host.deliver(source, value, identity)
+        self.host.deliver(source, value, identity, scope=self.host.generation_scope)
         self.host.drain()
 
     def projection(self, provider_state: str = "unknown") -> dict[str, object]:

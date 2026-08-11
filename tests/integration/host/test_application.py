@@ -264,6 +264,25 @@ def test_draft_ready_dormant_and_same_head_resume(tmp_path: Path) -> None:
     subject.close()
 
 
+def test_active_generation_scope_and_activity_provenance_survive_restart(tmp_path: Path) -> None:
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    first = application(tmp_path, authority, runner)
+
+    first.reconcile("ready")
+
+    assert first.host is not None
+    scope = first.host.generation_scope
+    assert scope is not None and (scope.name, scope.generation) == ("readiness-generation", 1)
+    requests = [record for record in first.host.engine.records if isinstance(record, ActivityRequested)]
+    assert requests and all(record.scope == scope for record in requests)
+    first.close()
+
+    second = application(tmp_path, authority, Runner())
+    assert second.host is not None and second.host.generation_scope == scope
+    second.close()
+
+
 def test_new_head_and_closed_terminal_absorb_late_poll(tmp_path: Path) -> None:
     authority, runner = Authority(), Runner()
     ready(authority)

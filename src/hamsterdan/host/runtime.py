@@ -13,8 +13,16 @@ from petrus.impetus.binding import DerivedActivityHandler
 from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested, FiringFailed
 from petrus.impetus.history_store import JsonlHistoryStore
 from petrus.impetus.petrinet import Binding, Marking, NetPath, Token
+from petrus.impetus.scope import LifecycleScope
 from petrus.motus.activity import ActivityFailure, ActivityInvocation, ExecutionPolicy
-from petrus.motus.dispatch import Dispatch, InlineDispatch, LocalDispatch
+from petrus.motus.dispatch import (
+    CancellableDispatch,
+    CancellationDisposition,
+    CancellationInstruction,
+    Dispatch,
+    InlineDispatch,
+    LocalDispatch,
+)
 
 from hamsterdan.contracts.readiness import (
     ActionsState,
@@ -36,6 +44,7 @@ from hamsterdan.readiness.net import ACTIVITY_TRANSITIONS, build_net
 from .activities import PrReadinessActivities, StaleAuthorityError, activity_definitions
 
 _DURABLE_ACTIVITIES = frozenset({"conversation_publish", "dashboard_publish", "readiness_publish"})
+_GENERATION_SCOPE = "readiness-generation"
 _PUBLICATION_POLICY = ExecutionPolicy(
     attempts=3, initial_interval=5, coefficient=2, max_interval=10, jitter=0, schedule_to_close=60
 )
@@ -54,6 +63,12 @@ class CompositeDispatch:
 
     def collect(self) -> Sequence[tuple[int, object]]:
         return (*self.inline.collect(), *self.durable.collect())
+
+    def cancel(self, instruction: CancellationInstruction) -> CancellationDisposition:
+        target = self.durable if instruction.invocation.activity in _DURABLE_ACTIVITIES else self.inline
+        if not isinstance(target, CancellableDispatch):
+            raise TypeError("scope-managed Activity target does not support cancellation")
+        return target.cancel(instruction)
 
 
 @dataclass(frozen=True)
@@ -343,6 +358,7 @@ class PrReadinessHost:
                 activities=activities,
                 marking=marking,
             )
+            engine.open_scope(_GENERATION_SCOPE)
         lease.bind(engine)
         return cls(root, engine, lease, operations, load, agent_settle)
 
@@ -354,12 +370,31 @@ class PrReadinessHost:
     def control(self) -> ReadinessSnapshot | None:
         return self.lease.control()
 
+    @property
+    def generation_scope(self) -> LifecycleScope | None:
+        return self.engine.active_scopes.get(_GENERATION_SCOPE)
+
+    def open_generation(self) -> LifecycleScope:
+        return self.engine.open_scope(_GENERATION_SCOPE)
+
+    def reset_generation(self) -> LifecycleScope:
+        scope = self.generation_scope
+        if scope is None:
+            raise RuntimeError("readiness generation is not active")
+        return self.engine.reset_scope(scope)
+
+    def close_generation(self) -> None:
+        scope = self.generation_scope
+        if scope is None:
+            raise RuntimeError("readiness generation is not active")
+        self.engine.close_scope(scope)
+
     def place(self, path: str) -> tuple[dict, ...]:
         return tuple(token.data for token in self.engine.marking.place(NetPath(path)))
 
-    def deliver(self, source: str, value, identity: str):
+    def deliver(self, source: str, value, identity: str, *, scope: LifecycleScope | str | None = None):
         token = Token(type(value).__name__, (value).dump())
-        return self.engine.deliver(source, token, identity=identity)
+        return self.engine.deliver(source, token, identity=identity, scope=scope)
 
     def drain(self, limit: int = 500) -> DriveOutcome:
         self._settle_agent_routes()
