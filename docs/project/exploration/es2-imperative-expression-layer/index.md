@@ -241,13 +241,34 @@ Findings:
    vocabulary items: `activity_bridge`, `authorized_effect`,
    `retired_result`, `MutationAcceptance`, `Authorization`.
 
-Next slices, in rising design risk: observation entries and the intent
-acceptances (`accept_finding_intent`/`accept_reminder_intent`); the
-conversation fan-out (`start_conversation`, `unpack_intents`); the
-recovery family (`recover_publication.*`, `retire.recovery_basis`) with
-its cross-owner read arcs; then the genuinely open cases — snapshot
-relational joins (`request_dashboard`, `authorize_readiness` reading the
-cohort) and the generation-boundary cohort creation.
+8. Intent routing and recovery joined the grammar (commit `35a955c`).
+   `FanOut` (unpack_intents; the handler owns routing), `IntentAcceptance`
+   (each owner names the intent kinds it may fold), and
+   `PublicationRecovery` (per-target replay; recoverability is a
+   three-owner decision, so cross-owner read arcs stay explicit).
+   `Retirement` generalized to declarative `reads`, absorbing the basis
+   retirements alongside the operation family. Coverage: 38 of 69 across
+   eight vocabulary items; guard grids prove kind splitting and target
+   dispatch identical.
+
+The remaining 31 transitions fall into four groups:
+
+1. Simple owner accepts (`accept_actions`, `accept_human`,
+   `accept_review`, `accept_finding`, `accept_reminder`,
+   `retire.actions_basis`) — likely existing/small items.
+2. Observation entries (`verified_admission`, `actions_observation`,
+   `conversation_observation`, `human_observation`,
+   `begin/end/commit_generation`).
+3. Generation lifecycle and admission (`generation.*`,
+   `refresh_admission`, `refresh_basis`, `rearm`,
+   `retire.*_admission`) — the cohort creation family.
+4. Snapshot joins (`request_dashboard`, `authorize_readiness`,
+   `start_conversation`, `reminder_due`, `retry_review`) — the
+   relational-read open question.
+
+Groups 1–2 look high-confidence; groups 3–4 are where vocabulary shape
+choices start dictating the eventual Petrus grammar and deserve Navigator
+judgment before committing to a design.
 
 ## Open questions
 
