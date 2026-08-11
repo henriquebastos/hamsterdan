@@ -99,3 +99,31 @@ modules, durable capability containers, or exactly-once side-effect claims.
 - Implicit restoration of consumed inputs.
 - Automatic retry of terminally blocked logical operations.
 - Merging the disposable Lane 3 implementation.
+
+## Current Hamsterdan preparation
+
+The current 40-place, 138-transition, 412-arc Net contains 91 retirement
+transitions. Fresh classification against production `main` identifies:
+
+| Retirement responsibility | Count | Scope disposition |
+| --- | ---: | --- |
+| Dormant/terminal transient absorption | 56 | Replace after exact scoped queue/result proof |
+| Stale-generation queued work, basis, and timer | 15 | Replace after scoped occurrence proof |
+| Stale external ingress | 1 | Replace only after scoped ingress provenance proof |
+| Same-generation operation ownership | 8 | Retain |
+| Invalid/completed basis routing | 4 | Retain |
+| Admission and lifecycle ingress | 7 | Retain or route through explicit ingress disposition |
+
+The conservative current candidate is therefore 71 retirement transitions,
+rising to 72 only if closed/uncertain ingress semantics are proven in production.
+This is a hypothesis to validate, not a target to force. Same-generation
+operation retirement remains mandatory because lifecycle generation is not
+business operation identity.
+
+Explicit recovery will authorize a new Engine occurrence while retaining the
+same provider-side operation/idempotency identity. Petrus Local Dispatch keys
+custody by `(instance, occurrence)`, so a new occurrence may intentionally reuse
+that identity; the Activity then performs lookup-first reconciliation. The
+remaining Hamsterdan design must preserve or reconstruct the original desired
+payload—especially conversation reply text—without treating History scanning as
+hidden Net state or restoring automatic retries.
