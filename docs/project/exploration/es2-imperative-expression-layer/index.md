@@ -367,6 +367,18 @@ Findings:
     the birth guards compare one exact relation where the family declares
     an admitted set. Behavioral grids prove all judgments identical.
 
+11. RS-014 absorption (commit `ac54263`). The second `main` merge was the
+    first to force vocabulary change: production replaced six binding-style
+    acceptance handlers with `@direct` typed folds and deleted the
+    `_fold_owned` seam the prototype reused. The families absorbed it as a
+    carrier change only — `OwnedEffect` and `MutationAcceptance` now hold
+    the direct `HandlerSpec` instead of a fold callable; no fragment shape,
+    guard, or arc changed. Handler comparisons became stronger: lowered
+    derived transforms compare by their full typed plan (inputs, outputs,
+    colors, result type) rather than by synthetic-binding calls. This is
+    the open question about surviving the direct-acceptance change without
+    application-private binding helpers answered in the affirmative.
+
 The remaining 4 transitions are the relational snapshot decisions
 (`request_dashboard`, `authorize_readiness`, `start_conversation`,
 `reminder_due`): each reads a broad cohort snapshot and turns one owner,
@@ -376,8 +388,6 @@ judgment before a design is committed.
 
 ## Open questions
 
-- Can the emerging fragment families survive the direct-acceptance
-  production change without depending on application-private binding helpers?
 - Do the four snapshot decisions deserve a named family (explicit `reads`
   over a decision fragment), first-class Petrus snapshot/cohort joins, or
   hand-written declarations — without hiding workflow decisions?
