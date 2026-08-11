@@ -56,7 +56,7 @@ this series as prior art.
 | [AX1](ax1-minimal-ast/index.md) | Minimal workflow AST (Activity/Sequence/Parallel) | Completed | Promising; continue |
 | [AX2](ax2-lower-sequence/index.md) | Lowering Activity and Sequence to `Net` | Completed | Promising; continue |
 | [AX3](ax3-typed-ports/index.md) | Typed activities, ports, basic inference | Completed | Promising; continue |
-| AX4 | Parallel split, execution, join | Planned | — |
+| [AX4](ax4-parallel-join/index.md) | Parallel split, execution, join | Completed | Promising; continue |
 | AX5 | Branching by output type | Planned | — |
 | AX6 | Guard-based branching, predicate AST → CEL | Planned | — |
 | AX7 | Hybrid type + guard routing | Planned | — |

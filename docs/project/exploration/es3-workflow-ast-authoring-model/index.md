@@ -103,3 +103,16 @@ All records and spike code live inside this directory; production
   ~60-line place-bound port handler above the runtime — named ports need
   no Petrus change. Sink probe recorded as ledger SP-2. Fourteen tests
   pass.
+- [AX4 — Parallel split, execution, join](experiments/ax4-parallel-join/index.md)
+  completed 2026-08-11 — Promising; continue. The lowering contract
+  generalizes to place sets; the split is an explicit `passthrough`
+  transition and the join is the downstream multi-input activity's own
+  transition — no hidden aggregator. Key findings: concurrency is
+  driving-policy territory (`choose_conservative` serializes,
+  `choose_throughput` parallelizes) so the authoring layer needs no
+  concurrency syntax; terminal branch failure halts loud, poisons the
+  Engine, and resumes via `Engine.load` with the sibling's result
+  durably parked; a `-> None` branch terminates but cannot feed a join;
+  and the cross-case join mispairing hazard was *proven* by crossed
+  completions (ledger SP-3) — instance-per-case discipline, not types,
+  provides correlation. Twelve tests pass.

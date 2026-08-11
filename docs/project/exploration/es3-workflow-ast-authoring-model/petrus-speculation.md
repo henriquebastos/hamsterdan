@@ -56,3 +56,27 @@ result of the explorations.
   ugliness above the runtime.
 - Watch in: AX4 (join branches whose sides produce nothing), AX8
   (retry exits), AX11 (real fragment).
+- AX4 evidence (2026-08-11): a `-> None` branch works as a terminal
+  side-effect branch (the compiler emits the `NoneType` exit place and
+  the workflow ends with multiple exits) but can never feed a join —
+  no activity parameter can consume `NoneType`, so the shape is
+  rejected at lowering. A canonical completion color would make such
+  branches joinable; today they are compile-time errors.
+
+### SP-3 — Case correlation at generated joins
+
+- Raised by: AX4 proof, 2026-08-11.
+- Today: a compiled AND-join is an ordinary multi-input transition;
+  place FIFO pairs whatever tokens arrive first. AX4 seeded two cases
+  into one Engine instance and crossed the completion order: the join
+  paired one case's Reservation with the other case's TaxQuote. Neither
+  nominal colors nor topology carry case identity.
+- Speculation: none needed at the runtime layer for Hamsterdan — the
+  production discipline is one Engine instance per PR, which removes
+  the hazard structurally. If multi-case instances ever matter, the
+  existing `SelectionPolicy` seam (a public Engine extension point)
+  could filter candidate bindings by a correlation key the compiler
+  stamps into token data; that is above-runtime work, not a Petrus
+  change.
+- Watch in: AX8 (loop iterations create repeated tokens in one case —
+  the same pairing question intra-case), AX11 (real fragment).
