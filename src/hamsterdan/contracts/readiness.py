@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import field
 from typing import Any, Literal
 
@@ -18,7 +19,11 @@ class WorkflowModel:
 
     def validated_update(self, **changes: object):
         """Return a fully revalidated update rather than an unchecked model copy."""
-        return type(self)(**(self.dump() | changes))
+        payload = self.dump() | {
+            key: TypeAdapter(type(value)).dump_python(value, mode="json") if isinstance(value, WorkflowModel) else value
+            for key, value in changes.items()
+        }
+        return TypeAdapter(type(self)).validate_json(json.dumps(payload))
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -162,28 +167,40 @@ class MutationState(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
-class PublicationState(WorkflowModel):
+class FindingPublicationState(WorkflowModel):
     findings_published: bool = False
     finding_publication_requested: bool = False
+    finding_operation: str | None = None
+    finding_capability_blocking: bool = False
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ConversationPublicationState(WorkflowModel):
+    conversation_requested: bool = False
+    conversation_operation: str | None = None
+    conversation_recovery: ConversationPublicationRequest | None = None
+    conversation_capability_blocking: bool = False
+    conversation_publication_fault: bool = False
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashboardPublicationState(WorkflowModel):
     dashboard_projection: str = ""
     dashboard_requested_projection: str = ""
     dashboard_requested: bool = False
-    dashboard_operation: str = ""
-    dashboard_recovery: dict = field(default_factory=dict)
+    dashboard_operation: str | None = None
+    dashboard_recovery: DashboardPublicationRequest | None = None
     dashboard_format: int = 0
-    conversation_requested: bool = False
-    conversation_operation: str = ""
-    conversation_recovery: dict = field(default_factory=dict)
-    conversation_capability_blocking: bool = False
-    conversation_publication_fault: bool = False
-    finding_operation: str = ""
     dashboard_capability_blocking: bool = False
     dashboard_publication_fault: bool = False
-    finding_capability_blocking: bool = False
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReadinessPublicationState(WorkflowModel):
     readiness_capability_blocking: bool = False
     readiness_publication_fault: bool = False
-    readiness_operation: str = ""
-    readiness_recovery: dict = field(default_factory=dict)
+    readiness_operation: str | None = None
+    readiness_recovery: ReadinessCommand | None = None
     readiness_requested: bool = False
     announced: bool = False
 
@@ -249,18 +266,16 @@ class ReadinessSnapshot(WorkflowModel):
     dashboard_projection: str = ""
     dashboard_requested_projection: str = ""
     dashboard_requested: bool = False
-    dashboard_operation: str = ""
-    dashboard_recovery: dict = field(default_factory=dict)
+    dashboard_operation: str | None = None
     dashboard_format: int = 0
     conversation_requested: bool = False
-    conversation_operation: str = ""
-    conversation_recovery: dict = field(default_factory=dict)
+    conversation_operation: str | None = None
     conversation_capability_blocking: bool = False
     conversation_publication_fault: bool = False
     review_operation: str = ""
     review_attempts: int = 0
     actions_operation: str = ""
-    finding_operation: str = ""
+    finding_operation: str | None = None
     mutation_operation: str = ""
     reminder_snoozed: bool = False
     reminder_recipient: str = ""
@@ -272,8 +287,7 @@ class ReadinessSnapshot(WorkflowModel):
     finding_capability_blocking: bool = False
     readiness_capability_blocking: bool = False
     readiness_publication_fault: bool = False
-    readiness_operation: str = ""
-    readiness_recovery: dict = field(default_factory=dict)
+    readiness_operation: str | None = None
     readiness_requested: bool = False
     announced: bool = False
     wait: str = "actions, coordinating review, and human review"
@@ -654,7 +668,10 @@ def project_readiness(
     review: ReviewState,
     human: HumanState,
     mutation: MutationState,
-    publication: PublicationState,
+    finding_publication: FindingPublicationState,
+    conversation_publication: ConversationPublicationState,
+    dashboard_publication: DashboardPublicationState,
+    readiness_publication: ReadinessPublicationState,
 ) -> ReadinessSnapshot:
     """Merge independently owned state and derive its current external wait."""
     values: dict[str, Any] = {
@@ -663,12 +680,25 @@ def project_readiness(
         **review.dump(),
         **human.dump(),
         **mutation.dump(),
-        **publication.dump(),
+        **finding_publication.dump(),
+        **{key: value for key, value in conversation_publication.dump().items() if key != "conversation_recovery"},
+        **{key: value for key, value in dashboard_publication.dump().items() if key != "dashboard_recovery"},
+        **{key: value for key, value in readiness_publication.dump().items() if key != "readiness_recovery"},
     }
     values["dashboard_current"] = (
-        dashboard_projection_digest(authority, actions, review, human, mutation, publication)
-        == publication.dashboard_projection
-        and not publication.dashboard_requested
+        dashboard_projection_digest(
+            authority,
+            actions,
+            review,
+            human,
+            mutation,
+            finding_publication,
+            conversation_publication,
+            dashboard_publication,
+            readiness_publication,
+        )
+        == dashboard_publication.dashboard_projection
+        and not dashboard_publication.dashboard_requested
     )
     snapshot = ReadinessSnapshot(**values)
     return snapshot.validated_update(wait=workflow_wait(snapshot))
@@ -680,7 +710,10 @@ def dashboard_projection_digest(
     review: ReviewState,
     human: HumanState,
     mutation: MutationState,
-    publication: PublicationState,
+    finding_publication: FindingPublicationState,
+    conversation_publication: ConversationPublicationState,
+    dashboard_publication: DashboardPublicationState,
+    readiness_publication: ReadinessPublicationState,
 ) -> str:
     """Return the canonical identity of facts rendered by readiness/dashboard views."""
     import hashlib
@@ -699,7 +732,17 @@ def dashboard_projection_digest(
     }
     facts = {
         key: value
-        for concern in (authority, actions, review, human, mutation, publication)
+        for concern in (
+            authority,
+            actions,
+            review,
+            human,
+            mutation,
+            finding_publication,
+            conversation_publication,
+            dashboard_publication,
+            readiness_publication,
+        )
         for key, value in concern.dump().items()
         if key not in excluded
     }

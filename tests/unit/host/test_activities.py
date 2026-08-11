@@ -20,14 +20,17 @@ from hamsterdan.contracts.readiness import (
     ConversationClassificationRequest,
     ConversationObservation,
     ConversationPublicationRequest,
+    ConversationPublicationState,
     DashboardPublicationRequest,
+    DashboardPublicationState,
     FindingPublicationRequest,
     FindingPublicationResult,
+    FindingPublicationState,
     HumanState,
     Intent,
     MutationState,
-    PublicationState,
     ReadinessCommand,
+    ReadinessPublicationState,
     ReadinessSnapshot,
     ReminderPublicationRequest,
     RepairRequest,
@@ -55,12 +58,25 @@ REQUEST_TYPES = {
 
 
 def readiness_snapshot(repository, pr_number, epoch, head, base_head, strict_base=True, base_current=True, **changes):
-    token_types = (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
+    token_types = (
+        Authority,
+        ActionsState,
+        ReviewState,
+        HumanState,
+        MutationState,
+        FindingPublicationState,
+        ConversationPublicationState,
+        DashboardPublicationState,
+        ReadinessPublicationState,
+    )
     values = ReadinessSnapshot(
         repository, pr_number, epoch, head, base_head, strict_base, base_current, **changes
     ).dump()
     return project_readiness(
-        *(value_type(**{name: values[name] for name in value_type.__dataclass_fields__}) for value_type in token_types)
+        *(
+            value_type(**{name: values[name] for name in value_type.__dataclass_fields__ if name in values})
+            for value_type in token_types
+        )
     )
 
 

@@ -833,7 +833,7 @@ def test_conversation_retry_succeeds_under_one_activity_request_and_stable_ident
     matching_writes = [write for write in authority.transport.writes if "clarify" in str(write[2]["body"])]
     control = subject.host.control  # type: ignore[union-attr]
     assert len(matching_writes) == 1
-    assert control is not None and not control.conversation_requested and control.conversation_operation == ""
+    assert control is not None and not control.conversation_requested and control.conversation_operation is None
     subject.close()
     worker.close()
 
@@ -888,7 +888,7 @@ def test_frozen_conversation_terminal_reopens_without_duplicate_provider_call(tm
     control = second.host.control  # type: ignore[union-attr]
     assert len(completed) == 1
     assert len(conversation_requests) == 1 and conversation_requests[0].idempotency == operation
-    assert control is not None and not control.conversation_requested and control.conversation_operation == ""
+    assert control is not None and not control.conversation_requested and control.conversation_operation is None
     cleanup_worker = Worker(
         LocalDispatch(dispatch_path, instance="cleanup-worker").worker(("publication",)),
         {},
@@ -1143,6 +1143,171 @@ def test_production_publication_capability_absence_completes_once_with_typed_blo
     assert control is not None and getattr(control, blocker)
     subject.close()
     worker.close()
+
+
+@pytest.mark.parametrize(
+    ("target", "activity", "marker", "state_place", "recovery_field"),
+    [
+        (
+            "conversation",
+            "conversation_publish",
+            "clarify",
+            "conversation_publication_state",
+            "conversation_recovery",
+        ),
+        (
+            "dashboard",
+            "dashboard_publish",
+            "hamsterdan:dashboard",
+            "dashboard_publication_state",
+            "dashboard_recovery",
+        ),
+        (
+            "readiness",
+            "readiness_publish",
+            "hamsterdan:readiness",
+            "readiness_publication_state",
+            "readiness_recovery",
+        ),
+    ],
+)
+def test_publication_recovery_reconstructs_one_exact_owned_request_after_restart(
+    tmp_path: Path,
+    target: str,
+    activity: str,
+    marker: str,
+    state_place: str,
+    recovery_field: str,
+) -> None:
+    dispatch_path = tmp_path / "dispatch.sqlite3"
+    authority, runner = Authority(), Runner()
+    ready(authority)
+    authority.transport.rejection = (marker, 403)
+    first = application(tmp_path, authority, runner, dispatch_path=dispatch_path)
+    first.reconcile("enqueue")
+    if target == "conversation":
+        first.route_comment(
+            delivery_id="reply",
+            comment_id=53,
+            text="@hamster-dan Please fix it",
+            actor_id=7,
+            actor_login="author",
+            actor_type="User",
+            association="OWNER",
+        )
+    first_worker = Worker(
+        LocalDispatch(dispatch_path, instance="first-worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: first.activity(name),
+    )
+    blocker = f"{target}_capability_blocking"
+    for _ in range(10):
+        first_worker.run_available(limit=20)
+        first.settle()
+        control = first.host.control  # type: ignore[union-attr]
+        if control is not None and getattr(control, blocker):
+            break
+
+    original = next(
+        record
+        for record in first.host.engine.records  # type: ignore[union-attr]
+        if isinstance(record, ActivityRequested) and record.activity == activity
+    )
+    original_operation = original.idempotency
+    first.close()
+    first_worker.close()
+
+    class FixedRecoveryRunner(Runner):
+        def converse(self, repository_url, request, *, is_current=None):
+            if str(request.comment_context.get("text", "")) != "Retry the blocked publication":
+                return super().converse(repository_url, request, is_current=is_current)
+            self.conversations += 1
+            self.requests.append(request)
+            return ConversationResult(
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                [
+                    {
+                        "type": "recover_publication",
+                        "arguments": {"target": target, "operation": original_operation},
+                        "mutation": False,
+                        "explicit": True,
+                        "confidence": 1,
+                    }
+                ],
+            )
+
+    second = application(tmp_path, authority, FixedRecoveryRunner(), dispatch_path=dispatch_path)
+    control = second.host.control  # type: ignore[union-attr]
+    assert control is not None and getattr(control, blocker)
+    state = second.host.place(state_place)[0]  # type: ignore[union-attr]
+    retained = state[recovery_field]
+    assert retained is not None and retained["operation"] == original_operation
+    assert not any(
+        getattr(control, f"{other}_capability_blocking")
+        for other in {"conversation", "dashboard", "readiness"} - {target}
+    )
+
+    second.route_comment(
+        delivery_id=f"recover-{target}",
+        comment_id=54,
+        text="@hamster-dan Retry the blocked publication",
+        actor_id=7,
+        actor_login="author",
+        actor_type="User",
+        association="OWNER",
+    )
+    selected = [
+        record
+        for record in second.host.engine.records  # type: ignore[union-attr]
+        if isinstance(record, ActivityRequested) and record.activity == activity
+    ]
+    assert len(selected) == 2
+    assert selected[1].occurrence != selected[0].occurrence
+    assert selected[1].idempotency == selected[0].idempotency == original_operation
+    assert selected[1].input == selected[0].input
+    control = second.host.control  # type: ignore[union-attr]
+    assert control is not None and not getattr(control, blocker)
+
+    authority.transport.rejection = None
+    second_worker = Worker(
+        LocalDispatch(dispatch_path, instance="second-worker").worker(("publication",)),
+        {},
+        resolver=lambda instance, name: second.activity(name),
+    )
+    for _ in range(10):
+        second_worker.run_available(limit=20)
+        second.settle()
+        state = second.host.place(state_place)[0]  # type: ignore[union-attr]
+        if state[f"{target}_operation"] is None:
+            break
+    state = second.host.place(state_place)[0]  # type: ignore[union-attr]
+    assert state[f"{target}_operation"] is None
+    assert state[recovery_field] is None
+
+    second.route_comment(
+        delivery_id=f"recover-{target}-stale",
+        comment_id=55,
+        text="@hamster-dan Retry the blocked publication",
+        actor_id=7,
+        actor_login="author",
+        actor_type="User",
+        association="OWNER",
+    )
+    assert (
+        sum(
+            isinstance(record, ActivityRequested)
+            and record.activity == activity
+            and record.idempotency == original_operation
+            for record in second.host.engine.records  # type: ignore[union-attr]
+        )
+        == 2
+    )
+    second.close()
+    second_worker.close()
 
 
 @pytest.mark.parametrize(

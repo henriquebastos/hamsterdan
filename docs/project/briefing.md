@@ -17,9 +17,10 @@ first sandbox organization for real-provider validation.
 - GitHub App, agent, and PR-readiness subsystems are siblings communicating only
   through neutral typed contracts and host/Engine dispatch.
 - The readiness Net owns workflow decisions through one centralized `Authority`
-  token and independent Actions, review, human, mutation, and publication
+  token and independent Actions, review, human, mutation, finding-publication,
+  conversation-publication, dashboard-publication, and readiness-publication
   concern tokens. `ReadinessSnapshot` is a relational projection, never a place
-  color or mutable aggregate.
+  color or mutable aggregate; internal recovery requests are not projected.
 - Activities perform external work through exact strict Pydantic request/result
   contracts. Conversation, dashboard, and readiness publication use one
   immutable logical Motus execution with classified bounded retry in shared
@@ -38,7 +39,8 @@ first sandbox organization for real-provider validation.
   authorized recovery intent naming the exact blocked operation. It creates one
   fresh Activity occurrence with the stable provider-effect identity. Unknown
   terminal publication failures become nonrecoverable workflow faults rather
-  than automatic retries or projection wedges.
+  than automatic retries or projection wedges. Each publication channel owns
+  its exact optional operation and typed retained recovery request independently.
 - Explicit authorized mutation instructions execute directly. Ambiguous
   instructions clarify without mutation; there is no confirmation ceremony.
 - GitHub credentials stay host-side and never enter agent territories.

@@ -8,10 +8,13 @@ from hamsterdan.contracts.readiness import (
     ActionsState,
     Authority,
     ChangeResult,
+    ConversationPublicationState,
     DashboardPublicationRequest,
+    DashboardPublicationState,
+    FindingPublicationState,
     HumanState,
     MutationState,
-    PublicationState,
+    ReadinessPublicationState,
     ReadinessSnapshot,
     RepairResult,
     ReviewState,
@@ -73,13 +76,26 @@ def test_converter_rejects_a_different_nominal_result_contract() -> None:
 
 
 def test_readiness_state_tokens_partition_snapshot_fields() -> None:
-    token_types = (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
+    token_types = (
+        Authority,
+        ActionsState,
+        ReviewState,
+        HumanState,
+        MutationState,
+        FindingPublicationState,
+        ConversationPublicationState,
+        DashboardPublicationState,
+        ReadinessPublicationState,
+    )
     field_sets = [set(value_type.__dataclass_fields__) for value_type in token_types]
 
     for index, fields in enumerate(field_sets):
         assert not fields.intersection(*field_sets[index + 1 :]) if field_sets[index + 1 :] else True
     assert all(field_sets[0].isdisjoint(fields) for fields in field_sets[1:])
-    assert set().union(*field_sets, {"dashboard_current", "wait"}) == set(ReadinessSnapshot.__dataclass_fields__)
+    internal = {"conversation_recovery", "dashboard_recovery", "readiness_recovery"}
+    assert set().union(*field_sets, {"dashboard_current", "wait"}) - internal == set(
+        ReadinessSnapshot.__dataclass_fields__
+    )
 
 
 @pytest.mark.parametrize(
@@ -91,7 +107,10 @@ def test_readiness_state_tokens_partition_snapshot_fields() -> None:
             ReviewState(),
             HumanState(),
             MutationState(),
-            PublicationState(),
+            FindingPublicationState(),
+            ConversationPublicationState(),
+            DashboardPublicationState(),
+            ReadinessPublicationState(),
         ),
         (
             Authority("repo", 7, 3, "head-3", "base-2", True, False, "policy", ["test"], 2),
@@ -99,14 +118,18 @@ def test_readiness_state_tokens_partition_snapshot_fields() -> None:
             ReviewState(review="clear", findings=[{"id": "f1", "blocking": False}]),
             HumanState(human_requested=True, human_approved=True, mergeable=True, author="octocat"),
             MutationState(),
-            PublicationState(findings_published=True),
+            FindingPublicationState(findings_published=True),
+            ConversationPublicationState(),
+            DashboardPublicationState(),
+            ReadinessPublicationState(),
         ),
     ],
 )
 def test_concern_tokens_project_to_derived_snapshots(tokens: tuple) -> None:
     projected = project_readiness(*tokens)
 
-    expected = {key: value for token in tokens for key, value in token.dump().items()} | {
+    internal = {"conversation_recovery", "dashboard_recovery", "readiness_recovery"}
+    expected = {key: value for token in tokens for key, value in token.dump().items() if key not in internal} | {
         "dashboard_current": projected.dashboard_current,
         "wait": projected.wait,
     }
@@ -128,7 +151,10 @@ def test_converter_round_trips_readiness_snapshot() -> None:
         ReviewState(),
         HumanState(),
         MutationState(),
-        PublicationState(),
+        FindingPublicationState(),
+        ConversationPublicationState(),
+        DashboardPublicationState(),
+        ReadinessPublicationState(),
     )
 
     encoded = converter.encode(snapshot, ReadinessSnapshot)
@@ -143,7 +169,10 @@ def test_converter_round_trips_immutable_dashboard_request() -> None:
         ReviewState(),
         HumanState(),
         MutationState(),
-        PublicationState(),
+        FindingPublicationState(),
+        ConversationPublicationState(),
+        DashboardPublicationState(),
+        ReadinessPublicationState(),
     )
     request = DashboardPublicationRequest(1, "head", "dashboard:1", "base", "policy", snapshot)
     converter = PydanticPayloadConverter()

@@ -566,6 +566,27 @@ occurrence, retaining stable provider-effect identity for lookup-first
 reconciliation. Unknown terminal failures are nonrecoverable workflow faults.
 Neither path creates an autonomous Petri retry loop.
 
+### Production publication-ownership conclusion
+
+The post-scope reassessment found one remaining false serialization boundary:
+finding, conversation, dashboard, and readiness publication still shared one
+23-field `PublicationState` token. RS-004 replaced it with four concrete strict
+Pydantic tokens. Each result and authorization transition now consumes only its
+owner; exact retained recovery requests are typed and private to workflow state,
+and operation absence is `None` rather than an empty string.
+
+The topology moved from 43 places, 67 transitions, and 266 arcs to 46 places,
+69 transitions, and 309 arcs while retaining 17 retirement transitions. This is
+a clarity gain rather than a regression: three places expose four independent
+owners, two transitions expose three recovery branches instead of one dynamic
+router, and arcs expose genuine relational reads. Restart evidence for every
+recoverable publication channel confirms one fresh occurrence with stable
+provider identity and no stale self-loop.
+
+No new Petrus contract or host infrastructure was needed. This reinforces the
+boundary: Motus owns execution, lifecycle scopes own generation cleanup, each
+business publication owns its state, and the host composes them.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

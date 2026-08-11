@@ -22,11 +22,14 @@ from hamsterdan.contracts.readiness import (
     ConversationObservation,
     ConversationPublicationRequest,
     ConversationPublicationResult,
+    ConversationPublicationState,
     DashboardPublicationRequest,
     DashboardPublicationResult,
+    DashboardPublicationState,
     Dormant,
     FindingPublicationRequest,
     FindingPublicationResult,
+    FindingPublicationState,
     GenerationCommit,
     GenerationStart,
     GenerationStop,
@@ -35,9 +38,9 @@ from hamsterdan.contracts.readiness import (
     Intent,
     IntentBatch,
     MutationState,
-    PublicationState,
     ReadinessCommand,
     ReadinessPublicationResult,
+    ReadinessPublicationState,
     ReadinessSnapshot,
     Reminder,
     ReminderPublicationRequest,
@@ -84,7 +87,10 @@ _TOKEN_TYPES = {
         ReviewState,
         HumanState,
         MutationState,
-        PublicationState,
+        FindingPublicationState,
+        ConversationPublicationState,
+        DashboardPublicationState,
+        ReadinessPublicationState,
         ReadinessSnapshot,
         Dormant,
         Terminal,
@@ -209,8 +215,23 @@ def _current(authority: Authority, value) -> bool:
     )
 
 
-def _snapshot(a, ac, r, h, m, p):
-    return project_readiness(a, ac, r, h, m, p)
+def _snapshot(a, ac, r, h, m, fp, cp, dp, rp):
+    return project_readiness(a, ac, r, h, m, fp, cp, dp, rp)
+
+
+def _snapshot_values(*values):
+    types = (
+        Authority,
+        ActionsState,
+        ReviewState,
+        HumanState,
+        MutationState,
+        FindingPublicationState,
+        ConversationPublicationState,
+        DashboardPublicationState,
+        ReadinessPublicationState,
+    )
+    return _snapshot(*(next(value for value in values if isinstance(value, kind)) for kind in types))
 
 
 def _review_matches(a: Authority, r: ReviewState, value: ReviewResult) -> bool:
@@ -351,8 +372,8 @@ def fold_effect(owner, result):
             return owner.validated_update(conversation_capability_blocking=True)
         return owner.validated_update(
             conversation_requested=False,
-            conversation_operation="",
-            conversation_recovery={},
+            conversation_operation=None,
+            conversation_recovery=None,
             conversation_capability_blocking=False,
             conversation_publication_fault=False,
         )
@@ -392,8 +413,8 @@ def fold_effect(owner, result):
                 dashboard_projection=owner.dashboard_requested_projection,
                 dashboard_requested_projection="",
                 dashboard_requested=False,
-                dashboard_operation="",
-                dashboard_recovery={},
+                dashboard_operation=None,
+                dashboard_recovery=None,
                 dashboard_format=DASHBOARD_FORMAT,
                 dashboard_capability_blocking=False,
                 dashboard_publication_fault=False,
@@ -409,8 +430,8 @@ def fold_effect(owner, result):
         if result.ok:
             return owner.validated_update(
                 readiness_requested=False,
-                readiness_operation="",
-                readiness_recovery={},
+                readiness_operation=None,
+                readiness_recovery=None,
                 announced=True,
                 readiness_capability_blocking=False,
                 readiness_publication_fault=False,
@@ -419,7 +440,9 @@ def fold_effect(owner, result):
 
 
 @direct
-def fold_conversation_effect(p: PublicationState, r: ConversationPublicationResult) -> PublicationState:
+def fold_conversation_effect(
+    p: ConversationPublicationState, r: ConversationPublicationResult
+) -> ConversationPublicationState:
     return fold_effect(p, r)
 
 
@@ -434,12 +457,12 @@ def fold_change_effect(m: MutationState, r: ChangeResult) -> MutationState:
 
 
 @direct
-def fold_dashboard_effect(p: PublicationState, r: DashboardPublicationResult) -> PublicationState:
+def fold_dashboard_effect(p: DashboardPublicationState, r: DashboardPublicationResult) -> DashboardPublicationState:
     return fold_effect(p, r)
 
 
 @direct
-def fold_readiness_effect(p: PublicationState, r: ReadinessPublicationResult) -> PublicationState:
+def fold_readiness_effect(p: ReadinessPublicationState, r: ReadinessPublicationResult) -> ReadinessPublicationState:
     return fold_effect(p, r)
 
 
@@ -504,7 +527,10 @@ def _begin_generation(binding, outputs):
             repair_used=start.repair_used,
             repair_fingerprint=start.repair_fingerprint,
         ),
-        "publication_state": PublicationState(),
+        "finding_publication_state": FindingPublicationState(),
+        "conversation_publication_state": ConversationPublicationState(),
+        "dashboard_publication_state": DashboardPublicationState(),
+        "readiness_publication_state": ReadinessPublicationState(),
         "work.review": review_work,
         "work.actions_discovery": actions_work,
         "reminder.timer": Reminder(start.epoch, start.head),
@@ -598,7 +624,17 @@ def _retry_review(binding, outputs):
 
 
 def _refresh_basis(binding, outputs):
-    a, ac, r, p, admission = _values(binding, Authority, ActionsState, ReviewState, PublicationState, Admission)
+    a, ac, r, fp, cp, dp, rp, admission = _values(
+        binding,
+        Authority,
+        ActionsState,
+        ReviewState,
+        FindingPublicationState,
+        ConversationPublicationState,
+        DashboardPublicationState,
+        ReadinessPublicationState,
+        Admission,
+    )
     a = a.validated_update(
         base_head=admission.base_head,
         strict_base=admission.strict_base,
@@ -611,25 +647,31 @@ def _refresh_basis(binding, outputs):
     )
     ac = ActionsState()
     r = r.validated_update(review="pending", review_attempts=1)
-    p = p.validated_update(
+    fp = fp.validated_update(
         findings_published=False,
         finding_publication_requested=False,
-        finding_operation="",
+        finding_operation=None,
         finding_capability_blocking=False,
-        dashboard_requested_projection="",
-        dashboard_requested=False,
-        dashboard_operation="",
-        dashboard_recovery={},
-        dashboard_capability_blocking=False,
-        dashboard_publication_fault=False,
+    )
+    cp = cp.validated_update(
         conversation_requested=False,
-        conversation_operation="",
-        conversation_recovery={},
+        conversation_operation=None,
+        conversation_recovery=None,
         conversation_capability_blocking=False,
         conversation_publication_fault=False,
+    )
+    dp = dp.validated_update(
+        dashboard_requested_projection="",
+        dashboard_requested=False,
+        dashboard_operation=None,
+        dashboard_recovery=None,
+        dashboard_capability_blocking=False,
+        dashboard_publication_fault=False,
+    )
+    rp = rp.validated_update(
         announced=False,
-        readiness_operation="",
-        readiness_recovery={},
+        readiness_operation=None,
+        readiness_recovery=None,
         readiness_requested=False,
         readiness_capability_blocking=False,
         readiness_publication_fault=False,
@@ -673,7 +715,10 @@ def _refresh_basis(binding, outputs):
             a,
             ac.validated_update(actions_operation=aw.operation),
             r.validated_update(review_operation=rw.operation),
-            p,
+            fp,
+            cp,
+            dp,
+            rp,
             rw,
             aw,
         ),
@@ -681,14 +726,14 @@ def _refresh_basis(binding, outputs):
 
 
 def _accept_review(binding, outputs):
-    a, r, p, result = _values(binding, Authority, ReviewState, PublicationState, ReviewResult)
+    a, r, p, result = _values(binding, Authority, ReviewState, FindingPublicationState, ReviewResult)
     r = fold_review.implementation(r, result)
     publishable = [f for f in r.findings if f.get("disposition") in {"new", "still_open"}]
     p = p.validated_update(
         findings_published=not publishable,
         finding_publication_requested=bool(publishable),
     )
-    routed = {"review_state": r, "publication_state": p}
+    routed = {"review_state": r, "finding_publication_state": p}
     if publishable:
         payload = effect_payload(a, {"findings": publishable, "lineage": result.lineage})
         work = FindingPublicationRequest(
@@ -701,12 +746,12 @@ def _accept_review(binding, outputs):
             lineage=result.lineage,
         )
         p = p.validated_update(finding_operation=work.operation)
-        routed.update({"publication_state": p, "work.finding": work})
+        routed.update({"finding_publication_state": p, "work.finding": work})
     return _route(outputs, routed)
 
 
 def _finding_effect(binding, outputs):
-    r, p, result = _values(binding, ReviewState, PublicationState, FindingPublicationResult)
+    r, p, result = _values(binding, ReviewState, FindingPublicationState, FindingPublicationResult)
     if result.ok:
         refs = {x.get("finding_id"): x.get("url", "") for x in result.references}
         r = r.validated_update(
@@ -715,7 +760,7 @@ def _finding_effect(binding, outputs):
         p = p.validated_update(
             findings_published=True,
             finding_publication_requested=False,
-            finding_operation="",
+            finding_operation=None,
             finding_capability_blocking=False,
         )
     elif not result.capability_available:
@@ -864,7 +909,7 @@ def _replyable(a, p, value):
 
 
 def _authorize_reply(binding, outputs):
-    a, p, value = _values(binding, Authority, PublicationState, Intent)
+    a, p, value = _values(binding, Authority, ConversationPublicationState, Intent)
     payload = effect_payload(a, {"intent": value.dump()})
     work = ConversationPublicationRequest(
         epoch=value.epoch,
@@ -877,70 +922,70 @@ def _authorize_reply(binding, outputs):
     p = p.validated_update(
         conversation_requested=True,
         conversation_operation=work.operation,
-        conversation_recovery=work.dump(),
+        conversation_recovery=work,
         conversation_capability_blocking=False,
     )
-    return _route(outputs, {"publication_state": p, "work.conversation_reply": work})
+    return _route(outputs, {"conversation_publication_state": p, "work.conversation_reply": work})
 
 
-_RECOVERY_TARGETS = {
-    "conversation": (
-        "conversation_capability_blocking",
-        "conversation_operation",
-        "conversation_recovery",
-        ConversationPublicationRequest,
-        "work.conversation_reply",
-    ),
-    "dashboard": (
-        "dashboard_capability_blocking",
-        "dashboard_operation",
-        "dashboard_recovery",
-        DashboardPublicationRequest,
-        "work.dashboard",
-    ),
-    "readiness": (
-        "readiness_capability_blocking",
-        "readiness_operation",
-        "readiness_recovery",
-        ReadinessCommand,
-        "command.readiness",
-    ),
-}
-
-
-def _recoverable_publication(a: Authority, p: PublicationState, value: Intent) -> bool:
+def _recoverable_publication(
+    a: Authority,
+    cp: ConversationPublicationState,
+    dp: DashboardPublicationState,
+    rp: ReadinessPublicationState,
+    value: Intent,
+) -> bool:
     target = value.arguments.get("target")
     operation = value.arguments.get("operation")
     if not (_current(a, value) and value.authorized and value.kind == "recover_publication"):
         return False
-    if not isinstance(target, str) or not isinstance(operation, str) or target not in _RECOVERY_TARGETS:
+    if not isinstance(target, str) or not isinstance(operation, str):
         return False
-    blocker, operation_field, recovery_field, _, _ = _RECOVERY_TARGETS[target]
-    recovery = getattr(p, recovery_field)
+    if target == "conversation":
+        blocked, owned, recovery = (
+            cp.conversation_capability_blocking,
+            cp.conversation_operation,
+            cp.conversation_recovery,
+        )
+    elif target == "dashboard":
+        blocked, owned, recovery = dp.dashboard_capability_blocking, dp.dashboard_operation, dp.dashboard_recovery
+    elif target == "readiness":
+        blocked, owned, recovery = rp.readiness_capability_blocking, rp.readiness_operation, rp.readiness_recovery
+    else:
+        return False
     return (
-        getattr(p, blocker)
-        and getattr(p, operation_field) == operation
-        and isinstance(recovery, dict)
-        and recovery.get("operation") == operation
+        blocked
+        and owned == operation
+        and recovery is not None
+        and recovery.operation == operation
         and (
-            recovery.get("epoch"),
-            recovery.get("head"),
-            recovery.get("base_head"),
-            recovery.get("policy_digest"),
+            recovery.epoch,
+            recovery.head,
+            recovery.base_head,
+            recovery.policy_digest,
         )
         == (a.epoch, a.head, a.base_head, a.policy_digest)
     )
 
 
 def _recover_publication(binding, outputs):
-    _a, publication, value = _values(binding, Authority, PublicationState, Intent)
-    target = value.arguments["target"]
-    blocker, _, recovery_field, request_type, output = _RECOVERY_TARGETS[target]
-    request = _TOKEN_ADAPTERS[request_type.__name__].validate_json(
-        json.dumps(getattr(publication, recovery_field), sort_keys=True, separators=(",", ":"))
+    cp, dp, rp, value = _values(
+        binding, ConversationPublicationState, DashboardPublicationState, ReadinessPublicationState, Intent
     )
-    publication = publication.validated_update(**{blocker: False})
-    return _route(outputs, {"publication_state": publication, output: request})
+    target = value.arguments["target"]
+    if target == "conversation":
+        request = cp.conversation_recovery
+        cp = cp.validated_update(conversation_capability_blocking=False)
+        routed = {"conversation_publication_state": cp, "work.conversation_reply": request}
+    elif target == "dashboard":
+        request = dp.dashboard_recovery
+        dp = dp.validated_update(dashboard_capability_blocking=False)
+        routed = {"dashboard_publication_state": dp, "work.dashboard": request}
+    else:
+        request = rp.readiness_recovery
+        rp = rp.validated_update(readiness_capability_blocking=False)
+        routed = {"readiness_publication_state": rp, "command.readiness": request}
+    return _route(outputs, routed)
 
 
 def conversation_work(
@@ -949,10 +994,13 @@ def conversation_work(
     r: ReviewState,
     h: HumanState,
     m: MutationState,
-    p: PublicationState,
+    fp: FindingPublicationState,
+    cp: ConversationPublicationState,
+    dp: DashboardPublicationState,
+    rp: ReadinessPublicationState,
     value: ConversationObservation,
 ) -> ConversationClassificationRequest:
-    snapshot = _snapshot(a, ac, r, h, m, p)
+    snapshot = _snapshot(a, ac, r, h, m, fp, cp, dp, rp)
     payload = effect_payload(a, {"comment": value.dump(), "control": snapshot.dump()})
     return ConversationClassificationRequest(
         epoch=value.epoch,
@@ -973,7 +1021,10 @@ def _conversation_work(binding, outputs):
         ReviewState,
         HumanState,
         MutationState,
-        PublicationState,
+        FindingPublicationState,
+        ConversationPublicationState,
+        DashboardPublicationState,
+        ReadinessPublicationState,
         ConversationObservation,
     )
     return _put(outputs, (conversation_work(*values),))
@@ -995,11 +1046,20 @@ def _request_dashboard(snapshot: ReadinessSnapshot) -> bool:
 
 
 def _dashboard(binding, outputs):
-    a, ac, r, h, m, p = _values(
-        binding, Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState
+    a, ac, r, h, m, fp, cp, p, rp = _values(
+        binding,
+        Authority,
+        ActionsState,
+        ReviewState,
+        HumanState,
+        MutationState,
+        FindingPublicationState,
+        ConversationPublicationState,
+        DashboardPublicationState,
+        ReadinessPublicationState,
     )
-    before = _snapshot(a, ac, r, h, m, p)
-    projection = dashboard_projection_digest(a, ac, r, h, m, p)
+    before = _snapshot(a, ac, r, h, m, fp, cp, p, rp)
+    projection = dashboard_projection_digest(a, ac, r, h, m, fp, cp, p, rp)
     payload = effect_payload(a, {"control": before.dump(), "projection": projection})
     op = operation("dashboard", a, payload=payload)
     p = p.validated_update(
@@ -1007,35 +1067,44 @@ def _dashboard(binding, outputs):
         dashboard_operation=op,
         dashboard_requested_projection=projection,
     )
-    after = _snapshot(a, ac, r, h, m, p)
+    after = _snapshot(a, ac, r, h, m, fp, cp, p, rp)
     work = DashboardPublicationRequest(
         epoch=a.epoch, head=a.head, operation=op, base_head=a.base_head, policy_digest=a.policy_digest, control=after
     )
-    p = p.validated_update(dashboard_recovery=work.dump())
+    p = p.validated_update(dashboard_recovery=work)
     return _route(
         outputs,
         {
-            "publication_state": p,
+            "dashboard_publication_state": p,
             "work.dashboard": work,
         },
     )
 
 
 def _announce(binding, outputs):
-    a, ac, r, h, m, p = _values(
-        binding, Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState
+    a, ac, r, h, m, fp, cp, dp, p = _values(
+        binding,
+        Authority,
+        ActionsState,
+        ReviewState,
+        HumanState,
+        MutationState,
+        FindingPublicationState,
+        ConversationPublicationState,
+        DashboardPublicationState,
+        ReadinessPublicationState,
     )
-    projection = dashboard_projection_digest(a, ac, r, h, m, p)
+    projection = dashboard_projection_digest(a, ac, r, h, m, fp, cp, dp, p)
     op = operation("readiness", a, payload={"projection": projection})
     p = p.validated_update(readiness_requested=True, readiness_operation=op)
     work = ReadinessCommand(
         epoch=a.epoch, head=a.head, operation=op, base_head=a.base_head, policy_digest=a.policy_digest
     )
-    p = p.validated_update(readiness_recovery=work.dump())
+    p = p.validated_update(readiness_recovery=work)
     return _route(
         outputs,
         {
-            "publication_state": p,
+            "readiness_publication_state": p,
             "command.readiness": work,
         },
     )
@@ -1145,7 +1214,10 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         p.review_state(ReviewState),
         p.human_state(HumanState),
         p.mutation_state(MutationState),
-        p.publication_state(PublicationState),
+        p.finding_publication_state(FindingPublicationState),
+        p.conversation_publication_state(ConversationPublicationState),
+        p.dashboard_publication_state(DashboardPublicationState),
+        p.readiness_publication_state(ReadinessPublicationState),
     )
     generation = net.s.generation
     for name, prior, prior_type, relation in (
@@ -1236,12 +1308,31 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         >> (p.dormant, p.terminal)
     )
     (
-        (p.authority, p.actions_state, p.review_state, p.publication_state, p.admission)
+        (
+            p.authority,
+            p.actions_state,
+            p.review_state,
+            p.finding_publication_state,
+            p.conversation_publication_state,
+            p.dashboard_publication_state,
+            p.readiness_publication_state,
+            p.admission,
+        )
         >> t.refresh_basis(
             handler=petri_handler(_refresh_basis),
-            guards=_guard(lambda a, ac, r, pub, ad: _same(a, ad) and not _same_basis(a, ad)),
+            guards=_typed_guard((Authority, Admission), lambda a, ad: _same(a, ad) and not _same_basis(a, ad)),
         )
-        >> (p.authority, p.actions_state, p.review_state, p.publication_state, work.p.review, work.p.actions_discovery)
+        >> (
+            p.authority,
+            p.actions_state,
+            p.review_state,
+            p.finding_publication_state,
+            p.conversation_publication_state,
+            p.dashboard_publication_state,
+            p.readiness_publication_state,
+            work.p.review,
+            work.p.actions_discovery,
+        )
     )
     refresh = t.refresh_admission(
         handler=petri_handler(_refresh_admission),
@@ -1277,11 +1368,11 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     p.authority >> arc.read() >> accept_review
     (
-        (p.review_state, p.publication_state, p.review_result)
+        (p.review_state, p.finding_publication_state, p.review_result)
         >> accept_review
         >> (
             p.review_state,
-            p.publication_state,
+            p.finding_publication_state,
             work.p.finding,
         )
     )
@@ -1290,11 +1381,11 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     p.authority >> arc.read() >> accept_finding
     (
-        (p.review_state, p.publication_state, p.finding_result)
+        (p.review_state, p.finding_publication_state, p.finding_result)
         >> accept_finding
         >> (
             p.review_state,
-            p.publication_state,
+            p.finding_publication_state,
         )
     )
     authorize_change = t.authorize_change(
@@ -1312,21 +1403,27 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     )
     accept_conversation = t.accept_conversation(
         handler=petri_handler(
-            lambda b, o: _fold_owned(b, o, PublicationState, ConversationPublicationResult, fold_conversation_effect)
+            lambda b, o: _fold_owned(
+                b, o, ConversationPublicationState, ConversationPublicationResult, fold_conversation_effect
+            )
         ),
         guards=_guard(_effect_matches),
     )
     p.authority >> arc.read() >> accept_conversation
-    (p.publication_state, p.conversation_result) >> accept_conversation >> p.publication_state
-    for name, place, result_type, folder in (
+    (p.conversation_publication_state, p.conversation_result) >> accept_conversation >> p.conversation_publication_state
+    for name, owner, owner_type, place, result_type, folder in (
         (
             "dashboard",
+            p.dashboard_publication_state,
+            DashboardPublicationState,
             p.dashboard_result,
             DashboardPublicationResult,
             fold_dashboard_effect,
         ),
         (
             "readiness",
+            p.readiness_publication_state,
+            ReadinessPublicationState,
             p.readiness_result,
             ReadinessPublicationResult,
             fold_readiness_effect,
@@ -1334,14 +1431,14 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     ):
         tr = getattr(t, f"accept_{name}")(
             handler=petri_handler(
-                lambda b, o, result_type=result_type, fold=folder: _fold_owned(
-                    b, o, PublicationState, result_type, fold
+                lambda b, o, owner_type=owner_type, result_type=result_type, fold=folder: _fold_owned(
+                    b, o, owner_type, result_type, fold
                 )
             ),
-            guards=_typed_guard((Authority, PublicationState, result_type), _effect_matches),
+            guards=_typed_guard((Authority, owner_type, result_type), _effect_matches),
         )
         p.authority >> arc.read() >> tr
-        (p.publication_state, place) >> tr >> p.publication_state
+        (owner, place) >> tr >> owner
     accept_reminder = t.accept_reminder(guards=_guard(lambda a, result: _current(a, result)))
     p.authority >> arc.read() >> accept_reminder
     p.reminder_result >> accept_reminder
@@ -1383,7 +1480,9 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
     # disposition, reminder, and reply paths.
     start = t.start_conversation(
         handler=petri_handler(_conversation_work),
-        guards=_guard(lambda a, ac, r, h, m, pub, v: _current(a, v) and v.authorized),
+        guards=_typed_guard(
+            (Authority, ConversationObservation), lambda a, value: _current(a, value) and value.authorized
+        ),
     )
     for place in cohort:
         place >> arc.read() >> start
@@ -1409,66 +1508,103 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (owner, p.intent_result) >> tr >> owner
     authorize_reply = t.authorize_reply(
         handler=petri_handler(_authorize_reply),
-        guards=_typed_guard((Authority, PublicationState, Intent), _replyable),
+        guards=_typed_guard((Authority, ConversationPublicationState, Intent), _replyable),
     )
     p.authority >> arc.read() >> authorize_reply
     (
-        (p.publication_state, p.reply_basis)
+        (p.conversation_publication_state, p.reply_basis)
         >> authorize_reply
         >> (
-            p.publication_state,
+            p.conversation_publication_state,
             work.p.conversation_reply,
         )
     )
-    recover_publication = t.recover_publication(
-        handler=petri_handler(_recover_publication),
-        guards=_typed_guard((Authority, PublicationState, Intent), _recoverable_publication),
+    recovery_owners = (
+        ("conversation", p.conversation_publication_state, work.p.conversation_reply),
+        ("dashboard", p.dashboard_publication_state, work.p.dashboard),
+        ("readiness", p.readiness_publication_state, command.p.readiness),
     )
-    p.authority >> arc.read() >> recover_publication
-    (
-        (p.publication_state, p.recovery_basis)
-        >> recover_publication
-        >> (p.publication_state, work.p.conversation_reply, work.p.dashboard, command.p.readiness)
-    )
+    recovery = net.s.recover_publication
+    for target, owner, exact_work in recovery_owners:
+        recover_publication = getattr(recovery.t, target)(
+            handler=petri_handler(_recover_publication),
+            guards=_typed_guard(
+                (
+                    Authority,
+                    ConversationPublicationState,
+                    DashboardPublicationState,
+                    ReadinessPublicationState,
+                    Intent,
+                ),
+                lambda authority, conversation, dashboard, readiness, value, selected=target: (
+                    value.arguments.get("target") == selected
+                    and _recoverable_publication(authority, conversation, dashboard, readiness, value)
+                ),
+            ),
+        )
+        p.authority >> arc.read() >> recover_publication
+        for concern in (p.conversation_publication_state, p.dashboard_publication_state, p.readiness_publication_state):
+            if concern is not owner:
+                concern >> arc.read() >> recover_publication
+        (owner, p.recovery_basis) >> recover_publication >> (owner, exact_work)
     reject_recovery = retire.t.recovery_basis(
         guards=_typed_guard(
-            (Authority, PublicationState, Intent),
-            lambda authority, publication, value: not _recoverable_publication(authority, publication, value),
+            (
+                Authority,
+                ConversationPublicationState,
+                DashboardPublicationState,
+                ReadinessPublicationState,
+                Intent,
+            ),
+            lambda authority, conversation, dashboard, readiness, value: (
+                not _recoverable_publication(authority, conversation, dashboard, readiness, value)
+            ),
         )
     )
-    (p.authority, p.publication_state) >> arc.read() >> reject_recovery
+    for place in (
+        p.authority,
+        p.conversation_publication_state,
+        p.dashboard_publication_state,
+        p.readiness_publication_state,
+    ):
+        place >> arc.read() >> reject_recovery
     p.recovery_basis >> reject_recovery
     # Full snapshots are relational joins only at projection/gate boundaries.
     dashboard = t.request_dashboard(
         handler=petri_handler(_dashboard),
-        guards=_guard(lambda a, ac, r, h, m, pub: _request_dashboard(_snapshot(a, ac, r, h, m, pub))),
+        guards=_guard(lambda *values: _request_dashboard(_snapshot_values(*values))),
     )
     announce = t.authorize_readiness(
         handler=petri_handler(_announce),
-        guards=_guard(lambda a, ac, r, h, m, pub: ready(_snapshot(a, ac, r, h, m, pub))),
+        guards=_guard(lambda *values: ready(_snapshot_values(*values))),
     )
-    for place in cohort[:-1]:
+    for place in (*cohort[:7], cohort[8]):
         place >> arc.read() >> dashboard
+    for place in cohort[:8]:
         place >> arc.read() >> announce
     (
-        p.publication_state
+        p.dashboard_publication_state
         >> dashboard
         >> (
-            p.publication_state,
+            p.dashboard_publication_state,
             work.p.dashboard,
         )
     )
     (
-        p.publication_state
+        p.readiness_publication_state
         >> announce
         >> (
-            p.publication_state,
+            p.readiness_publication_state,
             command.p.readiness,
         )
     )
     due = t.reminder_due(
         handler=petri_handler(_remind),
-        guards=_guard(lambda a, ac, r, h, m, pub, timer: _reminder_due(_snapshot(a, ac, r, h, m, pub), timer)),
+        guards=_guard(
+            lambda *values: _reminder_due(
+                _snapshot_values(*values), next(value for value in values if isinstance(value, Reminder))
+            )
+        ),
         timers=(Delay(reminder_delay),),
     )
     for place in cohort:
@@ -1486,25 +1622,25 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         (
             "finding_operation",
             p.finding_result,
-            p.publication_state,
+            p.finding_publication_state,
             lambda a, owner, v: not _effect_matches(a, owner, v),
         ),
         (
             "dashboard_operation",
             p.dashboard_result,
-            p.publication_state,
+            p.dashboard_publication_state,
             lambda a, owner, v: not _effect_matches(a, owner, v),
         ),
         (
             "readiness_operation",
             p.readiness_result,
-            p.publication_state,
+            p.readiness_publication_state,
             lambda a, owner, v: not _effect_matches(a, owner, v),
         ),
         (
             "conversation_operation",
             p.conversation_result,
-            p.publication_state,
+            p.conversation_publication_state,
             lambda a, owner, v: not _effect_matches(a, owner, v),
         ),
         ("change_operation", p.change_result, p.mutation_state, lambda a, owner, v: not _effect_matches(a, owner, v)),

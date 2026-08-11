@@ -1,5 +1,6 @@
 """Executable contract tests for the replacement PR-readiness topology."""
 
+import json
 from dataclasses import replace
 from types import SimpleNamespace
 from typing import Literal
@@ -12,7 +13,7 @@ from petrus.impetus.history_store import InMemoryHistoryStore
 from petrus.impetus.petrinet import Marking, NetPath, Token
 from petrus.motus.activity import activity
 from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from hamsterdan.contracts.readiness import (
     ActionsDiscoveryRequest,
@@ -27,10 +28,13 @@ from hamsterdan.contracts.readiness import (
     ConversationObservation,
     ConversationPublicationRequest,
     ConversationPublicationResult,
+    ConversationPublicationState,
     DashboardPublicationRequest,
     DashboardPublicationResult,
+    DashboardPublicationState,
     FindingPublicationRequest,
     FindingPublicationResult,
+    FindingPublicationState,
     GenerationCommit,
     GenerationStart,
     GenerationStop,
@@ -39,9 +43,9 @@ from hamsterdan.contracts.readiness import (
     Intent,
     IntentBatch,
     MutationState,
-    PublicationState,
     ReadinessCommand,
     ReadinessPublicationResult,
+    ReadinessPublicationState,
     ReadinessSnapshot,
     Reminder,
     ReminderPublicationRequest,
@@ -429,18 +433,21 @@ def state(subject: Engine, path: str, kind):
     """Hydrate the singleton token owned by one active concern."""
     found = values(subject, path)
     assert len(found) == 1, (path, found)
-    return kind(**found[0])
+    return TypeAdapter(kind).validate_json(json.dumps(found[0]))
 
 
 def snapshot(subject: Engine) -> ReadinessSnapshot:
-    """Join the six independently owned active concern tokens."""
+    """Join the nine independently owned active concern tokens."""
     return project_readiness(
         state(subject, "authority", Authority),
         state(subject, "actions_state", ActionsState),
         state(subject, "review_state", ReviewState),
         state(subject, "human_state", HumanState),
         state(subject, "mutation_state", MutationState),
-        state(subject, "publication_state", PublicationState),
+        state(subject, "finding_publication_state", FindingPublicationState),
+        state(subject, "conversation_publication_state", ConversationPublicationState),
+        state(subject, "dashboard_publication_state", DashboardPublicationState),
+        state(subject, "readiness_publication_state", ReadinessPublicationState),
     )
 
 
@@ -450,7 +457,10 @@ ACTIVE_CONCERNS = {
     "review_state": ReviewState,
     "human_state": HumanState,
     "mutation_state": MutationState,
-    "publication_state": PublicationState,
+    "finding_publication_state": FindingPublicationState,
+    "conversation_publication_state": ConversationPublicationState,
+    "dashboard_publication_state": DashboardPublicationState,
+    "readiness_publication_state": ReadinessPublicationState,
 }
 
 
@@ -463,16 +473,26 @@ def assert_no_active_cohort(subject: Engine) -> None:
 
 
 def concern_state(**overrides):
-    """Build six concern values from concise legacy-shaped test overrides."""
+    """Build nine concern values from concise snapshot-shaped test overrides."""
     dashboard_current = overrides.pop("dashboard_current", False)
     base = ReadinessSnapshot("repo", 7, 1, "h", "base", True, True).dump() | overrides
     concerns = tuple(
-        kind(**{name: base[name] for name in kind.__dataclass_fields__})
-        for kind in (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
+        kind(**{name: base[name] for name in kind.__dataclass_fields__ if name in base})
+        for kind in (
+            Authority,
+            ActionsState,
+            ReviewState,
+            HumanState,
+            MutationState,
+            FindingPublicationState,
+            ConversationPublicationState,
+            DashboardPublicationState,
+            ReadinessPublicationState,
+        )
     )
     if dashboard_current:
         projection = dashboard_projection_digest(*concerns)
-        concerns = (*concerns[:5], concerns[5].validated_update(dashboard_projection=projection))
+        concerns = (*concerns[:7], concerns[7].validated_update(dashboard_projection=projection), concerns[8])
     return concerns
 
 
@@ -644,28 +664,27 @@ def test_same_head_reconcile_retries_unable_review_twice_then_waits() -> None:
 
 
 def test_legacy_unable_review_without_attempt_count_resumes_at_attempt_two() -> None:
-    authority, _, review_state, _, _, publication = concern_state(head="h1", review="unable")
+    authority, _, review_state, *_ = concern_state(head="h1", review="unable")
     admission = Admission("repo", 7, "h1", "base", True)
 
     assert _retryable_review(authority, review_state, admission)
     outputs = (
         SimpleNamespace(target="authority", color="Authority"),
         SimpleNamespace(target="review_state", color="ReviewState"),
-        SimpleNamespace(target="publication_state", color="PublicationState"),
         SimpleNamespace(target="work.review", color="ReviewRequest"),
     )
     binding = SimpleNamespace(
         read=(),
-        consumed=(("inputs", tuple(map(token, (authority, review_state, publication, admission)))),),
+        consumed=(("inputs", tuple(map(token, (authority, review_state, admission)))),),
     )
     routed = _retry_review(binding, outputs)
 
     assert routed[outputs[1].target][0].data["review_attempts"] == 2
-    assert routed[outputs[3].target][0].data["sequence"] == 2
+    assert routed[outputs[2].target][0].data["sequence"] == 2
 
 
 def test_review_retry_atomically_refreshes_admission_authority() -> None:
-    authority, _, review_state, _, _, publication = concern_state(
+    authority, _, review_state, *_ = concern_state(
         head="h1",
         base_current=False,
         review="unable",
@@ -675,23 +694,22 @@ def test_review_retry_atomically_refreshes_admission_authority() -> None:
     outputs = (
         SimpleNamespace(target="authority", color="Authority"),
         SimpleNamespace(target="review_state", color="ReviewState"),
-        SimpleNamespace(target="publication_state", color="PublicationState"),
         SimpleNamespace(target="work.review", color="ReviewRequest"),
     )
     binding = SimpleNamespace(
         read=(),
-        consumed=(("inputs", tuple(map(token, (authority, review_state, publication, admission)))),),
+        consumed=(("inputs", tuple(map(token, (authority, review_state, admission)))),),
     )
 
     routed = _retry_review(binding, outputs)
 
     changed = routed[outputs[0].target][0].data
     changed_review = routed[outputs[1].target][0].data
-    work = routed[outputs[3].target][0].data
+    work = routed[outputs[2].target][0].data
     assert changed["base_current"] is True
     assert changed_review["review_attempts"] == 2
     assert work["base_current"] is True
-    assert len(routed[outputs[3].target]) == 1
+    assert len(routed[outputs[2].target]) == 1
 
 
 def test_same_head_reconcile_does_not_retry_clear_review_and_new_head_resets_attempts() -> None:
@@ -1074,7 +1092,7 @@ def test_same_head_basis_refresh_retires_stale_conversation_result() -> None:
 
     assert not values(subject, "conversation_result")
     control = snapshot(subject)
-    assert not control.conversation_requested and control.conversation_operation == ""
+    assert not control.conversation_requested and control.conversation_operation is None
 
 
 def test_two_reply_intents_serialize_until_first_success() -> None:
@@ -1153,7 +1171,7 @@ def test_external_actions_failure_is_deduplicated_and_authorizes_one_rerun() -> 
 
 
 def test_actions_basis_cannot_retire_before_a_current_observation_is_folded() -> None:
-    authority, actions, _, _, mutation, _ = concern_state(actions_operation="actions")
+    authority, actions, _, _, mutation, *_ = concern_state(actions_operation="actions")
     failure = ActionsObservation(1, "h", "run", 1, "failure", "fp", operation="actions", observation="new")
     assert _basis_done(authority, actions, mutation, failure) is False
 
@@ -1204,11 +1222,12 @@ def test_failed_repair_spends_the_automatic_budget() -> None:
     )
     assert failed.repair_used is True
     assert failed.repair_fingerprint == "fp"
-    assert workflow_wait(project_readiness(*concerns[:4], failed, concerns[5])) == "repair recovery"
+    changed = (*concerns[:4], failed, *concerns[5:])
+    assert workflow_wait(project_readiness(*changed)) == "repair recovery"
 
 
 def test_terminal_finding_lineage_stays_visible_without_republication() -> None:
-    _, _, review_state, _, _, publication = concern_state(
+    _, _, review_state, _, _, publication, *_ = concern_state(
         epoch=2,
         findings=[{"id": "finding-1", "title": "Old", "blocking": True, "comment_url": "url"}],
     )
@@ -1261,7 +1280,7 @@ def test_rerun_failure_folds_after_the_same_attempt_was_observed_in_progress() -
 
 
 def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cannot_ack() -> None:
-    authority, _, _, _, mutation, _ = concern_state(head="h1", provisional=True)
+    authority, _, _, _, mutation, *_ = concern_state(head="h1", provisional=True)
     intent = Intent(epoch=1, head="h1", kind="change", digest="d", authorized=True, blocking=True, base_head="base")
     assert _mutation(authority, mutation, intent) is False
     requested = make_snapshot(
@@ -1276,14 +1295,16 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
         dashboard_operation="dashboard:1:4",
     )
     stale = effect_result("dashboard", 1, "h1", True, operation="dashboard:1:3")
-    requested_authority, *_, requested_publication = concern_state(**requested.dump())
+    requested_concerns = concern_state(**requested.dump())
+    requested_authority = requested_concerns[0]
+    requested_publication = requested_concerns[7]
     assert _effect_matches(requested_authority, requested_publication, stale) is False
 
     conversation = replace(requested, conversation_requested=True, conversation_operation="conversation:1")
     assert (
         _effect_matches(
             requested_authority,
-            concern_state(**conversation.dump())[5],
+            concern_state(**conversation.dump())[6],
             effect_result("conversation", 1, "h1", True, operation="conversation:stale"),
         )
         is False
@@ -1291,7 +1312,7 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
     assert (
         _effect_matches(
             requested_authority,
-            concern_state(**conversation.dump())[5],
+            concern_state(**conversation.dump())[6],
             effect_result("conversation", 1, "h1", True, operation="conversation:1"),
         )
         is True
@@ -1299,7 +1320,7 @@ def test_provisional_blocks_authorized_change_and_stale_dashboard_operation_cann
     assert (
         _effect_matches(
             requested_authority,
-            concern_state(**replace(conversation, conversation_requested=False, conversation_operation="").dump())[5],
+            concern_state(**replace(conversation, conversation_requested=False, conversation_operation=None).dump())[6],
             effect_result("conversation", 1, "h1", True, operation="conversation:1"),
         )
         is False
@@ -1876,21 +1897,76 @@ def test_activity_topology_delegates_generation_cleanup_without_losing_operation
     assert not any("_result" in name or "_work_" in name for name in retirement_names)
     assert "retire.stale_dashboard_result" not in retirement_names
     assert len(retirement_names) == 17
-    assert (len(net.places), len(net.transitions), len(net.arcs)) == (43, 67, 266)
+    assert (len(net.places), len(net.transitions), len(net.arcs)) == (46, 69, 309)
     assert NetPath("reissue_reply") not in net.transitions
     publication_paths = {str(path) for path in (*net.places, *net.transitions) if str(path).startswith("publication.")}
     assert not any(
         any(part in path for part in ("lease", "retry", "due", "reissue", "mature")) for path in publication_paths
     )
-    for name in ("dashboard", "readiness"):
+    publication_owners = {
+        "conversation": "conversation_publication_state",
+        "dashboard": "dashboard_publication_state",
+        "finding": "finding_publication_state",
+        "readiness": "readiness_publication_state",
+    }
+    for name in ("conversation", "dashboard", "readiness"):
         accept = NetPath(f"accept_{name}")
         result = f"{name}_result"
         assert {str(item.source): item.mode.value for item in net.inputs(accept)} == {
             "authority": "read",
-            "publication_state": "consume",
+            publication_owners[name]: "consume",
             result: "consume",
         }
         assert len(net.transitions[accept].timers) == 0
+    assert {str(item.source): item.mode.value for item in net.inputs(NetPath("accept_finding"))} == {
+        "authority": "read",
+        "review_state": "consume",
+        "finding_publication_state": "consume",
+        "finding_result": "consume",
+    }
+    assert {str(item.source): item.mode.value for item in net.inputs(NetPath("authorize_reply"))} == {
+        "authority": "read",
+        "conversation_publication_state": "consume",
+        "reply_basis": "consume",
+    }
+    assert {str(item.target) for item in net.outputs(NetPath("authorize_reply"))} == {
+        "conversation_publication_state",
+        "work.conversation_reply",
+    }
+    snapshot_reads = {
+        "authority",
+        "actions_state",
+        "review_state",
+        "human_state",
+        "mutation_state",
+        "finding_publication_state",
+        "conversation_publication_state",
+        "dashboard_publication_state",
+        "readiness_publication_state",
+    }
+    for transition, owner, work in (
+        ("request_dashboard", "dashboard_publication_state", "work.dashboard"),
+        ("authorize_readiness", "readiness_publication_state", "command.readiness"),
+    ):
+        inputs = {str(item.source): item.mode.value for item in net.inputs(NetPath(transition))}
+        assert set(inputs) == snapshot_reads
+        assert inputs[owner] == "consume"
+        assert all(mode == "read" for place, mode in inputs.items() if place != owner)
+        assert {str(item.target) for item in net.outputs(NetPath(transition))} == {owner, work}
+    recovery_states = {
+        "conversation": ("conversation_publication_state", "work.conversation_reply"),
+        "dashboard": ("dashboard_publication_state", "work.dashboard"),
+        "readiness": ("readiness_publication_state", "command.readiness"),
+    }
+    all_recovery_owners = {owner for owner, _ in recovery_states.values()}
+    for target, (owner, work) in recovery_states.items():
+        transition = NetPath(f"recover_publication.{target}")
+        inputs = {str(item.source): item.mode.value for item in net.inputs(transition)}
+        assert set(inputs) == {"authority", "recovery_basis", *all_recovery_owners}
+        assert inputs["authority"] == "read"
+        assert inputs["recovery_basis"] == inputs[owner] == "consume"
+        assert all(inputs[other] == "read" for other in all_recovery_owners - {owner})
+        assert {str(item.target) for item in net.outputs(transition)} == {owner, work}
 
 
 def test_topology_hydration_strictly_rejects_malformed_dashboard_request() -> None:
@@ -1916,9 +1992,11 @@ def test_mutation_requires_current_authority_basis() -> None:
         base_head="base-1",
         policy_digest="policy-1",
     )
-    authority, _, _, _, mutation, _ = concern_state(head="h1", base_head="base-1", policy_digest="policy-1")
+    authority, _, _, _, mutation, *_ = concern_state(head="h1", base_head="base-1", policy_digest="policy-1")
     assert _mutation(authority, mutation, authorized) is True
-    stale_authority, _, _, _, stale_mutation, _ = concern_state(head="h1", base_head="base-2", policy_digest="policy-2")
+    stale_authority, _, _, _, stale_mutation, *_ = concern_state(
+        head="h1", base_head="base-2", policy_digest="policy-2"
+    )
     assert _mutation(stale_authority, stale_mutation, authorized) is False
 
 
@@ -1953,12 +2031,13 @@ def test_dashboard_capability_denial_is_an_explicit_blocker_not_success() -> Non
         dashboard_operation="dashboard",
     )
     result = effect_result("dashboard", 1, "h1", False, operation="dashboard", capability_available=False)
-    blocked = fold_effect(concerns[5], result)
+    blocked = fold_effect(concerns[7], result)
     assert blocked.dashboard_capability_blocking is True
     assert blocked.dashboard_requested is True
     assert blocked.dashboard_operation == "dashboard"
-    assert project_readiness(*concerns[:5], blocked).dashboard_current is False
-    assert workflow_wait(project_readiness(*concerns[:5], blocked)) == "dashboard update capability"
+    changed = (*concerns[:7], blocked, concerns[8])
+    assert project_readiness(*changed).dashboard_current is False
+    assert workflow_wait(project_readiness(*changed)) == "dashboard update capability"
 
 
 @pytest.mark.parametrize(
@@ -1977,13 +2056,13 @@ def test_concern_change_stales_dashboard_without_changing_publication_bytes(inde
         mergeable=True,
         dashboard_current=True,
     )
-    publication_bytes = concerns[5].dump()
+    publication_bytes = concerns[7].dump()
     changed_concerns = list(concerns)
     changed_concerns[index] = changed
 
     assert project_readiness(*concerns).dashboard_current is True
     assert project_readiness(*changed_concerns).dashboard_current is False
-    assert changed_concerns[5].dump() == publication_bytes
+    assert changed_concerns[7].dump() == publication_bytes
 
 
 def test_human_observation_lineage_does_not_change_dashboard_projection() -> None:
@@ -2007,12 +2086,12 @@ def test_readiness_capability_denial_relationally_stales_its_ready_dashboard() -
     )
     result = effect_result("readiness", 1, "h1", False, operation="readiness", capability_available=False)
 
-    blocked = fold_effect(concerns[5], result)
+    blocked = fold_effect(concerns[8], result)
 
-    assert blocked.dashboard_requested is False
     assert blocked.readiness_capability_blocking is True
-    assert project_readiness(*concerns[:5], blocked).dashboard_current is False
-    assert workflow_wait(project_readiness(*concerns[:5], blocked)) == "readiness publication capability"
+    changed = (*concerns[:8], blocked)
+    assert project_readiness(*changed).dashboard_current is False
+    assert workflow_wait(project_readiness(*changed)) == "readiness publication capability"
 
 
 def test_capability_available_conversation_terminal_clears_operation() -> None:
@@ -2030,12 +2109,12 @@ def test_capability_available_conversation_terminal_clears_operation() -> None:
     )
 
     cleared = fold_effect(
-        control,
+        concern_state(**control.dump())[6],
         effect_result("conversation", 1, "h1", False, operation=work.operation),
     )
 
     assert cleared.conversation_requested is False
-    assert cleared.conversation_operation == ""
+    assert cleared.conversation_operation is None
     assert cleared.conversation_capability_blocking is False
 
 
@@ -2060,11 +2139,11 @@ def test_readiness_ack_relationally_stales_dashboard_before_latching_announcemen
     control = project_readiness(*concerns)
     assert ready(control) is False
     acknowledged = fold_effect(
-        concerns[5],
+        concerns[8],
         effect_result("readiness", 1, "h1", True, operation="readiness"),
     )
     assert acknowledged.announced is True
-    assert project_readiness(*concerns[:5], acknowledged).dashboard_current is False
+    assert project_readiness(*concerns[:8], acknowledged).dashboard_current is False
 
 
 def test_mismatched_subject_admission_cannot_rebind_an_instance() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
@@ -31,16 +32,20 @@ from petrus.motus.dispatch import (
     InlineDispatch,
     LocalDispatch,
 )
+from pydantic import TypeAdapter
 
 from hamsterdan.contracts.readiness import (
     ActionsState,
     Authority,
     ConversationPublicationResult,
+    ConversationPublicationState,
     DashboardPublicationResult,
+    DashboardPublicationState,
+    FindingPublicationState,
     HumanState,
     MutationState,
-    PublicationState,
     ReadinessPublicationResult,
+    ReadinessPublicationState,
     ReadinessSnapshot,
     ReviewState,
     Seed,
@@ -178,7 +183,7 @@ class AuthorityLease:
         tokens = self.engine.marking.place(NetPath(path))
         if len(tokens) != 1:
             raise RuntimeError(f"active readiness place {path!r} must contain exactly one token")
-        return value_type(**tokens[0].data)
+        return TypeAdapter(value_type).validate_json(json.dumps(tokens[0].data))
 
     def authority_state(self) -> Authority | None:
         if self.engine is None or not self.engine.marking.place(NetPath("authority")):
@@ -199,7 +204,10 @@ class AuthorityLease:
             ("review_state", ReviewState),
             ("human_state", HumanState),
             ("mutation_state", MutationState),
-            ("publication_state", PublicationState),
+            ("finding_publication_state", FindingPublicationState),
+            ("conversation_publication_state", ConversationPublicationState),
+            ("dashboard_publication_state", DashboardPublicationState),
+            ("readiness_publication_state", ReadinessPublicationState),
         )
         populated = [bool(self.engine.marking.place(NetPath(path))) for path, _ in cohort]
         if not any(populated):

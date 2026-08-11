@@ -11,9 +11,12 @@ from petrus.motus.activity import ExecutionPolicy
 from hamsterdan.contracts.readiness import (
     ActionsState,
     Authority,
+    ConversationPublicationState,
+    DashboardPublicationState,
+    FindingPublicationState,
     HumanState,
     MutationState,
-    PublicationState,
+    ReadinessPublicationState,
     ReadinessSnapshot,
     ReviewRequest,
     ReviewState,
@@ -39,13 +42,33 @@ class Marking:
     def __init__(self, snapshot: ReadinessSnapshot, *, missing: str = "", duplicate: str = "") -> None:
         values = snapshot.dump()
         concerns = tuple(
-            value_type(**{name: values[name] for name in value_type.__dataclass_fields__})
-            for value_type in (Authority, ActionsState, ReviewState, HumanState, MutationState, PublicationState)
+            value_type(**{name: values[name] for name in value_type.__dataclass_fields__ if name in values})
+            for value_type in (
+                Authority,
+                ActionsState,
+                ReviewState,
+                HumanState,
+                MutationState,
+                FindingPublicationState,
+                ConversationPublicationState,
+                DashboardPublicationState,
+                ReadinessPublicationState,
+            )
         )
         self.tokens = {
             path: (Token(type(value).__name__, value.dump()),)
             for path, value in zip(
-                ("authority", "actions_state", "review_state", "human_state", "mutation_state", "publication_state"),
+                (
+                    "authority",
+                    "actions_state",
+                    "review_state",
+                    "human_state",
+                    "mutation_state",
+                    "finding_publication_state",
+                    "conversation_publication_state",
+                    "dashboard_publication_state",
+                    "readiness_publication_state",
+                ),
                 concerns,
                 strict=True,
             )
