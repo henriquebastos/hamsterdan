@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from hamsterdan.contracts.readiness import (
     ActionsObservation,
     ActionsState,
+    AdmittedConversation,
     Authority,
     ChangeResult,
     ConversationPublicationState,
@@ -31,6 +32,16 @@ def test_converter_round_trips_strict_json_workflow_model() -> None:
 
     assert encoded == value.dump()
     assert converter.decode(encoded, ActionsObservation) == value
+
+
+def test_admitted_conversation_is_strict_frozen_and_forbids_provider_fields() -> None:
+    value = AdmittedConversation("delivery", 1, 2, "human", "OWNER", "status")
+    with pytest.raises(AttributeError):
+        value.text = "changed"  # type: ignore[misc]
+    with pytest.raises(ValidationError):
+        PydanticPayloadConverter().decode(value.dump() | {"actor_type": "User"}, AdmittedConversation)
+    with pytest.raises(ValidationError):
+        PydanticPayloadConverter().decode(value.dump() | {"comment_id": "1"}, AdmittedConversation)
 
 
 @pytest.mark.parametrize(

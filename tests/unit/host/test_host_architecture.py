@@ -5,7 +5,6 @@ from dataclasses import fields
 from pathlib import Path
 
 from hamsterdan.agents import CodingRequest, ConversationRequest, ReviewRequest
-from hamsterdan.host.application import PrReadinessApplication
 
 
 def _imports(path: Path) -> set[str]:
@@ -33,18 +32,9 @@ def test_only_host_composes_agent_and_github_siblings() -> None:
             assert path.is_relative_to(source / "agents") or path.is_relative_to(source / "host")
 
 
-def test_agent_requests_are_credential_free_and_mentions_are_exact() -> None:
+def test_agent_requests_are_credential_free() -> None:
     request_fields = {
         field.name.casefold() for kind in (ReviewRequest, ConversationRequest, CodingRequest) for field in fields(kind)
     }
     for forbidden in ("github_token", "installation_token", "private_key", "credential"):
         assert forbidden not in request_fields
-
-    app = object.__new__(PrReadinessApplication)
-    app.bot_login = "hamster-dan[bot]"
-    assert app._addressed_text("/hamsterdan status") is None
-    assert app._addressed_text("@HaMsTeR-DaN please explain") == "please explain"
-    assert app._addressed_text("@hamster-dan") == ""
-    assert app._addressed_text("@hamsterdan please explain") is None
-    assert app._addressed_text("@hamsterdan-other hello") is None
-    assert app._addressed_text("/hamsterdangler status") is None

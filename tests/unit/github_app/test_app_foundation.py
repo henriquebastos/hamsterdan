@@ -18,7 +18,14 @@ from hamsterdan.github_app.auth import GitHubAppClients, RequestMetadata
 from hamsterdan.github_app.config import ConfigurationError, HostConfig
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubKitTransport
-from hamsterdan.github_app.webhooks import MAX_DELIVERY_ATTEMPTS, SUPPORTED_EVENTS, WebhookCustody, WebhookRejected
+from hamsterdan.github_app.webhooks import (
+    MAX_DELIVERY_ATTEMPTS,
+    SUPPORTED_EVENTS,
+    Observation,
+    WebhookCustody,
+    WebhookRejected,
+    admit_conversation,
+)
 
 
 def secret(path: Path, value: bytes) -> Path:
@@ -42,6 +49,72 @@ def environment(tmp_path: Path) -> dict[str, str]:
         "HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE": str(secret(tmp_path / "key", key)),
         "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE": str(secret(tmp_path / "hook", b"hook-secret")),
     }
+
+
+def conversation_observation(**changes: object) -> Observation:
+    values: dict[str, object] = {
+        "delivery_id": "delivery",
+        "event": "issue_comment",
+        "action": "created",
+        "installation_id": 44,
+        "account_id": 23,
+        "repository_id": 31,
+        "repository_full_name": "owner/one",
+        "pull_request_number": 7,
+        "comment_id": 9,
+        "comment_body": "  @HaMsTeR-DaN   explain the blockers  ",
+        "actor_id": 5,
+        "actor_login": "human",
+        "actor_type": "User",
+        "author_association": "MEMBER",
+    }
+    values.update(changes)
+    return Observation(**values)  # type: ignore[arg-type]
+
+
+def test_conversation_admission_returns_only_stripped_neutral_values() -> None:
+    admitted = admit_conversation(conversation_observation(), app_slug="hamster-dan", bot_login="hamster-dan[bot]")
+    assert admitted is not None
+    assert admitted.dump() == {
+        "delivery_id": "delivery",
+        "comment_id": 9,
+        "actor_id": 5,
+        "actor_login": "human",
+        "association": "MEMBER",
+        "text": "explain the blockers",
+    }
+
+
+def test_conversation_admission_accepts_bare_mention_as_empty_text() -> None:
+    admitted = admit_conversation(
+        conversation_observation(comment_body="@hamster-dan"),
+        app_slug="hamster-dan",
+        bot_login="hamster-dan[bot]",
+    )
+    assert admitted is not None and admitted.text == ""
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"event": "pull_request"},
+        {"action": "edited"},
+        {"actor_login": "HAMSTER-DAN[BOT]"},
+        {"actor_type": "Bot"},
+        {"author_association": "CONTRIBUTOR"},
+        {"comment_id": "9"},
+        {"actor_id": "5"},
+        {"actor_login": 5},
+        {"comment_body": "@hamster-dan-other explain"},
+        {"comment_body": "@hamster-dan\texplain"},
+        {"comment_body": "hello @hamster-dan"},
+    ],
+)
+def test_conversation_admission_rejects_provider_policy_failures(changes: dict[str, object]) -> None:
+    assert (
+        admit_conversation(conversation_observation(**changes), app_slug="hamster-dan", bot_login="hamster-dan[bot]")
+        is None
+    )
 
 
 def test_config_accepts_only_explicit_secure_secret_files_and_is_redacted(tmp_path: Path) -> None:

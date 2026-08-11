@@ -14,13 +14,12 @@ import pytest
 from fastapi.testclient import TestClient
 from petrus.motus.activity import ActivityError, ActivityInvocation
 
-from hamsterdan.contracts.readiness import ConversationPublicationRequest, Intent
+from hamsterdan.contracts.readiness import AdmittedConversation, ConversationPublicationRequest, Intent
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host.__main__ import inspect_instance
 from hamsterdan.host.agenticus import AgentConfig, AgentMode, AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
-from hamsterdan.host.application import NormalizedComment
 from hamsterdan.host.service import APP_EVENTS, APP_PERMISSIONS, HostService, QualificationFault
 
 
@@ -69,12 +68,12 @@ class Application:
         self.comments: list[dict[str, object]] = []
         self.closed = 0
 
-    def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> None:
+    def activate(self, trigger: str, *, conversation: AdmittedConversation | None = None) -> None:
         self.reconciles.append(trigger)
         if self.fail:
             raise RuntimeError("provider secret must not escape")
-        if comment is not None:
-            self.comments.append(comment.__dict__)
+        if conversation is not None:
+            self.comments.append(conversation.__dict__)
 
     def close(self) -> None:
         self.closed += 1
@@ -389,6 +388,33 @@ def test_inactive_routes_and_non_actionable_comments_are_terminal_without_applic
     assert made == []
 
 
+def test_malformed_authenticated_comment_is_terminal_without_retry_loop_or_application(tmp_path: Path) -> None:
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
+    delivery = str(uuid.uuid4())
+    body = json.dumps(
+        {
+            "action": "created",
+            "installation": {"id": 44, "account": {"id": 23}},
+            "repository": {"id": 31, "full_name": "owner/one"},
+            "issue": {"number": 7, "pull_request": {"url": "https://api.github.test/pulls/7"}},
+            "comment": {
+                "id": "9",
+                "body": "@hamsterdan-test help",
+                "author_association": "MEMBER",
+                "user": {"id": 5, "login": "human", "type": "User"},
+            },
+        }
+    ).encode()
+    host.custody.receive(signed(body, delivery, "issue_comment").items() | {("content-length", str(len(body)))}, body)
+
+    host.process(host.custody.pending()[0])
+
+    assert host.custody.status(delivery) == "terminal"
+    assert made == []
+    host.close()
+
+
 def test_addressed_trusted_human_comment_is_routed(tmp_path: Path) -> None:
     made: list[Application] = []
     host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
@@ -407,7 +433,7 @@ def test_addressed_trusted_human_comment_is_routed(tmp_path: Path) -> None:
     )
     assert len(made) == 1
     assert made[0].comments[0]["comment_id"] == 9
-    assert made[0].comments[0]["text"] == "@hamsterdan-test help"
+    assert made[0].comments[0]["text"] == "help"
     assert made[0].reconciles == ["github-delivery:comment"]
 
 
@@ -988,7 +1014,7 @@ def test_startup_sweep_settles_frozen_terminal_before_provider_reconciliation(tm
             events.append("settle")
             self.published = True
 
-        def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> None:
+        def activate(self, trigger: str, *, conversation: AdmittedConversation | None = None) -> None:
             events.append(f"reconcile:{self.published}")
             if not self.published:
                 events.append("duplicate-publication")

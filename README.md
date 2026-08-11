@@ -64,6 +64,13 @@ derived snapshot. `src/hamsterdan/readiness/net/topology.py` is the workflow:
 follow it from typed ingress, through admission and concern folding, to
 conversation, publication, timers, lifecycle, and retirement.
 
+GitHub comment trust and exact-mention admission have one owner in
+`github_app.webhooks.admit_conversation`. Raw authenticated observations remain
+in durable webhook custody; an admissible comment crosses the host boundary as
+a strict `AdmittedConversation` containing only audit identity and
+mention-stripped text. The application binds current epoch/head and delivers it
+without reimplementing provider policy.
+
 The active marking is not one aggregate state-machine token. It contains one
 token for each independently owned concern:
 

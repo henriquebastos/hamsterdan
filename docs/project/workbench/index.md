@@ -15,3 +15,4 @@ None.
 - [RS-004 — Separate publication concern ownership](rs-004-separate-publication-concern-ownership.md)
 - [RS-005 — Unify per-Instance host activation](rs-005-unify-per-instance-host-activation.md)
 - [RS-006 — Remove the false application query API](rs-006-remove-false-application-query-api.md)
+- [RS-007 — Establish one comment-admission owner](rs-007-establish-one-comment-admission-owner.md)

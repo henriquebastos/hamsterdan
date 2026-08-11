@@ -39,6 +39,10 @@ first sandbox organization for real-provider validation.
   reconciliation command. Canonical state is the typed Engine marking and
   `ReadinessSnapshot`; the application exposes no parallel dictionary
   projection or compatibility reconciliation path.
+- GitHub comment admission is provider-owned and fail-closed. Durable custody
+  retains the authenticated raw observation; `github_app` emits a strict
+  `AdmittedConversation` with mention-stripped text, and the application only
+  binds current workflow authority and delivers it.
 - Each active PR generation has one exact Petrus lifecycle scope. Unscoped
   lifecycle commands survive generation cleanup; a staged command, exact scope
   reset/close, and matching commit form a restart-repairable boundary. Scope

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -13,6 +13,7 @@ from hamsterdan.agents import AgentRunner
 from hamsterdan.contracts.readiness import (
     ActionsObservation,
     Admission,
+    AdmittedConversation,
     ConversationObservation,
     GenerationCommit,
     GenerationStart,
@@ -26,19 +27,6 @@ from hamsterdan.github_app.gateway import GitHubAuthority
 from .activities import AgentFault, PrReadinessActivities
 from .git_publish import HostGitPublisher
 from .runtime import AuthorityLease, PrReadinessHost
-
-
-@dataclass(frozen=True)
-class NormalizedComment:
-    """Host-normalized conversation input, free of provider SDK values."""
-
-    delivery_id: str
-    comment_id: int
-    actor_id: int
-    actor_login: str
-    actor_type: str
-    association: str
-    text: str
 
 
 def _digest(value: object) -> str:
@@ -62,7 +50,6 @@ class PrReadinessApplication:
         public_clone_url: str,
         workflow_path: str = ".github/workflows/ci.yml",
         reminder_delay: float = 3 * 24 * 60 * 60,
-        trusted_associations: frozenset[str] = frozenset({"OWNER", "MEMBER", "COLLABORATOR"}),
         publication_fault: EffectFault | None = None,
         agent_fault: AgentFault | None = None,
         dispatch_path: Path | None = None,
@@ -72,7 +59,6 @@ class PrReadinessApplication:
         if not normalized_login or not normalized_login.endswith("[bot]"):
             raise ValueError("bot login must be the exact GitHub App bot login")
         self.bot_login = normalized_login
-        self.trusted_associations = frozenset(value.upper() for value in trusted_associations)
         self.public_clone_url, self.workflow_path = public_clone_url, workflow_path
         self.reminder_delay = reminder_delay
         self.publication_fault, self.agent_fault = publication_fault, agent_fault
@@ -284,42 +270,25 @@ class PrReadinessApplication:
             self._observe_actions(current, policy.required_checks)
         return
 
-    def activate(self, trigger: str, *, comment: NormalizedComment | None = None) -> None:
+    def activate(self, trigger: str, *, conversation: AdmittedConversation | None = None) -> None:
         """Reconcile provider truth once, then optionally deliver a conversation."""
         self._reconcile(trigger)
-        if comment is None:
+        if conversation is None:
             return
         if self.host is None or self.host.control is None:
             return
         control = self.host.control
-        normalized_text = comment.text.strip()
-        is_bot = comment.actor_login.strip().casefold() == self.bot_login
-        addressed = self._addressed_text(normalized_text)
-        authorized = comment.actor_type == "User" and comment.association.upper() in self.trusted_associations
-        if is_bot or not authorized or addressed is None:
-            return
         value = ConversationObservation(
             control.epoch,
             control.head,
             True,
-            addressed,
-            comment.comment_id,
-            comment.actor_id,
-            comment.actor_login,
-            comment.association,
+            conversation.text,
+            conversation.comment_id,
+            conversation.actor_id,
+            conversation.actor_login,
+            conversation.association,
         )
-        self._deliver("conversation_observation", value, f"github-delivery:{comment.delivery_id}")
-
-    def _addressed_text(self, text: str) -> str | None:
-        """Strip the exact, case-insensitive configured App mention."""
-        mention = f"@{self.bot_login.removesuffix('[bot]')}"
-        folded = text.casefold()
-        if folded == mention:
-            return ""
-        prefix = f"{mention} "
-        if folded.startswith(prefix):
-            return text[len(prefix) :].lstrip()
-        return None
+        self._deliver("conversation_observation", value, f"github-delivery:{conversation.delivery_id}")
 
     def _observe_actions(self, control, required_checks: tuple[str, ...]) -> None:
         run = self.authority.select_run(self.workflow_path, control.head)

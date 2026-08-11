@@ -629,6 +629,27 @@ duplicate comment admission across service and application; unlike the deleted
 query API, that is a security-boundary choice and requires explicit Navigator
 direction.
 
+### Production comment-admission conclusion
+
+The Navigator chose one provider-ingress trust owner. RS-007 moved GitHub
+event/action, bot, actor type, association, exact-mention, whitespace, and raw
+type policy into `github_app.webhooks.admit_conversation`. Authenticated raw
+observations remain durable custody; accepted input crosses the host as a
+strict, frozen `AdmittedConversation` containing only audit identity and
+mention-stripped text.
+
+`PrReadinessApplication` now reconciles provider truth, binds current
+epoch/head, and delivers the already-admitted conversation. It no longer knows
+provider actor types, configured mention syntax, or trusted-association policy.
+Malformed authenticated values fail terminally before application construction
+rather than wedging immediately due custody.
+
+This removes 45 net lines from host application/service code while adding one
+neutral contract and total provider validation; the overall production diff is
+seven net lines larger. The clarity gain is ownership, not line-count theater.
+No Net, custody schema, lifecycle, Activity, authority, scheduler, or Petrus
+semantics changed.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

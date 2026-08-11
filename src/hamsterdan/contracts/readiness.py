@@ -392,6 +392,16 @@ class HumanObservation(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class AdmittedConversation(WorkflowModel):
+    delivery_id: str
+    comment_id: int
+    actor_id: int
+    actor_login: str
+    association: str
+    text: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class ConversationObservation(WorkflowModel):
     epoch: int
     head: str

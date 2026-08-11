@@ -67,4 +67,5 @@ surface remains.
 - The Net remains at 46 places, 69 transitions, 309 arcs, and 17 retirements.
 - The next candidate is one authoritative provider-ingress comment admission
   policy. The Navigator must choose that boundary before duplicate validation
-  can be removed.
+  can be removed. RS-007 subsequently selected that boundary and removed the
+  duplicate application policy.

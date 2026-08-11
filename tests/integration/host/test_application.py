@@ -19,7 +19,7 @@ from petrus.motus.dispatch import LocalDispatch
 from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, CodingResult, ConversationResult, ReviewResult
-from hamsterdan.contracts.readiness import workflow_gates_ready, workflow_wait
+from hamsterdan.contracts.readiness import AdmittedConversation, workflow_gates_ready, workflow_wait
 from hamsterdan.github_app.models import (
     ActionsJobSnapshot,
     ActionsRunSnapshot,
@@ -28,7 +28,7 @@ from hamsterdan.github_app.models import (
     RepositoryPolicy,
     WireResponse,
 )
-from hamsterdan.host.application import NormalizedComment, PrReadinessApplication
+from hamsterdan.host.application import PrReadinessApplication
 
 HEAD, HEAD_2, BASE = "a" * 40, "c" * 40, "b" * 40
 BOT = "hamster-dan[bot]"
@@ -274,9 +274,13 @@ def ready(authority: Authority) -> None:
 
 def comment(subject: PrReadinessApplication, **values: Any) -> None:
     delivery_id = str(values["delivery_id"])
+    values.pop("actor_type", None)
+    text = str(values["text"])
+    mention = "@hamster-dan"
+    values["text"] = "" if text.casefold() == mention else text[len(mention) + 1 :].lstrip()
     subject.activate(
         f"comment-preflight:{delivery_id}",
-        comment=NormalizedComment(**values),
+        conversation=AdmittedConversation(**values),
     )
 
 
@@ -488,9 +492,6 @@ def test_mention_conversation_executes_explicit_mutation_once_and_clarifies_ambi
     subject = application(tmp_path, authority, runner)
     subject.activate("poll")
     common = {"actor_id": 7, "actor_login": "author", "actor_type": "User", "association": "OWNER"}
-    comment(subject, delivery_id="old", comment_id=30, text="/impetus status", **common)
-    comment(subject, delivery_id="slash", comment_id=30, text="/hamsterdan status", **common)
-    assert runner.conversations == 0
     authority.transport.comments.append({"id": 90, "body": "<!-- impetus:dashboard -->", "user": {"login": BOT}})
     comment(subject, delivery_id="status", comment_id=31, text="@hamster-dan How is this looking?", **common)
     assert runner.conversations == 1 and any(
@@ -512,26 +513,6 @@ def test_mention_conversation_executes_explicit_mutation_once_and_clarifies_ambi
     )
     assert runner.codes == 1
     assert any("clarify" in comment["body"] for comment in authority.transport.comments)
-    subject.close()
-
-
-@pytest.mark.parametrize("changes", [{"actor_type": "Bot"}, {"association": "NONE"}, {"actor_login": BOT}])
-def test_only_trusted_addressed_users_route(tmp_path: Path, changes: dict[str, str]) -> None:
-    authority, runner = Authority(), Runner()
-    ready(authority)
-    subject = application(tmp_path, authority, runner)
-    subject.activate("poll")
-    values = {
-        "delivery_id": "x",
-        "comment_id": 4,
-        "actor_id": 999,
-        "actor_login": "human",
-        "actor_type": "User",
-        "association": "MEMBER",
-        "text": "@hamster-dan explain the blockers",
-    } | changes
-    comment(subject, **values)
-    assert runner.conversations == 0
     subject.close()
 
 

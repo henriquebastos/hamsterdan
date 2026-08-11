@@ -21,6 +21,7 @@ from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, AgentRunner, OperationRoutedRunner
 from hamsterdan.contracts.readiness import (
+    AdmittedConversation,
     ConversationPublicationRequest,
     ConversationPublicationResult,
     DashboardPublicationRequest,
@@ -34,10 +35,10 @@ from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import GitHubBoundaryError
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
-from hamsterdan.github_app.webhooks import Observation, WebhookCustody
+from hamsterdan.github_app.webhooks import Observation, WebhookCustody, admit_conversation
 
 from .agenticus import AgentComposition, AgentRouteStore
-from .application import NormalizedComment, PrReadinessApplication
+from .application import PrReadinessApplication
 from .payloads import PydanticPayloadConverter
 from .runnable import RunnableIndex
 
@@ -520,7 +521,7 @@ class HostService:
     def process(self, item: Observation) -> None:
         instance = self._instance(item)
         if instance is None:
-            self._observation_actionable(item)
+            self._select_observation(item)
             return
         try:
             self._activate_instance(instance, observation=item)
@@ -529,56 +530,41 @@ class HostService:
             # direct callers do not own scheduler health.
             return
 
-    def _observation_actionable(self, item: Observation) -> bool:
+    def _select_observation(self, item: Observation) -> tuple[Observation, AdmittedConversation | None] | None:
         """Terminally dispose observations which cannot address a PR Instance."""
         if item.event in {"ping", "installation", "installation_repositories"}:
             self.custody.acknowledge(item.delivery_id, "non-workflow event")
-            return False
+            return None
         if (
             item.installation_id is None
             or item.repository_id is None
             or self.registry.route(item.installation_id, item.repository_id) is None
         ):
             self.custody.acknowledge(item.delivery_id, "inactive route")
-            return False
+            return None
         if item.pull_request_number is None:
             self.custody.acknowledge(item.delivery_id, "no pull request")
-            return False
+            return None
         if item.event == "issue_comment":
-            addressed = (item.comment_body or "").strip().casefold()
-            mention = f"@{self.config.app_slug}"
-            if (
-                item.action != "created"
-                or (item.actor_login or "").casefold() == self.config.bot_login
-                or item.actor_type != "User"
-                or (item.author_association or "").upper() not in {"OWNER", "MEMBER", "COLLABORATOR"}
-                or not (addressed == mention or addressed.startswith(mention + " "))
-            ):
+            conversation = admit_conversation(item, app_slug=self.config.app_slug, bot_login=self.config.bot_login)
+            if conversation is None:
                 self.custody.acknowledge(item.delivery_id, "comment not addressed")
-                return False
-        return True
+                return None
+            return item, conversation
+        return item, None
 
-    def _apply_observation(self, application: PrReadinessApplication, item: Observation) -> tuple[bool, str | None]:
+    def _apply_observation(
+        self,
+        application: PrReadinessApplication,
+        item: Observation,
+        conversation: AdmittedConversation | None,
+    ) -> tuple[bool, str | None]:
         """Apply one eligible observation under its Instance lock, without custody effects."""
         assert item.installation_id is not None and item.repository_id is not None
         if self.registry.route(item.installation_id, item.repository_id) is None:
             return False, "route inactive before work"
         trigger = f"github-delivery:{item.delivery_id}"
-        if item.event == "issue_comment":
-            application.activate(
-                trigger,
-                comment=NormalizedComment(
-                    item.delivery_id,
-                    item.comment_id or 0,
-                    item.actor_id or 0,
-                    item.actor_login or "",
-                    item.actor_type or "",
-                    item.author_association or "",
-                    item.comment_body or "",
-                ),
-            )
-        else:
-            application.activate(trigger)
+        application.activate(trigger, conversation=conversation)
         return True, None
 
     @staticmethod
@@ -688,7 +674,7 @@ class HostService:
         installation_id, repository_id, pull_request_number = (int(value) for value in match.groups())
         key = installation_id, repository_id, pull_request_number
         candidates = (observation,) if observation is not None else self.custody.pending(limit=1000, subject=key)
-        selected = tuple(item for item in candidates if self._observation_actionable(item))
+        selected = tuple(selection for item in candidates if (selection := self._select_observation(item)) is not None)
         route_active = self.registry.route(key[0], key[1]) is not None
         if observation is not None and not selected:
             return False
@@ -715,9 +701,9 @@ class HostService:
                     # state that could otherwise infer the operation is pending.
                     outcome = settle()
                 activated = False
-                for item in selected:
+                for item, conversation in selected:
                     try:
-                        applied, reason = self._apply_observation(application, item)
+                        applied, reason = self._apply_observation(application, item, conversation)
                         activated = activated or applied
                         succeeded.append((item, reason))
                     except Exception as error:  # noqa: BLE001 -- isolate one delivery in a claimed Instance
@@ -742,7 +728,7 @@ class HostService:
                 if activation_error is not None:
                     raise activation_error
         except Exception as error:
-            for item in selected:
+            for item, _conversation in selected:
                 if item.delivery_id not in handled:
                     self._retry_observation(item, error)
             raise

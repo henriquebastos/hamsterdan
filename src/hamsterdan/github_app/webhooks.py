@@ -15,6 +15,8 @@ from typing import Any
 
 from githubkit.webhooks import verify
 
+from hamsterdan.contracts.readiness import AdmittedConversation
+
 from .routing import InstallationRegistry
 
 MAX_BODY_BYTES = 1_048_576
@@ -68,6 +70,46 @@ class Receipt:
     delivery_id: str
     disposition: str
     observation: Observation | None = None
+
+
+def admit_conversation(
+    item: Observation,
+    *,
+    app_slug: str,
+    bot_login: str,
+) -> AdmittedConversation | None:
+    """Admit one provider comment and return only neutral conversation values."""
+    if (
+        not isinstance(item.delivery_id, str)
+        or (item.comment_id is not None and type(item.comment_id) is not int)
+        or (item.actor_id is not None and type(item.actor_id) is not int)
+        or (item.comment_body is not None and not isinstance(item.comment_body, str))
+        or (item.actor_login is not None and not isinstance(item.actor_login, str))
+        or (item.actor_type is not None and not isinstance(item.actor_type, str))
+        or (item.author_association is not None and not isinstance(item.author_association, str))
+    ):
+        return None
+    text = (item.comment_body or "").strip()
+    mention = f"@{app_slug}"
+    folded = text.casefold()
+    if (
+        item.event != "issue_comment"
+        or item.action != "created"
+        or (item.actor_login or "").strip().casefold() == bot_login.strip().casefold()
+        or item.actor_type != "User"
+        or (item.author_association or "").upper() not in {"OWNER", "MEMBER", "COLLABORATOR"}
+        or not (folded == mention.casefold() or folded.startswith(mention.casefold() + " "))
+    ):
+        return None
+    addressed = "" if folded == mention.casefold() else text[len(mention) + 1 :].lstrip()
+    return AdmittedConversation(
+        delivery_id=item.delivery_id,
+        comment_id=item.comment_id or 0,
+        actor_id=item.actor_id or 0,
+        actor_login=item.actor_login or "",
+        association=item.author_association or "",
+        text=addressed,
+    )
 
 
 def _headers(entries: Iterable[tuple[str, str]]) -> dict[str, str]:
