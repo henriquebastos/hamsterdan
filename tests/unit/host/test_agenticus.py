@@ -218,7 +218,7 @@ def test_startup_cleanup_attempts_every_independently_owned_resource() -> None:
     assert closed == ["runtime", "routes"]
 
 
-def test_snapshot_persists_and_same_route_is_reconstructed_before_redispatch(tmp_path: Path) -> None:
+def test_snapshot_persists_and_claim_reconstructs_same_route_after_restart(tmp_path: Path) -> None:
     composition = compose_agent(AgentConfig(AgentMode.AGENTICUS))
     store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
     store.activate(composition, tmp_path / "applications")
@@ -227,13 +227,13 @@ def test_snapshot_persists_and_same_route_is_reconstructed_before_redispatch(tmp
 
     reopened = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
     reopened.activate(composition, tmp_path / "applications")
-    reconstructed = reopened.reconstruct_before_redispatch("review:one", composition)
+    reconstructed = reopened.claim("review:one", composition)
     assert reconstructed == claimed
     assert composition.snapshot is not None
     changed = ResolutionSnapshot(composition.snapshot.catalog_revision + 1, composition.snapshot.descriptors)
     different = AgentComposition(composition.mode, composition.profile, changed)
     with pytest.raises(AgentCompositionError, match="route"):
-        reopened.reconstruct_before_redispatch("review:one", different)
+        reopened.claim("review:one", different)
 
 
 def test_rollback_refuses_while_agenticus_work_is_unresolved(tmp_path: Path) -> None:
@@ -244,7 +244,7 @@ def test_rollback_refuses_while_agenticus_work_is_unresolved(tmp_path: Path) -> 
     store.claim("code:one", agenticus)
     with pytest.raises(AgentCompositionError, match="prior-route work is unresolved"):
         store.activate(legacy, tmp_path / "applications")
-    store.resolve("code:one")
+    store.settle(("code:one",))
     store.activate(legacy, tmp_path / "applications")
 
 

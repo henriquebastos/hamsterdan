@@ -673,6 +673,25 @@ reinforces the clarity rule: unify provider interpretation, but do not hide
 consumer-specific sequencing or authority behind an apparently convenient
 aggregate.
 
+### Production host-runtime surface conclusion
+
+The following host pass found two false forms of optionality. `HostService`
+looked up application terminal settlement and unresolved-publication inspection
+dynamically even though every production application implements both and safe
+activation ordering requires them. RS-009 made those calls direct and moved
+test doubles onto the real mandatory interface.
+
+`AgentRouteStore.reconstruct_before_redispatch()` and `.resolve()` had no
+production callers and duplicated the canonical `claim()` and `settle()`
+protocol. Deleting them leaves one operation that atomically validates active
+composition and reconstructs exact persisted ownership, and one operation that
+settles terminal ownership.
+
+No replacement Protocol or adapter was needed. No Net, provider, lifecycle,
+Activity execution, scheduler, storage schema, or Petrus behavior changed. The
+clarity gain is that required recovery behavior is now syntactically required,
+while route custody exposes only the operations production actually composes.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

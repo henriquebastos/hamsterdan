@@ -35,6 +35,8 @@ first sandbox organization for real-provider validation.
   provider observation, records final runnable posture, and only then
   acknowledges webhook custody. Subject-filtered custody and strict-bound
   inactive repair prevent deferred work or lost hints from bypassing recovery.
+  Settlement and unresolved-publication inspection are mandatory application
+  operations rather than optional compatibility capabilities.
 - `PrReadinessApplication.activate(...) -> None` is the sole application
   reconciliation command. Canonical state is the typed Engine marking and
   `ReadinessSnapshot`; the application exposes no parallel dictionary

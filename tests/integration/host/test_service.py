@@ -75,6 +75,12 @@ class Application:
         if conversation is not None:
             self.comments.append(conversation.__dict__)
 
+    def settle(self) -> None:
+        return None
+
+    def has_unresolved_publication(self) -> bool:
+        return False
+
     def close(self) -> None:
         self.closed += 1
 

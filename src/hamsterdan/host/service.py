@@ -631,8 +631,7 @@ class HostService:
             # Repair locally generated terminals which did not execute through
             # the resolver. The durable Dispatch/History remain authoritative.
             for instance, key in tuple(self._instances.items()):
-                pending = getattr(self._apps[key], "has_unresolved_publication", None)
-                if pending is not None and pending():
+                if self._apps[key].has_unresolved_publication():
                     self.runnable.wake(instance, time.time(), "dispatch-repair", "unresolved-publication")
             return processed
 
@@ -694,12 +693,9 @@ class HostService:
                 else self._application(*key, allow_inactive_binding=not route_active)
             )
             with self._locks[key]:
-                settle = getattr(application, "settle", None)
-                outcome = None
-                if settle is not None:
-                    # Consume frozen provider terminals before observing provider
-                    # state that could otherwise infer the operation is pending.
-                    outcome = settle()
+                # Consume frozen provider terminals before observing provider
+                # state that could otherwise infer the operation is pending.
+                outcome = application.settle()
                 activated = False
                 for item, conversation in selected:
                     try:
@@ -719,8 +715,8 @@ class HostService:
                 ):
                     application.activate(f"{reconcile_trigger}:{key[0]}:{key[1]}:{key[2]}")
                     activated = True
-                if settle is not None and activated:
-                    outcome = settle()
+                if activated:
+                    outcome = application.settle()
                 self._record_posture(instance, outcome)
                 for item, reason in succeeded:
                     self._acknowledge_observation(item, reason)
@@ -777,12 +773,9 @@ class HostService:
             application = self._apps.get(key)
             if application is None:
                 continue
-            settle = getattr(application, "settle", None)
-            if settle is None:
-                continue
             try:
                 with self._locks[key]:
-                    self._record_posture(instance, settle())
+                    self._record_posture(instance, application.settle())
             except Exception as error:  # noqa: BLE001 -- shutdown must continue closing all custody
                 LOG.warning(
                     "shutdown_terminal_settlement_failed instance=%s error_class=%s",

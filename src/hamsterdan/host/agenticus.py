@@ -240,17 +240,6 @@ class AgentRouteStore:
             raise AgentCompositionError("operation is already fenced to a different agent route")
         return route
 
-    def reconstruct_before_redispatch(self, operation: str, composition: AgentComposition) -> OperationRoute:
-        route = self._load(operation)
-        if route.resolved:
-            raise AgentCompositionError("resolved agent work cannot be redispatched")
-        return self.claim(operation, composition)
-
-    def resolve(self, operation: str) -> None:
-        _identifier(operation, "operation")
-        with self._transaction():
-            self._settle((operation,))
-
     def settle(self, operations: Iterable[str]) -> None:
         with self._transaction():
             self._settle(operations)
