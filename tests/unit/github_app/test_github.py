@@ -9,7 +9,7 @@ from githubkit import GitHub
 
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
 from hamsterdan.github_app.gateway import GitHubAuthority
-from hamsterdan.github_app.models import ActionsRunSnapshot, GitHubBoundaryError, WireResponse
+from hamsterdan.github_app.models import ActionsJobSnapshot, ActionsRunSnapshot, GitHubBoundaryError, WireResponse
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 
 HEAD = "a" * 40
@@ -869,6 +869,42 @@ def test_in_progress_run_does_not_treat_not_yet_created_required_jobs_as_failure
     observed = authority(fake).jobs(run, ("lint", "unit"))
 
     assert authority(fake).run_result(observed)["conclusion"] == "pending"
+
+
+@pytest.mark.parametrize(("status", "conclusion"), [("queued", "queued"), ("in_progress", "in_progress")])
+def test_actions_evidence_normalizes_pending_provider_state(
+    monkeypatch: pytest.MonkeyPatch, status: str, conclusion: str
+) -> None:
+    subject = authority(FakeTransport())
+    run = ActionsRunSnapshot(5, HEAD, "ci.yml", 2, status, None)
+    observed = ActionsRunSnapshot(
+        5,
+        HEAD,
+        "ci.yml",
+        2,
+        status,
+        None,
+        (ActionsJobSnapshot(8, "lint", status, None, True),),
+    )
+    monkeypatch.setattr(subject, "jobs", lambda selected, required: observed)
+    monkeypatch.setattr(subject, "run_result", lambda selected: {"conclusion": "pending"})
+
+    evidence = subject.actions_evidence(run, ("lint",))
+
+    assert evidence is not None
+    assert evidence.run == observed
+    assert evidence.conclusion == conclusion
+    assert evidence.failed_required_jobs == (("lint", None),)
+
+
+def test_actions_evidence_rejects_an_unsupported_terminal_conclusion(monkeypatch: pytest.MonkeyPatch) -> None:
+    subject = authority(FakeTransport())
+    run = ActionsRunSnapshot(5, HEAD, "ci.yml", 2, "completed", "neutral")
+    monkeypatch.setattr(subject, "jobs", lambda selected, required: run)
+    monkeypatch.setattr(subject, "run_result", lambda selected: {"conclusion": "neutral"})
+
+    with pytest.raises(GitHubBoundaryError, match="conclusion is unsupported"):
+        subject.actions_evidence(run, ("lint",))
 
 
 def test_rerun_request_is_lookup_first_and_fenced_immediately_before_marker() -> None:

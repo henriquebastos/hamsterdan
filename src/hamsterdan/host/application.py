@@ -294,13 +294,9 @@ class PrReadinessApplication:
         run = self.authority.select_run(self.workflow_path, control.head)
         if run is None:
             return
-        run = self.authority.jobs(run, required_checks)
-        result = self.authority.run_result(run)
-        conclusion = str(result["conclusion"])
-        if conclusion == "pending":
-            conclusion = "in_progress" if run.status == "in_progress" else "queued"
-        failed = sorted((job.name, job.conclusion) for job in run.jobs if job.required and job.conclusion != "success")
-        fingerprint = _digest(failed) if conclusion == "failure" else ""
+        evidence = self.authority.actions_evidence(run, required_checks)
+        run, conclusion = evidence.run, evidence.conclusion
+        fingerprint = _digest(evidence.failed_required_jobs) if conclusion == "failure" else ""
         observation = _digest({"run": asdict(run), "conclusion": conclusion})
         value = ActionsObservation(
             control.epoch,

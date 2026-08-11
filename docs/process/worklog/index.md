@@ -40,3 +40,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-11 — Per-Instance host activation unified](entries/2026-08-11T2100Z-per-instance-host-activation-unified.md)
 - [2026-08-11 — False application query API removed](entries/2026-08-11T2200Z-false-application-query-api-removed.md)
 - [2026-08-11 — Comment admission given one provider owner](entries/2026-08-11T2300Z-comment-admission-provider-owned.md)
+- [2026-08-11 — Actions assessment given one provider owner](entries/2026-08-11T2350Z-actions-assessment-provider-owned.md)

@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 from .models import (
     MAX_LOG_BYTES,
+    ActionsEvidence,
     ActionsJobSnapshot,
     ActionsRunSnapshot,
     BinaryTransport,
@@ -20,7 +21,6 @@ from .models import (
     PullRequestSnapshot,
     RepositoryPolicy,
     Transport,
-    VerifiedSnapshot,
 )
 
 _SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
@@ -180,10 +180,6 @@ class GitHubAuthority:
             capability,
         )
 
-    def verified_snapshot(self) -> VerifiedSnapshot:
-        pull = self.pull_request()
-        return VerifiedSnapshot(pull, self.policy(pull.base_ref), self.human_review())
-
     def base_current(self, pull: PullRequestSnapshot) -> bool:
         value = self._get(f"{self.root}/compare/{pull.base}...{pull.head}")
         if not isinstance(value, dict):
@@ -269,6 +265,26 @@ class GitHubAuthority:
             "conclusion": conclusion or "pending",
             "required_jobs": tuple(job.name for job in required),
         }
+
+    def actions_evidence(self, run: ActionsRunSnapshot, required_checks: Sequence[str]) -> ActionsEvidence:
+        """Assess current evidence for one exact PR workflow run."""
+        run = self.jobs(run, required_checks)
+        raw_conclusion = self.run_result(run)["conclusion"]
+        if raw_conclusion == "pending":
+            conclusion = "in_progress" if run.status == "in_progress" else "queued"
+        elif raw_conclusion == "success":
+            conclusion = "success"
+        elif raw_conclusion == "failure":
+            conclusion = "failure"
+        else:
+            raise GitHubBoundaryError("GitHub Actions conclusion is unsupported")
+        failed = tuple(
+            sorted(
+                ((job.name, job.conclusion) for job in run.jobs if job.required and job.conclusion != "success"),
+                key=lambda item: (item[0], item[1] or ""),
+            )
+        )
+        return ActionsEvidence(run, conclusion, failed)
 
     def failure_logs(self, run: ActionsRunSnapshot, binary: BinaryTransport) -> bytes:
         data = binary.download(f"{self.root}/actions/runs/{run.id}/attempts/{run.attempt}/logs", MAX_LOG_BYTES)

@@ -650,6 +650,29 @@ seven net lines larger. The clarity gain is ownership, not line-count theater.
 No Net, custody schema, lifecycle, Activity, authority, scheduler, or Petrus
 semantics changed.
 
+### Production Actions-assessment conclusion
+
+The next boundary inspection found duplicate GitHub Actions assessment in
+application reconciliation and durable Activity discovery. The copies selected
+required jobs and derived conclusions independently, and had already diverged:
+only reconciliation normalized provider `pending` into the strict domain values
+`queued` or `in_progress`.
+
+RS-008 retained explicit exact-run selection and moved the cohesive remainder
+into `GitHubAuthority.actions_evidence(run, required_checks)`. The provider now
+owns required-job attachment, pending normalization, supported terminal
+validation, and deterministic failed-job evidence. Reconciliation retains
+observation identity and current workflow context; the Activity retains fresh
+authority fencing and operation context. This narrower two-step API preserves
+the Activity's important absent-run-before-policy ordering and avoids a broad
+snapshot or consumer-mode flag.
+
+The unused `VerifiedSnapshot` aggregate was deleted. No Net, lifecycle,
+Activity execution, scheduler, storage, or Petrus behavior changed. This
+reinforces the clarity rule: unify provider interpretation, but do not hide
+consumer-specific sequencing or authority behind an apparently convenient
+aggregate.
+
 ### Production execution-scope conclusion
 
 The production lane validated a smaller contract than a general workflow or

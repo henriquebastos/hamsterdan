@@ -43,6 +43,11 @@ first sandbox organization for real-provider validation.
   retains the authenticated raw observation; `github_app` emits a strict
   `AdmittedConversation` with mention-stripped text, and the application only
   binds current workflow authority and delivers it.
+- GitHub Actions assessment is provider-owned. Exact-run selection remains an
+  explicit read; one typed `ActionsEvidence` operation attaches required jobs,
+  normalizes queued/in-progress state, and identifies failed required jobs.
+  Reconciliation and Activities add their own workflow identity and authority
+  context without duplicating provider interpretation.
 - Each active PR generation has one exact Petrus lifecycle scope. Unscoped
   lifecycle commands survive generation cleanup; a staged command, exact scope
   reset/close, and matching commit form a restart-repairable boundary. Scope

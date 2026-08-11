@@ -41,7 +41,7 @@ from hamsterdan.contracts.readiness import (
 )
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
 from hamsterdan.github_app.gateway import GitHubAuthority
-from hamsterdan.github_app.models import ActionsRunSnapshot, GitHubBoundaryError
+from hamsterdan.github_app.models import GitHubBoundaryError
 
 from .git_publish import GitPublishError, HostGitPublisher, PublicationCategory, payload_digest
 from .payloads import PydanticPayloadConverter
@@ -74,6 +74,10 @@ PublicationRequest = (
     | ReadinessCommand
 )
 CodeResult = TypeVar("CodeResult", ChangeResult, RepairResult)
+
+
+def _digest(value: object) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 class StaleAuthorityError(RuntimeError):
@@ -214,10 +218,9 @@ class PrReadinessActivities:
                 policy_digest=work.policy_digest,
             )
         policy = self.authority.policy(self.authority.pull_request().base_ref)
-        run = self.authority.jobs(run, policy.required_checks)
-        result = self.authority.run_result(run)
-        conclusion = str(result["conclusion"])
-        fingerprint = self._failure_fingerprint(run) if conclusion == "failure" else ""
+        evidence = self.authority.actions_evidence(run, policy.required_checks)
+        run, conclusion = evidence.run, evidence.conclusion
+        fingerprint = _digest(evidence.failed_required_jobs) if conclusion == "failure" else ""
         self._fence(work)
         return ActionsObservation(
             work.epoch,
@@ -623,10 +626,6 @@ class PrReadinessActivities:
     def _is_current(self, work) -> bool:
         return self.current is None or self.current(work.epoch, work.head)
 
-    def _failure_fingerprint(self, run: ActionsRunSnapshot) -> str:
-        failed = sorted((job.name, job.conclusion) for job in run.jobs if job.required and job.conclusion != "success")
-        return hashlib.sha256(json.dumps(failed, separators=(",", ":")).encode()).hexdigest()
-
     def _intent(self, raw: dict, work: ConversationClassificationRequest, control: dict) -> Intent:
         kind, arguments = cast(Any, str(raw["type"])), dict(raw.get("arguments", {}))
         digest = _intent_digest(self.repository, self.pr_number, work, kind, arguments)
@@ -806,7 +805,7 @@ def _intent_digest(
         "type": kind,
         "arguments": arguments,
     }
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return _digest(value)
 
 
 def activity_definitions(operations: PrReadinessActivities) -> dict[str, ActivityDefinition]:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 MAX_LOG_BYTES = 2_097_152
 
@@ -85,6 +85,13 @@ class ActionsRunSnapshot:
 
 
 @dataclass(frozen=True)
+class ActionsEvidence:
+    run: ActionsRunSnapshot
+    conclusion: Literal["queued", "in_progress", "success", "failure"]
+    failed_required_jobs: tuple[tuple[str, str | None], ...]
+
+
+@dataclass(frozen=True)
 class HumanReviewSnapshot:
     requested_reviewers: tuple[str, ...]
     latest_reviews: tuple[tuple[str, str], ...]
@@ -92,13 +99,6 @@ class HumanReviewSnapshot:
     changes_requested: tuple[str, ...]
     unresolved_threads: int | None
     threads_capability: str
-
-
-@dataclass(frozen=True)
-class VerifiedSnapshot:
-    pull_request: PullRequestSnapshot
-    policy: RepositoryPolicy
-    human_review: HumanReviewSnapshot
 
 
 @dataclass(frozen=True)

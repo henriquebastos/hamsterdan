@@ -20,6 +20,7 @@ from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, CodingResult, ConversationResult, ReviewResult
 from hamsterdan.contracts.readiness import AdmittedConversation, workflow_gates_ready, workflow_wait
+from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import (
     ActionsJobSnapshot,
     ActionsRunSnapshot,
@@ -67,6 +68,7 @@ class CommentTransport:
 
 class Authority:
     repository, pr_number = "owner/repo", 3
+    actions_evidence = GitHubAuthority.actions_evidence
 
     def __init__(self) -> None:
         self.transport = CommentTransport()
