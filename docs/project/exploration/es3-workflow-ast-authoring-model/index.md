@@ -348,3 +348,23 @@ All records and spike code live inside this directory; production
   in AX18 moved. One refusal added: a produce filter is rejected at
   declaration because frozen output arcs admit by color only — a
   declared-but-ignored filter would lie. Ten tests pass.
+- [AX20 — Function-like subnets](experiments/ax20-function-subnet/index.md)
+  completed 2026-08-12 — Promising; continue. The Navigator's diagnosis
+  (control places as global state smear guards across the net) answered
+  with a function-call shape on the frozen engine: entry routes by
+  per-token arc filter and *consumes* the concern's state token — a
+  structural mutex, no `change_in_flight` flag anywhere in the
+  serialized net; the interior is a guardless linear pipe reading no
+  shared state; two complementary exit guards fence the moving
+  authority exactly once — commit emits the effect and releases the
+  state updated, discard throws the whole run away and releases it
+  unchanged, with restart being a fresh submit through the same door.
+  Entry blindness collapses "stale at entry" and "moved mid-flight"
+  into one fence-judged case, under the stated contract that inputs
+  carry the authority coordinates they were issued under. Soundness
+  tested, not asserted: no interior marking survives either terminal
+  path; the state token is conserved; replay reaches the same marking.
+  Boundaries stated: the fence is atomic with effect *emission* only
+  (external effects keep their own current-authority fencing); the
+  interior must stay pure; the claim serializes the concern. Fifteen
+  tests pass.
