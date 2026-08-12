@@ -180,3 +180,16 @@ All records and spike code live inside this directory; production
   intermediate place erased to an untyped `dict`. Ledger SP-6 records
   the checkpoint-channel constraints (64 KiB cap, slot exclusivity,
   policy plumbing). Twelve tests pass.
+- [AX10 — Python authoring-style comparison](experiments/ax10-authoring-styles/index.md)
+  completed 2026-08-12 — Promising; continue. Four spellings were forced
+  to produce one canonical AST on a genuinely nested example. Nested
+  combinators remain the core and default surface (typed constructors,
+  positional error messages, refactor-by-expression). An immutable
+  fluent chain is permitted sugar for linear flows — the probe shows it
+  degenerates to nested combinator expressions at the first multi-step
+  branch. Context-manager builders are rejected (mutable scope stack,
+  statement-order structure, `None`-typed calls, runtime-only misuse
+  detection). Generator builders are rejected for structure: handles
+  refuse `if` (the AX9-B boundary re-proven at this layer) and Python
+  loops merely unroll — generators stay inside activities (AX9-A).
+  Sixteen tests pass.

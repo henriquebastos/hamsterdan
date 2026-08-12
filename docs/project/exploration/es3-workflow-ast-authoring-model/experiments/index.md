@@ -62,7 +62,7 @@ this series as prior art.
 | [AX7](ax7-hybrid-routing/index.md) | Hybrid type + guard routing | Completed | Promising; continue |
 | [AX8](ax8-loops-retries/index.md) | Loops, cycles, retries | Completed | Promising; continue |
 | [AX9](ax9-effect-authoring/index.md) | Effect-oriented activity authoring | Completed | Promising with changes |
-| AX10 | Python authoring-style comparison | Planned | — |
+| [AX10](ax10-authoring-styles/index.md) | Python authoring-style comparison | Completed | Promising; continue |
 | AX11 | Leading design on the real baseline fragment | Planned | — |
 | AX12 | Final architecture recommendation | Planned | — |
 
