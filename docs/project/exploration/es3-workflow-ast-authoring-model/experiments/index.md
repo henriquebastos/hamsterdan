@@ -76,6 +76,7 @@ this series as prior art.
 | [AX21](ax21-effect-outcomes/index.md) | Typed effect outcomes: the at-least-once boundary classified | Completed | Promising; continue |
 | [AX22](ax22-structured-composition/index.md) | Structured composition: blocks as values, combinators as the only control flow | Completed | Promising; continue |
 | [AX23](ax23-completed-algebra/index.md) | Completed algebra: merge, loop, and context ports (read fence, held resource) | Completed | Promising; continue |
+| [AX24](ax24-parallel-blocks/index.md) | Parallel blocks: split, total branches, explicit join policies | Completed | Promising; continue |
 
 ## Standing inputs from prior ES-002 evidence
 

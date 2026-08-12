@@ -439,3 +439,21 @@ All records and spike code live inside this directory; production
   frozen engine unchanged. The layer model now has no shaped gaps
   left; what remains for synthesis is judgment (which disciplines
   become lints; how AX10's styles sit on top). Thirty-six tests pass.
+- [AX24 — Parallel blocks](experiments/ax24-parallel-blocks/index.md)
+  completed 2026-08-12 — Promising; continue. The Composable Functions
+  gap closed with the join policy explicit in the net: `par` (the
+  'all' policy) copies one input to every branch, tolerates effects
+  (nothing is abandoned), and AND-joins into a `{branch: data}`
+  aggregate — sound *because* every branch must be total (exactly one
+  exit; variants totalize into one result color first, a downstream
+  classify splits the aggregate — one failed branch still joins, two
+  failures accumulate). `par_fail_fast` exists exactly where their
+  removed `first` was inadmissible: pure, context-free branches only
+  (a pure `holding` block is still refused), one `armed` once-only
+  token, losing branches draining into a visible `abandoned` exit —
+  2 + 3n transitions, linear, not the 2^n complement blowup. One
+  honest rule extension: fan-out/fan-in handlers address arcs
+  positionally (declared order survives renames) because a split
+  produces one datum into N same-colored places. The ES-003 inquiry
+  example — receive, parallel(reserve, taxes), charge — runs end to
+  end on the frozen engine. Twenty-three tests pass.
