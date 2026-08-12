@@ -83,6 +83,10 @@ Authoritative GitHub documentation inspected 2026-08-01:
   [ES-003 theory reference ledger](../project/exploration/es3-workflow-ast-authoring-model/theory-references.md).
   Entries are uninspected leads for future digging, not accepted
   dependencies.
+- Composable Functions (seasonedcc, TypeScript, v5.0.0) deep-inspected
+  2026-08-12 as an external comparison for the ES-003 block algebra —
+  not a dependency. Findings and candidate experiments in the
+  [ES-003 analysis note](../project/exploration/es3-workflow-ast-authoring-model/composable-functions.md).
 
 ## Runtime libraries and deployment contracts
 

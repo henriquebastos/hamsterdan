@@ -102,6 +102,28 @@ authoritative sources during the experiments.
   composed by sequence (`>>>`), parallel (`***`), choice (`|||`) — the
   mathematical home of the combinator set, and its laws are free design
   tests for the composition layer.
+- **Railway-oriented programming** — Scott Wlaschin,
+  *Railway Oriented Programming*, NDC Oslo 2014;
+  <https://fsharpforfunandprofit.com/rop/>. The two-track (success /
+  failure) composition picture behind binary `Result` pipelines —
+  composable-functions is this pattern industrialized. Relevant to the
+  AX25 question: can a uniform failure rail be authoring sugar that
+  expands into *visible* net structure rather than a hidden channel?
+- **Validation applicative (error accumulation)** — the
+  accumulate-all-errors-instead-of-failing-fast composition, e.g. Jane
+  Street's / Scalaz-cats `Validation` and McBride & Paterson §"monoidal
+  accumulation". The semantics of composable-functions' `all` (every
+  branch finishes, every failure aggregated) and the theory behind an
+  AND-join policy choice (AX24).
+- **Composable Functions (inspected, not a lead)** — Seasoned,
+  <https://github.com/seasonedcc/composable-functions>, v5.0.0,
+  TypeScript; successor to their `domain-functions`. Deep-inspected
+  2026-08-12; full comparison in
+  [composable-functions.md](composable-functions.md). Key transferable
+  facts: total `Result`-returning functions, all-errors parallel
+  aggregation, `FailToCompose<A, B>` non-callable diagnostic types,
+  closure-threaded ambient context, and two removals that validate our
+  doctrines (`merge` for non-totality, `first` for racing effects).
 
 ## Effects as values
 

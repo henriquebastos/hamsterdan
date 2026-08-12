@@ -69,6 +69,13 @@ All records and spike code live inside this directory; production
   accumulate in the [theory reference ledger](theory-references.md)
   (Navigator direction 2026-08-12) so future digging starts from names,
   not memory.
+- External designs proposed by the Navigator are compared against the
+  algebra in dedicated analysis notes:
+  [Composable Functions](composable-functions.md) (seasonedcc,
+  TypeScript; inspected 2026-08-12) — five independent convergences
+  with our doctrines, one true structural gap exposed (no parallel
+  combinator in the completed algebra, and with it the totality and
+  join-policy question), three candidate experiments (AX24–AX26).
 
 ## Progress
 
