@@ -260,3 +260,22 @@ All records and spike code live inside this directory; production
   order is explicit and part of the definition (reversal preserves the
   element sets but permutes arc positions). Cross-file source mapping
   survives the seam. No runtime or ledger impact. Eighteen tests pass.
+- [AX15 — Recovery concern](experiments/ax15-recovery-concern/index.md)
+  completed 2026-08-12 — Promising; continue. Production's hardest
+  routing decision (`_recoverable_publication`: five tokens, open-map
+  arguments, a nested optional recovery request identity-matched
+  against the current authority, three targets, hand-built complement
+  retire) authored as a third composed hand-off concern — with **zero**
+  compiler or AST growth. Behavior matches a verbatim production oracle
+  across all recovery scenarios, including a run where recovery
+  unblocks a parked reply through the shared emit seam. Per-target
+  predicate specialization beats production's read-everything wiring
+  (54 vs 56 arcs) while the generated `otherwise` reproduces
+  `reject_recovery`'s exact scope mechanically. Chief discovery: celpy
+  has no `!= null` overload for struct values — the presence rendering
+  in the shared AX11 predicate module now emits `!(x == null)`, proven
+  by regression tests on Petrus's own `compile_guard` path (committed
+  byte-parity evidence unaffected). Two `validate_null_safety` holes
+  are demonstrated and recorded as refinements: child refs do not
+  inherit parent optionality, and right-hand comparison operands escape
+  checking. Twenty-two tests pass.

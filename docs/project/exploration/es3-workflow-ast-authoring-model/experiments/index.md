@@ -67,6 +67,7 @@ this series as prior art.
 | [AX12](ax12-recommendation/index.md) | Architecture recommendation (synthesis snapshot) | Completed | Promising with changes |
 | [AX13](ax13-sibling-amortization/index.md) | Sibling amortization: marginal cost of the second concern | Completed | Promising; continue |
 | [AX14](ax14-fragment-composition/index.md) | Fragment composition by explicit named-port identity | Completed | Promising; continue |
+| [AX15](ax15-recovery-concern/index.md) | Production's hardest guard as a composed recovery concern | Completed | Promising; continue |
 
 ## Standing inputs from prior ES-002 evidence
 

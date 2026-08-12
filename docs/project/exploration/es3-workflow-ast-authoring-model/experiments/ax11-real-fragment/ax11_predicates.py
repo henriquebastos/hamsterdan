@@ -121,13 +121,19 @@ class Compare(_Boolean):
 @dataclass(frozen=True)
 class NullCheck(_Boolean):
     subject: FieldRef
-    present: bool  # True: value exists (has()/!= null)
+    present: bool  # True: value exists (has() / !(x == null))
 
     def cel(self, scope: Scope) -> str:
         if self.subject.via_map:
             rendered = f"has({self.subject.cel(scope)})"
             return rendered if self.present else f"!{rendered}"
-        return f"({self.subject.cel(scope)} {'!=' if self.present else '=='} null)"
+        # celpy's frozen dialect has no `!= null` overload for struct-typed
+        # values (`MapType != NoneType` raises, parking the binding), while
+        # `== null` is total — so presence renders as negated null-equality.
+        # Discovered by AX15's nested-recovery guard, the first executed
+        # null check over a struct-typed optional field.
+        rendered = f"({self.subject.cel(scope)} == null)"
+        return f"!{rendered}" if self.present else rendered
 
 
 @dataclass(frozen=True)
