@@ -142,3 +142,28 @@ result of the explorations.
   occurrence ID.
 - Watch in: AX11 (the real fragment has operational recovery flows where
   pacing matters).
+
+### SP-6 — Heartbeat details as the de-facto durable checkpoint channel
+
+- Raised by: AX9 effect-authoring spike, 2026-08-12.
+- Today: the only durable, per-occurrence, cross-attempt state a worker
+  can write mid-activity is the heartbeat details slot.
+  `LocalWorkerDispatch.claim` hands the previous attempt's persisted
+  details to the successor — AX9 proved a journaled effect interpreter
+  resumes a crashed activity mid-program on the frozen runtime with no
+  Petrus change.
+- Load-bearing constraints found: one exclusive slot per occurrence (an
+  effect journal collides with any other details use), a 65,536-byte
+  encoded cap (long programs with fat results will not fit), and
+  `InlineDispatch` resetting `latest_details=None` per inline retry
+  (journal resume is real only under persistent providers). Also,
+  `DerivedActivityHandler.prepare` hard-codes the default
+  `ExecutionPolicy()` (attempts=1), so multi-attempt resume cannot be
+  reached from a net-bound activity without policy plumbing.
+- Speculation: if effect-style activities become common, Petrus could
+  offer (a) per-activity `ExecutionPolicy` on the binding/declaration
+  surface, and (b) a first-class named checkpoint channel (or size-
+  accounted journal) distinct from liveness heartbeats, so progress
+  reporting and checkpointing stop competing for one slot.
+- Watch in: AX11/AX12 (whether the recommendation admits effect
+  activities at all determines this entry's weight).

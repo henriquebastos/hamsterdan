@@ -165,3 +165,18 @@ All records and spike code live inside this directory; production
   counter, not a runtime loop detector; replay over the cyclic net
   works unchanged. The frozen runtime has no timer/delay primitive, so
   backoff is inexpressible durably (ledger SP-5). Fifteen tests pass.
+- [AX9 — Effect-oriented activity authoring](experiments/ax9-effect-authoring/index.md)
+  completed 2026-08-12 — Promising with changes: **Interpretation A
+  only**. Effects are frozen dataclass values a generator activity
+  yields; a worker-side interpreter journals each completed effect into
+  the frozen dispatch's heartbeat-details channel, which
+  `LocalWorkerDispatch.claim` durably hands to the next attempt — a
+  crashed worker resumed mid-program with zero Petrus changes (proven:
+  `ReserveFunds` performed once across a retried attempt). The net sees
+  one activity; generators are re-executed deterministic syntax, never
+  durable frames; divergence fails loudly. Interpretation B (tracing
+  effects into net structure) was built and rejected: straight-line
+  only, 5 transitions/history pairs where A needs 1, and every
+  intermediate place erased to an untyped `dict`. Ledger SP-6 records
+  the checkpoint-channel constraints (64 KiB cap, slot exclusivity,
+  policy plumbing). Twelve tests pass.
