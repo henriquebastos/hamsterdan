@@ -141,3 +141,15 @@ All records and spike code live inside this directory; production
   arcs proved to be competition, not duplication — the mirror of AX5's
   output-side drop (SP-4 extended). Lambda *tracing* works as sugar over
   the same objects; source inspection rejected. Thirty-five tests pass.
+- [AX7 — Hybrid type + guard routing](experiments/ax7-hybrid-routing/index.md)
+  completed 2026-08-11 — Promising; continue. `hybrid()` fuses switch
+  and branch: each `case(Approved, when=on(Approved).risk < 20, then=…)`
+  lowers to one arc carrying *both* a color and a filter off an untyped
+  pool place. The decisive frozen-runtime fact: `enabledness.admitted`
+  gates on color **before** evaluating the filter, so a guard over the
+  narrowed variant's fields can never raise on other variants — proven
+  by running the Rejected route with warnings-as-errors. Guards stay
+  rooted in declared types (structural guards rejected: they trade
+  compile errors for parked tokens); totality is two-level — every
+  variant covered, and per variant exactly one unguarded default, last.
+  Fifteen tests pass.
