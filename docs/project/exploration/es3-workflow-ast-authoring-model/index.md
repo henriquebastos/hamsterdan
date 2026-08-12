@@ -334,3 +334,17 @@ All records and spike code live inside this directory; production
   the layer boundary. Stated non-coverage: arc weights, arc filters,
   inhibitors, timers, delivery — additive fields, not redesigns.
   Seventeen tests pass.
+- [AX19 — Kernel boundary](experiments/ax19-kernel-boundary/index.md)
+  completed 2026-08-12 — Promising; continue. AX18's non-coverage
+  claim, proven on the frozen engine: weight (enabledness multiplicity:
+  pairs move, the odd token strands), inhibit (one flag token freezes
+  the transition), per-arc CEL filters (token-field scope, distinct
+  from guard place-name scope; non-matching tokens never bind), timers
+  (a `Delay` gates in *virtual* time — the coordinator observes
+  `next_maturation` and the SimulatedClock jumps to maturity, stamping
+  the firing at anchor+duration), and source-transition delivery with
+  identity dedup (a shape plus an engine door, not a net primitive).
+  Each landed as one field on `KernelArc`/`KernelTransition`; nothing
+  in AX18 moved. One refusal added: a produce filter is rejected at
+  declaration because frozen output arcs admit by color only — a
+  declared-but-ignored filter would lie. Ten tests pass.

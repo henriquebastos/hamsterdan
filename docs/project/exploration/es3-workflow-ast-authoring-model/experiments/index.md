@@ -71,6 +71,7 @@ this series as prior art.
 | [AX16](ax16-null-safety-validation/index.md) | Null-safety as validation over CEL absorption semantics | Completed | Promising; continue |
 | [AX17](ax17-net-evolution/index.md) | Net evolution: one durable history across two compositions | Completed | Promising; continue |
 | [AX18](ax18-generic-kernel/index.md) | Generic kernel: net-agnostic IR beneath the domain sugar | Completed | Promising; continue |
+| [AX19](ax19-kernel-boundary/index.md) | Kernel boundary: weights, filters, inhibitors, timers, delivery | Completed | Promising; continue |
 
 ## Standing inputs from prior ES-002 evidence
 
