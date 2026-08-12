@@ -298,3 +298,22 @@ All records and spike code live inside this directory; production
   `TypeError` on the identical predicate, so the conservative refusal
   stays until the evaluators align (refinements recorded). No shared or
   production modules changed. Twenty-one tests pass.
+- [AX17 — Net evolution](experiments/ax17-net-evolution/index.md)
+  completed 2026-08-12 — Promising; continue. The adoption path for
+  fragment composition, tested as a generic runtime question: one
+  durable history, two same-name compositions (base+change vs
+  base+change+recovery), real engines over one store. Five rules: the
+  net name is the process identity (a renamed structural twin is a
+  foreign trace, so version cannot live in the name); superset resume
+  is total and zero-migration (one `Engine.load`, old places replay
+  identically, new places arrive empty); a token parked on a hand-off
+  place before the consuming concern existed is consumed after
+  evolution — WAIT + composition = deferred capability; an unseeded
+  state place starves the joined concern visibly (and its generated
+  `otherwise` with it), making minimal guard scope a *compatibility*
+  property, not just an economy — `recover_conversation`'s inputs
+  prove ⊆ the narrow net's places, `recover_dashboard`'s prove not;
+  and narrowing audits live state only — ended firings of removed
+  transitions resume silently (Petrus's documented posture), so
+  concern removal needs an authoring-layer preflight, not runtime
+  trust. Eight tests pass.
