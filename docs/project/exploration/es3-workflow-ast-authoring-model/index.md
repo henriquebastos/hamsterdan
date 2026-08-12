@@ -317,3 +317,20 @@ All records and spike code live inside this directory; production
   transitions resume silently (Petrus's documented posture), so
   concern removal needs an authoring-layer preflight, not runtime
   trust. Eight tests pass.
+- [AX18 — Generic kernel](experiments/ax18-generic-kernel/index.md)
+  completed 2026-08-12 — Promising; continue. The primitive question,
+  answered structurally: a four-notion net-agnostic IR — named
+  string-colored places (name is identity and CEL variable), transitions
+  with ordered consume/read/produce arcs, rendered CEL guard strings,
+  and work ∈ {passthrough, Petri handler, Motus activity} — is complete
+  for the frozen runtime. A hand-authored neutral net (same-color place
+  pair, marking-bounded cycle, read-arc-guarded competition, no handlers,
+  no Python types) runs unchanged on the frozen Engine; and the full
+  AX13 fragment desugared through the kernel serializes **byte-identical**
+  to the AX11 compiler's output with identical source attribution — so
+  fragment/scatter/choice/fold/update/retire are proven sugar, every
+  domain decision ending before the kernel. One honest loss: policy-only
+  source-map rows (WAIT/EXIT) have no kernel home — that asymmetry is
+  the layer boundary. Stated non-coverage: arc weights, arc filters,
+  inhibitors, timers, delivery — additive fields, not redesigns.
+  Seventeen tests pass.

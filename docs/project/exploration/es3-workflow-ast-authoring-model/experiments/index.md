@@ -70,6 +70,7 @@ this series as prior art.
 | [AX15](ax15-recovery-concern/index.md) | Production's hardest guard as a composed recovery concern | Completed | Promising; continue |
 | [AX16](ax16-null-safety-validation/index.md) | Null-safety as validation over CEL absorption semantics | Completed | Promising; continue |
 | [AX17](ax17-net-evolution/index.md) | Net evolution: one durable history across two compositions | Completed | Promising; continue |
+| [AX18](ax18-generic-kernel/index.md) | Generic kernel: net-agnostic IR beneath the domain sugar | Completed | Promising; continue |
 
 ## Standing inputs from prior ES-002 evidence
 
