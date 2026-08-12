@@ -411,3 +411,24 @@ All records and spike code live inside this directory; production
   gaps, shaped not open: a `merge` combinator, loops at composition
   level, and declared context ports for ambient state. Seventeen tests
   pass.
+- [AX23 — The completed algebra](experiments/ax23-completed-algebra/index.md)
+  completed 2026-08-12 — Promising; continue. AX22's three shaped gaps
+  closed as port operations, no new node kinds: `merge` fuses two
+  same-colored named exits into one place (convergence, *not*
+  synchronization — two tokens stay two tokens, tested); `loop` fuses
+  a named exit back into the block's own entry, so the authoring
+  expression stays a tree while the net is cyclic, boundedness staying
+  data-driven in the classifier; context ports make ambient state a
+  declared contract — `classify(..., reads=)` wires the AX20 fence as
+  a read arc (a reading step can never be pure), and `holding` builds
+  the AX20 claim bracket from handler-less passthroughs, returning the
+  context token on every terminal path including failure. The declared
+  exemption is what separates contract from smear: the same net with
+  the declaration dropped fails `check_sound` by name. Capstone: the
+  full AX20 + AX21 story — claim, disposable prepare, fence-once,
+  typed effect outcomes with bounded transient loop, explicit merge,
+  release everywhere — composed from leaves + seven combinators alone,
+  16 places / 10 transitions / 33 arcs, deterministic serialization,
+  frozen engine unchanged. The layer model now has no shaped gaps
+  left; what remains for synthesis is judgment (which disciplines
+  become lints; how AX10's styles sit on top). Thirty-six tests pass.

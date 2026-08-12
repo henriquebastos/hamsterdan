@@ -47,7 +47,17 @@ authoritative sources during the experiments.
   Alistair Barros, *Workflow Control-Flow Patterns*, Distributed and
   Parallel Databases 14(1), 2003; <http://www.workflowpatterns.com>.
   The catalog the AX1–AX8 combinator set should be checked against for
-  coverage claims.
+  coverage claims. AX23 leans on three named distinctions: **Simple
+  Merge (WCP-5)** vs **Synchronization (WCP-3)** — convergence never
+  pairs or waits, the AND-join does; **Structured Loop (WCP-21)** —
+  the tree-expression cycle; and the separate **Workflow Resource
+  Patterns** catalog (Nick Russell, ter Hofstede, van der Aalst, David
+  Edmond) for what `holding` is a fragment of.
+- **Contextual nets / read arcs** — Ugo Montanari & Francesca Rossi,
+  *Contextual Nets*, Acta Informatica 32(6), 1995. The formal
+  semantics of an arc that checks without consuming — concurrent
+  readers do not conflict. The frozen engine's read arcs, and AX23's
+  `reads=` context ports, are this construct.
 - **YAWL** — van der Aalst & ter Hofstede, *YAWL: Yet Another Workflow
   Language*, Information Systems 30(4), 2005. Prior art for a
   patterns-complete workflow language over Petri-net semantics.
@@ -122,6 +132,18 @@ authoritative sources during the experiments.
   World!*, IFIP TC2 Programming Concepts and Methods, 1990. The typed
   claim/release discipline, if the composition layer ever wants to
   check it statically.
+- **Semaphores and mutual exclusion** — Edsger W. Dijkstra,
+  *Cooperating Sequential Processes*, EWD 123, 1965 (published 1968).
+  AX23's `holding` bracket is a binary semaphore made structural: the
+  context place is the semaphore, claim is P, release is V, and an
+  AX19 arc weight would make it counting.
+- **Resource bracketing** — the acquire/use/release-on-every-exit
+  shape: Haskell's `Control.Exception.bracket` (Marlow et al., GHC),
+  Python's context managers (PEP 343, Guido van Rossum & Nick
+  Coghlan, 2005), C++ RAII (Bjarne Stroustrup, *The C++ Programming
+  Language*). `holding` compiles this shape into net structure — one
+  release transition per terminal exit, so the failure path returns
+  the resource too.
 - *Peripheral:* session types — Kohei Honda et al.; Philip Wadler,
   *Propositions as Sessions*, ICFP 2012. Only relevant if subnet
   boundaries ever become bidirectional protocols.
