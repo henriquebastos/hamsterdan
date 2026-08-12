@@ -368,3 +368,20 @@ All records and spike code live inside this directory; production
   (external effects keep their own current-authority fencing); the
   interior must stay pure; the claim serializes the concern. Fifteen
   tests pass.
+- [AX21 — Typed effect outcomes](experiments/ax21-effect-outcomes/index.md)
+  completed 2026-08-12 — Promising; continue. The Navigator's two
+  idempotencies proven as two different net mechanisms at two different
+  locations: identity dedup at the delivery door (kind one), and
+  lookup-first classification at the effect itself (kind two), whose
+  answer is a **typed outcome routed by color** — `Applied |
+  AlreadyApplied | Stale | Transient`, each a place, none an exception.
+  "Already done" is adopted (a success wearing an error's clothes);
+  "preconditions changed" routes to rejected and quiesces normally;
+  only Transient loops, bounded by the AX20 complement discipline.
+  Sharpest transferable rule: **lookup answers before preconditions** —
+  an operation applied under an old base then redelivered is
+  AlreadyApplied, not Stale. Replay resumes against a fresh fake ledger
+  with zero invocations: recorded outcomes, not re-executed effects,
+  drive resumption. The boundary is a function signature —
+  `apply : Work → Done | Rejected | Exhausted` — ready for the
+  composition layer. Twelve tests pass.

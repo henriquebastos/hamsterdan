@@ -73,6 +73,7 @@ this series as prior art.
 | [AX18](ax18-generic-kernel/index.md) | Generic kernel: net-agnostic IR beneath the domain sugar | Completed | Promising; continue |
 | [AX19](ax19-kernel-boundary/index.md) | Kernel boundary: weights, filters, inhibitors, timers, delivery | Completed | Promising; continue |
 | [AX20](ax20-function-subnet/index.md) | Function-like subnets: structural claim, disposable interior, exit fence | Completed | Promising; continue |
+| [AX21](ax21-effect-outcomes/index.md) | Typed effect outcomes: the at-least-once boundary classified | Completed | Promising; continue |
 
 ## Standing inputs from prior ES-002 evidence
 
