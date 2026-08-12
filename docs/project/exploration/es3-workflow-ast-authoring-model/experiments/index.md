@@ -58,7 +58,7 @@ this series as prior art.
 | [AX3](ax3-typed-ports/index.md) | Typed activities, ports, basic inference | Completed | Promising; continue |
 | [AX4](ax4-parallel-join/index.md) | Parallel split, execution, join | Completed | Promising; continue |
 | [AX5](ax5-type-branching/index.md) | Branching by output type | Completed | Promising; continue |
-| AX6 | Guard-based branching, predicate AST → CEL | Planned | — |
+| [AX6](ax6-guard-branching/index.md) | Guard-based branching, predicate AST → CEL | Completed | Promising; continue |
 | AX7 | Hybrid type + guard routing | Planned | — |
 | AX8 | Loops, cycles, retries | Planned | — |
 | AX9 | Effect-oriented activity authoring | Planned | — |

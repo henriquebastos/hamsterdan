@@ -128,3 +128,16 @@ All records and spike code live inside this directory; production
   validator; same-color case exits get an explicit XOR merge. Ledger:
   SP-1 evidence extended, SP-4 (strict routing mode) added. Nineteen
   tests pass.
+- [AX6 — Guard-based branching with a single data type](experiments/ax6-guard-branching/index.md)
+  completed 2026-08-11 — Promising; continue. A typed root proxy
+  (`on(Application)`) builds a frozen predicate AST via operator
+  overloading, validated against the dataclass at construction (unknown
+  fields, constant type mismatches, unguarded optional fields all fail
+  with remedies) and compiled to the bare-variable CEL dialect Petrus
+  filters evaluate. Overlap policy decided explicitly: cases lower
+  ordered-exclusive (each conjoined with prior negations) so first match
+  wins deterministically on the frozen runtime, and `otherwise` is
+  mandatory because a token no input arc admits parks silently. Input
+  arcs proved to be competition, not duplication — the mirror of AX5's
+  output-side drop (SP-4 extended). Lambda *tracing* works as sugar over
+  the same objects; source inspection rejected. Thirty-five tests pass.

@@ -110,3 +110,13 @@ result of the explorations.
   loud faults at the exact firing that produced the orphan.
 - Watch in: AX7 (guards narrow admission further — more drop surface),
   AX11 (real fragment).
+- AX6 evidence (2026-08-11): the input side has the mirror behavior —
+  a token admitted by no filtered input arc **parks** in its place,
+  silently when every filter evaluates cleanly to false, with a
+  `FilterEvaluationWarning` only when a filter raises. Parking is
+  recoverable (the token stays visible in the marking) but produces no
+  fault or diagnostic in the clean-false case. Any strict-mode design
+  should consider both surfaces: unroutable-produced (drop) and
+  unadmittable-parked (stall). The AX6 combinator closes the stall
+  authoring-side with a mandatory `otherwise` compiled to the
+  conjunction of all case negations.
