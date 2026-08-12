@@ -153,3 +153,15 @@ All records and spike code live inside this directory; production
   compile errors for parked tokens); totality is two-level — every
   variant covered, and per variant exactly one unguarded default, last.
   Fifteen tests pass.
+- [AX8 — Loops, cycles, retries](experiments/ax8-loops-retries/index.md)
+  completed 2026-08-11 — Promising; continue. The authoring AST stays a
+  tree; `retry(...)` lowers to a net with exactly one loop-back arc.
+  Retry state is durable token data (the retryable variant carries
+  `attempt`), the retry guard compiles to CEL (`attempt < limit`), and
+  retry/exhausted are complementary filtered arcs so no token parks.
+  Re-arming is an explicit pure typed transform (retryable variant →
+  original request) feeding the loop entry — workflow-level retry,
+  distinct from worker retry. Bounded-ness comes from the durable
+  counter, not a runtime loop detector; replay over the cyclic net
+  works unchanged. The frozen runtime has no timer/delay primitive, so
+  backoff is inexpressible durably (ledger SP-5). Fifteen tests pass.

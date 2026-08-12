@@ -120,3 +120,25 @@ result of the explorations.
   unadmittable-parked (stall). The AX6 combinator closes the stall
   authoring-side with a mandatory `otherwise` compiled to the
   conjunction of all case negations.
+
+### SP-5 — Durable timers and delays
+
+- Raised by: AX8 loop/retry spike, 2026-08-11.
+- Today: no timer, delay, deadline, or scheduling primitive exists
+  anywhere in the frozen Petrus package (verified by case-insensitive
+  search across the pinned checkout). "Wait, then retry" — the canonical
+  retry-with-backoff shape — is representable only as a worker-side
+  sleep inside an activity (blocking a worker, invisible to the net) or
+  as external driving-policy pacing (invisible to history).
+- Consequence for authoring layers: AX8's `retry` combinator expresses
+  bounded re-attempts durably (counter in token data, guard in CEL) but
+  cannot express *when* the next attempt may fire. Any backoff policy
+  would today be smuggled into an activity's implementation.
+- Speculation: a durable timer as a first-class enabledness input — for
+  example an arc or transition inscription "not before T", with T a
+  durable fact and firing eligibility re-evaluated by the driving loop.
+  The event-sourced shape suggests recording a timer-set fact and
+  treating expiry as an external completion, like activity completion by
+  occurrence ID.
+- Watch in: AX11 (the real fragment has operational recovery flows where
+  pacing matters).

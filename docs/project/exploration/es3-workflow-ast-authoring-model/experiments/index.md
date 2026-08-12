@@ -60,7 +60,7 @@ this series as prior art.
 | [AX5](ax5-type-branching/index.md) | Branching by output type | Completed | Promising; continue |
 | [AX6](ax6-guard-branching/index.md) | Guard-based branching, predicate AST → CEL | Completed | Promising; continue |
 | [AX7](ax7-hybrid-routing/index.md) | Hybrid type + guard routing | Completed | Promising; continue |
-| AX8 | Loops, cycles, retries | Planned | — |
+| [AX8](ax8-loops-retries/index.md) | Loops, cycles, retries | Completed | Promising; continue |
 | AX9 | Effect-oriented activity authoring | Planned | — |
 | AX10 | Python authoring-style comparison | Planned | — |
 | AX11 | Leading design on the real baseline fragment | Planned | — |
