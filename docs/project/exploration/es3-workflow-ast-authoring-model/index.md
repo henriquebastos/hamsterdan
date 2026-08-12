@@ -242,3 +242,21 @@ All records and spike code live inside this directory; production
   values — `dataclasses.replace` surgery on AX11's committed AST equals
   the restated fragment and compiles byte-identically. No compiler
   changes were needed to absorb the new concern. Eleven tests pass.
+- [AX14 — Fragment composition](experiments/ax14-fragment-composition/index.md)
+  completed 2026-08-12 — Promising; continue. The variation attacking
+  AX13's remaining constraint: sibling growth still restated (or
+  surgically transformed) the base AST. Concerns can instead be
+  independent fragment values composed by explicit named-port identity:
+  `compose(name, *fragments)` lowers fragments in argument order into
+  one shared spec, merging places only where port *names* coincide and
+  refusing loudly when a shared name disagrees in color or kind — while
+  same-color/different-name ports stay distinct (AX3's ruling survives
+  composition). The one AST addition is `handoff_fragment` (an entry
+  adjudicated by a guarded choice — the shape every consumer of an
+  `EXIT` lane takes); it reuses AX11's lane-choice lowering verbatim.
+  The oracle is exact: AX11's untouched base composed with the change
+  concern serializes byte-for-byte identical to AX13's restated
+  monolith, and both source fragments remain untouched values. Fragment
+  order is explicit and part of the definition (reversal preserves the
+  element sets but permutes arc positions). Cross-file source mapping
+  survives the seam. No runtime or ledger impact. Eighteen tests pass.
