@@ -457,3 +457,19 @@ All records and spike code live inside this directory; production
   produces one datum into N same-colored places. The ES-003 inquiry
   example — receive, parallel(reserve, taxes), charge — runs end to
   end on the frozen engine. Twenty-three tests pass.
+- [AX25 — The failure rail](experiments/ax25-failure-rail/index.md)
+  completed 2026-08-12 — Promising; continue. Railway-oriented failure
+  handling is pure sugar over the completed algebra: `attempt`
+  totalizes a leaf (an exception becomes a wire-safe envelope — kind,
+  message, source, retryable, cause chain; exact JSON round-trip
+  asserted, answering the `SerializableError` caveat), `rail_then`
+  fuses rails through an ordinary merge (one chain, structurally *one*
+  `Failure`-colored place — counted, not assumed), `recover` routes
+  the rail into a total handler that must rejoin the success track,
+  consuming the `failed` exit so unrecovered rails stay terminal by
+  construction. Zero kernel, algebra, or runtime changes; ~60 lines of
+  arrangement. The finding is the scope rule, held as doctrine: **the
+  rail carries what nobody modeled; classify carries what somebody
+  did** — a domain exit named `failed` is refused fusion by color, so
+  AX21's typed outcomes can never collapse into an undifferentiated
+  error channel. Seventeen tests pass.
