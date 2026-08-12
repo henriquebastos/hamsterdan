@@ -212,3 +212,18 @@ All records and spike code live inside this directory; production
   are zero separately registered callbacks, no repeated read/state
   wiring, construction-time overlap/gap/shape/type errors, and full
   transition→source-line mapping. Twenty-two tests pass.
+- [AX12 — Final architecture recommendation](experiments/ax12-recommendation/index.md)
+  completed 2026-08-12 — series verdict: **Promising with changes**.
+  Synthesis only, every claim cited to its experiment: layered model
+  (pure combinator AST → deterministic compiler emitting nets *and*
+  above-runtime glue → unchanged frozen Petrus); core + state-machine
+  node sets; named ports over nominal colors; typed predicate AST with
+  CEL as the now-proven guard backend; effects inside activities only
+  (AX9-A); nested combinators as default surface with an immutable
+  fluent façade permitted. The corrected economics claim is central:
+  the DSL does not shrink dense fragments (AX11) — its case is zero
+  callback registration, written-down implicit policy, construction-time
+  error classes, and total source mapping. Migration is oracle-parity
+  fragment-at-a-time; the separable minimum adoption is the predicate
+  AST + CEL guards alone. Seventeen sections; open risks tied to ledger
+  entries SP-1–SP-6.

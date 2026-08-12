@@ -64,7 +64,7 @@ this series as prior art.
 | [AX9](ax9-effect-authoring/index.md) | Effect-oriented activity authoring | Completed | Promising with changes |
 | [AX10](ax10-authoring-styles/index.md) | Python authoring-style comparison | Completed | Promising; continue |
 | [AX11](ax11-real-fragment/index.md) | Leading design on the real baseline fragment | Completed | Promising; continue |
-| AX12 | Final architecture recommendation | Planned | — |
+| [AX12](ax12-recommendation/index.md) | Final architecture recommendation | Completed | Promising with changes |
 
 ## Standing inputs from prior ES-002 evidence
 

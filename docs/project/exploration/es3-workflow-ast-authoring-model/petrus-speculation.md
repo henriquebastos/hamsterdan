@@ -167,3 +167,10 @@ result of the explorations.
   reporting and checkpointing stop competing for one slot.
 - Watch in: AX11/AX12 (whether the recommendation admits effect
   activities at all determines this entry's weight).
+- AX12 outcome (2026-08-12): the recommendation admits effect activities
+  as an optional authoring convenience inside activities only
+  (Interpretation A) — never as workflow structure. This entry therefore
+  keeps moderate weight: it becomes relevant only if effect-style
+  activities are actually adopted, and the policy-plumbing gap
+  (`DerivedActivityHandler`'s hard-coded `ExecutionPolicy()`) is the
+  part that gates any real use.
