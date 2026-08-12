@@ -57,7 +57,7 @@ this series as prior art.
 | [AX2](ax2-lower-sequence/index.md) | Lowering Activity and Sequence to `Net` | Completed | Promising; continue |
 | [AX3](ax3-typed-ports/index.md) | Typed activities, ports, basic inference | Completed | Promising; continue |
 | [AX4](ax4-parallel-join/index.md) | Parallel split, execution, join | Completed | Promising; continue |
-| AX5 | Branching by output type | Planned | — |
+| [AX5](ax5-type-branching/index.md) | Branching by output type | Completed | Promising; continue |
 | AX6 | Guard-based branching, predicate AST → CEL | Planned | — |
 | AX7 | Hybrid type + guard routing | Planned | — |
 | AX8 | Loops, cycles, retries | Planned | — |

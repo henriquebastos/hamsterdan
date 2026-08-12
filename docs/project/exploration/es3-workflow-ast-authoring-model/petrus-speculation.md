@@ -40,6 +40,15 @@ result of the explorations.
   no color (`Approved | Rejected` must be exploded by the compiler,
   AX5), and generics erase (`list[Decision]` → `"list"`), forcing
   wrapper dataclasses.
+- AX5 evidence (2026-08-11): unions confirmed as the sharpest casualty.
+  Variant identity does not survive the Motus worker boundary at all —
+  `DataclassPayloadConverter.encode` on a union annotation falls to raw
+  JSON encoding and raises. The authoring layer must both explode the
+  union into typed arcs *and* stamp a `$variant` discriminator into the
+  frozen result via a custom converter. Subclass routing is
+  unrepresentable under nominal colors (refused loudly at the worker
+  boundary instead). Real type binding would make subtype admission a
+  runtime semantic; today it simply does not exist.
 
 ### SP-2 — First-class sinks (no-output activities)
 
@@ -80,3 +89,24 @@ result of the explorations.
   change.
 - Watch in: AX8 (loop iterations create repeated tokens in one case —
   the same pairing question intra-case), AX11 (real fragment).
+
+### SP-4 — Opt-in strict output routing
+
+- Raised by: AX5 native-routing probes, 2026-08-11.
+- Today: `route` (pure handlers) and `complete_firing` (activity
+  projections) deposit each produced token on every output arc that
+  admits it and **silently drop** tokens no arc admits. AX5 proved both
+  behaviors with mini-nets: a `"Mystery"` token fires the transition and
+  vanishes without error or parking; a token admitted by a typed and an
+  untyped arc duplicates onto both targets.
+- Consequence for authoring layers: exhaustiveness must be guaranteed at
+  compile time and every projection must fail loudly before the drop can
+  occur — the AX5 spike does both, but nothing protects hand-written
+  nets or future compilers from the same footgun.
+- Speculation: an opt-in per-net or per-transition strict mode where a
+  produced token admitted by no output arc fails the firing instead of
+  dropping. Silent drop stays the compatible default (some nets use it
+  deliberately as filtering); strict mode turns exhaustiveness bugs into
+  loud faults at the exact firing that produced the orphan.
+- Watch in: AX7 (guards narrow admission further — more drop surface),
+  AX11 (real fragment).

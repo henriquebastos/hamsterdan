@@ -116,3 +116,15 @@ All records and spike code live inside this directory; production
   and the cross-case join mispairing hazard was *proven* by crossed
   completions (ledger SP-3) — instance-per-case discipline, not types,
   provides correlation. Twelve tests pass.
+- [AX5 — Branching by output type](experiments/ax5-type-branching/index.md)
+  completed 2026-08-11 — Promising; continue. The runtime routes tokens
+  by color through typed arcs natively — but silently drops what no arc
+  admits, and union variant identity is erased at the worker boundary
+  today. Both gaps close above the frozen runtime: a
+  `VariantPayloadConverter` stamps a durable `$variant` discriminator
+  (refusing subclasses and unlisted types loudly), and a routing handler
+  projects to exactly the matching variant place. Branching is explicit
+  (`switch`/`case`), with the union return as trigger and exhaustiveness
+  validator; same-color case exits get an explicit XOR merge. Ledger:
+  SP-1 evidence extended, SP-4 (strict routing mode) added. Nineteen
+  tests pass.
