@@ -62,6 +62,13 @@ All records and spike code live inside this directory; production
   analysis result and accumulates in the
   [Petrus speculation ledger](petrus-speculation.md), never inside an
   experiment's implementation.
+- Literature, authors, and named concepts grounding the AX findings —
+  structured programming, workflow-net soundness, structured
+  concurrency, applicative/selective/arrow composition, effects as
+  values, linear logic, idempotency doctrine, and net metrics —
+  accumulate in the [theory reference ledger](theory-references.md)
+  (Navigator direction 2026-08-12) so future digging starts from names,
+  not memory.
 
 ## Progress
 

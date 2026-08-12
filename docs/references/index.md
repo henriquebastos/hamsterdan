@@ -69,6 +69,21 @@ Authoritative GitHub documentation inspected 2026-08-01:
 - <https://docs.github.com/en/rest/guides/using-the-rest-api-to-interact-with-your-git-database>
 - <https://docs.github.com/en/webhooks/webhook-events-and-payloads>
 
+## Workflow-theory and functional-programming literature (ES-003)
+
+- Named literature behind the ES-003 authoring-model experiments —
+  structured programming (Böhm–Jacopini, Dijkstra), workflow nets and
+  soundness (van der Aalst; Kiepuszewski/ter Hofstede/Bussler),
+  structured concurrency (N. J. Smith), composition theory (Hughes,
+  McBride & Paterson, Mokhov et al.), effects as values (Plotkin &
+  Pretnar; Kiselyov & Ishii), linear logic and Petri nets (Girard;
+  Engberg & Winskel; Martí-Oliet & Meseguer), idempotency doctrine
+  (Helland; Garcia-Molina & Salem), and process-model metrics (Cardoso;
+  Mendling) — is catalogued with per-experiment relevance in the
+  [ES-003 theory reference ledger](../project/exploration/es3-workflow-ast-authoring-model/theory-references.md).
+  Entries are uninspected leads for future digging, not accepted
+  dependencies.
+
 ## Runtime libraries and deployment contracts
 
 - GitHubKit 0.16.0 App authentication, installation scoping, cache, request,
