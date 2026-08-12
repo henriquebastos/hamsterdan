@@ -279,3 +279,22 @@ All records and spike code live inside this directory; production
   are demonstrated and recorded as refinements: child refs do not
   inherit parent optionality, and right-hand comparison operands escape
   checking. Twenty-two tests pass.
+- [AX16 — Null-safety validation](experiments/ax16-null-safety-validation/index.md)
+  completed 2026-08-12 — Promising; continue. AX15's "conjoin
+  `.present()` *before* nested reads" author obligation is replaced by
+  a validator — and revised: celpy implements CEL's commutative,
+  error-absorbing logic (`error && false == false` in both orders,
+  proven on Petrus's own `compile_guard` path), so guard soundness is
+  **sibling membership, not position** — a risky read is safe iff some
+  conjunct anywhere in the same all-of is false whenever the path is
+  absent, dually for any-of (`.is_null()`; `.present()` has the wrong
+  polarity there and secures nothing). `validate_guard(predicate,
+  *root_types)` recomputes risk points from the root dataclasses —
+  closing v1's three holes: inherited parent optionality, both
+  comparison sides, order-dependence — validates AX15's real recovery
+  guards clean, and catches the variant with its presence conjunct
+  removed. Second finding: the two evaluators disagree — celpy equality
+  on a null leaf is total while `holds()` crashes with a raw
+  `TypeError` on the identical predicate, so the conservative refusal
+  stays until the evaluators align (refinements recorded). No shared or
+  production modules changed. Twenty-one tests pass.
