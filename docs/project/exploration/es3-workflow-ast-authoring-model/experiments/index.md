@@ -74,6 +74,7 @@ this series as prior art.
 | [AX19](ax19-kernel-boundary/index.md) | Kernel boundary: weights, filters, inhibitors, timers, delivery | Completed | Promising; continue |
 | [AX20](ax20-function-subnet/index.md) | Function-like subnets: structural claim, disposable interior, exit fence | Completed | Promising; continue |
 | [AX21](ax21-effect-outcomes/index.md) | Typed effect outcomes: the at-least-once boundary classified | Completed | Promising; continue |
+| [AX22](ax22-structured-composition/index.md) | Structured composition: blocks as values, combinators as the only control flow | Completed | Promising; continue |
 
 ## Standing inputs from prior ES-002 evidence
 

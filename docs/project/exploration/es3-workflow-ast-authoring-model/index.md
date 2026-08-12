@@ -392,3 +392,22 @@ All records and spike code live inside this directory; production
   drive resumption. The boundary is a function signature —
   `apply : Work → Done | Rejected | Exhausted` — ready for the
   composition layer. Twelve tests pass.
+- [AX22 — Structured composition](experiments/ax22-structured-composition/index.md)
+  completed 2026-08-12 — Promising; continue. The Navigator's "control
+  statements may only call functions" made executable: blocks (one
+  typed entry, named typed exits, declared purity) compose by **port
+  fusion** — a named exit renamed onto the next entry, zero glue
+  transitions, zero new state — under one authoring rule the frozen
+  runtime was probed to guarantee: handlers address outputs by *color*
+  through their output arcs, never by place name, so blocks survive
+  renaming untouched. Soundness (every node on an entry→exit path)
+  became a static judgment on the block value; purity propagates
+  (`pure ∘ pure = pure`) and `disposable(effectful)` is refused at
+  composition time with the AX20 doctrine in the message; exit-name
+  collisions demand explicit `rename_exit` — names disambiguate, types
+  validate. The four-leaf fenced pipeline compiles to 6 places / 4
+  transitions / 9 arcs, runs both terminal paths on the frozen engine
+  with no interior residue, and serializes deterministically. Known
+  gaps, shaped not open: a `merge` combinator, loops at composition
+  level, and declared context ports for ambient state. Seventeen tests
+  pass.
