@@ -51,6 +51,17 @@ Program, rules, and status: [experiments/index.md](experiments/index.md).
 All records and spike code live inside this directory; production
 `topology.py` is never modified and remains the comparison oracle.
 
+## Synthesis — 2026-08-12
+
+The full-series synthesis lives in [synthesis/](synthesis/index.md):
+four lenses (experiment map, negative results, positive results,
+unified candidate spec) plus a captured end-to-end pipeline
+walkthrough, written for a reader with no prior ES-002/ES-003 context.
+It **supersedes AX12**, which stands unedited as the midpoint
+recommendation snapshot. The unified candidate spec awaits Navigator
+review; no decisions, roadmap items, or production work follow from it
+yet.
+
 ## Navigator rulings — 2026-08-11
 
 - The entire investigation is exploration work with every artifact inside
@@ -243,6 +254,8 @@ All records and spike code live inside this directory; production
   entries SP-1–SP-6. Standing note (Navigator, 2026-08-12): AX12 is a
   synthesis *snapshot* — the goal remains exploration and variation;
   the story is retold and decided only after the variations run.
+  **Superseded 2026-08-12 by [synthesis/](synthesis/index.md)**, which
+  retells the story over the completed AX0–AX26 series.
 - [AX13 — Sibling amortization](experiments/ax13-sibling-amortization/index.md)
   completed 2026-08-12 — Promising; continue. The variation attacking
   AX11's LOC-parity finding: growing the real change-intent concern

@@ -1,6 +1,9 @@
 # AX12 — Final architecture recommendation
 
-- State: Completed, 2026-08-12.
+- State: Completed, 2026-08-12. **Superseded** by
+  [../../synthesis/](../../synthesis/index.md) (2026-08-12), which
+  retells the recommendation over the completed AX0–AX26 series. This
+  record stands unedited as the midpoint snapshot.
 - Question: given AX0–AX11, what architecture should Hamsterdan choose
   for authoring processes above the Petrus net — and what should it
   refuse to build?

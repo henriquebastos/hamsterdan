@@ -1,0 +1,498 @@
+
+==============================================================================
+  STAGE 1 — the authoring expression (what the author wrote)
+==============================================================================
+
+  In cases_good.py (AX26), the canonical workflow is composed from typed
+  leaves. This is the entire authoring surface — no places, transitions,
+  or arcs are mentioned:
+
+      both     = t_par2("both", first=reserve, second=taxes)
+      routed   = t_route(judge, when_yes=settle, when_no=escalate, returns=Done)
+      workflow = t_then(t_then(t_then(parse, both), charge), routed)
+
+
+==============================================================================
+  STAGE 2 — the typed value (what pyright/ty see)
+==============================================================================
+
+  type(workflow)        = TBlock
+  static type           = TBlock[Raw, Done]   (revealed identically by pyright and ty)
+  This layer is advisory: it exists so composition mistakes fail in the editor.
+
+==============================================================================
+  STAGE 3 — the Block value (the composition algebra's view, AX23)
+==============================================================================
+
+  name    = '(((parse >> par[both](first, second)) >> charge) >> ((judge >> settle) >> escalate))'
+  pure    = False
+  entry   = Port(place='parse_in', color='Raw')
+  exits:
+    'out': Port(place='settle_out', color='Done')
+  contexts: {}
+
+==============================================================================
+  STAGE 4 — the kernel nodes inside the Block (AX18/AX19 IR)
+==============================================================================
+
+  11 places, 9 transitions
+
+  places (name: color):
+    parse_in: Raw
+    parse_out: Order
+    both_out: Join2[Reservation, Taxes]
+    reserve_in: Order
+    reserve_out: Reservation
+    taxes_in: Order
+    taxes_out: Taxes
+    charge_out: Receipt
+    judge_yes: Receipt
+    judge_no: Review
+    settle_out: Done
+
+  transitions (arcs as mode(place), guard if any):
+    parse: consume(parse_in), produce(parse_out)
+    reserve: consume(reserve_in), produce(reserve_out)
+    taxes: consume(taxes_in), produce(taxes_out)
+    both: consume(parse_out), produce(reserve_in), produce(taxes_in)
+    both_join: consume(reserve_out), consume(taxes_out), produce(both_out)
+    charge: consume(both_out), produce(charge_out)
+    judge: consume(charge_out), produce(judge_yes), produce(judge_no)
+    settle: consume(judge_yes), produce(settle_out)
+    escalate: consume(judge_no), produce(settle_out)
+
+==============================================================================
+  STAGE 5 — soundness check + lowering to the frozen Petrus net
+==============================================================================
+
+  check_sound: passed (every node lies on an entry→exit path)
+  serialized NetDefinition: 6985 bytes, deterministic
+  serialized definition (verbatim):
+
+    {
+      "definition": {
+        "arcs": [
+          {
+            "color": "Raw",
+            "filter": null,
+            "mode": "consume",
+            "position": 0,
+            "source": "parse_in",
+            "target": "parse",
+            "weight": 1
+          },
+          {
+            "color": "Order",
+            "filter": null,
+            "mode": "consume",
+            "position": 1,
+            "source": "parse",
+            "target": "parse_out",
+            "weight": 1
+          },
+          {
+            "color": "Order",
+            "filter": null,
+            "mode": "consume",
+            "position": 2,
+            "source": "reserve_in",
+            "target": "reserve",
+            "weight": 1
+          },
+          {
+            "color": "Reservation",
+            "filter": null,
+            "mode": "consume",
+            "position": 3,
+            "source": "reserve",
+            "target": "reserve_out",
+            "weight": 1
+          },
+          {
+            "color": "Order",
+            "filter": null,
+            "mode": "consume",
+            "position": 4,
+            "source": "taxes_in",
+            "target": "taxes",
+            "weight": 1
+          },
+          {
+            "color": "Taxes",
+            "filter": null,
+            "mode": "consume",
+            "position": 5,
+            "source": "taxes",
+            "target": "taxes_out",
+            "weight": 1
+          },
+          {
+            "color": "Order",
+            "filter": null,
+            "mode": "consume",
+            "position": 6,
+            "source": "parse_out",
+            "target": "both",
+            "weight": 1
+          },
+          {
+            "color": "Order",
+            "filter": null,
+            "mode": "consume",
+            "position": 7,
+            "source": "both",
+            "target": "reserve_in",
+            "weight": 1
+          },
+          {
+            "color": "Order",
+            "filter": null,
+            "mode": "consume",
+            "position": 8,
+            "source": "both",
+            "target": "taxes_in",
+            "weight": 1
+          },
+          {
+            "color": "Reservation",
+            "filter": null,
+            "mode": "consume",
+            "position": 9,
+            "source": "reserve_out",
+            "target": "both_join",
+            "weight": 1
+          },
+          {
+            "color": "Taxes",
+            "filter": null,
+            "mode": "consume",
+            "position": 10,
+            "source": "taxes_out",
+            "target": "both_join",
+            "weight": 1
+          },
+          {
+            "color": "Join2[Reservation, Taxes]",
+            "filter": null,
+            "mode": "consume",
+            "position": 11,
+            "source": "both_join",
+            "target": "both_out",
+            "weight": 1
+          },
+          {
+            "color": "Join2[Reservation, Taxes]",
+            "filter": null,
+            "mode": "consume",
+            "position": 12,
+            "source": "both_out",
+            "target": "charge",
+            "weight": 1
+          },
+          {
+            "color": "Receipt",
+            "filter": null,
+            "mode": "consume",
+            "position": 13,
+            "source": "charge",
+            "target": "charge_out",
+            "weight": 1
+          },
+          {
+            "color": "Receipt",
+            "filter": null,
+            "mode": "consume",
+            "position": 14,
+            "source": "charge_out",
+            "target": "judge",
+            "weight": 1
+          },
+          {
+            "color": "Receipt",
+            "filter": null,
+            "mode": "consume",
+            "position": 15,
+            "source": "judge",
+            "target": "judge_yes",
+            "weight": 1
+          },
+          {
+            "color": "Review",
+            "filter": null,
+            "mode": "consume",
+            "position": 16,
+            "source": "judge",
+            "target": "judge_no",
+            "weight": 1
+          },
+          {
+            "color": "Receipt",
+            "filter": null,
+            "mode": "consume",
+            "position": 17,
+            "source": "judge_yes",
+            "target": "settle",
+            "weight": 1
+          },
+          {
+            "color": "Done",
+            "filter": null,
+            "mode": "consume",
+            "position": 18,
+            "source": "settle",
+            "target": "settle_out",
+            "weight": 1
+          },
+          {
+            "color": "Review",
+            "filter": null,
+            "mode": "consume",
+            "position": 19,
+            "source": "judge_no",
+            "target": "escalate",
+            "weight": 1
+          },
+          {
+            "color": "Done",
+            "filter": null,
+            "mode": "consume",
+            "position": 20,
+            "source": "escalate",
+            "target": "settle_out",
+            "weight": 1
+          }
+        ],
+        "completion": null,
+        "name": "walkthrough",
+        "places": [
+          {
+            "color": "Join2[Reservation, Taxes]",
+            "path": "both_out"
+          },
+          {
+            "color": "Receipt",
+            "path": "charge_out"
+          },
+          {
+            "color": "Review",
+            "path": "judge_no"
+          },
+          {
+            "color": "Receipt",
+            "path": "judge_yes"
+          },
+          {
+            "color": "Raw",
+            "path": "parse_in"
+          },
+          {
+            "color": "Order",
+            "path": "parse_out"
+          },
+          {
+            "color": "Order",
+            "path": "reserve_in"
+          },
+          {
+            "color": "Reservation",
+            "path": "reserve_out"
+          },
+          {
+            "color": "Done",
+            "path": "settle_out"
+          },
+          {
+            "color": "Order",
+            "path": "taxes_in"
+          },
+          {
+            "color": "Taxes",
+            "path": "taxes_out"
+          }
+        ],
+        "time_domain": "integer",
+        "transitions": [
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/both#handler"
+            },
+            "path": "both",
+            "timers": []
+          },
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/both_join#handler"
+            },
+            "path": "both_join",
+            "timers": []
+          },
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/charge#handler"
+            },
+            "path": "charge",
+            "timers": []
+          },
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/escalate#handler"
+            },
+            "path": "escalate",
+            "timers": []
+          },
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/judge#handler"
+            },
+            "path": "judge",
+            "timers": []
+          },
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/parse#handler"
+            },
+            "path": "parse",
+            "timers": []
+          },
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/reserve#handler"
+            },
+            "path": "reserve",
+            "timers": []
+          },
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/settle#handler"
+            },
+            "path": "settle",
+            "timers": []
+          },
+          {
+            "guards": [],
+            "handler": {
+              "kind": "anonymous",
+              "uri": "transition:/taxes#handler"
+            },
+            "path": "taxes",
+            "timers": []
+          }
+        ]
+      },
+      "format": "petrus-net-definition",
+      "version": 3
+    }
+
+==============================================================================
+  STAGE 6 — execution on the frozen engine, one advance at a time
+==============================================================================
+
+  seed: Raw{'payload': 'ab'} placed on 'parse_in'
+
+  initial marking:
+    parse_in: [Raw{"payload": "ab"}]
+
+  after advance 1:
+    parse_out: [Order{"amount": 2, "sku": "ab"}]
+
+  after advance 2:
+    reserve_in: [Order{"amount": 2, "sku": "ab"}]
+    taxes_in: [Order{"amount": 2, "sku": "ab"}]
+
+  after advance 3:
+    reserve_out: [Reservation{"hold_id": "H-ab", "sku": "ab"}]
+    taxes_in: [Order{"amount": 2, "sku": "ab"}]
+
+  after advance 4:
+    reserve_out: [Reservation{"hold_id": "H-ab", "sku": "ab"}]
+    taxes_out: [Taxes{"tax": 0}]
+
+  after advance 5:
+    both_out: [Join2[Reservation, Taxes]{"first": {"hold_id": "H-ab", "sku": "ab"}, "second": {"tax": 0}}]
+
+  after advance 6:
+    charge_out: [Receipt{"total": 4}]
+
+  after advance 7:
+    judge_yes: [Receipt{"total": 4}]
+
+  after advance 8:
+    settle_out: [Done{"ok": true}]
+
+  quiesced after 8 advances
+
+==============================================================================
+  STAGE 7 — the persisted history (the durable truth)
+==============================================================================
+
+  44 records:
+     0  InstanceCreated
+     1  TokensInitialized
+     2  CandidateSelected
+     3  FiringBegun
+     4  TokensConsumed
+     5  TokensProduced
+     6  FiringCompleted
+     7  CandidateSelected
+     8  FiringBegun
+     9  TokensConsumed
+    10  TokensProduced
+    11  TokensProduced
+    12  FiringCompleted
+    13  CandidateSelected
+    14  FiringBegun
+    15  TokensConsumed
+    16  TokensProduced
+    17  FiringCompleted
+    18  CandidateSelected
+    19  FiringBegun
+    20  TokensConsumed
+    21  TokensProduced
+    22  FiringCompleted
+    23  CandidateSelected
+    24  FiringBegun
+    25  TokensConsumed
+    26  TokensConsumed
+    27  TokensProduced
+    28  FiringCompleted
+    29  CandidateSelected
+    30  FiringBegun
+    31  TokensConsumed
+    32  TokensProduced
+    33  FiringCompleted
+    34  CandidateSelected
+    35  FiringBegun
+    36  TokensConsumed
+    37  TokensProduced
+    38  FiringCompleted
+    39  CandidateSelected
+    40  FiringBegun
+    41  TokensConsumed
+    42  TokensProduced
+    43  FiringCompleted
+
+==============================================================================
+  STAGE 8 — replay: recompile from source, load the history
+==============================================================================
+
+  recompiled lowering is byte-identical: True
+  replayed marking equals live marking on every place: True
+
+  final marking after replay:
+    settle_out: [Done{"ok": true}]
