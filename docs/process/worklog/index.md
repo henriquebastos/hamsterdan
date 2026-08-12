@@ -51,3 +51,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-11 — Strict typed guards adopted](entries/2026-08-11T2359Z-strict-typed-guards-adopted.md)
 - [2026-08-11 — Lifecycle guards named](entries/2026-08-11T2359Z-lifecycle-guards-named.md)
 - [2026-08-11 — Terminal partition guards named](entries/2026-08-11T2359Z-terminal-partition-guards-named.md)
+- [2026-08-11 — Expression-layer exploration closed](entries/2026-08-11T2359Z-expression-layer-exploration-closed.md)

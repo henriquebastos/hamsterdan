@@ -1,6 +1,7 @@
 ---
-status: Thickening
+status: Archived
 opened: 2026-08-11
+closed: 2026-08-11
 navigator: Henrique
 ---
 
@@ -19,6 +20,29 @@ demands simplicity and strong developer experience?
 This inquiry is distinct from ES-001. ES-001 resolved *which layer owns which
 execution mechanics*; ES-002 asks *how the remaining genuine workflow should be
 written down*.
+
+## Closure
+
+The experiment is closed and archived. Its full 69-transition branch proved
+that a restricted semantic grammar can regenerate the production Net exactly,
+but the economics rejected promotion: 14 mostly Hamsterdan-specific families
+and roughly 540 lines of family machinery reduced about 510 production wiring
+lines to about 440 declaration lines. `topology.py` remains the production
+expression, and the experimental module remains unmerged evidence.
+
+The production results that did earn their abstractions shipped independently:
+strict Pydantic conversion moved to readiness ownership; fixed-shape acceptance
+and conversation joins became Petrus direct transformations; Petrus gained the
+provider-neutral custom typed-guard carrier; and exact admission, authorization,
+lifecycle, acceptance, and retirement rules became named strict typed
+predicates. The production Net remains 46 places, 69 transitions, and 309 arcs.
+
+No universal combinator, generator workflow runtime, Hamsterdan fragment
+grammar, correlation/filter language, routing contract, or structural analyzer
+is authorized by this closure. Separate threads own any continuing Petrus
+structural-analysis and correlation exploration. Reopening ES-002 requires new
+evidence that an expression mechanism removes a demonstrated concept or enables
+an active analysis consumer—not merely fewer authoring lines.
 
 ## Signals
 
