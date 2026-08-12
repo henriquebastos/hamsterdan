@@ -193,3 +193,22 @@ All records and spike code live inside this directory; production
   refuse `if` (the AX9-B boundary re-proven at this layer) and Python
   loops merely unroll — generators stay inside activities (AX9-A).
   Sixteen tests pass.
+- [AX11 — Leading design on a real production fragment](experiments/ax11-real-fragment/index.md)
+  completed 2026-08-12 — Promising; continue. The real conversation-intent
+  fragment of `topology.py` (classification bridge, `unpack_intents`
+  scatter, the `accept_*_intent` folds, `authorize_reply`, and the
+  `reply_basis` retire) was authored as ports + scatter lanes + guarded
+  choices + typed folds/updates, importing production domain truth
+  (`fold_intent`, `operation`, `effect_payload`, the strict contracts)
+  rather than re-authoring it. The compiled net matches the
+  production-style oracle place-for-place across five scenarios on
+  frozen Petrus (11 places, 6 identically named transitions; 23 vs 22
+  arcs — one visible read-arc from mechanical ordered-exclusivity scope
+  widening the source map records). Replay over a recompiled net works;
+  compilation is byte-deterministic. Honest findings: the fragment's
+  concurrency is scatter concurrency, not AX4 AND-parallel (reported as
+  such); authored LOC is slightly *higher* (113 vs 95) because implicit
+  policy (`WAIT` parks, `rest=DROP`) must be written down — the gains
+  are zero separately registered callbacks, no repeated read/state
+  wiring, construction-time overlap/gap/shape/type errors, and full
+  transition→source-line mapping. Twenty-two tests pass.

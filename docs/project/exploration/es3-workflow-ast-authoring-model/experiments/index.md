@@ -63,7 +63,7 @@ this series as prior art.
 | [AX8](ax8-loops-retries/index.md) | Loops, cycles, retries | Completed | Promising; continue |
 | [AX9](ax9-effect-authoring/index.md) | Effect-oriented activity authoring | Completed | Promising with changes |
 | [AX10](ax10-authoring-styles/index.md) | Python authoring-style comparison | Completed | Promising; continue |
-| AX11 | Leading design on the real baseline fragment | Planned | — |
+| [AX11](ax11-real-fragment/index.md) | Leading design on the real baseline fragment | Completed | Promising; continue |
 | AX12 | Final architecture recommendation | Planned | — |
 
 ## Standing inputs from prior ES-002 evidence
