@@ -226,4 +226,19 @@ All records and spike code live inside this directory; production
   error classes, and total source mapping. Migration is oracle-parity
   fragment-at-a-time; the separable minimum adoption is the predicate
   AST + CEL guards alone. Seventeen sections; open risks tied to ledger
-  entries SP-1–SP-6.
+  entries SP-1–SP-6. Standing note (Navigator, 2026-08-12): AX12 is a
+  synthesis *snapshot* — the goal remains exploration and variation;
+  the story is retold and decided only after the variations run.
+- [AX13 — Sibling amortization](experiments/ax13-sibling-amortization/index.md)
+  completed 2026-08-12 — Promising; continue. The variation attacking
+  AX11's LOC-parity finding: growing the real change-intent concern
+  (`_mutation`/`_authorize_change`/`change_basis` retire) onto the AX11
+  fragment costs 32 authored lines vs 38 production lines, zero new
+  handler registrations (production adds two), no repeated wiring, and
+  identical marginal net growth (+2/+2/+8 both sides — no widening this
+  time, since `~MUTATION`'s roots cover its predecessor's). The
+  economics flip at the second sibling: the first fragment pays the
+  vocabulary, siblings reuse it. Bonus property proven: fragments are
+  values — `dataclasses.replace` surgery on AX11's committed AST equals
+  the restated fragment and compiles byte-identically. No compiler
+  changes were needed to absorb the new concern. Eleven tests pass.
