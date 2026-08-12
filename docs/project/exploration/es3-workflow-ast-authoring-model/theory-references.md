@@ -192,6 +192,30 @@ authoritative sources during the experiments.
   is not"; matches Petrus's dispatcher/worker boundary and the
   no-live-generator-frames rule.
 
+## Static typing of compositions (AX26)
+
+- **Gradual typing** — Jeremy Siek & Walid Taha, *Gradual Typing for
+  Functional Languages*, Scheme Workshop 2006. The theory behind both
+  checkers' posture; ty 0.0.63's "precise inference, incomplete
+  enforcement" is a deliberate pre-1.0 no-false-positives stance in
+  this tradition (unsolved generic bounds surface as `Unknown` rather
+  than errors).
+- **Phantom types** — Daan Leijen & Erik Meijer, *Domain Specific
+  Embedded Compilers*, DSL 1999. Type parameters carried for
+  compile-time discrimination without runtime representation — the
+  `TBlock[I, O]` façade is exactly this, with the AX26 caveat that
+  *purely* phantom parameters risk inferred bivariance; anchoring them
+  in `accepts`/`returns` fields keeps the checks real.
+- **TypeVar solving and union widening** — Python typing spec, and
+  pyright's documented constraint-solver behavior: a TypeVar
+  constrained from two independent argument positions widens to the
+  union instead of conflicting. The AX26 case-9 hole; the `t_fn`
+  single-source-of-truth inference closes it structurally.
+- **Make illegal states unrepresentable** — Yaron Minsky (Jane
+  Street, *Effective ML*). The AX26 encoding strategy: `TChoice` not
+  being a `TBlock` makes non-total composition a type error rather
+  than a lint.
+
 ## Net metrics (the arc/node and hub-degree discussion)
 
 - **Control-flow complexity (CFC)** — Jorge Cardoso, *How to Measure

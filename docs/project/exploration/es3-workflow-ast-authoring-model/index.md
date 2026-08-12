@@ -473,3 +473,25 @@ All records and spike code live inside this directory; production
   did** — a domain exit named `failed` is refused fusion by color, so
   AX21's typed outcomes can never collapse into an undifferentiated
   error channel. Seventeen tests pass.
+- [AX26 — Build-time type checking](experiments/ax26-static-typing/index.md)
+  completed 2026-08-12 — Promising; continue. A thin generic façade —
+  colors as Python types (TypedDicts, so token data stays plain
+  dicts, zero bridging), totality by construction (`TChoice` is not a
+  `TBlock`), purity as a subtype, convergence explicit — was fed to
+  both pinned checkers with the catch matrix asserted line by line.
+  **pyright 1.1.411: 8/9 mistakes rejected at edit time, zero false
+  positives, no annotation burden. ty 0.0.63: identical fully-precise
+  inference but only the structural 4/9 enforced** — its generic
+  solver does not yet fail unsatisfiable constraints, so the most
+  valuable checks (bad then/route/merge/par) do not fire in this
+  project's CI checker today. The shared 9th hole is TypeVar
+  union-widening over redundant declarations; the `t_fn` variation
+  (ports inferred from the signature alone, feeding the runtime
+  colors) removes the redundancy — inference is *safer* than
+  declaration, sharpening AX3. Three layers caught three different
+  bugs during the spike (a checker each, and AX23's own rules), so
+  the doctrine holds: checkers advise, the deterministic
+  CompositionError layer remains the authority. Sixteen tests pass,
+  both checker harnesses pinned. Fixed-arity is the static ceiling —
+  Python has no mapped types, so `FailToCompose`-style generality
+  does not translate; the runtime algebra keeps the general case.
