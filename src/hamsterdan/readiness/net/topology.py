@@ -271,6 +271,12 @@ def _effect_matches(a: Authority, owner, value) -> bool:
     return value.operation == getattr(owner, field)
 
 
+def _conversation_effect_matches(
+    a: Authority, owner: ConversationPublicationState, value: ConversationPublicationResult
+) -> bool:
+    return _effect_matches(a, owner, value)
+
+
 @direct
 def fold_review(state: ReviewState, result: ReviewResult) -> ReviewState:
     dispositions = {item.get("finding_id"): item.get("state") for item in result.lineage}
@@ -951,6 +957,10 @@ def _mutation(a: Authority, m: MutationState, value: Intent) -> bool:
     )
 
 
+def _retires_change_intent(a: Authority, m: MutationState, value: Intent) -> bool:
+    return not _mutation(a, m, value)
+
+
 def _authorize_change(binding, outputs):
     a, m, value = _values(binding, Authority, MutationState, Intent)
     payload = effect_payload(a, {"intent": value.dump()})
@@ -1033,6 +1043,16 @@ def _recoverable_publication(
         )
         == (a.epoch, a.head, a.base_head, a.policy_digest)
     )
+
+
+def _retires_unrecoverable_publication(
+    a: Authority,
+    cp: ConversationPublicationState,
+    dp: DashboardPublicationState,
+    rp: ReadinessPublicationState,
+    value: Intent,
+) -> bool:
+    return not _recoverable_publication(a, cp, dp, rp, value)
 
 
 def _recover_publication(binding, outputs):
@@ -1412,7 +1432,10 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
             work.p.change,
         )
     )
-    accept_conversation = t.accept_conversation(handler=_accept_conversation, guards=_guard(_effect_matches))
+    accept_conversation = t.accept_conversation(
+        handler=_accept_conversation,
+        guards=typed_guard(_conversation_effect_matches, converter=PydanticPayloadConverter()),
+    )
     p.authority >> arc.read() >> accept_conversation
     (p.conversation_publication_state, p.conversation_result) >> accept_conversation >> p.conversation_publication_state
     for name, owner, owner_type, place, result_type, handler in (
@@ -1546,18 +1569,7 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
                 concern >> arc.read() >> recover_publication
         (owner, p.recovery_basis) >> recover_publication >> (owner, exact_work)
     reject_recovery = retire.t.recovery_basis(
-        guards=_typed_guard(
-            (
-                Authority,
-                ConversationPublicationState,
-                DashboardPublicationState,
-                ReadinessPublicationState,
-                Intent,
-            ),
-            lambda authority, conversation, dashboard, readiness, value: (
-                not _recoverable_publication(authority, conversation, dashboard, readiness, value)
-            ),
-        )
+        guards=typed_guard(_retires_unrecoverable_publication, converter=PydanticPayloadConverter())
     )
     for place in (
         p.authority,
@@ -1654,7 +1666,9 @@ def build_net(reminder_delay: float = 3 * 24 * 60 * 60) -> BuiltNet:
         tr = getattr(retire.t, name)(guards=_guard(guard))
         p.authority >> arc.read() >> tr
         place >> tr
-    change_retire = retire.t.change_basis(guards=_guard(lambda a, m, v: not _mutation(a, m, v)))
+    change_retire = retire.t.change_basis(
+        guards=typed_guard(_retires_change_intent, converter=PydanticPayloadConverter())
+    )
     (p.authority, p.mutation_state) >> arc.read() >> change_retire
     p.change_basis >> change_retire
     for name, owner, guard in (

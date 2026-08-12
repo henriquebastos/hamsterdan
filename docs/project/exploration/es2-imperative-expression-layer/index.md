@@ -552,6 +552,21 @@ and distinct stop routing; only predicate binding and call-stack naming changed.
 It demonstrates that useful correlation atoms can become explicit ordinary
 Python rules before—and independently of—any declared correlation language.
 
+### Terminal partitions become named typed predicates
+
+RS-018 names three further exact fixed-shape decisions: accepting a current
+conversation publication result, retiring an intent that cannot authorize a
+change, and retiring an intent that cannot recover an owned blocked publication.
+The two retirement rules remain direct complements of their authorization
+predicates.
+
+This makes acceptance/retirement partition structure visible in ordinary typed
+Python without encoding it as a new AST. Dynamic per-target recovery,
+heterogeneous result families, subset-selection guards, and snapshot joins stay
+Petri-aware. The result supplies cleaner production seams for a future
+mechanical partition experiment while preserving the no-correlation-language
+decision.
+
 ## Open questions
 
 - Build-time compilation artifact: what is diffed, versioned, and reviewed —
