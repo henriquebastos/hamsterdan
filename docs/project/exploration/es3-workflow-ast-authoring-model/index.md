@@ -616,3 +616,25 @@ Navigator, not decided here):
   a substitute for — AX27's generated-authoring probe. The store
   default (in-memory, visibly labeled) stays a tabled Navigator
   decision. Nine tests pass.
+- [AX27 — Generated authoring against the composition authority](experiments/ax27-generated-authoring/index.md)
+  completed 2026-08-13 — Promising; continue. The Deer-raised route
+  works today with no new machinery: a ~120-line **total** `review`
+  (any candidate source → structured Feedback, never a crash) stages
+  the existing authorities — `source` (parse), `author` (the algebra's
+  eager `CompositionError`s), `sound` (`check_sound`). Against a
+  corpus of ten characteristic generator mistakes plus two residue
+  cases: all ten refused at the expected stage; all ten messages name
+  the offending element and **five of ten carry the concrete remedy
+  verbatim** (pinned as a count); the wrong-exit repair is mechanical
+  from the message alone. Review never executes the net — proven with
+  a poisoned Engine, not by inspection — and the trust contract is
+  explicit: reviewing authoring source is executing Python, so the
+  no-execution stage is pinned pyright over the AX26 façade (the
+  generated mistake rejected on exactly the marked line, no imports).
+  Two structural findings: the eager algebra makes the `sound` stage
+  nearly unreachable from combinator-only source (reaching it required
+  dataclass surgery — layered validation working as designed), and the
+  residue boundary is demonstrated (an undeclared runtime outcome and
+  a data-driven non-termination pass every pre-motion stage and are
+  caught only by opt-in motion, AX28's harness). The full loop is
+  static → review → opt-in motion. Thirty tests pass.

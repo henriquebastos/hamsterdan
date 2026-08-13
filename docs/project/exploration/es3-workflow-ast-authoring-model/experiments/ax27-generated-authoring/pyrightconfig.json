@@ -1,0 +1,11 @@
+{
+    "typeCheckingMode": "standard",
+    "reportMissingModuleSource": false,
+    "extraPaths": [
+        "../ax11-real-fragment",
+        "../ax19-kernel-boundary",
+        "../ax23-completed-algebra",
+        "../ax24-parallel-blocks",
+        "../ax26-static-typing"
+    ]
+}
