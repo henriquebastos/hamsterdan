@@ -10,7 +10,7 @@ emerge from findings; only the opening arc is planned.
 | [AX2](ax2-linear-review.md) | Can one mostly pure/disposable concern be expressed as a linear ES-003 block chain? | concluded — promising; continue (spike: [ax2-linear-review/](ax2-linear-review/)) |
 | [AX3](ax3-attempt-first.md) | Attempt-first gates: is the operation itself the fence, and does dropping pre-checks simplify the subnets? | concluded — promising; continue, AX1 amended (spike: [ax3-attempt-first/](ax3-attempt-first/)) |
 | [AX4](ax4-typed-port-composition.md) | Do two subnets compose through typed named ports without a shared control place? | concluded — promising; continue (spike: [ax4-typed-port-composition/](ax4-typed-port-composition/)) |
-| AX5 | Where does the independent model diverge from `topology.py`, and is each divergence accidental complexity, a missed requirement, or an open choice? | planned |
+| [AX5](ax5-divergence-sweep.md) | Where does the independent model diverge from `topology.py`, and is each divergence accidental complexity, a missed requirement, or an open choice? | concluded — question answered; 73% of read arcs ACCIDENTAL, projection OPEN, MISSED list explicit (spike: [ax5-divergence-sweep/](ax5-divergence-sweep/)) |
 | [AX6](ax6-unified-quiescence.md) | Are draft dormancy, provisional head, and supersession one general quiescent state with one resume move? | concluded — promising; continue (spike: [ax6-unified-quiescence/](ax6-unified-quiescence/)) |
 | [AX7](ax7-orthogonal-conversations.md) | Are conversations orthogonal to the head machine, making AX6's Hold unnecessary? | concluded — promising; continue, AX6 Hold dissolved (spike: [ax7-orthogonal-conversations/](ax7-orthogonal-conversations/)) |
 
@@ -18,8 +18,10 @@ AX6 and AX7 ran before AX4/AX5: AX6 fell directly out of AX3's
 conclusion (the operation is the fence, so what is `provisional` still
 for?) plus Navigator direction on unifying dormancy; AX7 fell out of
 AX6's one open question (held conversations). AX4 then composed the
-settled pieces. Only AX5 — the divergence sweep against `topology.py` —
-remains, fed by the divergence tables of AX3, AX4, AX6, and AX7.
+settled pieces, and AX5 closed the planned arc with the executable
+divergence sweep. Candidate follow-ons named by AX5's MISSED list:
+the readiness projection/announcement gate, timers and reminders, and
+the actions rerun/repair loop.
 
 Divergence classification vocabulary for AX5:
 
