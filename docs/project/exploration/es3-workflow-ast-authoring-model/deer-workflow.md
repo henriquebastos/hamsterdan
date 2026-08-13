@@ -259,6 +259,10 @@ Navigator choice:
   live-observation surfaces are unowned adoption work, deliberately
   out of ES-003 scope, with Deer as the evidence they matter. No spec
   text changes until the Navigator rules on the spec itself.
+  *(Superseded 2026-08-13 for the authoring-side measurement: the
+  Navigator's [governing product target](index.md) brought the
+  first-motion criterion into ES-003's probe scope; run-surface
+  ownership remains a separate bounded choice.)*
 - **ES-004 spec:** no candidate change. Deer adds corroborating
   negative evidence for §1's projection spine and §11's validation
   posture; the open product choices tabled there are untouched.

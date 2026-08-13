@@ -94,6 +94,76 @@ yet.
   generated-authoring route, candidate AX27) and two adoption gaps on
   the record (first motion, live observation).
 
+## Governing product target — Navigator, 2026-08-13
+
+Direction received after the Deer Workflow comparison; it governs every
+subsequent DX probe in this story:
+
+- **Preserve Petrus's full runtime power and every honest low-level
+  escape hatch.** The runtime is never simplified or weakened to
+  improve DX.
+- **The desired experience is progressive disclosure.** A
+  Hamsterdan-scale, roughly-complex system should be radically simple
+  and expressive on the Petri-net/flow-authoring side — ideally one
+  file to first motion — while HTTP/GitHub clients, agent machinery,
+  and infrastructure remain composed behind or beside that clear flow.
+  Advanced users descend deliberately to lower-level Petrus APIs when
+  they need unusual semantics.
+- **Evaluation criterion for AX27 and all future probes:** does the
+  candidate reduce the authored Petri-net/flow architecture of a
+  Hamsterdan-scale system *without* (a) hiding durable semantics,
+  (b) weakening validation, or (c) letting infrastructure control flow
+  leak back into the canonical workflow?
+- **Candidate status stays honest:** no implementation or roadmap
+  promotion without Navigator review.
+
+The layer model already carries the shape this target demands — each
+layer lowers only to the one below, and L4→L2→L1 descent is designed
+in — so the target ratifies the architecture and moves the
+*measurement* to the composition surface: the spikes author blocks in
+one file today, but first motion still requires hand-composing engine,
+History Store, and Dispatch. That gap is now in scope for DX probing
+(superseding the Deer note's "out of ES-003 scope" framing for the
+authoring-side measurement); ownership of a production run surface
+remains a separate bounded choice.
+
+Smallest next executable probes under this target (candidates, not
+commitments):
+
+1. **AX27 — generated authoring against the composition authority**
+   (raised by the [Deer comparison](deer-workflow.md)), now also
+   measured by authored-architecture reduction: generated L4/L2 source
+   for a Hamsterdan-scale brief, with `CompositionError`/`check_sound`/
+   pyright as the machine feedback loop, never auto-executed.
+2. **AX28 — one-file-to-first-motion:** the smallest honest harness
+   taking one authoring file (L4 blocks + composition) to a running,
+   observable instance on the frozen engine. Measure the lines and
+   concepts an author must touch versus today's spike-side composition;
+   the harness must keep the rendered net, History, and replay
+   inspectable — motion may be in-memory, durability must never be
+   faked.
+3. **AX29 — descent seam (optional):** one workflow mixing L4/L2
+   blocks with an L1 kernel fragment in the same file, proving the
+   escape hatch composes without weakening soundness checks or the
+   composition refusals.
+
+Unresolved product decisions this target exposes (tabled for the
+Navigator, not decided here):
+
+1. **The default authoring surface** — the candidate spec's
+   sugar-vocabulary question (§13), sharpened: radical simplicity
+   requires one chosen default spelling of the algebra.
+2. **The run-surface owner** — one-file-to-first-motion needs a
+   runner; a thin Hamsterdan host vs Arx vs Petrus-lane crosses
+   ownership boundaries and needs its own bounded choice.
+3. **What first motion honestly defaults to** — an in-memory History
+   is real motion but not durable; a durable store is a choice the one
+   file must surface without drowning the author. "No hiding durable
+   semantics" and "radically simple" pull against each other exactly
+   here.
+4. **Whether live observation** of the first run belongs inside this
+   story's target or a separate story (Deer evidence on record).
+
 ## Progress
 
 - [AX0 — Architecture map and baseline example](experiments/ax0-architecture-map/index.md)
