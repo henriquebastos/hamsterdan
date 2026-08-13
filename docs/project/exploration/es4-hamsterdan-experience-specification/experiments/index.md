@@ -7,7 +7,7 @@ emerge from findings; only the opening arc is planned.
 | --- | --- | --- |
 | [AX0](ax0-experience-map.md) | What is the topology-independent experience map derived from boundary evidence alone? | concluded — promising; continue |
 | [AX1](ax1-subnet-contracts.md) | Which concerns form subnets with secure entry/exit contracts? | concluded — promising; continue |
-| AX2 | Can one mostly pure/disposable concern be expressed as a linear ES-003 block chain? | planned — target: review production → finding publication |
+| [AX2](ax2-linear-review.md) | Can one mostly pure/disposable concern be expressed as a linear ES-003 block chain? | concluded — promising; continue (spike: [ax2-linear-review/](ax2-linear-review/)) |
 | AX3 | How do authority fencing and discard/restart semantics attach to one subnet? | planned |
 | AX4 | Do two subnets compose through typed named ports without a shared control place? | planned |
 | AX5 | Where does the independent model diverge from `topology.py`, and is each divergence accidental complexity, a missed requirement, or an open choice? | planned |
