@@ -1,6 +1,9 @@
-# ES-003 Synthesis — what 27 experiments taught us
+# ES-003 Synthesis — what 30 experiments taught us
 
-**Status:** candidate synthesis for Navigator review, 2026-08-12.
+**Status:** candidate synthesis for Navigator review. First issued
+2026-08-12 over AX0–AX26; extended 2026-08-13 to fold in the final
+probe arc (AX27–AX29) and the closing
+[recommendations](06-recommendations.md).
 **Supersedes:** [AX12](../experiments/ax12-recommendation/index.md), which
 was an early recommendation *snapshot* taken at the series midpoint
 (after AX0–AX11, before composition, the kernel, blocks, parallel
@@ -28,7 +31,7 @@ Two sentences of grounding so nothing later surprises you:
   write every place, transition, arc, guard, and callback by hand. ES-003
   asked whether that representation can become an internal one, with
   processes authored through a higher-level embedded Python DSL that
-  *compiles* to it. Twenty-seven experiments (AX0–AX26) tested that
+  *compiles* to it. Thirty experiments (AX0–AX29) tested that
   hypothesis in small, reversible spikes. Petrus itself stayed frozen at
   one pinned commit throughout; not one runtime change was needed.
 
@@ -41,14 +44,16 @@ Two sentences of grounding so nothing later surprises you:
 | [03-what-worked.md](03-what-worked.md) | Positive results | The patterns that survived contact with the frozen engine, each with the code that proves it. |
 | [04-end-to-end-walkthrough.md](04-end-to-end-walkthrough.md) | How it works | One canonical workflow traced through every intermediate representation: authoring expression → typed value → block → kernel nodes → serialized net → execution trace → history → replay. Real captured output, not idealized. |
 | [05-unified-candidate-spec.md](05-unified-candidate-spec.md) | The proposal | The cherry-picked unified design — layer model, primitives, combinators, sugar, types, guards, validation — every feature annotated with the experiment that proved it. **A candidate for discussion, not a decision.** |
+| [06-recommendations.md](06-recommendations.md) | The recommendations | Every recommendation the series supports, argued from quoted code as facts — for, against, cost — plus the consolidated list of decisions only the Navigator can make. |
 
 Read 01 first for the map. If you want to *understand the design*,
 read 04 (the walkthrough) before 05 (the spec). 02 and 03 are
-reference lenses you can read in either order.
+reference lenses you can read in either order. 06 is the closing
+argument — read it last, after the spec.
 
-## The three arcs
+## The four arcs
 
-The 27 experiments read best as three narrative arcs:
+The 30 experiments read best as four narrative arcs:
 
 ```diagram
 ┌───────────────────────────┐  ┌────────────────────────────┐  ┌─────────────────────────────┐
@@ -61,6 +66,18 @@ The 27 experiments read best as three narrative arcs:
 │ loops, effects, styles,   │  │ claim/fence; typed         │  │ and static typing with      │
 │ one real fragment.        │  │ outcomes; a full algebra.  │  │ pyright and ty.             │
 └───────────────────────────┘  └────────────────────────────┘  └─────────────────────────────┘
+                                        │
+                                        ▼
+                    ┌────────────────────────────────────────────┐
+                    │ Arc 4: PROGRESSIVE DISCLOSURE               │
+                    │ AX27–AX29                                   │
+                    │                                             │
+                    │ Does the algebra meet the governing DX      │
+                    │ target? Generated authoring against the     │
+                    │ composition authority; one file to first    │
+                    │ motion; the governed descent seam down      │
+                    │ to kernel authoring.                        │
+                    └────────────────────────────────────────────┘
         every AX verdict: "Promising; continue" except AX9 ("Promising with changes")
                         and AX12 ("Promising with changes", superseded)
 ```
@@ -84,8 +101,18 @@ The 27 experiments read best as three narrative arcs:
   typed façade that moves most composition errors into the editor
   (pyright catches 8/9; ty currently 4/9; the deterministic compiler
   stays the authority).
+- **Arc 4 (AX27–AX29)** tested the algebra against the Navigator's
+  governing DX product target (recorded in the
+  [exploration index](../index.md)): the composition authority behaves
+  as a machine feedback loop for *generated* authoring (total staged
+  review; five of ten refusals carry the remedy verbatim; review
+  provably never executes the net); one general `first_motion` call
+  takes any Block to a quiescent, replayable instance (33
+  hand-composed `Engine.create` sites collapse to one imported
+  infrastructure name); and descent to kernel authoring composes under
+  a two-depth law without weakening a single check.
 
-## Ground rules that held for all 27 experiments
+## Ground rules that held for all 30 experiments
 
 - Petrus frozen at `3b41f19aa68ed228e68324f7c6888371f805b560`; zero
   runtime changes made or needed. Speculation lives only in the
@@ -93,8 +120,8 @@ The 27 experiments read best as three narrative arcs:
 - Production `topology.py` never modified; it served as the parity
   oracle (AX11/AX13/AX15 reproduce real fragments token-for-token).
 - Every experiment: one question, smallest prototype, focused tests,
-  recorded verdict before the next began. 427 exploration tests pass
-  at the AX26 mark.
+  recorded verdict before the next began. 427 exploration tests passed
+  at the AX26 mark; 599 pass at the AX29 close.
 - Literature trail in [theory-references.md](../theory-references.md);
   external-design comparison in
   [composable-functions.md](../composable-functions.md).

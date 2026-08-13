@@ -292,3 +292,72 @@ rail; the "less code" pitch.
   vs the algebra's general words — which surface production authors
   actually get is a product decision this spec deliberately leaves
   open for the Navigator.
+
+## 14. Addendum (2026-08-13): the operational surfaces — run, review, descent (AX27–AX29)
+
+Sections 1–13 specify what an author *writes*. The final probe arc
+proved three general surfaces around that authoring, all with zero
+kernel, algebra, or runtime changes; they extend this spec rather than
+amend it.
+
+**The run surface (AX28).** One general primitive takes any Block to
+first motion; it belongs beside the compiler in the layer model, not
+inside any layer:
+
+```python
+# PROVEN (ax28_motion.py, 127 lines, zero workflow knowledge)
+motion = first_motion(block, data, net_name=..., instance=...,
+                      history=...,   # any History Store; in-memory when
+                                     # omitted, labeled store_defaulted=True
+                      limit=200)     # bounded advance budget, directed diagnostic
+motion.definition   # canonical serialized net — the replay contract's subject
+motion.records      # the real History records
+motion.settled      # token data at every named exit
+motion.replay()     # recompile, Engine.load, marking equality place by place
+```
+
+Contract: validation is not weakened (`compile_block` still runs
+`check_sound`); the entry token's color comes from the block's own
+entry port, so a wrongly-colored injection is unrepresentable through
+this surface; nothing fakes durability. Proven general on a
+linear+parallel+branching net and a cyclic `loop` net, unchanged.
+Known bounded gap: dispatched Activity leaves need dispatch bindings
+this surface must accept and surface (AX21 territory; not built).
+
+**The review surface (AX27).** For generated authoring, the algebra's
+existing refusals staged behind one total function are the feedback
+loop — the full loop is *static → review → opt-in motion*:
+
+```python
+# PROVEN (ax27_review.py) — total: every candidate becomes Feedback
+feedback = review(name, source)
+feedback.verdict    # "ok" | "refused"
+feedback.stage      # "source" | "author" | "sound" when refused
+feedback.message    # the authority's message verbatim — 5/10 corpus
+                    # refusals carry the concrete fix (pinned count)
+```
+
+Contract: review never executes the net (proven behaviorally with a
+poisoned `Engine`); reviewing authoring source *is* executing Python,
+so a loop extends `review` the same trust it extends the source (the
+pyright static stage is the no-execution alternative); two residue
+mistake classes (undeclared runtime outcome, data-driven
+non-termination) are catchable only at the motion stage — a loop that
+stops at review is incomplete by construction.
+
+**The descent seam (AX29).** Progressive disclosure downward obeys a
+two-depth law:
+
+1. *In-block descent* — hand-built `Block`s from raw kernel nodes
+   (arc filters, weights, guards) remain fully governed by the
+   algebra: eager refusals, `check_sound`, `first_motion` unchanged.
+2. *Below-block descent* — constructs `check_sound` refuses inside a
+   block (the inhibitor arc — non-flow) splice at the boundary-net
+   level: `check_sound` governs the block part first,
+   `KernelShapeError` governs the union. The run surface there is
+   honestly manual (`Engine.create` by hand; a `LoweredBoundary` has
+   no ports).
+
+Unbuilt, deliberately: a *re-wrap* (declared ports over a spliced
+boundary net, climbing back up to `Block`) and any blessed `splice`
+vocabulary — both are product questions, not proven needs.

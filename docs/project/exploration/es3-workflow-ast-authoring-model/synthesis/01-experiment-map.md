@@ -690,3 +690,111 @@ workflow: TBlock[Raw, Done] = t_then(t_then(t_then(parse, both), charge), routed
 `ax26_typed.py`, then `cases_bad.py` (each mistake annotated with the
 runtime error it twins), then `test_ax26_static.py` (the pinned
 harness).
+
+---
+
+## Arc 4 — Progressive disclosure (AX27–AX29): does the algebra meet the governing DX target?
+
+After AX26 the Navigator recorded a governing product target (see the
+[exploration index](../index.md)): preserve full runtime power and
+every honest low-level escape hatch; make a Hamsterdan-scale flow
+radically simple to author, ideally one file to first motion; keep the
+primitives general — reusable for *any* net, never Hamsterdan-shaped.
+Arc 4 tested the algebra against that target from three directions:
+above it (a machine generating authoring code), at it (the run
+surface), and below it (descent to kernel authoring).
+
+### AX28 — One file to first motion
+
+**Question:** can a single general call take *any* authored Block to a
+quiescent instance on the frozen engine, keeping every durable
+artifact (canonical definition, History, marking, replay) inspectable
+and every validation intact — or does "radically simple" start hiding
+semantics?
+**Verdict:** Promising; continue (store default explicitly tabled).
+**Takeaway:** the composition burden was real and it was *harness*
+work, never authoring meaning: the prior spikes hand-compose
+`Engine.create` at 33 call sites across 22 files, each touching ~8
+infrastructure names; the one-file example touches **one**. The
+127-line `first_motion(block, data)` reads everything it needs off the
+Block itself (entry port names the seed place and color; exits name
+the observation points; `compile_block` carries handlers, guards, and
+`check_sound`) — so a wrongly-colored injection is unrepresentable and
+generality holds: the same unchanged harness drove a
+linear+parallel+branching net *and* a cyclic retry net. The returned
+`Motion` exposes rather than wraps — `.definition`, `.records`,
+`.settled`, `.replay()` — so first motion *teaches* the durable
+contract instead of hiding it:
+
+```text
+net definition: 5732 canonical bytes
+history records: 39
+exits: {'settled': [{'sku': 'sku-1', 'total': 12.0}], 'review': []}
+replay: rebuilt marking matches, place by place
+```
+
+**Read:** `ax28-first-motion/index.md`, then `ax28_one_file.py` (the
+whole authoring experience in 102 lines), then `ax28_motion.py`, then
+`test_ax28_motion.py` (the cyclic-net generality test is the point).
+
+### AX27 — Generated authoring against the composition authority
+
+**Question:** the Deer Workflow comparison raised the generated-
+authoring route — an agent emits authoring source and iterates against
+deterministic feedback. Do the algebra's existing refusals actually
+behave as that feedback loop: total review, repair-grade messages, and
+a guarantee that review never executes the net?
+**Verdict:** Promising; continue (trust contract and residue boundary
+are load-bearing findings).
+**Takeaway:** no new authority was needed — a ~120-line total
+`review(name, source)` stages the existing refusals (`source` → parse,
+`author` → eager `CompositionError`s, `sound` → `check_sound`) and
+every one of ten characteristic generator mistakes lands at its
+expected stage; **five of ten messages carry the concrete fix
+verbatim** (pinned as a counted test, e.g. `its exits are ['out']`),
+and the repair-loop test closes mechanically from the message alone.
+Review provably never executes the net (`Engine` poisoned, review
+still succeeds). Two honest residue mistakes pass every pre-motion
+stage — an undeclared runtime outcome and a data-driven
+non-termination — so the full loop is **static → review → opt-in
+motion**, each stage catching what the earlier ones cannot.
+
+**Read:** `ax27-generated-authoring/index.md`, then `ax27_review.py`,
+then `ax27_corpus.py` (the ten mistakes plus two residue cases), then
+`test_ax27_review.py` (the repair-loop test).
+
+### AX29 — The descent seam
+
+**Question:** progressive disclosure promises descent to lower-level
+APIs for unusual semantics. Does the descent actually compose — does
+each level's validation still govern its level, or does the escape
+hatch quietly weaken soundness checks?
+**Verdict:** Promising; continue (the two-depth law is the seam's
+doctrine).
+**Takeaway:** descent has **two depths with different laws, both
+governed**. *In-block* descent — a hand-built `Block` from raw kernel
+nodes, using per-arc CEL filters that route by value with no handler
+and two same-colored exits (semantics `classify` refuses) — stays
+entirely under the algebra: eager refusals at `then`, `check_sound`,
+and AX28's `first_motion` runs and replays it unchanged. *Below-block*
+descent — the inhibitor arc, refused inside blocks because it is
+non-flow — splices legally at the boundary-net level, where
+`check_sound` still governs the block part first and
+`KernelShapeError` governs the union. The
+dispatch-until-acknowledged throttle is observed, not assumed: exactly
+one order dispatched at quiescence with the arc, both without it; acks
+arrive as `Engine.deliver` source firings; replay rebuilds the marking
+including delivered tokens. Honest cost: a `LoweredBoundary` has no
+ports, so below the algebra the run surface is manual.
+
+```python
+# ax29_descent.py — in-block descent: value routing no combinator spells
+BoundaryTransition(
+    name="expedite",
+    arcs=(consume("triage_in", filter="amount < 100.0"), produce("express")),
+)
+```
+
+**Read:** `ax29-descent-seam/index.md`, then `ax29_descent.py` (both
+depths side by side), then `test_ax29_descent.py` (the
+inhibitor-counterfactual test is the doctrine).

@@ -279,7 +279,60 @@ exit is refused fusion with the error message pointing to a typed exit
 **Doctrine:** *the rail carries what nobody modeled; classify carries
 what somebody did.*
 
-## 16. Smaller rejections worth remembering
+## 16. A generation loop that stops at pre-motion review (AX27)
+
+**Attempt:** treat `review(name, source)` — parse, author, and
+`check_sound` stages — as a *complete* feedback loop for
+machine-generated authoring code.
+
+**Why it died:** two characteristic mistakes pass every pre-motion
+stage, demonstrated in the corpus rather than argued:
+
+```python
+# ax27_corpus.py — residue case 1: the classifier returns an outcome
+# that was never declared; only firing can reveal it
+classify(
+    "decide",
+    lambda r: ("oops", r),                       # not in outcomes
+    accepts="Receipt",
+    outcomes={"yes": "Answer", "no": "Refusal"},
+    pure=True,
+)
+# residue case 2: a loop whose termination depends on token data —
+# no pre-motion stage can decide it ("data_driven_nontermination")
+```
+
+The first is caught only at firing time by the handler's own
+`CompositionError`; the second only by `first_motion`'s bounded
+advance budget (default 200 advances, then a directed diagnostic). A
+generation loop that stops at review is incomplete **by
+construction**.
+
+**Instead:** the full loop is *static → review → opt-in motion*, each
+stage catching what the earlier ones cannot — and motion is a
+deliberate, separate act (review provably cannot reach the engine).
+
+## 17. The freely-firing confirm as the throttle counterfactual (AX29)
+
+**Attempt:** demonstrate the inhibitor arc's throttling guarantee with
+a splice whose confirm transition consumed `dispatched` immediately —
+dispatch, confirm, repeat.
+
+**Why it died:** the conservative driving policy drains `dispatched`
+inside the same advance, so peak occupancy is identical with and
+without the inhibitor — the counterfactual shows nothing. Inhibitor
+semantics only become *observable* when the held token has a real
+lifecycle: confirmation had to arrive from outside, through
+`Engine.deliver` firing an `acknowledge` source transition with
+operation identity. Which is also the realistic shape — a throttle
+that acknowledges itself throttles nothing.
+
+**Instead:** the acknowledgment-controlled splice — with the arc, two
+input orders reach quiescence with exactly one dispatched; each
+external ack releases exactly one more; without the arc, both dispatch
+before any ack.
+
+## 18. Smaller rejections worth remembering
 
 - **Input-side XOR lowering for `switch` (AX5):** works, buys nothing
   over output-side typed places, and leaves the decision place

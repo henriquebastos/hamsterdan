@@ -7,13 +7,14 @@ These are the load-bearing results the
 
 ---
 
-## 1. The frozen runtime is already sufficient (AX0–AX26, all of them)
+## 1. The frozen runtime is already sufficient (AX0–AX29, all of them)
 
-Twenty-seven experiments — sequences, typed ports, parallel joins,
+Thirty experiments — sequences, typed ports, parallel joins,
 type routing, CEL guards, hybrid arcs, cycles, effect journals,
 composition, evolution, kernel features, claim/fence, typed outcomes,
 blocks, merge/loop/holding, parallel policies, the failure rail, a
-typed façade — and **zero Petrus changes were needed**. Everything
+typed façade, generated-authoring review, a general run harness, and
+the descent seam — and **zero Petrus changes were needed**. Everything
 lives above the runtime: handlers, converters, compilers, validators.
 This is the single most consequential result: the authoring model is
 adoptable without touching the engine, and every speculation about
@@ -277,3 +278,94 @@ Every layer preserves three invariants:
   history, identical marking — proven per-experiment and again in the
   [walkthrough](04-end-to-end-walkthrough.md); divergence fails loudly
   (`not a place of this net`), never silently.
+
+## 13. One general call to first motion (AX28)
+
+The run harness the spikes were silently paying for, made explicit and
+absorbed once. Everything `first_motion` needs is already *on* the
+Block — entry port (seed place and color), exits (observation points),
+compiled handlers and guards — so the harness reads the block instead
+of knowing any workflow:
+
+```python
+# ax28_one_file.py — the whole infrastructure surface of the authoring file
+motion = first_motion(order_workflow(), {"sku": "sku-1", "amount": 10.0},
+                      net_name="order", instance="order-1")
+print(f"net definition: {len(motion.definition)} canonical bytes")   # 5732
+print(f"history records: {len(motion.records)}")                     # 39
+print(f"exits: {motion.settled}")     # {'settled': [{'sku': 'sku-1', 'total': 12.0}], 'review': []}
+motion.replay()                       # rebuilt marking matches, place by place
+```
+
+Why it works: the burden it removes was measured, not felt — 33
+hand-composed `Engine.create` sites across 22 spike files, ~8
+infrastructure names each, none carrying workflow meaning; the
+one-file example touches **one**. Generality was the acceptance test:
+the same unchanged harness drove the linear+parallel+branching example
+*and* a cyclic retry net built from `loop`. And honesty survived
+simplicity: `Motion` exposes the canonical definition bytes, the real
+History records, and replay-as-a-method — with `store_defaulted`
+labeling the in-memory default instead of faking durability, and a
+bounded advance budget (directed diagnostic, never silent spinning)
+answering data-driven cycles.
+
+## 14. The composition authority as a machine feedback loop (AX27)
+
+Generated authoring needed **no new machinery** — the algebra's
+existing refusals, staged behind a ~120-line total `review`, already
+behave like a compiler for a generation loop:
+
+```python
+# ax27_review.py — every candidate becomes structured feedback
+@dataclass(frozen=True)
+class Feedback:
+    verdict: str          # "ok" | "refused"
+    stage: str | None     # "source" | "author" | "sound" when refused
+    ...                   # error type, authority's message verbatim,
+                          # offending line when known, net statistics on ok
+```
+
+Why it works: all ten characteristic generator mistakes are refused at
+their expected stage, deterministically; **five of ten messages carry
+the concrete alternatives verbatim** (`its exits are ['out']` — pinned
+as a counted test so message quality cannot silently regress), and the
+repair-loop test fixes the wrong-exit candidate mechanically from the
+message alone. Review provably never executes the net: with
+`Engine.create`/`Engine.load` monkeypatch-poisoned, review still
+succeeds. The eager algebra even makes the deepest stage nearly
+unreachable — combinator-only source cannot compose an unsound block,
+so `check_sound` is the safety net for descent-level authoring, not
+the daily authority. Layered validation, working as designed.
+
+## 15. The two-depth descent law (AX29)
+
+Progressive disclosure holds *downward*, and the seam is a semantic
+law, not a missing feature. **In-block descent** — hand-building a
+`Block` from raw kernel nodes — widens expression (per-arc CEL value
+routing with no handler; two same-colored exits, which `classify`
+refuses) while staying entirely under the algebra's government: eager
+refusals at `then`, `check_sound` on hand-written nodes, and
+`first_motion` runs and replays it unchanged. **Below-block descent**
+exists for exactly the constructs that would break what a block
+*means*: the inhibitor arc is non-flow, so `check_sound` refuses it
+inside a block ("inhibitor arcs are outside the block algebra") — and
+the same arc is legal kernel authoring one level down, where
+`KernelShapeError` governs the union:
+
+```python
+# ax29_descent.py — below the algebra: a structural guarantee no
+# combinator can spell (dispatch disabled while unacknowledged)
+gate = (inhibit("dispatched"),) if inhibited else ()
+...
+BoundaryTransition(name="acknowledge", arcs=(produce("ack"),))  # the delivery door
+```
+
+Why it works: each authority keeps its jurisdiction — a broken block
+is refused by `CompositionError` before the splice exists; a splice
+naming an undeclared place is refused by `KernelShapeError`; no check
+was weakened to let the seam through. The throttle guarantee is
+observed against its own counterfactual (one order dispatched at
+quiescence with the arc; both without), and replay rebuilds the
+marking including externally delivered acks. The honest cost is also a
+finding: a `LoweredBoundary` has no ports, so below the algebra you
+also live below its conveniences.
