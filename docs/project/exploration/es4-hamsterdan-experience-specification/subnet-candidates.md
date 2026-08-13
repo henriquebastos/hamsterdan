@@ -1,66 +1,41 @@
-# Subnet candidates — entry/exit contract drafts
+# Subnet candidates — resolved by AX1
 
-Candidate concerns that might each be one secure subnet: a single typed
-entry, linear work, explicit domain-outcome exits, authority at the entry
-or commit fence. All entries are **hypotheses** pending AX1; contracts use
-the investigative pseudocode from [index.md](index.md).
+The seed inventory here was promoted by
+[AX1](experiments/ax1-subnet-contracts.md), which owns the full contracts.
+This file keeps the resolved shape for quick reference.
 
-## Candidate inventory (seed)
+## Final decomposition
 
-| # | Concern | Effects used | Purity guess | Discard-safe? |
-| --- | --- | --- | --- | --- |
-| 1 | Review generation & finding publication | `review`, `finding_publish` | agent call effectful, result disposable | yes — recompute on new head |
-| 2 | CI observation & rerun | `actions_discovery`, `actions_rerun` | read + marker post | yes |
-| 3 | CI repair | `repair` (+ git publish) | effectful at commit fence only | yes until fence |
-| 4 | Conversation handling | `conversation`, `conversation_publish` | classify pure-ish; reply effectful | classify yes; reply no |
-| 5 | Intent execution (`change`, `update_base`, …) | `change` (+ git publish) | effectful at commit fence | yes until fence |
-| 6 | Dashboard projection | `dashboard_publish` | derive pure; publish idempotent singleton | derive yes |
-| 7 | Reminders | `reminder_publish` | timer-driven, effectful | n/a |
-| 8 | Readiness advisory | `readiness_publish` | decision pure; publish immutable | decision yes |
-| 9 | Admission / generation lifecycle | none (pure routing?) | control layer, maybe not a subnet | — |
+| Unit | Kind | Gate | Discard-safe until |
+| --- | --- | --- | --- |
+| Control layer (authority, generations, quarantine, routing) | not a subnet | — | — |
+| Review production | subnet | none (feeds P) | always |
+| CI observation | subnet | none (read-only) | always |
+| CI rerun | subnet | comment gate | the marker post |
+| Conversation classify | subnet | none (feeds fan-out) | always |
+| Agent mutation — shape M ×4 (`repair`, `change`, `update_base`, `resolve_conflict`) | fractal shape | **git gate** (CAS) | the CAS advance |
+| Publication — shape P ×5 (reply, findings, readiness, reminder; dashboard as mutable singleton) | fractal shape | **comment gate** | the post/update |
+| Dashboard projection (render) | subnet | none (feeds P) | always |
+| Timer/reminder scheduling | control-layer state + timer | — | — |
 
-## Contract drafts
+Two fractal shapes cover 9 of the 11 activities. The system has exactly
+two world-mutation gate types; every secure exit passes through one.
 
-### Candidate 1 — review generation (draft)
+## Workbench questions — resolved
 
-```python
-subnet(
-    name="review_generation",
-    entry=Port("admitted_head", Authority),        # enter with authority
-    exits={
-        "published": Port("findings", FindingPublicationResult),
-        "discarded": Port("stale", Authority),     # head moved; drop work
-        "failed": Port("error", ClassifiedFailure),
-    },
-    authority="checked at entry AND at finding_publish fence",
-    purity="agent call effectful but disposable until publish",
-    effects=("review", "finding_publish"),
-)
-```
-
-### Candidate 3 — CI repair (draft)
-
-```python
-subnet(
-    name="ci_repair",
-    entry=Port("failed_checks", ActionsObservation),
-    exits={
-        "committed": Port("advanced", ChangeResult),
-        "discarded": Port("branch_moved", Authority),   # CAS lost → restart
-        "not_repairable": Port("terminal", ClassifiedFailure),
-    },
-    authority="commit fence: CAS ref advance + trailer lookup-first",
-    purity="everything before the commit fence is disposable",
-    effects=("repair",),  # git publish inside repair activity
-)
-```
-
-## Workbench — decomposition questions
-
-| # | Question | Status |
+| # | Question | Resolution |
 | --- | --- | --- |
-| 1 | Is admission/generation lifecycle a subnet or the control layer itself? | open |
-| 2 | Does dashboard projection subscribe to every other subnet's exits, or derive from a snapshot? | open |
-| 3 | Where do the two idempotency kinds (skip vs classify-failure-as-done) each appear? | open |
-| 4 | Which exits are shared vocabulary (`discarded`, `retryable`, `terminal`) vs concern-specific? | open |
-| 5 | | |
+| 1 | Is admission/generation lifecycle a subnet or the control layer? | **The control layer itself** — no provider effects of its own; owns all DERIVED decisions (AX1 Finding 5) |
+| 2 | Dashboard: subscribe to exits or derive from snapshot? | **Derive from snapshot** — relational digest currency decides it (`contracts/readiness.py:675-714`) |
+| 3 | Where do the two idempotency kinds appear? | Kind 1 (skip) = lookup-first at both gates; Kind 2 (classify) = CAS failure → `discarded`, marker collision → `fault` (AX1 Finding 4) |
+| 4 | Shared vs concern-specific exits? | Universal: `completed`, `discarded`, `blocked`, `fault` (+ `retryable` strictly subnet-internal); the rest is payload |
+
+## Shared exit vocabulary
+
+```text
+completed(T)               domain result; control routes onward
+discarded(StaleAuthority)  authority moved; control MAY restart (D2)
+blocked(RecoverableFault)  retries exhausted; waits for explicit recovery
+fault(NonrecoverableFault) classified terminal; projected, not retried
+retryable                  never crosses a subnet boundary
+```
