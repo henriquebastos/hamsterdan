@@ -86,7 +86,13 @@ yet.
   TypeScript; inspected 2026-08-12) — five independent convergences
   with our doctrines, one true structural gap exposed (no parallel
   combinator in the completed algebra, and with it the totality and
-  join-policy question), three candidate experiments (AX24–AX26).
+  join-policy question), three candidate experiments (AX24–AX26);
+  [Deer Workflow](deer-workflow.md) (deerwork-ai, TypeScript/Bun;
+  inspected 2026-08-13, spans ES-001–ES-004) — the imperative surface
+  taken to completion, doubly confirming the failure-rail/typed-outcome
+  doctrines by negative example; one mechanism worth spiking (the
+  generated-authoring route, candidate AX27) and two adoption gaps on
+  the record (first motion, live observation).
 
 ## Progress
 

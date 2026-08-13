@@ -116,6 +116,16 @@ decision; the open product choices it surfaces are tabled in
 - [subnet-candidates.md](subnet-candidates.md) — candidate concerns and
   entry/exit contract drafts.
 
+## External comparisons
+
+- [Deer Workflow](../es3-workflow-ast-authoring-model/deer-workflow.md)
+  (deerwork-ai, TypeScript/Bun; inspected 2026-08-13) — corroborates
+  the projection spine (its TUI/JSONL project one typed event stream)
+  while breaking the discipline this story keeps by construction
+  (synchronous observers on the execution path); changes no control
+  semantics; puts the first-motion and live-observation adoption gaps
+  on the record with evidence.
+
 ## Relation to prior stories
 
 - **ES-002** established that fragment families are domain vocabulary and
