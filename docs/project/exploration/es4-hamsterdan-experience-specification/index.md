@@ -97,6 +97,16 @@ Registry: [experiments/index.md](experiments/index.md). Planned start
   requirement the independent spec missed, or (c) an unresolved design
   choice.
 
+## Synthesis
+
+The series' results are folded into [synthesis/](synthesis/index.md) —
+five lens documents (experiment map, negative results, positive
+results, an executed one-PR walkthrough, and the unified candidate
+experience specification) written for a reader who has seen none of
+the code. The specification is a candidate for Navigator review, not a
+decision; the open product choices it surfaces are tabled in
+[synthesis/05-unified-experience-spec.md](synthesis/05-unified-experience-spec.md).
+
 ## Working documents
 
 - [source-boundaries.md](source-boundaries.md) — evidence inventory

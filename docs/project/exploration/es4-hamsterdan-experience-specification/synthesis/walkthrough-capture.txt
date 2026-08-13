@@ -1,0 +1,149 @@
+
+==============================================================================
+  STAGE 1 — ingress and admission (AX6): every PR enters one machine
+==============================================================================
+  webhook: pull_request opened, head=h1, not draft
+  control state              Running(epoch=1, head='h1')
+  actions                    (Resume(epoch=1, head='h1', relation='new'),)
+
+  (variant) born as a draft — an instance, stopped, no seed place:
+  control state              Quiescent(last_epoch=0, last_head='h9', expected=None)
+  actions                    ()
+
+==============================================================================
+  STAGE 2 — the generation snapshot is born (AX8): decisions derive
+==============================================================================
+  snapshot                   Snapshot(epoch=1, head='h1', actions='unknown', review='unknown', blocking_findings=0, findings_published=False, human_approved=False, changes_requested=False, unresolved_conversations=0, mergeable=True, conflict=False, published_projection='', announced=False, reminder_snoozed=False)
+
+  decide(snapshot) — nothing is settled yet, but the dashboard
+  projection has drifted from '' (nothing published):
+  work                       DashboardWork(operation='dashboard:1:h1:proj-8f3233', projection='proj-8f3233')
+  the operation string IS the dedup — no dashboard_requested flag.
+
+==============================================================================
+  STAGE 3 — CI fails; the escalation ladder climbs (AX10)
+==============================================================================
+  actions concern            Actions(epoch=1, head='h1', phase='observing', run_id='', attempt=0, conclusion='', fingerprint='', provisional_head='', repair_used=False, repair_fingerprint='')
+
+  GitHub reports: run-9 attempt 1 concluded failure, fingerprint fp-A
+  after fold                 Actions(epoch=1, head='h1', phase='failed', run_id='run-9', attempt=1, conclusion='failure', fingerprint='fp-A', provisional_head='', repair_used=False, repair_fingerprint='')
+  decide →                   RerunWork(operation='actions-rerun:1:h1:run-9:1')
+
+  the same observation is delivered AGAIN (webhook duplicate):
+  after fold                 unchanged: True  (monotonic fence — no basis place)
+
+  the rerun happened; attempt 2 fails with the SAME fingerprint:
+  after fold                 Actions(epoch=1, head='h1', phase='reproduced', run_id='run-9', attempt=2, conclusion='failure', fingerprint='fp-A', provisional_head='', repair_used=False, repair_fingerprint='')
+  decide →                   RepairWork(operation='repair:1:h1:fp-A', fingerprint='fp-A')
+  GitHub's attempt counter is the loop variable; no rerun_requested flag.
+
+==============================================================================
+  STAGE 4 — the repair runs on the real Petrus engine (AX3+AX4 blocks)
+==============================================================================
+  the composed block: shape M (prepare → agent → CAS gate)
+  ── committed port ─▶ announce adapter ─▶ comment gate
+  entry port                 prepare_change_in (ChangeRequest)
+  exit ports                 {'acknowledged': 'FindingPublicationResult', 'failed': 'Failure', 'fault': 'NonrecoverableFault', 'moved': 'BranchMoved'}
+  context places             {} — nothing ambient
+  transitions                ['prepare_change', 'agent_patch', 'commit_gate', 'announce_commit', 'publish_comment']
+  compiled net               9 places
+
+  seeding ChangeRequest {operation: 'repair:1:h1:fp-A', expected_head: 'h1'}
+  exit 'acknowledged'        {'comment_id': 1, 'reused': False}
+  branch head now            commit-of-repair:1:h1:fp-A
+  comment marker             ['finding', 'announce-commit-of-repair:1:h1:fp-A', 'commit-of-repair:1:h1:fp-A']
+
+  (variant) someone pushed first — the CAS gate classifies itself:
+  exit 'moved'               {'expected': 'h1', 'actual': 'h2-someone-pushed'}
+  comments posted            []
+  branch touched by us       no
+
+==============================================================================
+  STAGE 5 — the control loop closes as data (AX6+AX7), lineage carried (AX10)
+==============================================================================
+  actions concern            Actions(epoch=1, head='h1', phase='awaiting_confirm', run_id='run-9', attempt=2, conclusion='failure', fingerprint='fp-A', provisional_head='commit-of-repair:1:h1:fp-A', repair_used=True, repair_fingerprint='fp-A')
+  control_move               Quiesce(expected='commit-of-repair:1:h1:fp-A')
+  control state              Quiescent(last_epoch=1, last_head='h1', expected='commit-of-repair:1:h1:fp-A')
+
+  while quiescent, a human asks for another change — and a question:
+  service('change')          Decline(kind='change', reason='a just-pushed commit awaits observation; re-ask once the head updates')
+  service('reply')           Answer(kind='reply')
+
+  the webhook arrives: head is 'commit-of-repair:1:h1:fp-A' — our own push, confirmed:
+  control state              Running(epoch=2, head='commit-of-repair:1:h1:fp-A')
+  actions                    (Resume(epoch=2, head='commit-of-repair:1:h1:fp-A', relation='confirmed'),)
+  actions after resume       Actions(epoch=2, head='commit-of-repair:1:h1:fp-A', phase='observing', run_id='', attempt=0, conclusion='', fingerprint='', provisional_head='', repair_used=True, repair_fingerprint='fp-A')
+
+  next generation: CI fails AGAIN with the same fingerprint fp-A —
+  the lineage fence sends it to the human rung, not another repair:
+  after folds                Actions(epoch=2, head='commit-of-repair:1:h1:fp-A', phase='reproduced', run_id='run-12', attempt=2, conclusion='failure', fingerprint='fp-A', provisional_head='', repair_used=True, repair_fingerprint='fp-A')
+  decide →                   ()
+  needs_human                True
+
+==============================================================================
+  STAGE 6 — the green path to readiness (AX8): fold, decide, gate, fold
+==============================================================================
+  suppose instead the repair fixed it. The concerns settle one by
+  one; each exit folds; decide() runs after every fold:
+  fold ActionsSettled           gates_ready=False  decide=(DashboardWork(operation='dashboard:2:commit-of-repair:1:h1:fp-A:proj-7d40b7', projection='proj-7d40b7'),)
+  fold ReviewSettled            gates_ready=False  decide=(DashboardWork(operation='dashboard:2:commit-of-repair:1:h1:fp-A:proj-3f76ca', projection='proj-3f76ca'),)
+  fold FindingsPublished        gates_ready=False  decide=(DashboardWork(operation='dashboard:2:commit-of-repair:1:h1:fp-A:proj-c7d7fd', projection='proj-c7d7fd'),)
+  fold HumanSettled             gates_ready=True  decide=(DashboardWork(operation='dashboard:2:commit-of-repair:1:h1:fp-A:proj-5fc984', projection='proj-5fc984'),)
+
+  gates are ready but the dashboard is stale → dashboard first,
+  announce only after its acknowledgment folds:
+  emitted                    DashboardWork(operation='dashboard:2:commit-of-repair:1:h1:fp-A:proj-5fc984', projection='proj-5fc984')
+  fold DashboardAcknowledged is_ready=True  decide=(AnnounceWork(operation='readiness:2:commit-of-repair:1:h1:fp-A:proj-5fc984'),)
+  fold AnnouncementAck…      decide=()  — settled; announce-once = snapshot lifetime
+
+  commutativity across independent concerns (same four exits,
+  reversed arrival order):
+  same snapshot              True
+
+==============================================================================
+  STAGE 7 — time as typed ingress (AX9): the scheduler is a provider
+==============================================================================
+  decide →                   (ArmTimer(operation='timer:2:commit-of-repair:1:h1:fp-A:0', due_at=260200.0),)
+
+  the scheduler delivers TimerDue — early (its fault), then on time:
+  early delivery             unchanged: True  (at < due_at — our truth, not the scheduler's)
+  on-time delivery           timer_matured=True
+  decide →                   (RemindWork(operation='reminder:2:commit-of-repair:1:h1:fp-A:0', sequence=0, reviewer=''),)
+
+  the reviewer snoozes (AX7 durable note): the DECISION is off,
+  the maturity FACT keeps — resume fires immediately:
+  snoozed decide             ()
+  resumed decide             (RemindWork(operation='reminder:2:commit-of-repair:1:h1:fp-A:0', sequence=0, reviewer=''),)
+
+  the reminder publishes; the ack re-arms sequence 1 from the
+  instant the reviewer actually saw:
+  after ack                  sequence=1 matured=False
+  decide →                   (ArmTimer(operation='timer:2:commit-of-repair:1:h1:fp-A:1', due_at=519900.0),)
+
+==============================================================================
+  STAGE 8 — the human concern is a mirror plus notes (AX12)
+==============================================================================
+  after observation 1        reviewer='alice' seq=1
+  after reassign note        reviewer='bob'
+  after observation 2        reviewer='alice' approved=True  ← the reassign was CLOBBERED
+  (production parity, flagged OPEN: snooze survives observations,
+  reassign does not — a field-ownership collision, not a spec choice)
+
+  dispositions rewrite findings; blocking is recomputed:
+  review                     Review(status='blocking', findings=(Finding(id='F1', blocking=True, disposition='new'),))
+  after dismiss F1           status='clear'  → ReviewSettled('clear', 0)
+
+==============================================================================
+  STAGE 9 — terminal, conversations that outlive it, and replay
+==============================================================================
+  control state              Terminal(status='merged', last_epoch=2, last_head='commit-of-repair:1:h1:fp-A')
+  service('reply')           Answer(kind='reply')
+  service('change')          Decline(kind='change', reason='the pull request is merged')
+
+  replay is a refold — the same exit events rebuild the same
+  snapshot; no live object was ever durable state:
+  refold == original         True
+
+  one PR, one walkthrough: admission → ladder → real CAS gate →
+  quiescence → confirmed resume → folds → readiness → timer →
+  human → terminal. Zero ambient places, zero flags, zero reads.
