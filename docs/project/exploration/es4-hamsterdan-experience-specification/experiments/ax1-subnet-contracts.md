@@ -95,6 +95,11 @@ update_base      = AgentMutation(entry=ChangeRequest, merge_base=True)  # activi
 resolve_conflict = AgentMutation(entry=ChangeRequest, merge_base=True)
 ```
 
+> **Amended by [AX3](ax3-attempt-first.md):** the `fence(authority)`
+> steps drawn above are economy, not correctness. The git gate's exact
+> CAS is itself the fence — attempt-first shape M needs no authority
+> context at all, and `moved` is the gate's own classified outcome.
+
 `committed` is special: its payload is **provisional authority**. The
 subnet does not continue past the gate — control freezes effects until
 admission verifies the head (`relation="confirmed"` preserves lineage).
