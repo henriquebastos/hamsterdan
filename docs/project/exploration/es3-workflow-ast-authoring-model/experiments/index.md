@@ -79,6 +79,7 @@ this series as prior art.
 | [AX24](ax24-parallel-blocks/index.md) | Parallel blocks: split, total branches, explicit join policies | Completed | Promising; continue |
 | [AX25](ax25-failure-rail/index.md) | Failure rail: railway-oriented handling as visible sugar | Completed | Promising; continue |
 | [AX26](ax26-static-typing/index.md) | Build-time type checking: pyright vs ty over a typed façade | Completed | Promising; continue |
+| [AX28](ax28-first-motion/index.md) | One file to first motion: the smallest honest general harness | Completed | Promising; continue |
 
 ## Standing inputs from prior ES-002 evidence
 

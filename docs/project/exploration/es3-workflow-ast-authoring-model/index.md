@@ -117,6 +117,18 @@ subsequent DX probe in this story:
 - **Candidate status stays honest:** no implementation or roadmap
   promotion without Navigator review.
 
+**Addendum — Navigator, 2026-08-13 (generality ruling):** the
+primitives must be **general Petri-net vocabulary**, one level above
+the spec DSL, able to express arbitrary nets — never Hamsterdan
+structure. A hosted application may define its own higher-level
+vocabulary (ES-004's Publication/AgentMutation shapes are exactly
+that), but it must sit on the general primitives; no project should
+ever again have to invent an abstraction layer directly on the spec
+DSL. This ratifies the L1/L2 split and adds a probe criterion: every
+DX probe must demonstrate its mechanism on more than one structurally
+different net, or declare itself project vocabulary (L3+) rather than
+a primitive.
+
 The layer model already carries the shape this target demands — each
 layer lowers only to the one below, and L4→L2→L1 descent is designed
 in — so the target ratifies the architecture and moves the
@@ -584,3 +596,23 @@ Navigator, not decided here):
   both checker harnesses pinned. Fixed-arity is the static ceiling —
   Python has no mapped types, so `FailToCompose`-style generality
   does not translate; the runtime algebra keeps the general case.
+- [AX28 — One file to first motion](experiments/ax28-first-motion/index.md)
+  completed 2026-08-13 — Promising; continue. The composition-surface
+  gap the governing target moved into scope closes with one general
+  call: `first_motion(block, datum)` compiles through the kernel
+  (`check_sound` intact), seeds the entry token from the block's own
+  entry port, drives the frozen engine under a bounded advance budget,
+  and returns a `Motion` that *exposes* every durable artifact —
+  canonical definition (5,732 deterministic bytes for the inquiry
+  example), real History records (39), token data at every named exit,
+  and `replay()` proving the rebuilt marking matches place by place.
+  The one authoring file touches exactly **one** infrastructure name,
+  versus ~8 names at 33 hand-composed `Engine.create` sites across 22
+  prior spike files. Generality held per the ruling: the same harness,
+  unchanged, drove both the parallel/branching example and a cyclic
+  `loop` net. Honest limits recorded: one authoring file over spike
+  libraries (not a package), PetriWork-only (Activity-leaf dispatch is
+  a bounded follow-up), and the run harness is complementary to — not
+  a substitute for — AX27's generated-authoring probe. The store
+  default (in-memory, visibly labeled) stays a tabled Navigator
+  decision. Nine tests pass.
