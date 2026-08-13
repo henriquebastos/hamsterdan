@@ -13,6 +13,7 @@ emerge from findings; only the opening arc is planned.
 | [AX5](ax5-divergence-sweep.md) | Where does the independent model diverge from `topology.py`, and is each divergence accidental complexity, a missed requirement, or an open choice? | concluded — question answered; 73% of read arcs ACCIDENTAL, projection OPEN, MISSED list explicit (spike: [ax5-divergence-sweep/](ax5-divergence-sweep/)) |
 | [AX6](ax6-unified-quiescence.md) | Are draft dormancy, provisional head, and supersession one general quiescent state with one resume move? | concluded — promising; continue (spike: [ax6-unified-quiescence/](ax6-unified-quiescence/)) |
 | [AX7](ax7-orthogonal-conversations.md) | Are conversations orthogonal to the head machine, making AX6's Hold unnecessary? | concluded — promising; continue, AX6 Hold dissolved (spike: [ax7-orthogonal-conversations/](ax7-orthogonal-conversations/)) |
+| [AX8](ax8-projection-fold.md) | Is the readiness projection's 25-read-arc join a requirement or a mechanism — can a fold over typed concern exits preserve every production rule? | concluded — promising; continue, AX5's C4 OPEN closed as ACCIDENTAL (spike: [ax8-projection-fold/](ax8-projection-fold/)) |
 
 AX6 and AX7 ran before AX4/AX5: AX6 fell directly out of AX3's
 conclusion (the operation is the fence, so what is `provisional` still
