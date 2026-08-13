@@ -104,6 +104,12 @@ resolve_conflict = AgentMutation(entry=ChangeRequest, merge_base=True)
 subnet does not continue past the gate — control freezes effects until
 admission verifies the head (`relation="confirmed"` preserves lineage).
 
+> **Amended by [AX6](ax6-unified-quiescence.md):** "provisional
+> authority" is not a distinct mechanism the control layer must carry.
+> The `committed` payload becomes `Quiescent(expected=head)` — the same
+> stopped state as draft dormancy, with one optional field; `confirmed`
+> is a pattern match on the next observation, not a fence-checked flag.
+
 ## Finding 3 — the full decomposition
 
 ```diagram

@@ -118,3 +118,6 @@ at comment gates) is now an explicit dial, not hidden correctness.
 AX4 composes two subnets through typed ports — including the
 `committed → provisional head → verified admission` loop back through
 the control layer, which is where attempt-first hands responsibility.
+[AX6](ax6-unified-quiescence.md) took that handoff first: the loop
+collapses into `Quiescent(expected=head)` — quiesce on commit, resume
+`confirmed` when ingress observes the expected head.
