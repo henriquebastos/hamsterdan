@@ -191,6 +191,14 @@ liveness                  supersession resumes in the same step (no
    replay on resume or expire is a product decision, not a control
    question; deferred.
 
+   > **Dissolved by [AX7](ax7-orthogonal-conversations.md):**
+   > conversations never reach this machine. Classification by effect
+   > grade answers read-only intents in any state, applies durable
+   > notes without head currency, and declines head-bound requests
+   > with an immediate explanatory reply — nothing is parked, so
+   > replay-vs-expire has no subject. The `Hold` case remains in the
+   > spike as the recorded seam.
+
 ## For AX5 (divergence classification)
 
 | Divergence from production | Provisional classification |
