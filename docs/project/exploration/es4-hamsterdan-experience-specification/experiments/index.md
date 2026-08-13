@@ -17,18 +17,21 @@ emerge from findings; only the opening arc is planned.
 | [AX9](ax9-timer-ingress.md) | Is time a special citizen requiring marking-wide reads, or one more provider whose `TimerDue` facts fold into the snapshot? | concluded — promising; continue, reminder's 9 reads join the ACCIDENTAL class, Petrus Delay purity kept as time-as-fact (spike: [ax9-timer-ingress/](ax9-timer-ingress/)) |
 | [AX10](ax10-actions-repair-loop.md) | Is the rerun → repair loop real domain structure, and can a phase-explicit ladder with attempt/fingerprint fences express it without flags, the basis place, or read arcs? | concluded — promising; continue, the ladder is REQUIREMENT, its mechanism ACCIDENTAL; AX5's MISSED list closed (spike: [ax10-actions-repair-loop/](ax10-actions-repair-loop/)) |
 | [AX11](ax11-payload-shape.md) | What does a port contract carrying payload shape look like — fusion rule, adapters, guard fields — and how much do pyright and ty enforce at edit time? | concluded — promising; continue, nominal fusion + shape-as-diagnostic; ty catches all shape mistakes today (spike: [ax11-payload-shape/](ax11-payload-shape/)) |
+| [AX12](ax12-human-fold.md) | Is the human concern "structurally like actions", or a different shape — and how do observation snapshots and durable notes coexist? | concluded — promising; continue, it is a mirror plus notes, no ladder; the reassign/observation clobber surfaced as a new OPEN (spike: [ax12-human-fold/](ax12-human-fold/)) |
 
 AX6 and AX7 ran before AX4/AX5: AX6 fell directly out of AX3's
 conclusion (the operation is the fence, so what is `provisional` still
 for?) plus Navigator direction on unifying dormancy; AX7 fell out of
 AX6's one open question (held conversations). AX4 then composed the
 settled pieces, and AX5 closed the planned arc with the executable
-divergence sweep. AX8-AX11 then worked AX5's MISSED list: the
+divergence sweep. AX8-AX12 then worked AX5's MISSED list: the
 readiness projection/announcement gate (AX8), timers and reminders
 (AX9), the actions rerun/repair loop with lineage through confirmed
-resumes (AX10), and payload shape contracts (AX11). Still open from
-AX5: human observation folding (#7, unspiked) and finding lineage
-through quiescence (#6, a product choice for the Navigator).
+resumes (AX10), payload shape contracts (AX11), and human observation
+folding (AX12). Every executable MISSED item is now spiked. Still open
+for the Navigator, as product choices rather than spikes: finding
+lineage through quiescence (AX5 #6) and the reminder-recipient
+ownership collision AX12 surfaced (provider snapshot vs local note).
 
 Divergence classification vocabulary for AX5:
 
