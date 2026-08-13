@@ -44,6 +44,33 @@ healed = recover(pipeline, handler=fallback_fn)   # envelope in, success out
   durable data for routing and diagnosis, exact through JSON
   round-trips.
 
+## What it compiles to
+
+No new machinery — the rail is three arrangements of chapter 3/4
+rules, which is why it needed only ~60 spike lines:
+
+```python
+# condensed exact — ax25_rail.py
+attempt(name, fn)          # outcomes(name, totalized(fn),
+                           #   {"out": returns, "failed": FAILURE})
+                           # fn raises → envelope token on "failed"
+rail_then(a, b)            # then(a, b, on="out")
+                           #   + merge both "failed" exits → ONE place
+recover(block, handler)    # then(block, handler, on="failed")
+                           #   + merge recovery back into "out"
+```
+
+```diagram
+in ─▶ [parse] ─▶ ok ─▶ [enrich] ─▶ ok ─▶ [store] ─▶ out
+          │                │                │
+          └────────────────┴────────────────┴──▶ failed (Failure)
+                                                 one place — merged,
+                                                 not three conventions
+```
+
+Mechanics: [chapter 16](16-how-the-authoring-compiles.md). Exact
+code: [ax25_rail.py](../es3-workflow-ast-authoring-model/experiments/ax25-failure-rail/ax25_rail.py).
+
 ## How it relates
 
 - Concept 5's modeled outcomes are the rail's complement — the refusal

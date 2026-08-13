@@ -56,6 +56,30 @@ at authoring time.
 - Micro-types exist only when modeled: guards exist precisely so a
   step never returns artificial types just to steer routing.
 
+## What it compiles to
+
+Each form has a distinct, countable lowering:
+
+```diagram
+1 modeled outcomes      one exit PLACE per outcome; handler picks one
+   in ─▶ [evaluate] ─▶ approved (Approved)
+                   └─▶ manual (ManualReview)
+
+2 value guards          CEL filter strings on the arcs; one router per case
+   in ─▶ [score > 700]  ─▶ [fast case] ─▶ fast subtree
+     └─▶ [score <= 700] ─▶ [slow case] ─▶ slow subtree
+
+3 hybrid                the SAME arc carries both constraints
+   in ─▶ (color=ApprovedApplication, filter="risk_score < 20") ─▶ [auto]
+```
+
+Form 2 is exactly what `FAST.cel()` is for: in today's spec DSL the
+lowered arc is written `p.branch_in >> arc(filter="score > 700") >>
+t.fast_case`. Mechanics:
+[chapter 16](16-how-the-authoring-compiles.md). Exact code:
+[ax6_compiler.py](../es3-workflow-ast-authoring-model/experiments/ax6-guard-branching/ax6_compiler.py),
+[ax7_compiler.py](../es3-workflow-ast-authoring-model/experiments/ax7-hybrid-routing/ax7_compiler.py).
+
 ## How it relates
 
 - Concept 2's typed activity outcomes are form 1 at the effect

@@ -30,9 +30,18 @@ How it relates        links to the sibling concepts
 Why trust it          one-line evidence with a pointer to the record
 ```
 
+Structural concepts (3–8) additionally carry a **"What it compiles
+to"** section: the exact places/transitions/arcs the construct
+becomes, with the shared mechanics in
+[chapter 16](16-how-the-authoring-compiles.md).
+
 **All pseudocode here is one normalized vocabulary**, chosen for
 teaching. The spikes use several evolving APIs; this primer uses one.
-The mapping, once:
+Snippets are labeled by fidelity — *teaching shape* (normalized),
+*condensed exact* (shortened spike code, same names and refusals),
+*exact current Petrus syntax* (build-verified by
+[test_refund_netspec.py](test_refund_netspec.py)), or *derived*
+(lowering rules applied by hand). The vocabulary mapping, once:
 
 | Primer word | Meaning | Proven as |
 |---|---|---|
@@ -90,13 +99,19 @@ Method — the payoff:
 
 15. [From spec to net](15-from-spec-to-net.md) — mapping
     Given/When/Then to entries, steps, exits, and gates; a worked
-    example; the design checklist.
+    example carried all the way down to today's spec DSL; the design
+    checklist.
+16. [How the authoring compiles](16-how-the-authoring-compiles.md) —
+    the lowering rules behind every "What it compiles to" section:
+    leaves add nodes, composition only renames, the node economy, and
+    the staged pipeline from expression to replayed marking.
 
 ## How the concepts relate
 
 ```diagram
                         ┌───────────────────────────┐
                         │ 15 FROM SPEC TO NET       │  method
+                        │ 16 HOW IT COMPILES        │
                         └─────────────┬─────────────┘
               ┌───────────────────────┼──────────────────────┐
               ▼                       ▼                      ▼

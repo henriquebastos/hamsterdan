@@ -48,6 +48,28 @@ holding(block, resource="claim")   # structural mutex: consume the resource
 - A block does not expose its interior places; debugging goes through
   exits and the source map, not through reaching inside.
 
+## What it compiles to
+
+A block *is* net structure — its entry and exits are real places, its
+work is one or more transitions between them. The two leaf shapes:
+
+```diagram
+step:      ┌────────┐   ┌───────┐   ┌────────┐
+           │ in (A) │──▶│ work  │──▶│ out(B) │        2 places, 1 transition
+           └────────┘   └───────┘   └────────┘
+
+outcomes:  ┌────────┐   ┌───────┐──▶ findings (Findings)
+           │ in (A) │──▶│ work  │──▶ clean (CleanReview)
+           └────────┘   └───────┘──▶ discarded (Discarded)
+                        one exit place PER named exit; the transition
+                        emits exactly one token per firing
+```
+
+Mechanics and condensed-exact pseudocode:
+[chapter 16](16-how-the-authoring-compiles.md). Exact code:
+[ax23_blocks.py](../es3-workflow-ast-authoring-model/experiments/ax23-completed-algebra/ax23_blocks.py)
+(`transform`, `classify`, `holding`).
+
 ## How it relates
 
 - Concept 4 composes blocks by fusing ports.

@@ -57,6 +57,31 @@ the next generation arriving from outside; boundedness is structural.
 - Timers for pacing between attempts are typed ingress (concept 12),
   not sleeps inside the net.
 
+## What it compiles to
+
+One rename. `loop(block, on="retryable")` rewrites the looping exit's
+place to be the block's **own entry place** — that single substitution
+is the entire cycle:
+
+```diagram
+before:  in ─▶ [attempt] ─▶ done
+                        └─▶ retryable        ← a normal exit place
+                        └─▶ exhausted
+
+after:   in ─▶ [attempt] ─▶ done             ← "retryable" arcs now
+          ▲             │                       produce into "in"
+          └─────────────┘
+               [attempt] ─▶ exhausted
+```
+
+No loop node, no iteration counter in the structure — the counter
+rides in the token (evolved by `try_fn`), and the guard is the
+ordinary outcomes-decision that chose `retryable`. Refused when the
+looping exit is the block's only exit (no way out). Mechanics:
+[chapter 16](16-how-the-authoring-compiles.md). Exact code:
+[ax23_blocks.py](../es3-workflow-ast-authoring-model/experiments/ax23-completed-algebra/ax23_blocks.py)
+(`loop`).
+
 ## How it relates
 
 - Concept 5 supplies the loop guard (it's just an outcomes-decision).

@@ -45,6 +45,24 @@ joining is thereby structurally impossible, not checked-for.
   job.
 - No racing over effectful branches, by refusal.
 
+## What it compiles to
+
+`par` is the only combinator that adds transitions: the fork and the
+join are real, visible nodes you can point at in the net —
+
+```diagram
+                    ┌─▶ inv_in ─▶ [reserve]   ─▶ inv_out ──┐
+in ─▶ [gather] ─────┤                                      ├───▶ [gather_join] ─▶ out (Quote)
+      copies input  └─▶ tax_in ─▶ [calculate] ─▶ tax_out ──┘     consumes ONE token
+      to each branch                                             per branch; aggregates
+                                                                 {branch_name: data}
+```
+
+Cost for n branches: 2 places, 2 transitions, 2+2n arcs — parallelism
+is where net density legitimately rises above `arcs/(P+T) ≈ 1`.
+Mechanics: [chapter 16](16-how-the-authoring-compiles.md). Exact code:
+[ax24_parallel.py](../es3-workflow-ast-authoring-model/experiments/ax24-parallel-blocks/ax24_parallel.py).
+
 ## How it relates
 
 - Concept 3's totality and purity metadata are what the combinator

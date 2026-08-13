@@ -101,6 +101,128 @@ motion.settled      # {'sent': [...], 'discarded': []}
 motion.replay()     # the durable contract, demonstrated
 ```
 
+## What the example becomes
+
+The same workflow, walked down every intermediate representation.
+Nothing here is hand-waved: the lowering applies chapter 16's rules
+one by one, and the final spec-DSL net is **built and asserted by
+[test_refund_netspec.py](test_refund_netspec.py)** in this directory.
+
+### The composed block
+
+Applying the lowering rules by hand (labeled: *derived*, not spike
+output — the refund activities are hypothetical). The `branch` lowers
+to two CEL-filtered arcs (chapter 5, form 2); each `activity` is an
+`outcomes` leaf (chapter 3); each `then` fuses one exit place into the
+next entry (chapter 4). One honest wrinkle the lowering forces into
+the open: the spec's "already refunded → treat as done" is **not** a
+separate exit — exit colors must be distinct, so the gate's handler
+maps both provider answers onto the one `refunded` exit. "Done is
+done" is a classification fact, not topology:
+
+```python
+workflow: Block = {
+    "entry":  Port("refund_request", RefundRequest),
+    "exits": {
+        "sent":      Port("notified", Notified),
+        "discarded": Port("discarded", Discarded),
+    },
+    # nodes: 5 places, 4 transitions — inventoried below
+}
+```
+
+### The generated net
+
+```diagram
+                [amount > 500]   ┌────────────────┐
+             ┌──────────────────▶│ human_approval │─────┐
+┌────────────┴───┐               └────────────────┘     ▼
+│ refund_request │                                ┌──────────┐    ┌────────┐
+│ RefundRequest  │               ┌──────────────┐ │ approved │───▶│ refund │
+└────────────┬───┘               │ auto_approve │▶│ Approved │    └───┬────┘
+             └──────────────────▶└──────────────┘ └──────────┘        │
+                [amount <= 500]                              ┌────────┴───────┐
+                                                             ▼                ▼
+                                                       ┌───────────┐   ┌───────────┐
+                                                       │ refunded  │   │ discarded │
+                                                       │ Refunded  │   │ Discarded │
+                                                       └─────┬─────┘   └───────────┘
+                                                             ▼
+                                                        ┌────────┐    ┌──────────┐
+                                                        │ notify │───▶│ notified │
+                                                        └────────┘    │ Notified │
+                                                                      └──────────┘
+```
+
+The inventory, as asserted by the test:
+
+| Kind | Elements |
+|---|---|
+| Places (5) | `refund_request`·RefundRequest, `approved`·Approved, `refunded`·Refunded, `discarded`·Discarded, `notified`·Notified |
+| Transitions (4) | `human_approval`, `auto_approve`, `refund`, `notify` |
+| Arcs (9) | 2 filtered triage arcs, 2 into `approved`, 1 into `refund`, 2 out of `refund`, 2 through `notify` |
+
+`arcs/(P+T) = 9/9 = 1.0` — the concept-10 economy signal, hit exactly:
+every arc exists because a spec clause demanded it.
+
+### The same net in today's spec DSL
+
+What a low-level author writes for this net right now — **exact
+current Petrus syntax**, built green by the test (the identity
+functions and the two idempotency behaviors live in the dispatched
+handlers, not in the topology — which is why they don't appear here):
+
+```python
+net = NetSpec("refund")
+p, t = net.p, net.t
+
+(
+    p.refund_request(RefundRequest)
+    >> arc(filter="amount > 500")
+    >> t.human_approval(handler="human_approval")
+    >> p.approved(Approved)
+)
+(
+    p.refund_request
+    >> arc(filter="amount <= 500")
+    >> t.auto_approve(handler="auto_approve")
+    >> p.approved
+)
+p.approved >> t.refund(handler="refund") >> (p.refunded(Refunded), p.discarded(Discarded))
+p.refunded >> t.notify(handler="notify") >> p.notified(Notified)
+
+built = net.build()
+```
+
+### What each layer contributed
+
+| | High-level authoring | Compiler (chapter 16 rules) | Low-level author today |
+|---|---|---|---|
+| exits & colors | wrote them (spec vocabulary) | checked distinctness | writes them |
+| triage CEL | wrote `req.amount > THRESHOLD` | compiled to the filter string | writes raw CEL strings |
+| glue places | — | none needed (fusion) | must name every place |
+| totality | `otherwise` forced | verified | unchecked — author's care |
+| gate identities | `identity=...` per activity | passed to dispatch | in handler code, off-net |
+| source map | — | AST node → generated element | none |
+
+At this scale the two columns cost similar lines — the difference is
+*what is checked*, not what is typed. The gap widens with size:
+production's net ([topology.py](../../../../src/hamsterdan/readiness/net/topology.py))
+writes every place, arc, guard, and read-arc by hand, and nothing
+verifies its exits are total or its names consistent.
+
+### And when it runs
+
+This chapter's example was never executed (the activities are
+hypothetical). For a **real captured run** of the same shape — parallel
+instead of triage, plus judge-and-route — read the ES-003 walkthrough:
+authoring expression → typed value → Block → kernel nodes → serialized
+definition → engine firings → persisted History → byte-identical
+replay, all real output
+([04-end-to-end-walkthrough.md](../es3-workflow-ast-authoring-model/synthesis/04-end-to-end-walkthrough.md),
+regenerable via
+[capture_walkthrough.py](../es3-workflow-ast-authoring-model/synthesis/capture_walkthrough.py)).
+
 ## The design checklist
 
 In order, for any new net:

@@ -49,6 +49,30 @@ its exits are ['committed', 'moved']
 - No hidden data flow: if a downstream step needs a different shape,
   the adapter is a visible pure function, inferred from its signature.
 
+## What it compiles to
+
+Nothing. That is the finding worth holding: `then`, `merge`, and
+`rename_exit` add **zero places, zero transitions, zero arcs**. Fusion
+is a rename — the downstream block's entry place *becomes* the
+upstream block's exit place, and the absorbed place is dropped:
+
+```diagram
+before:  a_in ─▶ [a] ─▶ a_out      b_in ─▶ [b] ─▶ b_out
+after:   a_in ─▶ [a] ─▶ a_out ─▶ [b] ─▶ b_out
+                        └── b's arcs now name a_out; b_in is gone
+```
+
+```python
+# condensed exact — the entire mechanic
+mapping = {b.entry.place: a.exits[on].place}
+nodes   = a.nodes + rename(b.nodes, mapping)
+```
+
+This is why composed nets stay countable: sequence contributes no
+connective tissue, so `arcs/(P+T)` stays near 1 (concept 10) unless a
+real decision or join adds it. Full mechanics:
+[chapter 16](16-how-the-authoring-compiles.md).
+
 ## How it relates
 
 - Concept 3 defines what is being fused.
