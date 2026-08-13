@@ -14,6 +14,7 @@ emerge from findings; only the opening arc is planned.
 | [AX6](ax6-unified-quiescence.md) | Are draft dormancy, provisional head, and supersession one general quiescent state with one resume move? | concluded — promising; continue (spike: [ax6-unified-quiescence/](ax6-unified-quiescence/)) |
 | [AX7](ax7-orthogonal-conversations.md) | Are conversations orthogonal to the head machine, making AX6's Hold unnecessary? | concluded — promising; continue, AX6 Hold dissolved (spike: [ax7-orthogonal-conversations/](ax7-orthogonal-conversations/)) |
 | [AX8](ax8-projection-fold.md) | Is the readiness projection's 25-read-arc join a requirement or a mechanism — can a fold over typed concern exits preserve every production rule? | concluded — promising; continue, AX5's C4 OPEN closed as ACCIDENTAL (spike: [ax8-projection-fold/](ax8-projection-fold/)) |
+| [AX9](ax9-timer-ingress.md) | Is time a special citizen requiring marking-wide reads, or one more provider whose `TimerDue` facts fold into the snapshot? | concluded — promising; continue, reminder's 9 reads join the ACCIDENTAL class, Petrus Delay purity kept as time-as-fact (spike: [ax9-timer-ingress/](ax9-timer-ingress/)) |
 
 AX6 and AX7 ran before AX4/AX5: AX6 fell directly out of AX3's
 conclusion (the operation is the fence, so what is `provisional` still
