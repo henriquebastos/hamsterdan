@@ -159,6 +159,12 @@ commitments):
    escape hatch composes without weakening soundness checks or the
    composition refusals.
 
+*Status update, 2026-08-13:* all three probes executed — AX28, AX27,
+AX29, in that order; each completed **Promising; continue** (see
+Progress). The probe list under this target is exhausted; what remains
+open is recorded in the tabled decisions below and in each
+experiment's carried-forward items.
+
 Unresolved product decisions this target exposes (tabled for the
 Navigator, not decided here):
 
@@ -638,3 +644,26 @@ Navigator, not decided here):
   a data-driven non-termination pass every pre-motion stage and are
   caught only by opt-in motion, AX28's harness). The full loop is
   static → review → opt-in motion. Thirty tests pass.
+- [AX29 — The descent seam](experiments/ax29-descent-seam/index.md)
+  completed 2026-08-13 — Promising; continue. Progressive disclosure
+  holds downward, and descent has **two depths with different laws,
+  both governed**. In-block descent — a hand-built Block using kernel
+  vocabulary no combinator spells (per-arc CEL filters routing by
+  value with no handler; two same-colored exits, which `classify`
+  refuses but a filter-routed Block may mean) — stays entirely under
+  the algebra: eager color refusals at `then`, `check_sound` on
+  hand-written nodes, and AX28's `first_motion` runs and replays it
+  unchanged. Below-block descent — the inhibitor, refused inside
+  blocks because it is *non-flow* and would break entry→exit
+  reachability's meaning — splices at the boundary-net level:
+  `check_sound` still governs the block part first, `KernelShapeError`
+  governs the union (undeclared place, cross-level name shadowing),
+  and the dispatch-until-acknowledged throttle is *observed* — exactly
+  one order in `dispatched` at quiescence with the arc, both without
+  it, acks arriving as `Engine.deliver` source firings with operation
+  identity, replay rebuilding the marking including delivered tokens.
+  The seam's honest cost: a `LoweredBoundary` has no ports, so below
+  the algebra the run surface is manual. Carried forward: the re-wrap
+  question (spliced net back to Block) and whether patterns like the
+  acknowledged throttle deserve kernel-layer names. Thirteen tests
+  pass.
