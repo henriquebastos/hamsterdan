@@ -61,6 +61,7 @@ The blocks-and-combinators reframe, if it survives, comes after.
 | AX3 | V3 variant: split PR lifecycle from epoch management (three nets) | done → [ax3-v3-split.md](ax3-v3-split.md) — not useful enough |
 | AX4 | Comparison: shape metrics, construct census, primitive re-derivation | done → [ax4-comparison.md](ax4-comparison.md) |
 | AX5 | Residue probe: an orphaned worker's late effect absorbed at a gate across an instance kill | done → [ax5-residue.md](ax5-residue.md) |
+| AX6 | V4 variant: one long-lived actor net per concern per PR (the Navigator's generator hunch), executed on the frozen engine | done → [ax6-actor-net.md](ax6-actor-net.md) |
 
 ## Conclusion
 
@@ -84,6 +85,13 @@ braided into every authored net. Recommended next step, pending the
 Navigator's rulings on the open decisions below: a runtime spike on
 spawn/abandon/ingress-routing/GC, the tower's remaining unknown.
 
+**Post-conclusion addendum (AX6):** the Navigator's generator hunch
+was measured as V4 — one long-lived actor net per concern per PR —
+and it keeps every tower property while deleting kills, graveyards,
+seeds, and most GC from the common path. The tower's two-level idea
+survives unchanged; what is now open is whether the work level is
+*disposable per epoch* (V2) or *durable per concern* (V4).
+
 ## Findings at a glance (details in each experiment)
 
 - **AX1 — promising.** Under one fixed authority the domain is eleven
@@ -105,6 +113,14 @@ spawn/abandon/ingress-routing/GC, the tower's remaining unknown.
 - **AX5 — promising.** Executed on the frozen engine: the kill is
   bookkeeping, the gate absorbs the orphaned effect (`moved`, not an
   error), chronicles never mix, and a dead instance replays honestly.
+- **AX6 — promising.** The long-lived actor (V4): the whole review
+  concern for the PR's whole life in 21 nodes / 23 arcs, zero
+  guards/reads/filters, executed on the frozen engine via
+  `Engine.deliver`. Sequential rounds by a memory-baton token;
+  staleness absorbed at the CAS gate (`moved` findings become the
+  next round's provisional input — incremental review is native).
+  Deletes kills, graveyards, seeds, and most GC from the common path.
+  V2 vs V4 is now a measured, open Navigator ruling.
 
 ## Navigator decisions (rulings of 2026-08-14)
 
@@ -146,10 +162,12 @@ long-lived case layer. GitHub-owned facts (approvals, draft state,
 mergeability) are re-observed, never stored. Under this rule the
 "seed" degenerates into spawn *arguments* — read-only snapshots
 passed like function parameters — not state that must be kept alive
-across cuts. Making a *work* concern long-lived instead (e.g. a
-review net that receives new-head events) was analyzed and rejected:
-it reintroduces exactly the per-token epoch guards and read arcs the
-tower eliminated (production: 94 reads/48 guards; V2: 0/0).
+across cuts. Making a *work* concern long-lived was first predicted
+to reintroduce per-token epoch guards — then AX6 measured it and
+found a clean shape: with sequential rounds enforced by a memory
+baton and staleness absorbed at the CAS gate, the actor stays at
+zero guards/reads. The prediction was wrong for that shape; V2 vs V4
+is now a measured, open ruling (see AX6).
 
 ## Governing constraints
 
