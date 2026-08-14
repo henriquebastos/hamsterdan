@@ -179,6 +179,40 @@ Idle | Pending(exact request) | Blocked(exact request, effect_identity) | Faulte
 8. Base-only movement → no review round, but every effect authorized
    under the old base is rejected at its gate.
 
+### A5 — Authority-sensitivity classification (added during AX1)
+
+The AX1 oracle checkpoint rejected a blanket reading of A1.5: not
+every provider effect is authority-*sensitive*, and stamping the tuple
+everywhere would fake fences that mean nothing. The explicit split:
+
+| Effect | Class | Fence |
+|---|---|---|
+| findings publication | authority-sensitive | gate fresh-reads head, base, policy; mismatch → `moved` |
+| readiness announcement | authority-sensitive | same full-tuple fresh read |
+| git mutation (repair/change/update_base/resolve_conflict) | authority-sensitive | head via **server-side CAS** (attempt-first, no read window); base/policy via fresh read — a `resolve_conflict` authored under an old base must not land |
+| CI rerun | authority-sensitive | full-tuple fresh read; `moved` burns no ladder budget |
+| conversation reply | **authority-orthogonal by design** | replies answer in ANY state including Terminal (Navigator ruling); identity `reply:{comment_id}`; landing late is cosmetically outdated at worst |
+| reminder comment | **authority-orthogonal by design** | about the PR's clock, not the head's content; identity `reminder:{timer_id}` |
+| dashboard upsert | **authority-orthogonal by design** | idempotent singleton overwrite of the current projection; self-healing on the next fact |
+
+Corollaries pinned by the same checkpoint:
+
+- The full claim is captured at **request creation** from the current
+  authority owner (lifecycle state for comments; CI memory for
+  escalation) and compared **at the gate** — never in between.
+- A base/policy **refresh** must therefore reach every loop that
+  mints authority-sensitive requests: CI memory adopts refreshed
+  base/policy without churning observed run state.
+- Faulted retention keeps the FULL claim so exact recovery reissues
+  it unchanged (same `op_key`, same base/policy).
+- A2 custody has two honest styles, and each loop declares one:
+  **held baton** (memory travels in the round token; the place is
+  empty while the effect is in flight: review, rerun, mutation,
+  dashboard including recovery) or **recorded pending** (the baton
+  returns carrying an explicit pending record so single-flight is
+  data: readiness `announcing`, reminder `pending` per timer,
+  conversation `pending` per reply id — deliberately concurrent).
+
 ## 5. NET-DECIDED rulings proposed for AX1 (Navigator may veto any)
 
 1. Review triggers on every Running head, sequential rounds (AX6).

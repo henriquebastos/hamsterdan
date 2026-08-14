@@ -39,7 +39,7 @@ being an architecture fork.
 | # | Question | Status |
 | --- | --- | --- |
 | AX0 | Contract census: every chapter-17 clause mapped to a concern loop; boundary obligations separated from tower-era mechanisms; instruments pinned | done, oracle-checked (amendments A1–A4 folded in) → [ax0-contract-census.md](ax0-contract-census.md) |
-| AX1 | The complete cohabited V5 net: all loops, one instance, executed timelines | pending |
+| AX1 | The complete cohabited V5 net: all loops, one instance, executed timelines | done, oracle-approved after six rounds (blockers pinned as tests; census amendment A5) → [ax1-complete-v5.md](ax1-complete-v5.md) |
 | AX2 | The courier primitive: outbox place + identified delivery across instances, crash-and-redeliver proof, generic | pending |
 | AX3 | The sharded assembly: the SAME loops across several instances; trace-equivalence against AX1 | pending |
 | AX4 | Verdict: production vs V5 vs V5-sharded — shape, behavior coverage, machinery bill, blast radius, replay; final primitive census | pending |
