@@ -56,7 +56,7 @@ The blocks-and-combinators reframe, if it survives, comes after.
 | # | Question | Status |
 | --- | --- | --- |
 | AX0 | Capture the tower model, variants, and measures | done → [tower-model.md](tower-model.md) |
-| AX1 | V2 work net: the domain net under one fixed authority — how simple? | planned |
+| AX1 | V2 work net: the domain net under one fixed authority — how simple? | done → [ax1-work-net.md](ax1-work-net.md) |
 | AX2 | V2 meta net: PR lifecycle + epoch spawn/abandon as ordinary activities | planned |
 | AX3 | V3 variant: split PR lifecycle from epoch management (three nets) | planned |
 | AX4 | Comparison: shape metrics, construct census, primitive re-derivation | planned |
