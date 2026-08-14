@@ -16,6 +16,11 @@ Paused, Candidate, Promoted, or Archived.
   from-spec-to-net method, and the Hamsterdan rebuild brief. Candidate
   input to the design phase; positives only — negative results stay in
   the source syntheses.
+- [ES-006 — The chronicle/ledger tower: layered net decomposition](es6-chronicle-ledger-tower/index.md):
+  what shape do the nets take when staleness, cancellation, and epoch
+  management move to a meta net whose world is the set of engine
+  instances — one disposable work net per epoch, written in the
+  shipped spec DSL with TDD, measured against the ES-005 contract.
 
 ## Archived
 
