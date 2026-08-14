@@ -1,6 +1,7 @@
-# Results — the design primer
+# ES-005 — The design primer: consolidated learning for the design phase
 
-**Status:** candidate distillation for the design phase, 2026-08-13.
+**Status:** Candidate — the consolidation of ES-001–ES-004 learning
+that matters for the future, 2026-08-14.
 **Sources:** everything that *earned trust* across
 [ES-001](../es1-petri-net-motus-boundary/index.md) (boundary
 ownership), [ES-002](../es2-imperative-expression-layer/index.md)
@@ -105,6 +106,11 @@ Method — the payoff:
     the lowering rules behind every "What it compiles to" section:
     leaves add nodes, composition only renames, the node economy, and
     the staged pipeline from expression to replayed marking.
+17. [The Hamsterdan rebuild brief](17-hamsterdan-rebuild-brief.md) —
+    how the Hamsterdan net behaves (the boundary-confirmed contract as
+    Given/When/Then), the NET-DECIDED design space, the proven
+    control-place simplifications, and the target shape — everything
+    needed to design your own version with chapter 15's method.
 
 ## How the concepts relate
 
@@ -112,6 +118,7 @@ Method — the payoff:
                         ┌───────────────────────────┐
                         │ 15 FROM SPEC TO NET       │  method
                         │ 16 HOW IT COMPILES        │
+                        │ 17 HAMSTERDAN BRIEF       │
                         └─────────────┬─────────────┘
               ┌───────────────────────┼──────────────────────┐
               ▼                       ▼                      ▼
