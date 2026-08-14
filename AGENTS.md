@@ -60,6 +60,17 @@ scope.
 - Import Petrus concepts from their defining modules. There is no root facade
   and no `impetus` compatibility package.
 
+## Navigator communication
+
+The chat response is the primary deliverable; files are references for
+later. Whenever the Driver introduces a coined concept, label, or
+shortcut — or asks the Navigator to rule a decision — the response
+itself must explain it with at least one concrete scenario. Never
+assume the Navigator will open a markdown file to decode a term the
+response invented. Every decision presented for ruling must state: the
+question in plain words, one concrete example, the options with their
+consequences, and a recommendation.
+
 ## Safety
 
 Never commit App private keys, installation tokens, webhook secrets, PATs,

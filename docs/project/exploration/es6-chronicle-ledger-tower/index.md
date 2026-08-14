@@ -106,14 +106,50 @@ spawn/abandon/ingress-routing/GC, the tower's remaining unknown.
   bookkeeping, the gate absorbs the orphaned effect (`moved`, not an
   error), chronicles never mix, and a dead instance replays honestly.
 
-## Navigator decisions surfaced (open, deliberately unruled)
+## Navigator decisions (rulings of 2026-08-14)
 
-1. Epoch definition: head only vs the full authority tuple.
-2. Kind-as-topology vs kind-as-data (AX1 explicit/collapsed; AX2
-   grid/reconcile) — observability vs size, behavior identical.
-3. Late-append policy: graveyard (modeled in AX5) vs refusal.
-4. Seed contents per concern (the `resume()` census).
-5. Timer ownership across instances.
+1. **Epoch definition — ruled: head only.** Base movement is not an
+   epoch cut; a *conflict* is the signal that matters, observed at
+   fold time. A "final checkpoint" subnet (when nothing is pending,
+   let the human judge merging on a moved-but-conflict-free base) was
+   recognized as a sensible **additive** feature and deliberately
+   deferred — it is new scope, not a change to this design.
+2. **Kind-as-topology — ruled: explicit topology per publication
+   kind**, with a refinement: extract the *shared publication
+   mechanics* (render → CAS-gate → effect → record) as one reusable
+   component subnet that each named kind instantiates, so per-kind
+   logic can change without touching the others while the common part
+   stays single-sourced. Collapsed form remains acceptable for
+   mutations.
+3. **Late-append policy — ruled: graveyard.** A dead instance's
+   chronicle may record late worker completions, because *advancing a
+   net* (enabling/firing) and *recording what the real world reported
+   back* are different acts; history must reflect the world.
+   Mechanism to be designed in the runtime spike.
+4. **Seed contents — reframed, not ruled.** The Navigator questioned
+   whether the seed exists only because PR-scoped facts were placed
+   in head-scoped instances (see "lifetime assignment" below). Open
+   fork: one case net owning all PR-scoped concerns vs per-concern
+   sibling nets.
+5. **Timer ownership — subsumed by 4.** Timers are PR-scoped facts;
+   under lifetime assignment they never live in a head-scoped
+   instance, so no handover problem exists.
+
+### The lifetime-assignment reframe (open)
+
+The seed/timer problems are symptoms of scope misassignment: a fact
+should live in the layer whose lifetime equals the fact's own.
+Head-scoped facts (review of *this diff*, CI for *this sha*) belong
+in the disposable work instance and need no seed. PR-scoped facts
+(conversation, reminders, dismissal memory, budgets) belong in the
+long-lived case layer. GitHub-owned facts (approvals, draft state,
+mergeability) are re-observed, never stored. Under this rule the
+"seed" degenerates into spawn *arguments* — read-only snapshots
+passed like function parameters — not state that must be kept alive
+across cuts. Making a *work* concern long-lived instead (e.g. a
+review net that receives new-head events) was analyzed and rejected:
+it reintroduces exactly the per-token epoch guards and read arcs the
+tower eliminated (production: 94 reads/48 guards; V2: 0/0).
 
 ## Governing constraints
 
