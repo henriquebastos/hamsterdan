@@ -62,6 +62,28 @@ The blocks-and-combinators reframe, if it survives, comes after.
 | AX4 | Comparison: shape metrics, construct census, primitive re-derivation | done → [ax4-comparison.md](ax4-comparison.md) |
 | AX5 | Residue probe: an orphaned worker's late effect absorbed at a gate across an instance kill | done → [ax5-residue.md](ax5-residue.md) |
 
+## Conclusion
+
+**Pursue V2; reject V3.** All numbers engine-measured, pinned by
+tests:
+
+| | P | T | nodes | A | ratio | reads | guards | biggest piece |
+|---|---|---|---|---|---|---|---|---|
+| Production | 46 | 69 | 115 | **309** | 2.69 | 94 | 48 | 115 (all of it) |
+| V2 explicit | 72 | 30 | 102 | **99** | 0.85–1.41 | 0 | 0 | 22 |
+| V2 collapsed | 35 | 17 | 52 | **56** | 0.83–1.41 | 0 | 0 | 22 |
+| V3 split | 83+ | 44+ | 121+ | 150+ | — | 0 | 0 | rejected (AX3) |
+
+Arcs drop 68–82%; read arcs and guards go to zero, not down; the
+largest thing a reader ever holds shrinks from 115 nodes to 22; and
+the kill-residue safety story executed on the frozen engine (AX5).
+The complexity that left the topology moved to (a) pure functions
+(fold/decide/step) and (b) instance-management runtime machinery
+Petrus does not yet have — paid once, domain-free, instead of
+braided into every authored net. Recommended next step, pending the
+Navigator's rulings on the open decisions below: a runtime spike on
+spawn/abandon/ingress-routing/GC, the tower's remaining unknown.
+
 ## Findings at a glance (details in each experiment)
 
 - **AX1 — promising.** Under one fixed authority the domain is eleven
