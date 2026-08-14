@@ -21,6 +21,12 @@ Paused, Candidate, Promoted, or Archived.
   management move to a meta net whose world is the set of engine
   instances — one disposable work net per epoch, written in the
   shipped spec DSL with TDD, measured against the ES-005 contract.
+- [ES-007 — The complete V5 Hamsterdan: cohabited, then sharded](es7-v5-hamsterdan/index.md):
+  the decision-grade three-way comparison — production untouched, a
+  complete actor-loop V5 net in one instance, and the same authored
+  loops sharded across instances via a generic courier. Tests whether
+  sharding is a deployment decision rather than a design decision.
+  Oracle-checkpointed at each experiment.
 
 ## Archived
 
