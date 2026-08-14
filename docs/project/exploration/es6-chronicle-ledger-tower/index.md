@@ -60,7 +60,38 @@ The blocks-and-combinators reframe, if it survives, comes after.
 | AX2 | V2 meta net: PR lifecycle + epoch spawn/abandon as ordinary activities | done → [ax2-case-net.md](ax2-case-net.md) |
 | AX3 | V3 variant: split PR lifecycle from epoch management (three nets) | done → [ax3-v3-split.md](ax3-v3-split.md) — not useful enough |
 | AX4 | Comparison: shape metrics, construct census, primitive re-derivation | done → [ax4-comparison.md](ax4-comparison.md) |
-| AX5 | Residue probe: an orphaned worker's late effect absorbed at a gate across an instance kill | optional |
+| AX5 | Residue probe: an orphaned worker's late effect absorbed at a gate across an instance kill | done → [ax5-residue.md](ax5-residue.md) |
+
+## Findings at a glance (details in each experiment)
+
+- **AX1 — promising.** Under one fixed authority the domain is eleven
+  isolated, acyclic, linear pipelines built from three shapes: ratio
+  0.85, zero read arcs, zero guards, zero filters, fan-in nowhere.
+- **AX2 — promising.** Everything the tower removed fits a 22-node
+  case net: a (state × observation) grid with zero guards; the whole
+  V2 system needs exactly two idioms — pipelines that work (ratio
+  < 1) and one state cell that routes (ratio > 1, confined).
+- **AX3 — not useful enough.** Splitting lifecycle from epoch
+  management builds a shadow state machine (+73% nodes, 4 cross-net
+  colors, new routing machinery). General rule: split levels **by
+  world, not by topic**.
+- **AX4 — promising.** Production measured with the same instruments:
+  309 arcs, ratio 2.687, 94 read arcs, 48 guards, one braid. V2
+  total: 99 arcs, 0 reads, 0 guards, thirteen independent pieces.
+  Five re-derived primitives: pipeline, state cell, gate, typed
+  ingress + decide-seeded entries, tower.
+- **AX5 — promising.** Executed on the frozen engine: the kill is
+  bookkeeping, the gate absorbs the orphaned effect (`moved`, not an
+  error), chronicles never mix, and a dead instance replays honestly.
+
+## Navigator decisions surfaced (open, deliberately unruled)
+
+1. Epoch definition: head only vs the full authority tuple.
+2. Kind-as-topology vs kind-as-data (AX1 explicit/collapsed; AX2
+   grid/reconcile) — observability vs size, behavior identical.
+3. Late-append policy: graveyard (modeled in AX5) vs refusal.
+4. Seed contents per concern (the `resume()` census).
+5. Timer ownership across instances.
 
 ## Governing constraints
 
