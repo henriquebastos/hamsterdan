@@ -37,10 +37,15 @@ The blocks-and-combinators reframe, if it survives, comes after.
 3. Shape first, machinery later: instance management, abandon
    delivery, and GC are *modeled as activities* of the meta net, not
    implemented as infrastructure.
-4. Behavior comes from ES-005
+4. **Greenfield, not refactoring.** This is a fresh expression of the
+   same goal, not a decomposition of the existing net. Behavior comes
+   from ES-005
    [chapter 17](../es5-design-primer/17-hamsterdan-rebuild-brief.md)
-   (the boundary-confirmed contract) — not from production
-   `topology.py`, which is the comparison target, not the source.
+   (the boundary-confirmed contract) and from first principles.
+   Production `topology.py` is **quarantined until AX4**: it is never
+   opened while designing AX1–AX3, so its structural choices — control
+   places, drain machinery, staleness plumbing — cannot leak into the
+   new design. It re-enters only at AX4, as the measured baseline.
 5. Measures per net and per variant: `P`, `T`, `A`, `arcs/(P+T)`,
    read-arc count, guard count, count of staleness-only constructs
    (target: 0 inside work nets), and the construct census.
