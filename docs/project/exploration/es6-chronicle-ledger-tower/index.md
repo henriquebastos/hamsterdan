@@ -62,6 +62,7 @@ The blocks-and-combinators reframe, if it survives, comes after.
 | AX4 | Comparison: shape metrics, construct census, primitive re-derivation | done → [ax4-comparison.md](ax4-comparison.md) |
 | AX5 | Residue probe: an orphaned worker's late effect absorbed at a gate across an instance kill | done → [ax5-residue.md](ax5-residue.md) |
 | AX6 | V4 variant: one long-lived actor net per concern per PR (the Navigator's generator hunch), executed on the frozen engine | done → [ax6-actor-net.md](ax6-actor-net.md) |
+| AX7 | V5 variant: all concern actors cohabiting ONE instance for the PR's whole life (the asyncio hunch), executed on the frozen engine | done → [ax7-family-net.md](ax7-family-net.md) |
 
 ## Conclusion
 
@@ -85,12 +86,17 @@ braided into every authored net. Recommended next step, pending the
 Navigator's rulings on the open decisions below: a runtime spike on
 spawn/abandon/ingress-routing/GC, the tower's remaining unknown.
 
-**Post-conclusion addendum (AX6):** the Navigator's generator hunch
-was measured as V4 — one long-lived actor net per concern per PR —
-and it keeps every tower property while deleting kills, graveyards,
-seeds, and most GC from the common path. The tower's two-level idea
-survives unchanged; what is now open is whether the work level is
-*disposable per epoch* (V2) or *durable per concern* (V4).
+**Post-conclusion addendum (AX6/AX7):** the Navigator's generator
+hunch was measured as V4 — one long-lived actor net per concern per
+PR — and it keeps every tower property while deleting kills,
+graveyards, seeds, and most GC from the common path. AX7 then
+measured V5: the actor loops cohabiting ONE instance for the PR's
+whole life, which further dissolves the router and cross-instance
+messaging into plain arcs. The layered *idea* survives — staleness
+out of the domain topology, coordination confined — but the meta
+level shrinks to host-side spawn-at-open/archive-at-close. The open
+ruling is now **V5 vs (V2 | V4)**, with V5 recommended unless a
+measured reason forces sharding.
 
 ## Findings at a glance (details in each experiment)
 
@@ -121,6 +127,16 @@ survives unchanged; what is now open is whether the work level is
   next round's provisional input — incremental review is native).
   Deletes kills, graveyards, seeds, and most GC from the common path.
   V2 vs V4 is now a measured, open Navigator ruling.
+- **AX7 — promising.** Cohabitation (V5): three actor loops (review,
+  CI, dashboard) in ONE instance for the PR's whole life — 40 nodes /
+  47 arcs, zero guards/reads/filters. Broadcast ingress and
+  cross-concern facts are plain arcs, so the V4 router and messaging
+  machinery dissolve; a mid-life CI fault stalled only its own loop
+  while the siblings kept running; one chronicle replays the whole
+  interleaved story. The anti-braid invariant is structural and
+  tested: concerns connect only event-to-mailbox, batons are private.
+  V2-vs-V4 collapses into: **V5 unless a measured reason forces
+  sharding.**
 
 ## Navigator decisions (rulings of 2026-08-14)
 
