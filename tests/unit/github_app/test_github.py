@@ -416,6 +416,109 @@ def test_initial_immutable_lookup_rejects_a_stable_operation_payload_collision()
     assert not any(call[0] == "POST" for call in fake.calls)
 
 
+def test_find_reports_absence_landing_and_collision_without_mutating() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+    marker = CommentPublisher.marker("finding", "stable-operation", HEAD)
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    assert publisher.find("finding", "stable-operation", HEAD, "Finding") is None
+
+    fake.page_values[f"{comments}?per_page=100"] = (
+        {"id": 11, "html_url": "url", "body": f"Finding\n\n{marker}", "user": {"login": "hamsterdan[bot]"}},
+    )
+    held = publisher.find("finding", "stable-operation", HEAD, "Finding")
+    assert held is not None and held.status == "existing"
+    assert held.reference is not None and held.reference.id == 11
+    compatible = publisher.find("finding", "stable-operation", HEAD, "Newer", compatible_bodies=("Finding",))
+    assert compatible is not None and compatible.status == "existing"
+
+    with pytest.raises(ValueError, match="different payload"):
+        publisher.find("finding", "stable-operation", HEAD, "Different")
+
+    assert not any(call[0] == "POST" for call in fake.calls)
+
+
+def _no_context():
+    raise AssertionError("write context must not be read for a held operation")
+
+
+def test_operation_scoped_reconciliation_recovers_across_a_head_move_without_reposting() -> None:
+    # A2 operation-scoped identity: a reply landed under h1 must
+    # reconcile as existing when reissued under h2 (the marker embeds
+    # the head) WITHOUT consulting the write context, and differing
+    # content must still fail closed.
+    comments = "/repos/owner/repo/issues/7/comments"
+    marker = CommentPublisher.marker("conversation", "reply:c1", HEAD)
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = (
+        {"id": 12, "html_url": "url", "body": f"the answer\n\n{marker}", "user": {"login": "hamsterdan[bot]"}},
+    )
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    recovered = publisher.immutable_operation("conversation", "reply:c1", "the answer", context=_no_context)
+    assert recovered.status == "existing"
+    assert recovered.reference is not None and recovered.reference.id == 12
+    assert not any(call[0] == "POST" for call in fake.calls)
+
+    with pytest.raises(ValueError, match="different payload"):
+        publisher.immutable_operation("conversation", "reply:c1", "a different answer", context=_no_context)
+    assert not any(call[0] == "POST" for call in fake.calls)
+
+
+def test_operation_scoped_publication_posts_under_the_current_head_when_never_held() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fake.responses[("POST", comments)] = WireResponse(201, {"id": 13, "html_url": "url"})
+    fences: list[str] = []
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append("fenced"))
+
+    result = publisher.immutable_operation("conversation", "reply:c1", "the answer", context=lambda: (1, HEAD))
+
+    assert result.status == "created"
+    [(_, _, posted)] = [call for call in fake.calls if call[0] == "POST"]
+    assert posted["body"].endswith(CommentPublisher.marker("conversation", "reply:c1", HEAD))
+    assert fences == ["fenced"]
+
+
+def test_operation_scoped_reminder_reconciles_presence_only_across_a_head_move() -> None:
+    # A2 presence-only reconciliation: the nudge landed under h1, so a
+    # reissue reconciles WITHOUT reading claim/recipients (the body
+    # legitimately drifts with addressing and the dashboard link).
+    comments = "/repos/owner/repo/issues/7/comments"
+    marker = CommentPublisher.marker("reminder", "reminder:t1", HEAD)
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = (
+        {"id": 14, "html_url": "url", "body": f"an OLD nudge body\n\n{marker}", "user": {"login": "hamsterdan[bot]"}},
+    )
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    recovered = publisher.reminder_operation("reminder:t1", context=_no_context)
+
+    assert recovered.status == "existing"
+    assert recovered.reference is not None and recovered.reference.id == 14
+    assert not any(call[0] == "POST" for call in fake.calls)
+    # exactly ONE lookup: no dashboard read on the reconciliation path
+    assert [call[0] for call in fake.calls] == ["PAGES"]
+
+
+def test_operation_scoped_reminder_posts_under_the_current_head_when_never_held() -> None:
+    comments = "/repos/owner/repo/issues/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fake.responses[("POST", comments)] = WireResponse(201, {"id": 15, "html_url": "url"})
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    result = publisher.reminder_operation("reminder:t1", context=lambda: (1, HEAD, "the-reviewer", "the-author"))
+
+    assert result.status == "created"
+    [(_, _, posted)] = [call for call in fake.calls if call[0] == "POST"]
+    assert "@the-reviewer" in posted["body"]
+    assert posted["body"].endswith(CommentPublisher.marker("reminder", "reminder:t1", HEAD))
+
+
 def test_two_unproven_comment_outcomes_stop_after_two_fenced_mutations() -> None:
     comments = "/repos/owner/repo/issues/7/comments"
 

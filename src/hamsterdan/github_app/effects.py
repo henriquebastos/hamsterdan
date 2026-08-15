@@ -145,6 +145,89 @@ class CommentPublisher:
             raise ValueError("stable publication operation collided with a different payload")
         return PublicationResult("existing", _reference(existing))
 
+    def _find_operation(self, kind: str, operation: str) -> tuple[Mapping[str, Any], str] | None:
+        """Find the bot's final marker for (kind, operation) under ANY head."""
+        pattern = re.compile(
+            rf"<!-- hamsterdan:{re.escape(kind)} operation={re.escape(operation)} head=([0-9a-f]{{40}}) -->"
+        )
+        for item in self._comments():
+            if _login(item) != self.bot_login:
+                continue
+            body = str(item.get("body", ""))
+            tail = body.rsplit("\n\n", 1)[-1]
+            matched = pattern.fullmatch(tail)
+            if matched:
+                return item, matched.group(1)
+        return None
+
+    def immutable_operation(
+        self,
+        kind: str,
+        operation: str,
+        body: str,
+        *,
+        context: Callable[[], tuple[int, str]],
+        compatible_bodies: tuple[str, ...] = (),
+    ) -> PublicationResult:
+        """Immutable publication whose A2 identity is (kind, operation)
+        across heads: authority-orthogonal comments (replies) must
+        reconcile a comment landed under an EARLIER head instead of
+        reposting, because the marker embeds the head. Reconciliation
+        happens BEFORE ``context`` is consulted, so a held effect
+        reconciles even when the current epoch/head cannot be read.
+        Content collision under the held identity still fails closed."""
+        found = self._find_operation(kind, operation)
+        if found is not None:
+            item, held_head = found
+            marker = self.marker(kind, operation, held_head)
+            payload = f"{body}\n\n{marker}"
+            compatible_payloads = {f"{value}\n\n{marker}" for value in compatible_bodies}
+            if item.get("body") != payload and item.get("body") not in compatible_payloads:
+                raise ValueError("stable publication operation collided with a different payload")
+            return PublicationResult("existing", _reference(item))
+        epoch, head = context()
+        return self.immutable(kind, operation, epoch, head, body, compatible_bodies=compatible_bodies)
+
+    def reminder_operation(
+        self, operation: str, *, context: Callable[[], tuple[int, str, str | None, str]]
+    ) -> PublicationResult:
+        """Operation-scoped reminder (A2): presence of the (reminder,
+        operation) marker under ANY head proves the nudge landed —
+        reconciliation is presence-only (the harness spec) because the
+        body legitimately drifts with addressing and the dashboard
+        link, and the identity has a single writer. ``context`` — the
+        current (epoch, head, reviewer, author) — is consulted only
+        when a new write is needed."""
+        found = self._find_operation("reminder", operation)
+        if found is not None:
+            item, _held_head = found
+            return PublicationResult("existing", _reference(item))
+        epoch, head, reviewer, author = context()
+        return self.reminder(operation, epoch, head, reviewer=reviewer, author=author)
+
+    def find(
+        self,
+        kind: str,
+        operation: str,
+        head: str,
+        body: str,
+        *,
+        compatible_bodies: tuple[str, ...] = (),
+    ) -> PublicationResult | None:
+        """Lookup-first reconciliation WITHOUT an effect: None when the
+        operation was never held, the existing result when it landed with
+        the same (or a compatible) payload, and the collision invariant
+        when the identity is held with different content."""
+        marker = self.marker(kind, operation, head)
+        payload = f"{body}\n\n{marker}"
+        compatible_payloads = {f"{value}\n\n{marker}" for value in compatible_bodies}
+        existing = self._find(marker)
+        if existing is None:
+            return None
+        if existing.get("body") != payload and existing.get("body") not in compatible_payloads:
+            raise ValueError("stable publication operation collided with a different payload")
+        return PublicationResult("existing", _reference(existing))
+
     def dashboard(self, operation: str, epoch: int, head: str, body: str) -> PublicationResult:
         marker = "<!-- hamsterdan:dashboard -->"
         existing = self._find(marker)
