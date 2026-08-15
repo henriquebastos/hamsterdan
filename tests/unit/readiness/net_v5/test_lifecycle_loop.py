@@ -7,7 +7,19 @@ loop mailboxes. No guards, no read arcs — every decision is a pure
 fold on token data (the ES-007 discipline, now first-class).
 """
 
-from harness import comment_held, deliver, deliver_held, one, see_head, see_run, spawn, spawn_held, tokens, world_of
+from harness import (
+    comment_held,
+    deliver,
+    deliver_held,
+    one,
+    projection,
+    see_head,
+    see_run,
+    spawn,
+    spawn_held,
+    tokens,
+    world_of,
+)
 
 from hamsterdan.readiness.net_v5 import build_net_v5
 
@@ -148,17 +160,17 @@ class TestClose:
         deliver(engine, "on_close", "CloseSeen", {"reason": "merged"})
         assert one(engine, "life.state")["phase"] == "terminal"
         for mailbox in (
-            "dash.closed",
             "rem.closed",
             "ready.closed",
         ):
             assert one(engine, mailbox)["reason"] == "merged"
-        # the CI, escalation, review, and mutation loops consumed their
-        # close mail and retired
+        # the CI, escalation, review, mutation, and dashboard loops
+        # consumed their close mail and retired
         assert one(engine, "ci.done")["reason"] == "merged"
         assert one(engine, "esc.done")["reason"] == "merged"
         assert one(engine, "review.done")["reason"] == "merged"
         assert one(engine, "mut.done")["reason"] == "merged"
+        assert one(engine, "dash.done")["reason"] == "merged"
 
     def test_terminal_absorbs_every_later_observation(self) -> None:
         engine, _ = spawn()
@@ -209,7 +221,7 @@ class TestObservationRouting:
         )
         facts = [f for f in tokens(engine, "ready.facts") if f["kind"] == "human"]
         assert facts[-1]["body"]["approval"] is True
-        assert [f for f in tokens(engine, "dash.facts") if f["kind"] == "human"]
+        assert [f for f in projection(engine) if f["kind"] == "human"]
 
     def test_runs_are_mailed_to_ci_only_while_running(self) -> None:
         engine, _ = spawn()

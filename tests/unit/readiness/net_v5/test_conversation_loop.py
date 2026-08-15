@@ -15,6 +15,7 @@ from harness import (
     comment_held,
     deliver,
     one,
+    projection,
     see_head,
     spawn,
     spawn_held,
@@ -226,7 +227,7 @@ class TestReplyGate:
         comment(engine, "c1", "status")
         state = memory(engine)
         assert state["faulted"] == {"c1": {"text": "answer:status", "reason": "unknown provider terminal"}}
-        [fault] = [f for f in tokens(engine, "dash.facts") if f["kind"] == "fault"]
+        [fault] = [f for f in projection(engine) if f["kind"] == "fault"]
         assert fault["body"] == {
             "where": "conversation",
             "op": "reply:c1",
@@ -241,7 +242,7 @@ class TestReplyGate:
         state = memory(engine)
         assert state["faulted"] == {}
         # the settle emits the operation-keyed resolution for the dashboard
-        resolutions = [f["body"] for f in tokens(engine, "dash.facts") if f["kind"] == "fault"]
+        resolutions = [f["body"] for f in projection(engine) if f["kind"] == "fault"]
         assert resolutions[-1] == {"where": "conversation", "op": "reply:c1", "status": "resolved"}
 
     def test_recovery_is_single_flight_per_identity(self) -> None:

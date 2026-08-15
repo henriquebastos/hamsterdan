@@ -16,6 +16,7 @@ from harness import (
     deliver,
     deliver_held,
     one,
+    projection,
     pump,
     release_one,
     see_head,
@@ -136,7 +137,7 @@ class TestPublication:
         assert "collision" in state["pub"]["reason"]
         assert state["pub"]["op"] == "findings:h1:i1"  # the EXACT operation retained
         assert state["reviewed"] == ["h1"]  # the ROUND completed; the publication did not
-        [fault] = [f for f in tokens(engine, "dash.facts") if f["kind"] == "fault"]
+        [fault] = [f for f in projection(engine) if f["kind"] == "fault"]
         assert fault["body"]["where"] == "review"
         assert fault["body"]["op"] == "findings:h1:i1"  # operation-keyed
         assert fault["body"]["status"] == "faulted"

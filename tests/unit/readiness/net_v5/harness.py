@@ -8,6 +8,8 @@ current-or-fresher grant), and binds every gate to a world-backed fake
 activity.
 """
 
+import ast
+
 from petrus.engine import Engine, choose_throughput
 from petrus.impetus.history_store import InMemoryHistoryStore
 from petrus.impetus.petrinet import NetPath, Token
@@ -16,6 +18,10 @@ from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
 
 from hamsterdan.contracts.readiness_v5 import (
     AgentReview,
+    DashBlocked,
+    DashFault,
+    DashLanded,
+    DashReq,
     FaultM,
     MovedM,
     MutWork,
@@ -64,6 +70,10 @@ def fresh_world() -> dict:
         # mutation: the provider's push ledger, keyed by operation identity
         "pushes": [],  # {"key", "op", "from", "to"}
         "git_mode": None,  # None | "fault" | "crash" (landed, terminal lost)
+        # dashboard: the provider's board (an idempotent overwrite target)
+        "dashboard": [],
+        "dash_mode": None,  # None | "retryable" | "unknown"
+        "dash_requests": [],  # EVERY attempted upsert {entries, digest}
         "log": [],
     }
 
@@ -318,7 +328,38 @@ def make_activities(world: dict):
             return Replied(id=work.id, text=work.text)
         return ReplyBlocked(id=work.id, text=work.text)
 
-    return (rerun_gate, review_agent, publish_gate, git_gate, reply_gate)
+    @motus_activity(converter=converter)
+    def dash_gate(work: DashReq) -> DashLanded | DashBlocked | DashFault:
+        # the dashboard is authority-orthogonal by design (A5): no
+        # fence — a stale board row is corrected by the next upsert.
+        # The upsert is an idempotent overwrite, so no lookup-first
+        # ledger is needed either: reissuing a digest is harmless.
+        world["dash_requests"].append({"entries": list(work.entries), "digest": work.digest})
+        if world["dash_mode"] == "retryable":
+            return DashBlocked(
+                entries=work.entries,
+                digest=work.digest,
+                desired_entries=work.desired_entries,
+                desired_digest=work.desired_digest,
+            )
+        if world["dash_mode"] == "unknown":
+            return DashFault(
+                entries=work.entries,
+                digest=work.digest,
+                desired_entries=work.desired_entries,
+                desired_digest=work.desired_digest,
+                reason="unknown provider terminal",
+            )
+        world["dashboard"] = list(work.entries)  # idempotent overwrite
+        world["log"].append(("dash", work.digest))
+        return DashLanded(
+            entries=work.entries,
+            digest=work.digest,
+            desired_entries=work.desired_entries,
+            desired_digest=work.desired_digest,
+        )
+
+    return (rerun_gate, review_agent, publish_gate, git_gate, reply_gate, dash_gate)
 
 
 # the host's webhook custody, keyed by engine identity: one admission
@@ -488,6 +529,20 @@ def tokens(engine: Engine, place: str) -> list[dict]:
 def one(engine: Engine, place: str) -> dict:
     [data] = tokens(engine, place)
     return data
+
+
+def projection(engine: Engine) -> list[dict]:
+    """Every fact the dashboard loop accumulated, parsed back into
+    {kind, body} — the durable observation window for loop-mailed facts
+    (the dashboard now consumes `dash.facts`, so the mailbox is empty at
+    quiescence). Reads the live baton, or the terminal record after
+    close. Consecutive digest-identical facts collapse by design."""
+    place = "dash.memory" if tokens(engine, "dash.memory") else "dash.done"
+    facts = []
+    for entry in one(engine, place)["entries"]:
+        kind, _, body = entry.partition(":")
+        facts.append({"kind": kind, "body": ast.literal_eval(body)})
+    return facts
 
 
 # -- observation shorthand ----------------------------------------------------

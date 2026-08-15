@@ -25,6 +25,7 @@ from harness import (
     deliver,
     deliver_held,
     one,
+    projection,
     pump,
     release_one,
     see_head,
@@ -51,11 +52,11 @@ def see_head_held(engine, dispatch, definitions, head: str = "h1", hold=HOLD):
 
 
 def settled_facts(engine) -> list[dict]:
-    return [f["body"] for f in tokens(engine, "dash.facts") if f["kind"] == "mutation_settled"]
+    return [f["body"] for f in projection(engine) if f["kind"] == "mutation_settled"]
 
 
 def pending_facts(engine) -> list[dict]:
-    return [f["body"] for f in tokens(engine, "dash.facts") if f["kind"] == "mutation_pending"]
+    return [f["body"] for f in projection(engine) if f["kind"] == "mutation_pending"]
 
 
 def pushes(engine) -> list[tuple]:
@@ -230,7 +231,7 @@ class TestFaultAndRecovery:
             "incarnation": 1,
             "reason": "unknown provider terminal",
         }
-        faults = [f for f in tokens(engine, "dash.facts") if f["kind"] == "fault"]
+        faults = [f for f in projection(engine) if f["kind"] == "fault"]
         assert faults[-1]["body"] == {
             "where": "mutation",
             "op": self.OP_KEY,

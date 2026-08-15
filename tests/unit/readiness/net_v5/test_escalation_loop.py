@@ -16,6 +16,7 @@ from harness import (
     deliver,
     deliver_held,
     one,
+    projection,
     release_one,
     see_head,
     see_run,
@@ -52,11 +53,11 @@ def pushes(engine) -> list[str]:
 def push_rounds(engine) -> list[dict]:
     """Every mutation round the loop ever opened (a landed, moved, or
     faulted round each left exactly one pending fact)."""
-    return [f["body"] for f in tokens(engine, "dash.facts") if f["kind"] == "mutation_pending"]
+    return [f["body"] for f in projection(engine) if f["kind"] == "mutation_pending"]
 
 
 def human_pages(engine) -> list[dict]:
-    return [f for f in tokens(engine, "dash.facts") if f["kind"] == "human_needed"]
+    return [f for f in projection(engine) if f["kind"] == "human_needed"]
 
 
 class TestRerunRung:
@@ -374,7 +375,7 @@ class TestFaultAndRecovery:
             "blocked": None,
         }
         assert world_of(engine)["reruns"] == []  # no proven effect
-        faults = [f for f in tokens(engine, "dash.facts") if f["kind"] == "fault"]
+        faults = [f for f in projection(engine) if f["kind"] == "fault"]
         assert faults and faults[0]["body"]["where"] == "rerun"
 
     def test_a_faulted_rung_never_authorizes_the_repair_rung(self) -> None:

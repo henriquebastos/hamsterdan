@@ -697,3 +697,99 @@ class ReplyFault(WorkflowModel):
     id: str
     text: str
     reason: str
+
+
+# -- the dashboard baton, gate work, and typed terminals ----------------------
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashMemory(WorkflowModel):
+    """The dashboard loop's baton — a mutable singleton projection.
+
+    `entries` is the accumulated projection log and `digest` the newest
+    fact's identity: the board republishes on digest drift ONLY. The
+    board tracks the DESIRED state (entries + digest, the dedup key)
+    and the LANDED digest (what the board actually shows) separately —
+    the self-heal decision compares the FULL desired snapshot against
+    what landed, never the digest alone: a cyclic drift (A→B→A) returns
+    to the retained digest with MORE entries. Custody is a held baton:
+    memory leaves the place while an upsert is in flight, so publication is
+    single-flight by construction. `blocked` retains the exact
+    retry-exhausted request and `faulted` the exact request plus reason
+    (A2) — both recover through the `dash.recover` door under the SAME
+    digest identity, while `entries`/`digest` keep tracking the evolving
+    desired state fail-closed.
+    """
+
+    entries: tuple[str, ...]
+    digest: str
+    landed: str
+    blocked: dict[str, Any]
+    faulted: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashReq(WorkflowModel):
+    """One dashboard upsert: the EXACT effect to execute (a recovery
+    reissues a retained request verbatim) plus the DESIRED state the
+    loop wants on the board. For a live publish they coincide; for a
+    recovery reissue the desired state may have drifted while the fault
+    was held, and the landed fold self-heals the drift."""
+
+    entries: list[str]
+    digest: str
+    desired_entries: list[str]
+    desired_digest: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashLanded(WorkflowModel):
+    """The upsert landed: the board shows `digest` (idempotent overwrite)."""
+
+    entries: list[str]
+    digest: str
+    desired_entries: list[str]
+    desired_digest: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashBlocked(WorkflowModel):
+    """Retryable exhaustion: the exact request is retained for recovery."""
+
+    entries: list[str]
+    digest: str
+    desired_entries: list[str]
+    desired_digest: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashFault(WorkflowModel):
+    """Unknown provider terminal: the upsert may or may not be shown.
+    Retains the exact effect (entries + digest) and reason (A2)."""
+
+    entries: list[str]
+    digest: str
+    desired_entries: list[str]
+    desired_digest: str
+    reason: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashHeal(WorkflowModel):
+    """A poke from the landed fold to the self-heal transition: the board
+    landed an exact-but-drifted recovery request. Carries the full
+    desired snapshot the poke was minted for — the digest alone cannot
+    detect a cyclic drift that returned to the retained digest (A→B→A)
+    with more entries. The transition consumes the memory baton, so the
+    reissue cycle stays baton-serialized."""
+
+    entries: tuple[str, ...]
+    digest: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashEnded(WorkflowModel):
+    """The dashboard loop's terminal record at close."""
+
+    entries: tuple[str, ...]
+    reason: str
