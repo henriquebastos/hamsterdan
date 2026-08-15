@@ -187,19 +187,27 @@ def _fold_rerun_landed(binding, outputs):
             watermark = max(watermark, (blocked["run_id"], blocked["attempt"]))
     rung = {"state": "done", "run_id": watermark[0], "attempt": watermark[1]}
     ladder = mem.validated_update(reruns={**mem.reruns, key: rung}, rerun_faults=faults)
+    routes: dict = {"esc.ladder": (ladder,)}
+    if held is not None:
+        # the landed fold consumed a fault entry: the settle CLEARS the
+        # operation-keyed fault, so readiness never stays fail-closed
+        # after the human's recovery actually succeeded
+        resolved = GateFact(
+            kind="fault", incarnation=0, body={"where": "rerun", "op": held["op"], "status": "resolved"}
+        )
+        routes["ready.facts"] = (resolved,)
+        routes["dash.facts"] = (resolved,)
     if blocked is not None and out.disposition == "existing":
         # the provider held the rerun all along — the blocked failure
         # may well BE its outcome: replay it through the normal path,
         # where it now finds the rung done and can advance the ladder
-        return route(
-            outputs,
-            {"esc.ladder": (ladder,), "esc.failures": (revive(ChecksFailure, blocked),)},
-        )
-    return route(outputs, {"esc.ladder": (ladder,)})
+        routes["esc.failures"] = (revive(ChecksFailure, blocked),)
+    return route(outputs, routes)
 
 
 def _fold_rerun_moved(binding, outputs):
     (out,) = values(binding, RerunMoved)
+    mem = revive(Ladder, out.mem)
     # moved burns NO budget — and the failure may still stand under the
     # fresh authority, so echo a recheck to CI instead of losing it
     echo = EscMoved(
@@ -209,7 +217,27 @@ def _fold_rerun_moved(binding, outputs):
         policy=out.policy,
         incarnation=out.incarnation,
     )
-    return route(outputs, {"esc.ladder": (revive(Ladder, out.mem),), "ci.echo": (echo,)})
+    routes: dict = {"ci.echo": (echo,)}
+    held = mem.rerun_faults.get(out.fingerprint)
+    if held is not None:
+        # a RECOVERY round settled moved: lookup-first found no existing
+        # rerun and the gate refused the stale claim, so the operation
+        # provably issued no effect. Consume the retained fault and mail
+        # the operation-keyed resolution — readiness must not stay
+        # fail-closed forever when the echo lands on a CI that already
+        # turned green (no later landed fold would ever clear it). The
+        # retained blocked failure is superseded by the echo's fresh
+        # recheck under the current authority.
+        mem = mem.validated_update(
+            rerun_faults={k: v for k, v in mem.rerun_faults.items() if k != out.fingerprint},
+        )
+        resolved = GateFact(
+            kind="fault", incarnation=0, body={"where": "rerun", "op": held["op"], "status": "resolved"}
+        )
+        routes["ready.facts"] = (resolved,)
+        routes["dash.facts"] = (resolved,)
+    routes["esc.ladder"] = (mem,)
+    return route(outputs, routes)
 
 
 def _fold_rerun_fault(binding, outputs):
@@ -234,7 +262,9 @@ def _fold_rerun_fault(binding, outputs):
         reruns={**mem.reruns, out.fingerprint: {"state": "fault"}},
         rerun_faults={**mem.rerun_faults, out.fingerprint: retained},
     )
-    fact = GateFact(kind="fault", incarnation=0, body={"where": "rerun", "reason": out.reason})
+    # the operation identity keys the fault so the landed fold's
+    # resolution can clear EXACTLY this entry in readiness
+    fact = GateFact(kind="fault", incarnation=0, body={"where": "rerun", "op": out.op, "reason": out.reason})
     return route(
         outputs,
         {"esc.ladder": (ladder,), "ready.facts": (fact,), "dash.facts": (fact,)},
@@ -363,6 +393,8 @@ def wire(net) -> None:
         >> (
             esc.p.ladder,
             esc.p.failures,  # a recovery round replays the blocked failure
+            ready.p.facts,  # a recovery round's settle clears the fault
+            dash.p.facts,
         )
     )
     (
@@ -371,6 +403,8 @@ def wire(net) -> None:
         >> (
             esc.p.ladder,
             ci.p.echo,
+            ready.p.facts,  # a moved recovery round's settle clears the fault
+            dash.p.facts,
         )
     )
     (

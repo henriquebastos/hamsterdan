@@ -562,6 +562,10 @@ class TestClose:
         assert tokens(engine, "esc.recover") == []  # applied or drained
         [ended] = tokens(engine, "esc.done")
         assert ended["reason"] == "merged"
+        # the late round settled MOVED (terminal authority) and echoed a
+        # recheck — CI already retired, so the echo must DRAIN, never
+        # strand in the mailbox of a closed loop
+        assert tokens(engine, "ci.echo") == []
 
     def test_close_retires_the_ladder_with_its_budgets(self) -> None:
         engine, _ = spawn()

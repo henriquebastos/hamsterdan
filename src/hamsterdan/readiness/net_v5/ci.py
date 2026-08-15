@@ -142,6 +142,14 @@ def _end(binding, outputs):
     return route(outputs, {"ci.done": (CiEnded(status=state.status, reason=close.reason),)})
 
 
+def _drain_echo(binding, outputs):
+    # an escalation echo that lost the race with close (a held rerun
+    # settling MOVED under terminal authority) is absorbed by the
+    # retired loop's persistent record — never stranded
+    _, ended = values(binding, EscMoved, CiEnded)
+    return route(outputs, {"ci.done": (ended,)})
+
+
 # -- topology ------------------------------------------------------------
 
 
@@ -190,6 +198,8 @@ def wire(net) -> None:
         )
     )
     (ci.p.closed, ci.p.state) >> ci.t.end(handler=petri_handler(_end)) >> ci.p.done
+    # post-close drain: a late escalation echo is absorbed, never stranded
+    ((ci.p.echo, ci.p.done) >> ci.t.drain_echo(handler=petri_handler(_drain_echo)) >> ci.p.done)
 
 
 def seed() -> dict:

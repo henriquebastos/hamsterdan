@@ -17,7 +17,12 @@ from petrus.motus.activity import activity as motus_activity
 from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
 
 from hamsterdan.contracts.readiness_v5 import (
+    ABlocked,
+    AFault,
     AgentReview,
+    ALanded,
+    AMoved,
+    AnnounceReq,
     DashBlocked,
     DashFault,
     DashLanded,
@@ -352,6 +357,44 @@ def make_activities(world: dict):
         return RemBlocked(timer_id=work.timer_id)
 
     @motus_activity(converter=converter)
+    def announce_gate(work: AnnounceReq) -> ALanded | ABlocked | AMoved | AFault:
+        key = work.op  # stable operation identity: "ready:{head}:i{n}"
+        if any(c["key"] == key for c in world["comments"]):  # lookup-first (A2)
+            return ALanded(incarnation=work.incarnation, head=work.head)
+        for _attempt in range(3):  # bounded classified retry, ONE occurrence
+            mode = world["comments_mode"]
+            if mode == "retryable":
+                continue
+            if mode == "unknown":
+                return AFault(op=work.op, incarnation=work.incarnation, reason="unknown provider terminal")
+            # A1.5: the gate compares ALL current authority fields — the
+            # live provider fields AND the host grant. The grant's
+            # incarnation is the ONLY field that exposes a stale announce
+            # issued under a previous Running incarnation whose
+            # head/base/policy tuple is IDENTICAL (draft -> resume): the
+            # provider state is "ready" again, but the grant moved on.
+            auth = world["authority"]
+            if (
+                auth["phase"] != "running"
+                or auth["incarnation"] != work.incarnation
+                or world["branch_head"] != work.head
+                or world["base_head"] != work.base
+                or world["policy"] != work.policy
+            ):
+                return AMoved(
+                    incarnation=work.incarnation,
+                    observed_head=world["branch_head"],
+                    observed_base=world["base_head"],
+                    observed_policy=world["policy"],
+                    observed_incarnation=auth["incarnation"],
+                    observed_phase=auth["phase"],
+                )
+            world["comments"].append({"key": key, "kind": "ready", "head": work.head, "body": ""})
+            world["log"].append(("comment", key))
+            return ALanded(incarnation=work.incarnation, head=work.head)
+        return ABlocked(incarnation=work.incarnation, head=work.head, base=work.base, policy=work.policy)
+
+    @motus_activity(converter=converter)
     def dash_gate(work: DashReq) -> DashLanded | DashBlocked | DashFault:
         # the dashboard is authority-orthogonal by design (A5): no
         # fence — a stale board row is corrected by the next upsert.
@@ -382,7 +425,7 @@ def make_activities(world: dict):
             desired_digest=work.desired_digest,
         )
 
-    return (rerun_gate, review_agent, publish_gate, git_gate, reply_gate, reminder_gate, dash_gate)
+    return (rerun_gate, review_agent, publish_gate, git_gate, reply_gate, reminder_gate, announce_gate, dash_gate)
 
 
 # the host's webhook custody, keyed by engine identity: one admission

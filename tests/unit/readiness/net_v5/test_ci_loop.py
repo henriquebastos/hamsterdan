@@ -17,6 +17,7 @@ from harness import (
     deliver,
     deliver_held,
     one,
+    projection,
     release_one,
     see_head,
     see_run,
@@ -66,8 +67,9 @@ class TestCiAdmission:
         assert state["lineage"] == "L1"
         assert state["status"] == "pending"
         assert state["best"] == []
-        facts = [f for f in tokens(engine, "ready.facts") if f["kind"] == "checks"]
+        facts = [f for f in projection(engine) if f["kind"] == "checks"]
         assert facts[-1]["body"]["status"] == "pending"
+        assert one(engine, "ready.snap")["checks"] == "pending"
 
     def test_superseded_head_resets_evidence_and_budget_lineage(self) -> None:
         engine, _ = spawn()
@@ -94,13 +96,13 @@ class TestCiAdmission:
         engine, _ = spawn()
         see_head(engine, "h1", base="b1")
         see_run(engine, head="h1", run_id=1, conclusion="failure", fingerprint="fp1")
-        checks_before = [f for f in tokens(engine, "ready.facts") if f["kind"] == "checks"]
+        checks_before = [f for f in projection(engine) if f["kind"] == "checks"]
         see_head(engine, "h1", base="b2")
         state = one(engine, "ci.state")
         assert state["base"] == "b2"
         assert state["status"] == "failure"
         assert state["best"] == [1, 1]
-        checks_after = [f for f in tokens(engine, "ready.facts") if f["kind"] == "checks"]
+        checks_after = [f for f in projection(engine) if f["kind"] == "checks"]
         assert len(checks_after) == len(checks_before)  # no new round, no churn
 
 

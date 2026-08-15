@@ -3,6 +3,11 @@
 The V5 discipline (ES-007, CV17): one concern = one loop = one memory
 baton plus mailbox places; cross-loop influence is mailed facts only;
 zero guards, zero read arcs, zero CEL filters, zero unowned places.
+One deliberate exception: readiness's `authorize` carries LOOP-INTERNAL
+inhibit arcs on readiness's own mailbox places, so an announce is only
+ever authorized from a snapshot that has folded every fact already
+mailed to it — mailbox quiescence as a structural precondition, not a
+cross-loop control place.
 Every decision is a pure fold on token data. Ingress doors are the only
 no-input transitions; the engine's identified delivery is the only
 deduplication anywhere.
@@ -19,14 +24,9 @@ from __future__ import annotations
 from petrus.impetus.dsl import BuiltNet, NetSpec
 from petrus.impetus.petrinet import Marking
 
-from hamsterdan.contracts.readiness_v5 import (
-    CloseFact,
-    GateFact,
-    RecoverFact,
-)
-from hamsterdan.readiness.net_v5 import ci, conversation, dashboard, esc, life, mutation, reminders, review
+from hamsterdan.readiness.net_v5 import ci, conversation, dashboard, esc, life, mutation, readiness, reminders, review
 
-_LOOPS = (life, ci, esc, review, mutation, conversation, dashboard, reminders)
+_LOOPS = (life, ci, esc, review, mutation, conversation, dashboard, reminders, readiness)
 
 # transition path -> (activity name, declared variant colors), for every
 # gate in the composed topology; the host (or a test world) binds these
@@ -41,23 +41,10 @@ for _loop in _LOOPS:
     DERIVED.update(getattr(_loop, "DERIVED", {}))
 
 
-def _declare_pending_mailboxes(s) -> None:
-    """Mailboxes owned by loops that have not landed yet (CV17.DS1).
-
-    This section shrinks as each loop module arrives and declares its
-    own places; it exists so already-landed loops can mail complete
-    facts from the first slice on.
-    """
-    s.ready.p.facts(GateFact)
-    s.ready.p.closed(CloseFact)
-    s.ready.p.recover(RecoverFact)
-
-
 def build_net_v5() -> BuiltNet:
     net = NetSpec("pr_v5")
     for loop in _LOOPS:
         loop.declare(net.s)
-    _declare_pending_mailboxes(net.s)
     for loop in _LOOPS:
         loop.wire(net)
     return net.build()

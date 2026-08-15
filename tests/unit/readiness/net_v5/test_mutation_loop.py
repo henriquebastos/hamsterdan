@@ -237,8 +237,10 @@ class TestFaultAndRecovery:
             "op": self.OP_KEY,
             "reason": "unknown provider terminal",
         }
-        # readiness hears the same fail-closed fact
-        assert any(f["kind"] == "fault" for f in tokens(engine, "ready.facts"))
+        # readiness heard the same fail-closed fact
+        assert one(engine, "ready.snap")["faults"] == {
+            f"mutation:{self.OP_KEY}": "unknown provider terminal",
+        }
 
     def test_further_requests_are_declined_before_any_gate_attempt(self) -> None:
         engine, _ = self.spawn_faulted()

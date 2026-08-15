@@ -159,16 +159,14 @@ class TestClose:
         see_head(engine, "h1")
         deliver(engine, "on_close", "CloseSeen", {"reason": "merged"})
         assert one(engine, "life.state")["phase"] == "terminal"
-        for mailbox in ("ready.closed",):
-            assert one(engine, mailbox)["reason"] == "merged"
-        # the CI, escalation, review, mutation, dashboard, and reminder
-        # loops consumed their close mail and retired
+        # every loop consumed its close mail and retired
         assert one(engine, "ci.done")["reason"] == "merged"
         assert one(engine, "esc.done")["reason"] == "merged"
         assert one(engine, "review.done")["reason"] == "merged"
         assert one(engine, "mut.done")["reason"] == "merged"
         assert one(engine, "dash.done")["reason"] == "merged"
         assert one(engine, "rem.done")["reason"] == "merged"
+        assert one(engine, "ready.done")["reason"] == "merged"
 
     def test_terminal_absorbs_every_later_observation(self) -> None:
         engine, _ = spawn()
@@ -217,9 +215,9 @@ class TestObservationRouting:
             "HumanSeen",
             {"approval": True, "changes_requested": False, "unresolved": 0},
         )
-        facts = [f for f in tokens(engine, "ready.facts") if f["kind"] == "human"]
+        facts = [f for f in projection(engine) if f["kind"] == "human"]
         assert facts[-1]["body"]["approval"] is True
-        assert [f for f in projection(engine) if f["kind"] == "human"]
+        assert one(engine, "ready.snap")["approval"] is True
 
     def test_runs_are_mailed_to_ci_only_while_running(self) -> None:
         engine, _ = spawn()
@@ -244,9 +242,12 @@ class TestObservationRouting:
     def test_admission_mails_state_facts_to_ready_and_dash(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
-        [fact] = [f for f in tokens(engine, "ready.facts") if f["kind"] == "state"]
+        [fact] = [f for f in projection(engine) if f["kind"] == "state"]
         assert fact["body"]["head"] == "h1"
         assert fact["body"]["phase"] == "running"
+        st = one(engine, "ready.snap")
+        assert st["head"] == "h1"
+        assert st["phase"] == "running"
 
 
 # -- the structural census (the V5 discipline, machine-checked) -----------
@@ -256,7 +257,15 @@ class TestCensus:
     def test_no_guards_no_reads_no_filters_every_place_owned(self) -> None:
         built = build_net_v5()
         assert built.guards == {}
-        assert all(str(a.mode) == "consume" for a in built.net.arcs)
+        # the ONE deliberate exception to all-consume: readiness's
+        # authorize gates on ITS OWN mailbox quiescence through
+        # loop-internal inhibit arcs — an announce is only authorized
+        # from a snapshot that folded every fact already mailed to it
+        exceptional = {(str(a.source), str(a.mode), str(a.target)) for a in built.net.arcs if str(a.mode) != "consume"}
+        assert exceptional == {
+            ("ready.facts", "inhibit", "ready.authorize"),
+            ("ready.closed", "inhibit", "ready.authorize"),
+        }
         assert all(getattr(a, "filter", None) is None for a in built.net.arcs)
         for place in built.net.places:
             owner = str(place).split(".", 1)

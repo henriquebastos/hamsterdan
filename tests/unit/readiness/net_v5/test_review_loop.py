@@ -37,7 +37,7 @@ def memory(engine) -> dict:
 
 
 def findings_facts(engine) -> list[dict]:
-    return [f for f in tokens(engine, "ready.facts") if f["kind"] == "findings"]
+    return [f for f in projection(engine) if f["kind"] == "findings"]
 
 
 def findings_comments(world: dict) -> list[dict]:
@@ -67,8 +67,9 @@ class TestAgentRound:
         assert state["provisional"] == []
         assert state["pub"] == {"phase": "idle"}
         fact = findings_facts(engine)[-1]
-        assert fact["incarnation"] == 1
         assert fact["body"] == {"head": "h1", "blocking": 1, "count": 1}
+        # the fact folded under the CURRENT incarnation (A1.4)
+        assert one(engine, "ready.snap")["findings_blocking"] == 1
 
     def test_empty_review_settles_without_publication(self) -> None:
         engine, _ = spawn()
@@ -188,8 +189,9 @@ class TestPublication:
         comment(engine, "rec3", "recover_publication", arg="findings:h1:i1")
         # the settle CLEARS the fault: readiness never stays fail-closed
         # after the human's recovery actually succeeded
-        faults = [f["body"] for f in tokens(engine, "ready.facts") if f["kind"] == "fault"]
+        faults = [f["body"] for f in projection(engine) if f["kind"] == "fault"]
         assert faults[-1] == {"where": "review", "op": "findings:h1:i1", "status": "resolved"}
+        assert one(engine, "ready.snap")["faults"] == {}  # readiness reopened
         assert comment_keys(world) == ["findings:h1:i1"]
 
     def test_recovery_for_another_loop_or_operation_is_inert(self) -> None:
@@ -432,8 +434,9 @@ class TestDismissalAndClose:
         comment(engine, "dis3", "dismiss", arg="f-h1")
         state = memory(engine)
         assert state["pub"]["phase"] == "cancelled"
-        faults = [f["body"] for f in tokens(engine, "ready.facts") if f["kind"] == "fault"]
+        faults = [f["body"] for f in projection(engine) if f["kind"] == "fault"]
         assert faults[-1] == {"where": "review", "op": "findings:h1:i1", "status": "cancelled"}
+        assert one(engine, "ready.snap")["faults"] == {}  # readiness reopened
         world["comments_mode"] = None
         comment(engine, "rec6", "recover_publication", arg="findings:h1:i1")
         assert findings_comments(world) == []  # the cancelled operation never posts

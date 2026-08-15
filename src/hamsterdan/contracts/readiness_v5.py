@@ -872,3 +872,137 @@ class RemEnded(WorkflowModel):
 
     matured: tuple[str, ...]
     reason: str
+
+
+# -- readiness loop ---------------------------------------------------------
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Snapshot(WorkflowModel):
+    """The readiness loop's baton: the sole gate projection.
+
+    Folds sibling GateFacts into one all-gates snapshot. A stale state
+    fact never rolls the projection back; a new incarnation resets the
+    per-incarnation gates (checks, blocking findings, pending
+    mutations) while human review state persists — provider approvals
+    and unresolved threads outlive a push. `faults` is a keyed ledger
+    (`{where}:{op}` -> reason): a faulted publication fail-closes
+    readiness until its owner mails an operation-keyed resolution.
+    Custody is A2 data: `candidate` marks a revocable ready-edge
+    observation awaiting authorization, `announcing` retains the EXACT
+    in-flight announce request, `blocked` a retry-exhausted one for the
+    `ready.recover` door; announce-once is recorded per incarnation in
+    `announced` on ACKNOWLEDGMENT, never on issuance (A1.6). `closing`
+    retains a deferred close reason while a terminal is outstanding
+    (A3); the sentinel is None — an EMPTY close reason is still a
+    close.
+    """
+
+    incarnation: int
+    phase: str
+    head: str
+    base: str
+    policy: str
+    mergeable: bool
+    checks: str
+    findings_blocking: int
+    approval: bool
+    changes_requested: bool
+    unresolved: int
+    pending: tuple[str, ...]
+    faults: dict[str, Any]
+    announced: tuple[int, ...]
+    candidate: bool
+    announcing: dict[str, Any]
+    blocked: dict[str, Any]
+    closing: str | None = None
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class AnnounceCandidate(WorkflowModel):
+    """A revocable ready-edge observation — NOT an effect request.
+
+    The fold that sees the not-ready -> ready edge emits this sentinel;
+    a separate authorization step re-derives the WHOLE decision from
+    the snapshot as it stands at authorization time and is inhibited
+    while any sibling fact is still unfolded in `ready.facts`. A fact
+    already mailed when the edge was seen therefore always folds first
+    and revokes a stale candidate — the announce request itself is only
+    ever minted from a fully caught-up snapshot."""
+
+    incarnation: int
+    head: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class AnnounceReq(WorkflowModel):
+    """One readiness announcement for the announce gate.
+
+    `ready:{head}:i{incarnation}` is the stable effect identity the
+    gate reconciles lookup-first (A2); the gate fences EVERY claimed
+    authority field — the live provider fields AND the host grant
+    (A1.5) — because a draft-resume leaves head/base/policy identical
+    and only the grant incarnation exposes the stale announce."""
+
+    op: str
+    incarnation: int
+    head: str
+    base: str
+    policy: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ALanded(WorkflowModel):
+    """The announcement landed (or lookup-first found it already
+    posted). Carries the TERMINAL's incarnation so a stale landing
+    never marks the current incarnation announced (A1.6)."""
+
+    incarnation: int
+    head: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ABlocked(WorkflowModel):
+    """Bounded classified retry exhausted; the exact request is
+    retained for the `ready.recover` door under the SAME identity."""
+
+    incarnation: int
+    head: str
+    base: str
+    policy: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class AMoved(WorkflowModel):
+    """Authority moved under the announce: the gate refused the post
+    and reports the COMPLETE observed authority — live provider fields
+    plus the host grant — so the fold can re-evaluate (the displacing
+    observation already folded) or park (it has not; reissuing the
+    identical request would be refused forever)."""
+
+    incarnation: int
+    observed_head: str
+    observed_base: str
+    observed_policy: str
+    observed_incarnation: int
+    observed_phase: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class AFault(WorkflowModel):
+    """Unknown provider terminal: the announcement is NOT PROVEN
+    landed. The operation and reason are retained fail-closed (A2);
+    settled terminal policy — never reissued by the recovery door."""
+
+    op: str
+    incarnation: int
+    reason: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReadyEnded(WorkflowModel):
+    """The readiness loop's terminal record at close."""
+
+    announced: tuple[int, ...]
+    faults: dict[str, Any]
+    reason: str

@@ -169,7 +169,12 @@ def _recover(binding, outputs):
         lineage=_lineage(st.op),
     )
     pending = GateFact(kind="mutation_pending", incarnation=st.incarnation, body={"op": st.op})
-    return route(outputs, {"mut.work": (work,), "ready.facts": (pending,), "dash.facts": (pending,)})
+    # the reissue CLEARS the operation-keyed fault: readiness never
+    # stays fail-closed after the human ruled — and it cannot announce
+    # during the reopened round either, because `pending` holds the op
+    # until the terminal settles; a re-fault restores the entry
+    resolved = GateFact(kind="fault", incarnation=0, body={"where": "mutation", "op": st.op_key, "status": "resolved"})
+    return route(outputs, {"mut.work": (work,), "ready.facts": (pending, resolved), "dash.facts": (pending, resolved)})
 
 
 def _end(binding, outputs):
