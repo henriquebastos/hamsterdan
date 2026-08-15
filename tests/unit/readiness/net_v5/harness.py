@@ -1,29 +1,228 @@
 """Shared test harness for the V5 actor-loop topology.
 
-Spawns the composed net on the frozen engine with inline dispatch and
-drives host-normalized observations through the ingress doors.
+Spawns the composed net on the frozen engine and drives host-normalized
+observations through the ingress doors. The harness plays the HOST: it
+owns a fake world with the current-authority grant record, moves the
+world BEFORE the net observes any event (gates therefore always read a
+current-or-fresher grant), and binds every gate to a world-backed fake
+activity.
 """
 
-from petrus.engine import Engine
+from petrus.engine import Engine, choose_throughput
 from petrus.impetus.history_store import InMemoryHistoryStore
 from petrus.impetus.petrinet import NetPath, Token
-from petrus.motus.dispatch import InlineDispatch
+from petrus.motus.activity import activity as motus_activity
+from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
 
+from hamsterdan.contracts.readiness_v5 import (
+    RerunFault,
+    RerunLanded,
+    RerunMoved,
+    RerunReq,
+)
 from hamsterdan.readiness.net_v5 import build_net_v5, seed_marking
+from hamsterdan.readiness.net_v5.gating import VariantPayloadConverter, wire_gates
+from hamsterdan.readiness.net_v5.topology import GATES
+
+# -- the fake world ---------------------------------------------------------
 
 
-def spawn(instance: str = "pr-v5"):
+def fresh_world() -> dict:
+    return {
+        # the provider's live fields, compared by gates at effect time
+        "branch_head": "",
+        "base_head": "",
+        "policy": "",
+        "pr_state": "ready",
+        # HOST-owned current-authority record (the lifecycle GRANT); the
+        # provider knows nothing of incarnations, the host does
+        "authority": {"incarnation": 0, "phase": "running", "head": "", "base": "", "policy": ""},
+        "reruns": [],
+        "reruns_mode": None,
+        "runs_by_head": {},  # provider truth: newest (run_id, attempt) per head
+        "log": [],
+    }
+
+
+def make_activities(world: dict):
+    converter = VariantPayloadConverter()
+
+    @motus_activity(converter=converter)
+    def rerun_gate(work: RerunReq) -> RerunLanded | RerunMoved | RerunFault:
+        if work.fingerprint in world["reruns"]:  # lookup-first (A2), BEFORE
+            # any failure mode: a crash after the provider accepted the
+            # rerun must reconcile as landed, never fault or repeat
+            return RerunLanded(
+                fingerprint=work.fingerprint,
+                op=work.op,
+                run_id=work.run_id,
+                attempt=work.attempt,
+                disposition="existing",
+                cut_run_id=work.run_id,  # meaningless for existing:
+                cut_attempt=work.attempt,  # echo the answered evidence
+                mem=work.mem,
+            )
+        if world["reruns_mode"] == "unknown":
+            return RerunFault(
+                fingerprint=work.fingerprint,
+                op=work.op,
+                reason="unknown provider terminal",
+                fp=work.fp,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                incarnation=work.incarnation,
+                run_id=work.run_id,
+                attempt=work.attempt,
+                mem=work.mem,
+            )
+        # A1.5: the gate compares ALL current authority fields — the live
+        # provider fields AND the host grant (phase + incarnation)
+        auth = world["authority"]
+        if (
+            auth["phase"] != "running"
+            or auth["incarnation"] != work.incarnation
+            or world["branch_head"] != work.head
+            or world["base_head"] != work.base
+            or world["policy"] != work.policy
+        ):
+            return RerunMoved(
+                fingerprint=work.fingerprint,
+                fp=work.fp,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                incarnation=work.incarnation,
+                op=work.op,
+                mem=work.mem,
+            )
+        # the pre-request evidence CUT: the newest run the provider
+        # reports for this head, read immediately before issuance
+        cut = world["runs_by_head"].get(work.head, (0, 0))
+        world["reruns"].append(work.fingerprint)
+        world["log"].append(("rerun", work.fingerprint))
+        return RerunLanded(
+            fingerprint=work.fingerprint,
+            op=work.op,
+            run_id=work.run_id,
+            attempt=work.attempt,
+            disposition="requested",
+            cut_run_id=cut[0],
+            cut_attempt=cut[1],
+            mem=work.mem,
+        )
+
+    return (rerun_gate,)
+
+
+# the host's webhook custody, keyed by engine identity: one admission
+# point per engine moves the world's grant record BEFORE the net observes
+_HOST: dict[int, dict] = {}
+
+
+def world_of(engine: Engine) -> dict:
+    return _HOST[id(engine)]
+
+
+def _move_world(world: dict, door: str, data: dict) -> None:
+    """The host's grant fold — the same deterministic rules as the
+    lifecycle loop's admission folds, applied to the world FIRST."""
+    auth = world["authority"]
+    if door == "on_head":
+        world["branch_head"] = data["head"]
+        world["base_head"] = data["base"]
+        world["policy"] = data["policy"]
+        if auth["phase"] == "terminal":
+            return
+        if auth["phase"] == "quiescent":
+            world["authority"] = {
+                **auth,
+                "head": data["head"],
+                "base": data["base"],
+                "policy": data["policy"],
+            }
+            return
+        if data["head"] == auth["head"]:
+            world["authority"] = {**auth, "base": data["base"], "policy": data["policy"]}
+            return
+        world["authority"] = {
+            "incarnation": auth["incarnation"] + 1,
+            "phase": "running",
+            "head": data["head"],
+            "base": data["base"],
+            "policy": data["policy"],
+        }
+    elif door == "on_draft":
+        world["pr_state"] = "draft"
+        if auth["phase"] == "running":
+            world["authority"] = {**auth, "phase": "quiescent"}
+    elif door == "on_ready":
+        world["pr_state"] = "ready"
+        if auth["phase"] == "quiescent":
+            # resume mints a NEW incarnation even when head/base/policy
+            # are unchanged — the grant alone distinguishes them
+            world["authority"] = {
+                **auth,
+                "phase": "running",
+                "incarnation": auth["incarnation"] + 1,
+            }
+    elif door == "on_close":
+        world["pr_state"] = "closed"
+        world["authority"] = {**auth, "phase": "terminal"}
+    elif door == "on_runs":
+        # a run observation proves the provider held this run BEFORE the
+        # webhook: the gate's pre-request evidence cut reads this record
+        newest = world["runs_by_head"].get(data["head"], (0, 0))
+        world["runs_by_head"][data["head"]] = max(newest, (data["run_id"], data["attempt"]))
+
+
+# -- spawning ----------------------------------------------------------------
+
+
+def spawn(instance: str = "pr-v5", world: dict | None = None):
+    """Spawn with inline dispatch: every gate settles within the drive."""
+    world = fresh_world() if world is None else world
     built = build_net_v5()
+    definitions = {d.declaration.name: d for d in make_activities(world)}
     engine = Engine.create(
         built.net,
         instance,
         history=InMemoryHistoryStore(),
-        dispatch=InlineDispatch({}),
+        dispatch=InlineDispatch(definitions),
         marking=seed_marking(),
-        handlers=dict(built.handlers),
+        handlers=wire_gates(built, GATES, definitions),
         guards=dict(built.guards),
+        activities=tuple(d.declaration for d in definitions.values()),
     )
+    _HOST[id(engine)] = world
     return engine, built
+
+
+def spawn_held(instance: str = "pr-v5", world: dict | None = None):
+    """Spawn with an explicit worker pool so a test can HOLD a gate's
+    terminal open — the only honest way to observe in-flight time.
+    Cohabited loops require `choose_throughput`; the conservative policy
+    begins no second candidate while ANY activity is outstanding."""
+    world = fresh_world() if world is None else world
+    built = build_net_v5()
+    definitions = {d.declaration.name: d for d in make_activities(world)}
+    dispatch = InMemoryDispatch()
+    engine = Engine.create(
+        built.net,
+        instance,
+        history=InMemoryHistoryStore(),
+        dispatch=dispatch,
+        marking=seed_marking(),
+        handlers=wire_gates(built, GATES, definitions),
+        guards=dict(built.guards),
+        activities=tuple(d.declaration for d in definitions.values()),
+        policy=choose_throughput,
+    )
+    _HOST[id(engine)] = world
+    return engine, built, dispatch, definitions
+
+
+# -- driving -----------------------------------------------------------------
 
 
 def drive(engine: Engine, limit: int = 200) -> None:
@@ -33,13 +232,47 @@ def drive(engine: Engine, limit: int = 200) -> None:
     raise AssertionError(f"engine did not quiesce in {limit} advances")
 
 
+def pump(engine, dispatch, definitions, *, hold: frozenset[str] = frozenset(), limit: int = 400):
+    """Advance and work like a worker pool, EXCEPT activities named in
+    `hold`, whose invocations stay pending (in flight)."""
+    for _ in range(limit):
+        progressed = engine.advance().ready
+        acted = False
+        for occurrence, invocation in list(dispatch.pending.items()):
+            if invocation.activity in hold:
+                continue
+            dispatch.complete(occurrence, definitions[invocation.activity](invocation, context=None))
+            acted = True
+        if not progressed and not acted:
+            return
+    raise AssertionError(f"engine did not quiesce in {limit} pumps")
+
+
+def release_one(engine, dispatch, definitions, activity: str) -> None:
+    """Complete the single pending invocation of `activity`, then pump."""
+    [(occurrence, invocation)] = [(o, i) for o, i in dispatch.pending.items() if i.activity == activity]
+    dispatch.complete(occurrence, definitions[invocation.activity](invocation, context=None))
+    pump(engine, dispatch, definitions)
+
+
 _SEQ = {"n": 0}
 
 
 def deliver(engine: Engine, door: str, color: str, data: dict) -> None:
     _SEQ["n"] += 1
+    _move_world(_HOST[id(engine)], door, data)  # the world moves FIRST
     engine.deliver(door, Token(color, data), identity=f"{door}-{_SEQ['n']}")
     drive(engine)
+
+
+def deliver_held(engine, dispatch, definitions, door: str, color: str, data: dict, *, hold=frozenset()):
+    _SEQ["n"] += 1
+    _move_world(_HOST[id(engine)], door, data)  # the world moves FIRST
+    engine.deliver(door, Token(color, data), identity=f"{door}-{_SEQ['n']}")
+    pump(engine, dispatch, definitions, hold=hold)
+
+
+# -- observation --------------------------------------------------------------
 
 
 def tokens(engine: Engine, place: str) -> list[dict]:
@@ -49,6 +282,9 @@ def tokens(engine: Engine, place: str) -> list[dict]:
 def one(engine: Engine, place: str) -> dict:
     [data] = tokens(engine, place)
     return data
+
+
+# -- observation shorthand ----------------------------------------------------
 
 
 def see_head(engine, head: str, base: str = "b1", mergeable: bool = True, policy: str = "p1"):

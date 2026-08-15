@@ -34,8 +34,9 @@ def _checks_fact(incarnation: int, status: str) -> GateFact:
     return GateFact(kind="checks", incarnation=incarnation, body={"status": status})
 
 
-def _failure_mail(state: CiState, fingerprint: str) -> ChecksFailure:
-    """The escalation mail always carries ONE state's complete authority."""
+def _failure_mail(state: CiState, fingerprint: str, run_id: int, attempt: int) -> ChecksFailure:
+    """The escalation mail always carries ONE state's complete authority
+    plus the run EVIDENCE identity, so the ladder can absorb duplicates."""
     return ChecksFailure(
         fingerprint=fingerprint,
         head=state.head,
@@ -43,6 +44,8 @@ def _failure_mail(state: CiState, fingerprint: str) -> ChecksFailure:
         policy=state.policy,
         lineage=state.lineage,
         incarnation=state.incarnation,
+        run_id=run_id,
+        attempt=attempt,
     )
 
 
@@ -63,7 +66,7 @@ def _admit_head(binding, outputs):
         )
         routes: dict = {"ci.state": (adopted,)}
         if authority_changed and state.status == "failure" and state.fingerprint in state.parked:
-            routes["esc.failures"] = (_failure_mail(adopted, state.fingerprint),)
+            routes["esc.failures"] = (_failure_mail(adopted, state.fingerprint, state.best[0], state.best[1]),)
         return route(outputs, routes)
     # budget lineage: new code (new/superseded) gets a fresh ladder
     # budget; our own confirmed repair and a resume keep the lineage
@@ -86,12 +89,26 @@ def _admit_head(binding, outputs):
     )
 
 
+# a run may be observed repeatedly under ONE (run_id, attempt) identity
+# as it progresses toward its terminal conclusion: queued → in_progress
+# → success|failure, strictly forward, never sideways or back
+_RANK = {"queued": 0, "in_progress": 1, "success": 2, "failure": 2}
+
+
 def _assess(binding, outputs):
     run, state = values(binding, RunWork, CiState)
     if run.head != state.head:
         return route(outputs, {"ci.state": (state,)})  # not the exact head: inert
-    if state.best and (run.run_id, run.attempt) <= state.best:
-        return route(outputs, {"ci.state": (state,)})  # older evidence: inert
+    if state.best:
+        identity = (run.run_id, run.attempt)
+        if identity < tuple(state.best):
+            return route(outputs, {"ci.state": (state,)})  # older evidence: inert
+        # (run_id, attempt) is identity, not the whole freshness order:
+        # the SAME identity legitimately advances to a strictly higher
+        # rank. Anything else — an exact duplicate, or an out-of-order
+        # observation arriving after a later status — is inert.
+        if identity == tuple(state.best) and _RANK[run.conclusion] <= _RANK[state.status]:
+            return route(outputs, {"ci.state": (state,)})
     updated = state.validated_update(
         best=[run.run_id, run.attempt],
         status=run.conclusion,
@@ -101,7 +118,7 @@ def _assess(binding, outputs):
     fact = _checks_fact(state.incarnation, run.conclusion)
     routes = {"ci.state": (updated,), "ready.facts": (fact,), "dash.facts": (fact,)}
     if run.conclusion == "failure":
-        routes["esc.failures"] = (_failure_mail(state, run.fingerprint),)
+        routes["esc.failures"] = (_failure_mail(state, run.fingerprint, run.run_id, run.attempt),)
     return route(outputs, routes)
 
 
@@ -116,7 +133,8 @@ def _recheck(binding, outputs):
     if attempted == (state.head, state.base, state.policy, state.incarnation):
         parked = state.parked if echo.fp in state.parked else [*state.parked, echo.fp]
         return route(outputs, {"ci.state": (state.validated_update(parked=parked),)})
-    return route(outputs, {"ci.state": (state,), "esc.failures": (_failure_mail(state, echo.fp),)})
+    reissued = _failure_mail(state, echo.fp, state.best[0], state.best[1])
+    return route(outputs, {"ci.state": (state,), "esc.failures": (reissued,)})
 
 
 def _end(binding, outputs):
@@ -142,9 +160,6 @@ def wire(net) -> None:
     """Wire this loop's transitions (sibling places must exist)."""
     s = net.s
     ci, esc, dash, ready = s.ci, s.esc, s.dash, s.ready
-
-    # scaffolding: the escalation loop will mail EscMoved internally
-    net.t.on_echo >> ci.p.echo
 
     (
         (ci.p.heads, ci.p.state)

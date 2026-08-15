@@ -34,6 +34,12 @@ def values(binding, *types):
     return tuple(next(value for value in hydrated if isinstance(value, kind)) for kind in types)
 
 
+def revive(cls, data: dict):
+    """Hydrate a strict workflow value from a JSON-faithful dict (e.g. a
+    baton HELD through a gate round inside a work token's `mem`)."""
+    return _TOKEN_ADAPTERS[cls.__name__].validate_json(json.dumps(data, sort_keys=True, separators=(",", ":")))
+
+
 def route(outputs, mapping):
     """Emit strict values only on the targets named in mapping."""
     return {

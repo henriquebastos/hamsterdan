@@ -20,15 +20,22 @@ from petrus.impetus.dsl import BuiltNet, NetSpec
 from petrus.impetus.petrinet import Marking
 
 from hamsterdan.contracts.readiness_v5 import (
-    ChecksFailure,
     CloseFact,
     GateFact,
     HeadWork,
     IntentFact,
+    MutationRequest,
 )
-from hamsterdan.readiness.net_v5 import ci, life
+from hamsterdan.readiness.net_v5 import ci, esc, life
 
-_LOOPS = (life, ci)
+_LOOPS = (life, ci, esc)
+
+# transition path -> (activity name, declared variant colors), for every
+# gate in the composed topology; the host (or a test world) binds these
+# with gating.wire_gates
+GATES: dict = {}
+for _loop in _LOOPS:
+    GATES.update(getattr(_loop, "GATES", {}))
 
 
 def _declare_pending_mailboxes(s) -> None:
@@ -40,9 +47,8 @@ def _declare_pending_mailboxes(s) -> None:
     """
     s.review.p.heads(HeadWork)
     s.review.p.closed(CloseFact)
-    s.esc.p.failures(ChecksFailure)
-    s.esc.p.closed(CloseFact)
     s.conv.p.intents(IntentFact)
+    s.mut.p.requests(MutationRequest)
     s.mut.p.closed(CloseFact)
     s.dash.p.facts(GateFact)
     s.dash.p.closed(CloseFact)

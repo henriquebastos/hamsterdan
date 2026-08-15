@@ -106,15 +106,15 @@ class TestClose:
         assert one(engine, "life.state")["phase"] == "terminal"
         for mailbox in (
             "review.closed",
-            "esc.closed",
             "mut.closed",
             "dash.closed",
             "rem.closed",
             "ready.closed",
         ):
             assert one(engine, mailbox)["reason"] == "merged"
-        # the CI loop consumed its close mail and retired
+        # the CI and escalation loops consumed their close mail and retired
         assert one(engine, "ci.done")["reason"] == "merged"
+        assert one(engine, "esc.done")["reason"] == "merged"
 
     def test_terminal_absorbs_every_later_observation(self) -> None:
         engine, _ = spawn()
@@ -211,5 +211,8 @@ class TestCensus:
             "on_human",
             "on_runs",
             "on_provisional",
-            "on_echo",
+            # scaffolding doors until the mutation and conversation
+            # loops mail these facts internally
+            "on_settled",
+            "on_recover",
         }
