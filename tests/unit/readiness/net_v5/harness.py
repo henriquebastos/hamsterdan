@@ -27,6 +27,10 @@ from hamsterdan.contracts.readiness_v5 import (
     MutWork,
     Publishable,
     Pushed,
+    RemBlocked,
+    RemFault,
+    RemLanded,
+    RemReq,
     Replied,
     ReplyBlocked,
     ReplyFault,
@@ -329,6 +333,25 @@ def make_activities(world: dict):
         return ReplyBlocked(id=work.id, text=work.text)
 
     @motus_activity(converter=converter)
+    def reminder_gate(work: RemReq) -> RemLanded | RemBlocked | RemFault:
+        # lookup-first (A2): the SAME nudge identity never posts twice.
+        # Reminders carry NO authority fence by design — a nudge is a
+        # human-facing note, corrected by conversation, never fenced.
+        key = f"reminder:{work.timer_id}"
+        if any(c["key"] == key for c in world["comments"]):
+            return RemLanded(timer_id=work.timer_id)
+        for _attempt in range(3):  # bounded classified retry, ONE occurrence
+            mode = world["comments_mode"]
+            if mode == "retryable":
+                continue
+            if mode is not None:
+                return RemFault(timer_id=work.timer_id, reason=str(mode))
+            world["comments"].append({"key": key, "kind": "reminder", "head": "", "body": ""})
+            world["log"].append(("comment", key))
+            return RemLanded(timer_id=work.timer_id)
+        return RemBlocked(timer_id=work.timer_id)
+
+    @motus_activity(converter=converter)
     def dash_gate(work: DashReq) -> DashLanded | DashBlocked | DashFault:
         # the dashboard is authority-orthogonal by design (A5): no
         # fence — a stale board row is corrected by the next upsert.
@@ -359,7 +382,7 @@ def make_activities(world: dict):
             desired_digest=work.desired_digest,
         )
 
-    return (rerun_gate, review_agent, publish_gate, git_gate, reply_gate, dash_gate)
+    return (rerun_gate, review_agent, publish_gate, git_gate, reply_gate, reminder_gate, dash_gate)
 
 
 # the host's webhook custody, keyed by engine identity: one admission

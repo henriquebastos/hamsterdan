@@ -159,18 +159,16 @@ class TestClose:
         see_head(engine, "h1")
         deliver(engine, "on_close", "CloseSeen", {"reason": "merged"})
         assert one(engine, "life.state")["phase"] == "terminal"
-        for mailbox in (
-            "rem.closed",
-            "ready.closed",
-        ):
+        for mailbox in ("ready.closed",):
             assert one(engine, mailbox)["reason"] == "merged"
-        # the CI, escalation, review, mutation, and dashboard loops
-        # consumed their close mail and retired
+        # the CI, escalation, review, mutation, dashboard, and reminder
+        # loops consumed their close mail and retired
         assert one(engine, "ci.done")["reason"] == "merged"
         assert one(engine, "esc.done")["reason"] == "merged"
         assert one(engine, "review.done")["reason"] == "merged"
         assert one(engine, "mut.done")["reason"] == "merged"
         assert one(engine, "dash.done")["reason"] == "merged"
+        assert one(engine, "rem.done")["reason"] == "merged"
 
     def test_terminal_absorbs_every_later_observation(self) -> None:
         engine, _ = spawn()
@@ -275,4 +273,5 @@ class TestCensus:
             "on_comment",
             "on_human",
             "on_runs",
+            "on_timer",
         }

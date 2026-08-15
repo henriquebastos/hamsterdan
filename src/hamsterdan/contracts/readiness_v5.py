@@ -64,6 +64,16 @@ class HumanSeen(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class TimerDue(WorkflowModel):
+    """A host-armed reminder timer matured. The host owns arming,
+    rearming, and cancellation; the net records the maturity as a
+    durable fact and decides whether to nudge (the decision — never the
+    fact — is what snooze and close suppress)."""
+
+    timer_id: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class RunSeen(WorkflowModel):
     """A host-normalized run observation.
 
@@ -792,4 +802,73 @@ class DashEnded(WorkflowModel):
     """The dashboard loop's terminal record at close."""
 
     entries: tuple[str, ...]
+    reason: str
+
+
+# -- the reminders baton, gate work, and typed terminals ----------------------
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RemState(WorkflowModel):
+    """The reminders loop's baton.
+
+    `matured` is the durable maturity log — every TimerDue is recorded,
+    always; snooze and close suppress only the nudge DECISION. Custody
+    is per-timer data in the baton (A2): `pending` marks a nudge in
+    flight (single-flight per timer, yet the baton stays available so a
+    snooze folds mid-flight), `blocked` retains a retry-exhausted timer
+    for the `rem.recover` door, and `faulted` retains the timer plus
+    reason fail-closed — a faulted timer never reopens by maturity
+    alone. `closing` retains a deferred close reason while terminals
+    are outstanding (A3): the LAST terminal fold finalizes the loop.
+    The sentinel is None — an EMPTY close reason is still a close.
+    """
+
+    matured: tuple[str, ...]
+    snoozed: bool
+    deferred: tuple[str, ...]
+    pending: dict[str, Any]
+    blocked: dict[str, Any]
+    faulted: dict[str, Any]
+    closing: str | None = None
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RemReq(WorkflowModel):
+    """One nudge for the reminder gate; `reminder:{timer_id}` is the
+    stable effect identity the gate reconciles lookup-first (A2)."""
+
+    timer_id: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RemLanded(WorkflowModel):
+    """The nudge landed (or lookup-first found it already posted)."""
+
+    timer_id: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RemBlocked(WorkflowModel):
+    """Bounded classified retry exhausted; the timer is retained for
+    the `rem.recover` door under the SAME effect identity."""
+
+    timer_id: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RemFault(WorkflowModel):
+    """Unknown provider terminal: the nudge is NOT PROVEN landed. The
+    timer and reason are retained fail-closed (A2); maturity alone
+    never reopens a faulted timer."""
+
+    timer_id: str
+    reason: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RemEnded(WorkflowModel):
+    """The reminders loop's terminal record at close."""
+
+    matured: tuple[str, ...]
     reason: str

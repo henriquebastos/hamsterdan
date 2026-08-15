@@ -102,11 +102,10 @@ class TestNoteIntents:
         comment(engine, "c1", "snooze", arg="t1")
         comment(engine, "c2", "resume", arg="t1")
         comment(engine, "c3", "defer", arg="t2")
-        assert tokens(engine, "rem.snoozes") == [
-            {"mode": "snooze", "arg": "t1"},
-            {"mode": "clear", "arg": "t1"},
-            {"mode": "defer", "arg": "t2"},
-        ]
+        # the reminders loop consumed the mailed facts into its baton
+        st = one(engine, "rem.state")
+        assert st["snoozed"] is False  # snoozed, then cleared by resume
+        assert st["deferred"] == ["t2"]
 
     def test_a_note_intent_in_terminal_phase_is_declined(self) -> None:
         engine, _ = spawn()
