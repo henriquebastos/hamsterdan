@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -42,6 +43,7 @@ from hamsterdan.agents.pi import PiWorkspaceProvider
 PI_PROVIDER = "anthropic"
 PI_MODEL = "claude-sonnet-4-5"
 PI_PROFILE = f"pi-native-a2-local-{PI_PROVIDER}-{PI_MODEL}-api-key"
+_REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
 HOST_FENCED_EFFECT = CapabilityDescriptor(
     DescriptorIdentity(DescriptorKind.EFFECT, "hamsterdan.host-fenced", 1),
@@ -382,7 +384,7 @@ def _terminal_operations(histories: Path) -> set[str]:
         if path.stat().st_size > 16 * 1024 * 1024:
             raise AgentCompositionError("agent route repair History exceeds its bound")
         requests: dict[int, tuple[str, str]] = {}
-        terminal: dict[int, str] = {}
+        terminal: dict[int, tuple[str, str | None, bool]] = {}
         try:
             for line in path.read_text(encoding="utf-8").splitlines():
                 payload = json.loads(line)
@@ -395,7 +397,6 @@ def _terminal_operations(histories: Path) -> set[str]:
                         if isinstance(record.input, dict)
                         else None
                     )
-                    operation = work.get("operation") if isinstance(work, dict) else None
                     transition = str(record.transition)
                     if transition in {
                         "execute.review",
@@ -403,19 +404,64 @@ def _terminal_operations(histories: Path) -> set[str]:
                         "execute.repair",
                         "execute.change",
                         "review.agent",
+                        "mut.git_gate",
                     }:
+                        operation = work.get("operation") if isinstance(work, dict) else None
+                        if transition == "mut.git_gate":
+                            op_key = work.get("op_key") if isinstance(work, dict) else None
+                            operation = _mutation_agent_operation(path, op_key)
                         if not isinstance(operation, str) or record.occurrence in requests:
                             raise ValueError("agent Activity request is ambiguous")
                         requests[record.occurrence] = transition, operation
                 elif isinstance(record, (ActivityCompleted, ActivityFailed)):
                     if record.occurrence in terminal:
                         raise ValueError("terminal Activity occurrence is ambiguous")
-                    terminal[record.occurrence] = str(record.transition)
+                    result = record.result if isinstance(record, ActivityCompleted) else None
+                    variant = result.get("$variant") if isinstance(result, dict) else None
+                    terminal[record.occurrence] = (
+                        str(record.transition),
+                        variant if isinstance(variant, str) else None,
+                        isinstance(record, ActivityFailed),
+                    )
         except OSError, UnicodeError, json.JSONDecodeError, TypeError, ValueError, AttributeError:
             raise AgentCompositionError("agent route repair History is malformed") from None
         for occurrence in terminal.keys() & requests.keys():
             transition, operation = requests[occurrence]
-            if terminal[occurrence] != transition:
+            terminal_transition, variant, failed = terminal[occurrence]
+            if terminal_transition != transition:
                 raise AgentCompositionError("agent route repair History has a mismatched terminal Activity")
+            if transition == "mut.git_gate" and not failed:
+                if variant == "FaultM":
+                    # Human recovery reuses the same globally routed Pi
+                    # result when provider publication remained uncertain.
+                    continue
+                if variant not in {"Pushed", "MovedM", "DeclinedM"}:
+                    raise AgentCompositionError("agent route repair History has a malformed mutation terminal")
             operations.add(operation)
     return operations
+
+
+def _mutation_agent_operation(history: Path, op_key: object) -> str:
+    """Recover the globally scoped mutation-agent identity from its binding."""
+
+    if not isinstance(op_key, str):
+        raise TypeError("mutation operation key is malformed")
+    binding = history.with_name("binding.json")
+    if binding.is_symlink() or not binding.is_file() or binding.stat().st_size > 4096:
+        raise ValueError("mutation History binding is unavailable")
+    payload = json.loads(binding.read_text(encoding="utf-8"))
+    installation, repository_id, path_pull = (int(value) for value in history.parts[-4:-1])
+    if min(installation, repository_id, path_pull) <= 0:
+        raise ValueError("mutation History path is malformed")
+    expected_instance = f"github:{installation}:{repository_id}:pr:{path_pull}"
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"instance_id", "repository", "pull_request"}
+        or payload.get("instance_id") != expected_instance
+        or type(payload.get("pull_request")) is not int
+        or payload.get("pull_request") != path_pull
+        or not isinstance(payload.get("repository"), str)
+        or _REPOSITORY.fullmatch(payload["repository"]) is None
+    ):
+        raise ValueError("mutation History binding is malformed")
+    return _identifier(f"mutation:{payload['repository']}:pr:{path_pull}:{op_key}", "operation")

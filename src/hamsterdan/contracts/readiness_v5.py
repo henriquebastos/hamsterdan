@@ -696,6 +696,8 @@ class MovedM(WorkflowModel):
     head: str
     incarnation: int
     observed: str
+    observed_base: str
+    observed_policy: str
     observed_incarnation: int
     observed_phase: Phase
 

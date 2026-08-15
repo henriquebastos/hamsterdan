@@ -14,6 +14,7 @@ from hamsterdan.github_app.gateway import GitHubAuthority, GitHubObjectWriteErro
 from hamsterdan.github_app.models import PullRequestSnapshot, WireResponse
 from hamsterdan.host.git_publish import (
     GitPublishError,
+    GitReconciliation,
     HostGitPublisher,
     PublicationCategory,
     _publication_directory,
@@ -408,13 +409,40 @@ def test_unmerged_index_is_rejected(repository: tuple[Path, Path, str, str]) -> 
         publisher(remote)._validate_staged_tree(root)
 
 
-def test_recovery_rejects_digest_mismatch_and_commit_tree_preserves_parent_order(
+def test_reconciliation_finds_an_operation_beneath_a_later_fast_forward(
+    repository: tuple[Path, Path, str, str],
+) -> None:
+    root, remote, first, _ = repository
+    tree = git(root, "rev-parse", f"{first}^{{tree}}")
+    operation = git(
+        root,
+        "commit-tree",
+        tree,
+        "-p",
+        first,
+        input_text="proposal\n\nHamsterdan-Operation: push:one\nHamsterdan-Payload-Digest: digest\n",
+    )
+    later = git(root, "commit-tree", tree, "-p", operation, input_text="later\n")
+    git(root, "push", "-q", "--force", "origin", f"{later}:refs/heads/topic")
+    authority = LocalPublicationAuthority(root, remote, first)
+    authority.head = later
+
+    result = HostGitPublisher(authority, str(remote)).reconcile(  # type: ignore[arg-type]
+        operation="push:one",
+        payload_digest="digest",
+        expected_head=first,
+        base_head=first,
+    )
+
+    assert result == GitReconciliation("existing", later, operation, (first,))
+
+
+def test_merge_base_reconciliation_requires_the_exact_ordered_parents(
     repository: tuple[Path, Path, str, str],
 ) -> None:
     root, remote, first, second = repository
-    subject = publisher(remote)
     tree = git(root, "rev-parse", f"{second}^{{tree}}")
-    recovered = git(
+    operation = git(
         root,
         "commit-tree",
         tree,
@@ -422,12 +450,78 @@ def test_recovery_rejects_digest_mismatch_and_commit_tree_preserves_parent_order
         first,
         "-p",
         second,
-        input_text="proposal\n\nHamsterdan-Operation: op\nHamsterdan-Payload-Digest: actual\n",
+        input_text="proposal\n\nHamsterdan-Operation: push:merge\nHamsterdan-Payload-Digest: digest\n",
     )
-    git(root, "push", "-q", "--force", "origin", f"{recovered}:refs/heads/topic")
-    assert git(root, "show", "-s", "--format=%P", recovered).split() == [first, second]
-    with pytest.raises(GitPublishError, match="different payload"):
-        subject._recover(root, "topic", "op", "expected", [first, second])
+    git(root, "push", "-q", "--force", "origin", f"{operation}:refs/heads/topic")
+    authority = LocalPublicationAuthority(root, remote, first)
+    authority.head = operation
+
+    result = HostGitPublisher(authority, str(remote)).reconcile(  # type: ignore[arg-type]
+        operation="push:merge",
+        payload_digest="digest",
+        expected_head=first,
+        base_head=second,
+        merge_base=True,
+    )
+
+    assert result == GitReconciliation("existing", operation, operation, (first, second))
+
+
+def test_reconciliation_proves_coherent_absence(
+    repository: tuple[Path, Path, str, str],
+) -> None:
+    root, remote, first, _ = repository
+    authority = LocalPublicationAuthority(root, remote, first)
+
+    result = HostGitPublisher(authority, str(remote)).reconcile(  # type: ignore[arg-type]
+        operation="push:absent",
+        payload_digest="digest",
+        expected_head=first,
+        base_head=first,
+    )
+
+    assert result == GitReconciliation("absent", first)
+
+
+@pytest.mark.parametrize("collision", ["digest", "parents", "duplicate"])
+def test_reconciliation_rejects_operation_identity_collisions(
+    repository: tuple[Path, Path, str, str], collision: str
+) -> None:
+    root, remote, first, second = repository
+    tree = git(root, "rev-parse", f"{first}^{{tree}}")
+    digest = "different" if collision == "digest" else "digest"
+    parents = (first, second) if collision == "parents" else (first,)
+    arguments = ["commit-tree", tree]
+    for parent in parents:
+        arguments.extend(("-p", parent))
+    operation = git(
+        root,
+        *arguments,
+        input_text=f"proposal\n\nHamsterdan-Operation: push:one\nHamsterdan-Payload-Digest: {digest}\n",
+    )
+    head = operation
+    if collision == "duplicate":
+        head = git(
+            root,
+            "commit-tree",
+            tree,
+            "-p",
+            operation,
+            input_text="again\n\nHamsterdan-Operation: push:one\nHamsterdan-Payload-Digest: digest\n",
+        )
+    git(root, "push", "-q", "--force", "origin", f"{head}:refs/heads/topic")
+    authority = LocalPublicationAuthority(root, remote, first)
+    authority.head = head
+
+    with pytest.raises(GitPublishError) as caught:
+        HostGitPublisher(authority, str(remote)).reconcile(  # type: ignore[arg-type]
+            operation="push:one",
+            payload_digest="digest",
+            expected_head=first,
+            base_head=first,
+        )
+
+    assert caught.value.category is PublicationCategory.IDEMPOTENCY
 
 
 def test_host_derived_patch_publishes_and_replays_through_complete_local_authority(

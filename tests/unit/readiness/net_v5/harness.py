@@ -303,6 +303,8 @@ def make_activities(world: dict):
                 head=work.head,
                 incarnation=work.incarnation,
                 observed=world["branch_head"],
+                observed_base=world["base_head"],
+                observed_policy=world["policy"],
                 observed_incarnation=auth["incarnation"],
                 observed_phase=auth["phase"],
             )
@@ -327,6 +329,8 @@ def make_activities(world: dict):
                 head=work.head,
                 incarnation=work.incarnation,
                 observed=world["branch_head"],
+                observed_base=world["base_head"],
+                observed_policy=world["policy"],
                 observed_incarnation=auth["incarnation"],
                 observed_phase=auth["phase"],
             )

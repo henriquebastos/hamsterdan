@@ -412,6 +412,75 @@ def test_v5_review_terminal_history_repairs_the_global_agent_route(tmp_path: Pat
     ).fetchone() == (1,)
 
 
+@pytest.mark.parametrize("variant", ["Pushed", "MovedM", "DeclinedM"])
+def test_v5_mutation_known_terminal_repairs_the_global_agent_route(tmp_path: Path, variant: str) -> None:
+    agenticus = compose_agent()
+    op_key = "push:comment:9:" + "a" * 40 + ":i1"
+    operation = f"mutation:owner/repo:pr:3:{op_key}"
+    store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    store.activate(agenticus, tmp_path / "applications")
+    store.claim(operation, agenticus)
+    store.close()
+    root = tmp_path / "applications/1/2/3"
+    root.mkdir(parents=True)
+    (root / "binding.json").write_text(
+        json.dumps({"instance_id": "github:1:2:pr:3", "repository": "owner/repo", "pull_request": 3})
+    )
+    request = ActivityRequested(
+        NetPath("mut.git_gate"),
+        activity="git_gate",
+        input={"work": {"op_key": op_key}},
+        policy=ExecutionPolicy(1, 300),
+        correlation=op_key,
+        idempotency=op_key,
+        occurrence=1,
+    )
+    completed = ActivityCompleted(NetPath("mut.git_gate"), {"$variant": variant}, occurrence=1)
+    (root / "history.jsonl").write_text(
+        "\n".join(json.dumps(encode_record(record)) for record in (request, completed)) + "\n"
+    )
+
+    reopened = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    reopened.activate(agenticus, tmp_path / "applications")
+
+    assert reopened._database.execute(
+        "SELECT resolved FROM agent_routes WHERE operation = ?", (operation,)
+    ).fetchone() == (1,)
+
+
+def test_v5_mutation_fault_keeps_the_agent_route_recoverable(tmp_path: Path) -> None:
+    agenticus = compose_agent()
+    op_key = "push:comment:9:" + "a" * 40 + ":i1"
+    operation = f"mutation:owner/repo:pr:3:{op_key}"
+    store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    store.activate(agenticus, tmp_path / "applications")
+    store.claim(operation, agenticus)
+    store.close()
+    root = tmp_path / "applications/1/2/3"
+    root.mkdir(parents=True)
+    (root / "binding.json").write_text(
+        json.dumps({"instance_id": "github:1:2:pr:3", "repository": "owner/repo", "pull_request": 3})
+    )
+    request = ActivityRequested(
+        NetPath("mut.git_gate"),
+        activity="git_gate",
+        input={"work": {"op_key": op_key}},
+        policy=ExecutionPolicy(1, 300),
+        correlation=op_key,
+        idempotency=op_key,
+        occurrence=1,
+    )
+    completed = ActivityCompleted(NetPath("mut.git_gate"), {"$variant": "FaultM"}, occurrence=1)
+    (root / "history.jsonl").write_text(
+        "\n".join(json.dumps(encode_record(record)) for record in (request, completed)) + "\n"
+    )
+
+    reopened = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    reopened.activate(agenticus, tmp_path / "applications")
+
+    assert reopened.claim(operation, agenticus).resolved is False
+
+
 def test_history_repair_refuses_a_mismatched_terminal_transition(tmp_path: Path) -> None:
     agenticus = compose_agent()
     store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")

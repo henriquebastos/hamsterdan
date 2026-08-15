@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
+from typing import Literal
 
 from hamsterdan.agents import CodingResult
 from hamsterdan.github_app.gateway import GitHubAuthority, GitHubObjectWriteError
@@ -49,6 +50,16 @@ class GitPublishResult:
     recovered: bool = False
 
 
+@dataclass(frozen=True)
+class GitReconciliation:
+    """Proof that a stable publication operation is absent or already held."""
+
+    disposition: Literal["absent", "existing"]
+    observed_head: str
+    commit: str = ""
+    parents: tuple[str, ...] = ()
+
+
 class HostGitPublisher:
     """Apply a host-captured binary patch and advance one same-repository PR ref."""
 
@@ -79,9 +90,18 @@ class HostGitPublisher:
     ) -> GitPublishResult:
         _validate_declared_paths(result.changed_files)
         _validate_commit_message(result.proposed_commit_message)
-        pull = self.authority.pull_request()
         if result.head != expected_head or result.base != base_head:
             raise GitPublishError(PublicationCategory.CORRELATION, "stale or incorrectly correlated Git publication")
+        reconciled = self.reconcile(
+            operation=operation,
+            payload_digest=payload_digest,
+            expected_head=expected_head,
+            base_head=base_head,
+            merge_base=merge_base,
+        )
+        if reconciled.disposition == "existing":
+            return GitPublishResult(reconciled.commit, True)
+        pull = self.authority.pull_request()
         if (
             not _same_repository(pull.repository, self.authority.repository)
             or not _same_repository(pull.head_repository, self.authority.repository)
@@ -100,16 +120,6 @@ class HostGitPublisher:
             self._git("clone", "--quiet", "--no-checkout", "--", self.clone_url, str(root))
             self._git("-C", str(root), "checkout", "--quiet", "--detach", expected_head)
             parents = [expected_head, *([base_head] if merge_base else [])]
-            recovered = self._recover(root, pull.head_ref, operation, payload_digest, parents)
-            if recovered:
-                # The snapshot used to select the ref may already be stale.  Re-read
-                # GitHub after the remote lookup before treating replay as success.
-                verified = self.authority.pull_request()
-                if not _same_pull(verified, pull) or verified.head != recovered:
-                    raise GitPublishError(
-                        PublicationCategory.IDEMPOTENCY, "recovered operation is not the verified PR head"
-                    )
-                return GitPublishResult(recovered, True)
             if pull.head != expected_head or pull.base != base_head:
                 raise GitPublishError(
                     PublicationCategory.CURRENT_AUTHORITY, "stale or incorrectly correlated Git publication"
@@ -139,17 +149,118 @@ class HostGitPublisher:
                 raise GitPublishError(
                     PublicationCategory.CURRENT_AUTHORITY, "pull request changed before Git publication"
                 )
-            self._advance_ref(pull.head_ref, expected_head, commit)
-            verified = self.authority.pull_request()
-            if (
-                not _same_pull(verified, pull)
-                or verified.head not in {expected_head, commit}
-                or verified.base != base_head
-            ):
-                raise GitPublishError(
-                    PublicationCategory.REF_CAS, "ref advance succeeded without a coherent PR projection"
+            try:
+                self._advance_ref(pull.head_ref, expected_head, commit)
+            except GitPublishError as error:
+                if error.category is not PublicationCategory.REF_CAS:
+                    raise
+                recovered = self.reconcile(
+                    operation=operation,
+                    payload_digest=payload_digest,
+                    expected_head=expected_head,
+                    base_head=base_head,
+                    merge_base=merge_base,
                 )
-            return GitPublishResult(commit)
+                if recovered.disposition == "existing":
+                    return GitPublishResult(recovered.commit, True)
+                raise
+            verified = self.reconcile(
+                operation=operation,
+                payload_digest=payload_digest,
+                expected_head=expected_head,
+                base_head=base_head,
+                merge_base=merge_base,
+            )
+            if verified.disposition != "existing":
+                raise GitPublishError(
+                    PublicationCategory.REF_CAS, "ref advance succeeded without a provable operation commit"
+                )
+            return GitPublishResult(verified.commit)
+
+    def reconcile(
+        self,
+        *,
+        operation: str,
+        payload_digest: str,
+        expected_head: str,
+        base_head: str,
+        merge_base: bool = False,
+    ) -> GitReconciliation:
+        """Find a prior operation in the complete first-parent PR history.
+
+        ``absent`` is returned only when the provider's PR projection and
+        remote ref agree and the complete search succeeded. Any identity
+        collision or unreadable evidence fails closed.
+        """
+
+        try:
+            pull = self.authority.pull_request()
+        except GitHubBoundaryError:
+            raise GitPublishError(
+                PublicationCategory.BOUNDARY_UNAVAILABLE, "GitHub PR projection is unavailable"
+            ) from None
+        if (
+            not _same_repository(pull.repository, self.authority.repository)
+            or not _same_repository(pull.head_repository, self.authority.repository)
+            or not _safe_branch(pull.head_ref)
+        ):
+            raise GitPublishError(
+                PublicationCategory.REPOSITORY_REF, "fork or unsafe pull-request ref is not publishable"
+            )
+        with _publication_directory() as temporary:
+            root = temporary / "repository"
+            self._git("clone", "--quiet", "--no-checkout", "--", self.clone_url, str(root))
+            destination = f"refs/heads/{pull.head_ref}"
+            remote = self._git(
+                "-C", str(root), "ls-remote", "--heads", "origin", destination, capture=True
+            ).splitlines()
+            if len(remote) != 1:
+                raise GitPublishError(PublicationCategory.BOUNDARY_UNAVAILABLE, "Git remote ref lookup is incoherent")
+            fields = remote[0].split()
+            if len(fields) != 2 or fields[1] != destination or fields[0] != pull.head:
+                raise GitPublishError(
+                    PublicationCategory.BOUNDARY_UNAVAILABLE,
+                    "Git remote ref differs from the current PR projection",
+                )
+            observed_head = fields[0]
+            self._git("-C", str(root), "fetch", "--quiet", "origin", observed_head)
+            history = self._git(
+                "-C",
+                str(root),
+                "log",
+                "--first-parent",
+                "-z",
+                "--format=%H%x00%P%x00%B",
+                observed_head,
+                capture=True,
+            ).split("\0")
+            if not history or history.pop() or len(history) % 3:
+                raise GitPublishError(PublicationCategory.GIT_OPERATION, "Git operation history is malformed")
+            operation_line = f"Hamsterdan-Operation: {operation}"
+            digest_line = f"Hamsterdan-Payload-Digest: {payload_digest}"
+            matches: list[tuple[str, tuple[str, ...]]] = []
+            for offset in range(0, len(history), 3):
+                commit, raw_parents, body = history[offset : offset + 3]
+                trailers = body.splitlines()
+                if operation_line not in trailers:
+                    continue
+                if trailers.count(operation_line) != 1 or trailers.count(digest_line) != 1:
+                    raise GitPublishError(
+                        PublicationCategory.IDEMPOTENCY,
+                        "stable operation was reused with a different payload",
+                    )
+                matches.append((commit, tuple(raw_parents.split())))
+            if len(matches) > 1:
+                raise GitPublishError(PublicationCategory.IDEMPOTENCY, "stable operation identifies multiple commits")
+            if not matches:
+                return GitReconciliation("absent", observed_head)
+            commit, parents = matches[0]
+            expected_parents = (expected_head, *([base_head] if merge_base else []))
+            if parents != expected_parents:
+                raise GitPublishError(
+                    PublicationCategory.IDEMPOTENCY, "recovered operation has unexpected commit parents"
+                )
+            return GitReconciliation("existing", observed_head, commit, parents)
 
     def _validate_staged_tree(self, root: Path) -> list[str]:
         changed = self._git("-C", str(root), "diff", "--cached", "--name-only", "-z", capture=True)
@@ -176,26 +287,6 @@ class HostGitPublisher:
                     PublicationCategory.PATCH_ADMISSION, "staged tree contains an unsafe mode or unmerged entry"
                 )
         return changed_paths
-
-    def _recover(self, root: Path, ref: str, operation: str, digest: str, expected_parents: list[str]) -> str:
-        remote = self._git("-C", str(root), "ls-remote", "--heads", "origin", f"refs/heads/{ref}", capture=True)
-        if not remote:
-            return ""
-        head = remote.split()[0]
-        self._git("-C", str(root), "fetch", "--quiet", "origin", head)
-        body = self._git("-C", str(root), "show", "-s", "--format=%B", head, capture=True)
-        trailers = body.splitlines()
-        operation_line = f"Hamsterdan-Operation: {operation}"
-        if operation_line not in trailers:
-            return ""
-        if trailers.count(operation_line) != 1 or trailers.count(f"Hamsterdan-Payload-Digest: {digest}") != 1:
-            raise GitPublishError(
-                PublicationCategory.IDEMPOTENCY, "stable operation was reused with a different payload"
-            )
-        parents = self._git("-C", str(root), "show", "-s", "--format=%P", head, capture=True).split()
-        if parents != expected_parents:
-            raise GitPublishError(PublicationCategory.IDEMPOTENCY, "recovered operation has unexpected commit parents")
-        return head
 
     def _create_commit(
         self,

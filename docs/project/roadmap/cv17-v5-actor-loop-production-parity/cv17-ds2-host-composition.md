@@ -2,7 +2,7 @@
 code: CV17.DS2
 level: Delivery Story
 status: Active
-status_reason: DS2.1c review-agent gate complete; mutation/git gate is next
+status_reason: DS2.1 provider-backed gates complete; DS2.2 V5 application is next
 updated: 2026-08-15
 ---
 
@@ -48,7 +48,18 @@ contract gap and two host-boundary hazards; the slicing reflects them:
   settleable operation; carries prior findings through validated agent
   lineage rather than concatenation; and folds typed clean inability
   into fail-closed readiness/dashboard review status without treating
-  it as an effect fault. The mutation/git gate remains.
+  it as an effect fault. **Done.** The mutation/git gate reconciles the
+  provider operation before any claim or agent read, fences the full
+  claim before and after one globally scoped attempt-1 coding operation,
+  then publishes through exact ref CAS. Petrus/Pi replays a durably
+  settled coding result after a pre-CAS crash; a post-CAS crash finds the
+  exact operation commit anywhere on the PR's reachable first-parent
+  history by request digest and ordered parents. Clean agent inability
+  declines, proven movement reports the full observed claim, and every
+  unproven publication terminal retains exact recovery work as `FaultM`.
+  Agent-route startup repair deliberately leaves `FaultM` unresolved so
+  human recovery can reclaim the same Pi result; known terminals settle
+  the route.
 - **DS2.2 — The V5 application.** Implements the application protocol
   HostService already calls; reconciler normalizes provider truth into
   identified door deliveries; host-side comment classification before
