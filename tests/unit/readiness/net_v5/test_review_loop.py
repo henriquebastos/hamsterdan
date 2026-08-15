@@ -11,6 +11,8 @@ The baton is HELD through every in-flight round.
 """
 
 from harness import (
+    comment,
+    comment_held,
     deliver,
     deliver_held,
     one,
@@ -37,8 +39,14 @@ def findings_facts(engine) -> list[dict]:
     return [f for f in tokens(engine, "ready.facts") if f["kind"] == "findings"]
 
 
+def findings_comments(world: dict) -> list[dict]:
+    """The provider's FINDINGS posts (the conversation loop's replies
+    share the same comment store)."""
+    return [c for c in world["comments"] if c["kind"] == "findings"]
+
+
 def comment_keys(world: dict) -> list[str]:
-    return [c["key"] for c in world["comments"]]
+    return [c["key"] for c in findings_comments(world)]
 
 
 # -- the agent round --------------------------------------------------------
@@ -51,7 +59,7 @@ class TestAgentRound:
         world = world_of(engine)
         assert world["agent_calls"] == 1
         assert comment_keys(world) == ["findings:h1:i1"]
-        assert world["comments"][0]["body"] == [FINDING_H1]
+        assert findings_comments(world)[0]["body"] == [FINDING_H1]
         state = memory(engine)
         assert state["reviewed"] == ["h1"]
         assert state["findings"] == [FINDING_H1]
@@ -66,7 +74,7 @@ class TestAgentRound:
         world = world_of(engine)
         world["agent_findings"]["h1"] = []
         see_head(engine, "h1")
-        assert world["comments"] == []
+        assert findings_comments(world) == []
         state = memory(engine)
         assert state["reviewed"] == ["h1"]
         assert state["findings"] == []
@@ -75,11 +83,11 @@ class TestAgentRound:
 
     def test_dismissed_findings_are_filtered_before_publication(self) -> None:
         engine, _ = spawn()
-        deliver(engine, "on_dismiss", "DismissFact", {"finding_id": "f-h1"})
+        comment(engine, "dis1", "dismiss", arg="f-h1")
         see_head(engine, "h1")
         world = world_of(engine)
         assert world["agent_calls"] == 1
-        assert world["comments"] == []  # every finding filtered: nothing to post
+        assert findings_comments(world) == []  # every finding filtered: nothing to post
         state = memory(engine)
         assert state["reviewed"] == ["h1"]
         assert state["dismissed"] == ["f-h1"]
@@ -146,7 +154,7 @@ class TestPublication:
         # the blocked findings still reach readiness/dashboard honestly
         assert findings_facts(engine)[-1]["body"]["blocking"] == 1
         world["comments_mode"] = None
-        deliver(engine, "on_recover", "RecoverFact", {"target": "review", "op": "findings:h1:i1"})
+        comment(engine, "rec1", "recover_publication", arg="findings:h1:i1")
         assert comment_keys(world) == ["findings:h1:i1"]  # SAME identity, once
         assert world_of(engine)["agent_calls"] == 1  # recovery reruns NO agent
         state = memory(engine)
@@ -161,9 +169,9 @@ class TestPublication:
         state = memory(engine)
         assert state["pub"]["phase"] == "faulted"
         assert state["pub"]["findings"] == [FINDING_H1]  # the EXACT request (A2)
-        assert world["comments"] == []
+        assert findings_comments(world) == []
         world["comments_mode"] = None
-        deliver(engine, "on_recover", "RecoverFact", {"target": "review", "op": "findings:h1:i1"})
+        comment(engine, "rec2", "recover_publication", arg="findings:h1:i1")
         assert comment_keys(world) == ["findings:h1:i1"]
         state = memory(engine)
         assert state["pub"] == {"phase": "idle"}
@@ -176,7 +184,7 @@ class TestPublication:
         world["comments_mode"] = "unknown"
         see_head(engine, "h1")
         world["comments_mode"] = None
-        deliver(engine, "on_recover", "RecoverFact", {"target": "review", "op": "findings:h1:i1"})
+        comment(engine, "rec3", "recover_publication", arg="findings:h1:i1")
         # the settle CLEARS the fault: readiness never stays fail-closed
         # after the human's recovery actually succeeded
         faults = [f["body"] for f in tokens(engine, "ready.facts") if f["kind"] == "fault"]
@@ -189,11 +197,12 @@ class TestPublication:
         world["comments_mode"] = "retryable"
         see_head(engine, "h1")
         world["comments_mode"] = None
-        deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "findings:h1:i1"})
-        deliver(engine, "on_recover", "RecoverFact", {"target": "review", "op": "findings:h9:i9"})
+        # the operation prefix routes to escalation: review never sees it
+        comment(engine, "rec4", "recover_publication", arg="rerun:L1:fp1")
+        comment(engine, "rec5", "recover_publication", arg="findings:h9:i9")
         state = memory(engine)
         assert state["pub"]["phase"] == "blocked"  # untouched
-        assert world["comments"] == []
+        assert findings_comments(world) == []
         assert world["comment_attempts"] == 3  # no reissue happened
 
 
@@ -223,7 +232,7 @@ class TestAuthorityMovement:
             hold=HOLD_PUBLISH,
         )
         world = world_of(engine)
-        assert world["comments"] == []  # nothing landed while held
+        assert findings_comments(world) == []  # nothing landed while held
         # release h1's publish: the gate observes h2 → MOVED; the fold
         # retains the findings provisionally; the queued superseding
         # admission then opens h2's round, which carries them forward
@@ -313,18 +322,11 @@ class TestAuthorityMovement:
             "HeadSeen",
             {"head": "h2", "base": "b2", "mergeable": True, "policy": "p1"},
         )
-        assert world["comments"] == []
+        assert findings_comments(world) == []
         assert memory(engine)["pub"]["phase"] == "blocked"
         # recovery reissues the EXACT operation; its stale base claim
         # MOVES, restoring the COMPLETE findings to provisional custody
-        deliver_held(
-            engine,
-            dispatch,
-            definitions,
-            "on_recover",
-            "RecoverFact",
-            {"target": "review", "op": "findings:h2:i2"},
-        )
+        comment_held(engine, dispatch, definitions, "rec1", "recover_publication", arg="findings:h2:i2")
         state = memory(engine)
         assert state["pub"] == {"phase": "idle"}
         assert [f["id"] for f in state["provisional"]] == ["f-h1", "f-h2"]
@@ -338,7 +340,7 @@ class TestAuthorityMovement:
             {"head": "h2", "base": "b3", "mergeable": True, "policy": "p1"},
         )
         assert comment_keys(world) == ["findings:h2:i2"]
-        assert [f["id"] for f in world["comments"][0]["body"]] == ["f-h1", "f-h2"]
+        assert [f["id"] for f in findings_comments(world)[0]["body"]] == ["f-h1", "f-h2"]
         assert world["agent_calls"] == 2  # recovery and refresh reran NO agent
 
     def test_refresh_with_nothing_provisional_republishes_nothing(self) -> None:
@@ -365,13 +367,13 @@ class TestAuthorityMovement:
         release_one(engine, dispatch, definitions, "publish_gate")
         assert memory(engine)["provisional"] == [FINDING_H1]
         # the human waves the finding off during dormancy
-        deliver_held(engine, dispatch, definitions, "on_dismiss", "DismissFact", {"finding_id": "f-h1"})
+        comment_held(engine, dispatch, definitions, "dis1", "dismiss", arg="f-h1")
         # resume opens a fresh round; the agent echoes the provisional
         # PLUS its fresh duplicate — the judge filters both
         deliver_held(engine, dispatch, definitions, "on_ready", "ReadySeen", {})
         world = world_of(engine)
         assert world["agent_calls"] == 2
-        assert world["comments"] == []
+        assert findings_comments(world) == []
         assert memory(engine)["reviewed"] == ["h1"]
 
 
@@ -379,6 +381,30 @@ class TestAuthorityMovement:
 
 
 class TestDismissalAndClose:
+    def test_a_dismiss_that_lost_the_race_with_close_is_never_stranded(self) -> None:
+        # the dismiss was ADMITTED while running, but its apply waits on
+        # the memory baton a held publication carries in flight; close
+        # arrives during the wait. Whichever wins the returned baton —
+        # the apply or the retire — no token may strand in the mailbox
+        engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=HOLD_PUBLISH,
+        )
+        assert tokens(engine, "review.memory") == []  # baton in flight
+        comment_held(engine, dispatch, definitions, "d1", "dismiss", arg="f-h1", hold=HOLD_PUBLISH)
+        assert len(tokens(engine, "review.dismiss")) == 1  # parked, waiting
+        deliver_held(engine, dispatch, definitions, "on_close", "CloseSeen", {"reason": "merged"}, hold=HOLD_PUBLISH)
+        release_one(engine, dispatch, definitions, "publish_gate")
+        assert tokens(engine, "review.dismiss") == []  # applied or drained
+        [ended] = tokens(engine, "review.done")
+        assert ended["reason"] == "merged"
+
     def test_dismissal_cancels_a_retained_blocked_operation(self) -> None:
         # the human waved off a finding the blocked operation carries:
         # the operation is CANCELLED — recovery must never republish it
@@ -387,13 +413,13 @@ class TestDismissalAndClose:
         world["comments_mode"] = "retryable"
         see_head(engine, "h1")
         assert memory(engine)["pub"]["phase"] == "blocked"
-        deliver(engine, "on_dismiss", "DismissFact", {"finding_id": "f-h1"})
+        comment(engine, "dis2", "dismiss", arg="f-h1")
         state = memory(engine)
         assert state["pub"]["phase"] == "cancelled"
         assert state["pub"]["op"] == "findings:h1:i1"  # retained for audit
         world["comments_mode"] = None
-        deliver(engine, "on_recover", "RecoverFact", {"target": "review", "op": "findings:h1:i1"})
-        assert world["comments"] == []  # recovery is INERT
+        comment(engine, "rec5", "recover_publication", arg="findings:h1:i1")
+        assert findings_comments(world) == []  # recovery is INERT
         assert world["comment_attempts"] == 3  # no reissue happened
         assert memory(engine)["pub"]["phase"] == "cancelled"
 
@@ -402,20 +428,20 @@ class TestDismissalAndClose:
         world = world_of(engine)
         world["comments_mode"] = "unknown"
         see_head(engine, "h1")
-        deliver(engine, "on_dismiss", "DismissFact", {"finding_id": "f-h1"})
+        comment(engine, "dis3", "dismiss", arg="f-h1")
         state = memory(engine)
         assert state["pub"]["phase"] == "cancelled"
         faults = [f["body"] for f in tokens(engine, "ready.facts") if f["kind"] == "fault"]
         assert faults[-1] == {"where": "review", "op": "findings:h1:i1", "status": "cancelled"}
         world["comments_mode"] = None
-        deliver(engine, "on_recover", "RecoverFact", {"target": "review", "op": "findings:h1:i1"})
-        assert world["comments"] == []  # the cancelled operation never posts
+        comment(engine, "rec6", "recover_publication", arg="findings:h1:i1")
+        assert findings_comments(world) == []  # the cancelled operation never posts
 
     def test_dismissal_recounts_blocking_findings_for_readiness(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
         assert findings_facts(engine)[-1]["body"]["blocking"] == 1
-        deliver(engine, "on_dismiss", "DismissFact", {"finding_id": "f-h1"})
+        comment(engine, "dis4", "dismiss", arg="f-h1")
         fact = findings_facts(engine)[-1]
         assert fact["body"]["blocking"] == 0
         assert fact["body"]["count"] == 1  # the finding remains, waved off
@@ -466,7 +492,7 @@ class TestDismissalAndClose:
         # returns, and only then does close retire the loop
         release_one(engine, dispatch, definitions, "review_agent")
         world = world_of(engine)
-        assert world["comments"] == []
+        assert findings_comments(world) == []
         [done] = tokens(engine, "review.done")
         assert done["reason"] == "closed"
         assert done["reviewed"] == ["h1"]  # the round DID complete

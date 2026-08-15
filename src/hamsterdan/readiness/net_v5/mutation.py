@@ -177,6 +177,13 @@ def _end(binding, outputs):
     return route(outputs, {"mut.done": (MutEnded(state=st.state, reason=close.reason),)})
 
 
+def _drain_recover(binding, outputs):
+    # a recovery note admitted while running can be applied AFTER the
+    # baton retired: close wins, the note is inert — never stranded
+    _, ended = values(binding, RecoverFact, MutEnded)
+    return route(outputs, {"mut.done": (ended,)})
+
+
 def _drain(binding, outputs):
     # after close, every mailboxed request still SETTLES (declined):
     # escalation's closing ladder waits on exactly these settlements —
@@ -211,11 +218,6 @@ def wire(net) -> None:
     """Wire this loop's transitions (sibling places must exist)."""
     s = net.s
     mut, life, esc, ready, dash = s.mut, s.life, s.esc, s.ready, s.dash
-
-    # scaffolding: the conversation loop will mail MutationRequest (for
-    # committing intents) and RecoverFact internally once it lands
-    net.t.on_mutation >> mut.p.requests
-    net.t.on_recover >> mut.p.recover
 
     (
         (mut.p.requests, mut.p.state)
@@ -293,6 +295,9 @@ def wire(net) -> None:
             dash.p.facts,
         )
     )
+    # a recovery note that lost the race with close is inert — never
+    # stranded (unlike requests, it owes nobody a settlement)
+    ((mut.p.recover, mut.p.done) >> mut.t.drain_recover(handler=petri_handler(_drain_recover)) >> mut.p.done)
 
 
 def seed() -> dict:

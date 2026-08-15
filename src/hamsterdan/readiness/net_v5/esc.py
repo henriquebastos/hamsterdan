@@ -250,6 +250,13 @@ def _retire(ladder: Ladder, repairs: dict, reason: str, outputs):
     return route(outputs, {"esc.done": (ended,)})
 
 
+def _drain_recover(binding, outputs):
+    # a recovery note admitted while running can be applied AFTER the
+    # ladder retired: close wins, the note is inert — never stranded
+    _, ended = values(binding, RecoverFact, LadderEnded)
+    return route(outputs, {"esc.done": (ended,)})
+
+
 def _fold_settled(binding, outputs):
     settled, ladder = values(binding, MutationSettled, Ladder)
     key = settled.fingerprint
@@ -331,11 +338,6 @@ def wire(net) -> None:
     s = net.s
     esc, ci, mut, dash, ready = s.esc, s.ci, s.mut, s.dash, s.ready
 
-    # scaffolding: the conversation loop will mail RecoverFact
-    # internally once it lands (MutationSettled arrives from the
-    # mutation loop, first-class)
-    net.t.on_recover >> esc.p.recover
-
     (
         (esc.p.failures, esc.p.ladder)
         >> esc.t.decide(handler=petri_handler(_decide))
@@ -402,6 +404,9 @@ def wire(net) -> None:
     # end retires immediately, or holds the ladder in `closing` while a
     # repair settlement is still owed by the mutation loop
     ((esc.p.closed, esc.p.ladder) >> esc.t.end(handler=petri_handler(_end)) >> (esc.p.done, esc.p.ladder))
+    # post-close drain: a recovery note whose apply lost the race with
+    # close is absorbed by the retired ladder's done baton, never stranded
+    ((esc.p.recover, esc.p.done) >> esc.t.drain_recover(handler=petri_handler(_drain_recover)) >> esc.p.done)
 
 
 def seed() -> dict:

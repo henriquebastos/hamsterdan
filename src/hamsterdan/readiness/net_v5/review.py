@@ -268,6 +268,20 @@ def _end(binding, outputs):
     return route(outputs, {"review.done": (ended,)})
 
 
+def _drain_dismiss(binding, outputs):
+    # a dismiss admitted while running can be applied AFTER the loop
+    # retired (its transition waited on the baton a gate held in flight
+    # while close won the race for it): close wins, the note is inert —
+    # never a stranded token
+    _, ended = values(binding, DismissFact, ReviewEnded)
+    return route(outputs, {"review.done": (ended,)})
+
+
+def _drain_recover(binding, outputs):
+    _, ended = values(binding, RecoverFact, ReviewEnded)
+    return route(outputs, {"review.done": (ended,)})
+
+
 # -- topology ------------------------------------------------------------
 
 
@@ -294,11 +308,6 @@ def wire(net) -> None:
     """Wire this loop's transitions (sibling places must exist)."""
     s = net.s
     review, ready, dash = s.review, s.ready, s.dash
-
-    # scaffolding: the conversation loop will mail RecoverFact and
-    # DismissFact internally once it lands
-    net.t.on_recover >> review.p.recover
-    net.t.on_dismiss >> review.p.dismiss
 
     (
         (review.p.heads, review.p.memory)
@@ -393,6 +402,18 @@ def wire(net) -> None:
         )
     )
     ((review.p.closed, review.p.memory) >> review.t.end(handler=petri_handler(_end)) >> review.p.done)
+    # post-close drains: a note whose apply lost the race with close is
+    # absorbed by the retired loop's persistent done baton, never stranded
+    (
+        (review.p.dismiss, review.p.done)
+        >> review.t.drain_dismiss(handler=petri_handler(_drain_dismiss))
+        >> review.p.done
+    )
+    (
+        (review.p.recover, review.p.done)
+        >> review.t.drain_recover(handler=petri_handler(_drain_recover))
+        >> review.p.done
+    )
 
 
 def seed() -> dict:

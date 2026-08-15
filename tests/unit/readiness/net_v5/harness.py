@@ -21,6 +21,10 @@ from hamsterdan.contracts.readiness_v5 import (
     MutWork,
     Publishable,
     Pushed,
+    Replied,
+    ReplyBlocked,
+    ReplyFault,
+    ReplyReq,
     RerunFault,
     RerunLanded,
     RerunMoved,
@@ -291,7 +295,30 @@ def make_activities(world: dict):
             lineage=work.lineage,
         )
 
-    return (rerun_gate, review_agent, publish_gate, git_gate)
+    @motus_activity(converter=converter)
+    def reply_gate(work: ReplyReq) -> Replied | ReplyBlocked | ReplyFault:
+        # lookup-first (A2): the SAME reply identity never posts twice —
+        # and a key collision with DIFFERENT content fails closed.
+        # Replies carry NO authority fence by design — a human may talk
+        # to a drafted or closed PR, and the answer still lands.
+        key = f"reply:{work.id}"
+        prior = next((c for c in world["comments"] if c["key"] == key), None)
+        if prior is not None:
+            if prior["body"] != work.text:
+                return ReplyFault(id=work.id, text=work.text, reason=f"effect identity collision: {key}")
+            return Replied(id=work.id, text=work.text)
+        for _attempt in range(3):  # bounded classified retry, ONE occurrence
+            mode = world["comments_mode"]
+            if mode == "retryable":
+                continue
+            if mode == "unknown":
+                return ReplyFault(id=work.id, text=work.text, reason="unknown provider terminal")
+            world["comments"].append({"key": key, "kind": "reply", "head": "", "body": work.text})
+            world["log"].append(("comment", key))
+            return Replied(id=work.id, text=work.text)
+        return ReplyBlocked(id=work.id, text=work.text)
+
+    return (rerun_gate, review_agent, publish_gate, git_gate, reply_gate)
 
 
 # the host's webhook custody, keyed by engine identity: one admission
@@ -494,4 +521,36 @@ def see_run(
             "conclusion": conclusion,
             "fingerprint": fingerprint,
         },
+    )
+
+
+def comment(engine, id: str, kind: str, arg: str = "", authorized: bool = True):
+    """A human comment: the ONLY ingress for dismiss/recover/snooze and
+    the conversation-sourced committing intents."""
+    deliver(
+        engine,
+        "on_comment",
+        "CommentSeen",
+        {"id": id, "kind": kind, "arg": arg, "authorized": authorized},
+    )
+
+
+def comment_held(
+    engine,
+    dispatch,
+    definitions,
+    id: str,
+    kind: str,
+    arg: str = "",
+    authorized: bool = True,
+    hold=frozenset(),
+):
+    deliver_held(
+        engine,
+        dispatch,
+        definitions,
+        "on_comment",
+        "CommentSeen",
+        {"id": id, "kind": kind, "arg": arg, "authorized": authorized},
+        hold=hold,
     )

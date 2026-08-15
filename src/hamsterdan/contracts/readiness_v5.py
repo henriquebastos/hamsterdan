@@ -366,6 +366,15 @@ class DismissFact(WorkflowModel):
     finding_id: str
 
 
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class SnoozeFact(WorkflowModel):
+    """Conversation -> reminders: a human snoozed, resumed (`clear`),
+    or deferred a reminder timer."""
+
+    mode: Literal["snooze", "clear", "defer"]
+    arg: str
+
+
 # -- gate work and typed terminals (escalation rerun) ------------------------
 
 
@@ -631,4 +640,60 @@ class MutEnded(WorkflowModel):
     """The mutation loop's terminal record at close."""
 
     state: str
+    reason: str
+
+
+# -- the conversation baton, gate work, and typed terminals -------------------
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ConvMemory(WorkflowModel):
+    """The conversation loop's baton — the loop NEVER ends.
+
+    `served` records every classified comment identity: an edited or
+    redelivered comment is answered once, ever. Replies are deliberately
+    CONCURRENT, so custody is per-id data rather than a held baton:
+    `pending` maps in-flight reply ids to their text, `blocked` retains
+    the exact text of a retry-exhausted reply, and `faulted` retains
+    text plus reason for an unknown provider terminal — both recover
+    under the SAME effect identity `reply:{id}` (A2).
+    """
+
+    served: tuple[str, ...]
+    pending: dict[str, str]
+    blocked: dict[str, str]
+    faulted: dict[str, dict[str, str]]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReplyReq(WorkflowModel):
+    """One reply publication under the stable identity `reply:{id}`."""
+
+    id: str
+    text: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Replied(WorkflowModel):
+    """The reply landed (or was lookup-first reconciled)."""
+
+    id: str
+    text: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReplyBlocked(WorkflowModel):
+    """Retryable exhaustion: the reply text is retained for recovery."""
+
+    id: str
+    text: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReplyFault(WorkflowModel):
+    """Unknown provider terminal: the reply may or may not be held.
+    Retains the text so recovery reissues the SAME identity (A2)."""
+
+    id: str
+    text: str
     reason: str

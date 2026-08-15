@@ -11,6 +11,8 @@ lookup-first by the gate.
 """
 
 from harness import (
+    comment,
+    comment_held,
     deliver,
     deliver_held,
     one,
@@ -334,28 +336,15 @@ class TestRepairRung:
         assert len(human_pages(engine)) == 1
         assert pushes(engine) == []
 
-    def test_settle_for_an_unknown_key_is_inert(self) -> None:
+    def test_a_settle_the_ladder_never_requested_is_inert(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
         fail(engine)
         before = ladder(engine)
-        # a human-commanded repair-shaped op the ladder never requested
-        # lands and settles; the foreign settle is absorbed untouched
-        deliver(
-            engine,
-            "on_mutation",
-            "MutationRequest",
-            {
-                "op": "repair:L9:zz",
-                "rid": "repair:L9:zz",
-                "head": "h1",
-                "base": "b1",
-                "policy": "p1",
-                "incarnation": 1,
-                "source": "conversation",
-            },
-        )
-        assert pushes(engine) == ["repair:L9:zz"]  # it DID land
+        # a human-commanded push the ladder never requested lands and
+        # settles (fingerprint ""); the foreign settle is absorbed
+        comment(engine, "c1", "change")
+        assert pushes(engine) == ["change"]  # it DID land
         assert ladder(engine) == before  # but burned no rung
 
 
@@ -401,7 +390,7 @@ class TestFaultAndRecovery:
         world = world_of(engine)
         world["reruns_mode"] = None
         world["reruns"].append("L1:fp1")
-        deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "rerun:L1:fp1"})
+        comment(engine, "rec1", "recover_publication", arg="rerun:L1:fp1")
         state = ladder(engine)
         assert state["reruns"] == {"L1:fp1": {"state": "done", "run_id": 1, "attempt": 1}}
         assert state["rerun_faults"] == {}
@@ -413,7 +402,7 @@ class TestFaultAndRecovery:
         engine, _ = self.spawn_faulted()
         world = world_of(engine)
         world["reruns_mode"] = None
-        deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "rerun:L1:fp1"})
+        comment(engine, "rec2", "recover_publication", arg="rerun:L1:fp1")
         assert world["reruns"] == ["L1:fp1"]  # the reissue landed for real
         assert ladder(engine)["reruns"]["L1:fp1"]["state"] == "done"
 
@@ -428,7 +417,7 @@ class TestFaultAndRecovery:
         world = world_of(engine)
         world["reruns_mode"] = None
         world["reruns"].append("L1:fp1")  # the provider held it
-        deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "rerun:L1:fp1"})
+        comment(engine, "rec3", "recover_publication", arg="rerun:L1:fp1")
         state = ladder(engine)
         assert state["reruns"]["L1:fp1"] == {"state": "done", "run_id": 1, "attempt": 1}
         assert state["rerun_faults"] == {}
@@ -445,7 +434,7 @@ class TestFaultAndRecovery:
         fail(engine, run_id=1, attempt=2)  # blocked by the fault
         world = world_of(engine)
         world["reruns_mode"] = None
-        deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "rerun:L1:fp1"})
+        comment(engine, "rec4", "recover_publication", arg="rerun:L1:fp1")
         state = ladder(engine)
         assert world["reruns"] == ["L1:fp1"]  # issued NOW
         # the rung watermark advanced to the blocked evidence: absorbed
@@ -483,15 +472,7 @@ class TestFaultAndRecovery:
         assert ladder(engine)["reruns"] == {"L1:fp1": {"state": "fault"}}
         world["reruns_mode"] = None  # the provider heals
         # begin recovery and HOLD its reissue in flight
-        deliver_held(
-            engine,
-            dispatch,
-            definitions,
-            "on_recover",
-            "RecoverFact",
-            {"target": "esc", "op": "rerun:L1:fp1"},
-            hold=HOLD,
-        )
+        comment_held(engine, dispatch, definitions, "rec1", "recover_publication", arg="rerun:L1:fp1", hold=HOLD)
         # attempt 2 fails while the reissue flies: it queues in the mailbox
         deliver_held(
             engine,
@@ -521,7 +502,7 @@ class TestFaultAndRecovery:
     def test_a_refaulted_recovery_round_keeps_the_blocked_evidence(self) -> None:
         engine, _ = self.spawn_faulted()
         fail(engine, run_id=1, attempt=2)  # blocked by the fault
-        deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "rerun:L1:fp1"})
+        comment(engine, "rec5", "recover_publication", arg="rerun:L1:fp1")
         # reruns_mode is still "unknown": the recovery round re-faults
         blocked = ladder(engine)["rerun_faults"]["L1:fp1"]["blocked"]
         assert (blocked["run_id"], blocked["attempt"]) == (1, 2)
@@ -530,23 +511,57 @@ class TestFaultAndRecovery:
         world = world_of(engine)
         world["reruns_mode"] = None
         world["reruns"].append("L1:fp1")
-        deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "rerun:L1:fp1"})
+        comment(engine, "rec6", "recover_publication", arg="rerun:L1:fp1")
         assert pushes(engine) == ["repair:L1:fp1"]
 
     def test_recovery_for_an_unknown_operation_is_inert(self) -> None:
         engine, _ = self.spawn_faulted()
         before = ladder(engine)
-        deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "rerun:L9:zz"})
+        comment(engine, "rec7", "recover_publication", arg="rerun:L9:zz")
         assert ladder(engine) == before
 
-    def test_recovery_for_another_loop_is_inert(self) -> None:
+    def test_recovery_routed_to_another_loop_is_inert_here(self) -> None:
+        # the operation prefix routes to mutation: the ladder never sees it
         engine, _ = self.spawn_faulted()
         before = ladder(engine)
-        deliver(engine, "on_recover", "RecoverFact", {"target": "mut", "op": "rerun:L1:fp1"})
+        comment(engine, "rec8", "recover_publication", arg="push:zz:h1:i1")
         assert ladder(engine) == before
 
 
 class TestClose:
+    def test_a_recovery_that_lost_the_race_with_close_is_never_stranded(self) -> None:
+        # the recovery note was ADMITTED while running, but its apply
+        # waits on the ladder baton a held rerun carries in flight;
+        # close arrives during the wait. Whichever wins the returned
+        # baton, no token may strand in the mailbox
+        engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=HOLD,
+        )
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_runs",
+            "RunSeen",
+            {"head": "h1", "run_id": 1, "attempt": 1, "conclusion": "failure", "fingerprint": "fp1"},
+            hold=HOLD,
+        )
+        assert tokens(engine, "esc.ladder") == []  # baton in flight
+        comment_held(engine, dispatch, definitions, "r1", "recover_publication", arg="rerun:fp1", hold=HOLD)
+        assert len(tokens(engine, "esc.recover")) == 1  # parked, waiting
+        deliver_held(engine, dispatch, definitions, "on_close", "CloseSeen", {"reason": "merged"}, hold=HOLD)
+        release_one(engine, dispatch, definitions, "rerun_gate")
+        assert tokens(engine, "esc.recover") == []  # applied or drained
+        [ended] = tokens(engine, "esc.done")
+        assert ended["reason"] == "merged"
+
     def test_close_retires_the_ladder_with_its_budgets(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")

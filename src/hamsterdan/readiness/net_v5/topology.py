@@ -22,11 +22,12 @@ from petrus.impetus.petrinet import Marking
 from hamsterdan.contracts.readiness_v5 import (
     CloseFact,
     GateFact,
-    IntentFact,
+    RecoverFact,
+    SnoozeFact,
 )
-from hamsterdan.readiness.net_v5 import ci, esc, life, mutation, review
+from hamsterdan.readiness.net_v5 import ci, conversation, esc, life, mutation, review
 
-_LOOPS = (life, ci, esc, review, mutation)
+_LOOPS = (life, ci, esc, review, mutation, conversation)
 
 # transition path -> (activity name, declared variant colors), for every
 # gate in the composed topology; the host (or a test world) binds these
@@ -48,12 +49,15 @@ def _declare_pending_mailboxes(s) -> None:
     own places; it exists so already-landed loops can mail complete
     facts from the first slice on.
     """
-    s.conv.p.intents(IntentFact)
     s.dash.p.facts(GateFact)
     s.dash.p.closed(CloseFact)
+    s.dash.p.recover(RecoverFact)
     s.rem.p.closed(CloseFact)
+    s.rem.p.snoozes(SnoozeFact)
+    s.rem.p.recover(RecoverFact)
     s.ready.p.facts(GateFact)
     s.ready.p.closed(CloseFact)
+    s.ready.p.recover(RecoverFact)
 
 
 def build_net_v5() -> BuiltNet:

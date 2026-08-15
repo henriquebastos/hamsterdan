@@ -7,9 +7,18 @@ loop mailboxes. No guards, no read arcs — every decision is a pure
 fold on token data (the ES-007 discipline, now first-class).
 """
 
-from harness import deliver, one, see_head, spawn, tokens, world_of
+from harness import comment_held, deliver, deliver_held, one, see_head, see_run, spawn, spawn_held, tokens, world_of
 
 from hamsterdan.readiness.net_v5 import build_net_v5
+
+
+def land_repair(engine) -> None:
+    """A REAL landed repair: the first failing attempt burns the rerun,
+    the second opens escalation's repair rung, whose push lands and
+    installs the provisional expectation `h1+repair:L1:fp1`."""
+    for attempt in (1, 2):
+        see_run(engine, head="h1", run_id=1, attempt=attempt, conclusion="failure", fingerprint="fp1")
+
 
 # -- admission relations ---------------------------------------------------
 
@@ -70,22 +79,9 @@ class TestHeadAdmission:
     def test_expected_head_admits_as_confirmed_keeping_lineage(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
-        # the mutation loop pushes for real: the landed push mails the
-        # provisional expectation, and the webhook later confirms it
-        deliver(
-            engine,
-            "on_mutation",
-            "MutationRequest",
-            {
-                "op": "repair:L1:fp1",
-                "rid": "repair:L1:fp1",
-                "head": "h1",
-                "base": "b1",
-                "policy": "p1",
-                "incarnation": 1,
-                "source": "escalation",
-            },
-        )
+        # the escalation/mutation loops push for real: the landed repair
+        # mails the provisional expectation, the webhook later confirms
+        land_repair(engine)
         assert one(engine, "life.state")["expected"] == "h1+repair:L1:fp1"
         see_head(engine, "h1+repair:L1:fp1")
         state = one(engine, "life.state")
@@ -133,20 +129,7 @@ class TestDormancy:
         # every later committing intent provisional forever
         engine, _ = spawn()
         see_head(engine, "h1")
-        deliver(
-            engine,
-            "on_mutation",
-            "MutationRequest",
-            {
-                "op": "repair:L1:fp1",
-                "rid": "repair:L1:fp1",
-                "head": "h1",
-                "base": "b1",
-                "policy": "p1",
-                "incarnation": 1,
-                "source": "escalation",
-            },
-        )
+        land_repair(engine)
         assert one(engine, "life.state")["expected"] == "h1+repair:L1:fp1"
         deliver(engine, "on_draft", "DraftSeen", {})
         see_head(engine, "h1+repair:L1:fp1")  # recorded while dormant
@@ -191,20 +174,29 @@ class TestClose:
 
 class TestObservationRouting:
     def test_comment_mails_an_intent_carrying_the_authority_claim(self) -> None:
-        engine, _ = spawn()
-        see_head(engine, "h1", base="b1", policy="p1")
-        deliver(
+        # the conversation loop consumes the intent, so the claim frozen
+        # at admission is observed where it lands: a committing intent's
+        # gate work carries the FULL claim of the moment the comment was
+        # admitted — head, base, policy, incarnation — under the
+        # comment's identity
+        engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
             engine,
-            "on_comment",
-            "CommentSeen",
-            {"id": "c1", "kind": "reply", "arg": "", "authorized": True},
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=frozenset({"git_gate"}),
         )
-        intent = one(engine, "conv.intents")
-        assert intent["id"] == "c1"
-        assert intent["head"] == "h1"
-        assert intent["base"] == "b1"
-        assert intent["incarnation"] == 1
-        assert intent["provisional"] is False
+        comment_held(engine, dispatch, definitions, "c1", "change", hold=frozenset({"git_gate"}))
+        [invocation] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        work = invocation.input["work"]
+        assert work["op_key"] == "push:comment:c1:h1:i1"
+        assert work["head"] == "h1"
+        assert work["base"] == "b1"
+        assert work["policy"] == "p1"
+        assert work["incarnation"] == 1
 
     def test_human_review_becomes_a_gate_fact_for_ready_and_dash(self) -> None:
         engine, _ = spawn()
@@ -271,9 +263,4 @@ class TestCensus:
             "on_comment",
             "on_human",
             "on_runs",
-            # scaffolding doors until the conversation loop mails these
-            # facts internally
-            "on_mutation",
-            "on_recover",
-            "on_dismiss",
         }
