@@ -7,63 +7,9 @@ loop mailboxes. No guards, no read arcs — every decision is a pure
 fold on token data (the ES-007 discipline, now first-class).
 """
 
-from petrus.engine import Engine
-from petrus.impetus.history_store import InMemoryHistoryStore
-from petrus.impetus.petrinet import NetPath, Token
-from petrus.motus.dispatch import InlineDispatch
+from harness import deliver, one, see_head, spawn, tokens
 
-from hamsterdan.readiness.net_v5 import build_net_v5, seed_marking
-
-# -- harness -------------------------------------------------------------
-
-
-def spawn(instance: str = "pr-v5"):
-    built = build_net_v5()
-    engine = Engine.create(
-        built.net,
-        instance,
-        history=InMemoryHistoryStore(),
-        dispatch=InlineDispatch({}),
-        marking=seed_marking(),
-        handlers=dict(built.handlers),
-        guards=dict(built.guards),
-    )
-    return engine, built
-
-
-def drive(engine: Engine, limit: int = 200) -> None:
-    for _ in range(limit):
-        if not engine.advance().ready:
-            return
-    raise AssertionError(f"engine did not quiesce in {limit} advances")
-
-
-_SEQ = {"n": 0}
-
-
-def deliver(engine: Engine, door: str, color: str, data: dict) -> None:
-    _SEQ["n"] += 1
-    engine.deliver(door, Token(color, data), identity=f"{door}-{_SEQ['n']}")
-    drive(engine)
-
-
-def tokens(engine: Engine, place: str) -> list[dict]:
-    return [token.data for token in engine.marking.place(NetPath(place))]
-
-
-def one(engine: Engine, place: str) -> dict:
-    [data] = tokens(engine, place)
-    return data
-
-
-def see_head(engine, head: str, base: str = "b1", mergeable: bool = True, policy: str = "p1"):
-    deliver(
-        engine,
-        "on_head",
-        "HeadSeen",
-        {"head": head, "base": base, "mergeable": mergeable, "policy": policy},
-    )
-
+from hamsterdan.readiness.net_v5 import build_net_v5
 
 # -- admission relations ---------------------------------------------------
 
@@ -79,7 +25,8 @@ class TestHeadAdmission:
         work = one(engine, "review.heads")
         assert work["relation"] == "new"
         assert work["incarnation"] == 1
-        assert one(engine, "ci.heads")["relation"] == "new"
+        # the CI loop consumed its copy of the admission mail
+        assert one(engine, "ci.state")["incarnation"] == 1
 
     def test_same_head_reobservation_is_absorbed(self) -> None:
         engine, _ = spawn()
@@ -159,7 +106,6 @@ class TestClose:
         assert one(engine, "life.state")["phase"] == "terminal"
         for mailbox in (
             "review.closed",
-            "ci.closed",
             "esc.closed",
             "mut.closed",
             "dash.closed",
@@ -167,6 +113,8 @@ class TestClose:
             "ready.closed",
         ):
             assert one(engine, mailbox)["reason"] == "merged"
+        # the CI loop consumed its close mail and retired
+        assert one(engine, "ci.done")["reason"] == "merged"
 
     def test_terminal_absorbs_every_later_observation(self) -> None:
         engine, _ = spawn()
@@ -219,7 +167,7 @@ class TestObservationRouting:
             "RunSeen",
             {"head": "h1", "run_id": 1, "attempt": 1, "conclusion": "failure", "fingerprint": "fp1"},
         )
-        assert one(engine, "ci.runs")["fingerprint"] == "fp1"
+        assert one(engine, "ci.state")["fingerprint"] == "fp1"
         deliver(engine, "on_draft", "DraftSeen", {})
         deliver(
             engine,
@@ -227,13 +175,13 @@ class TestObservationRouting:
             "RunSeen",
             {"head": "h1", "run_id": 2, "attempt": 1, "conclusion": "success", "fingerprint": ""},
         )
-        assert len(tokens(engine, "ci.runs")) == 1
+        # dormancy absorbed the run: CI evidence is untouched
+        assert one(engine, "ci.state")["status"] == "failure"
 
     def test_admission_mails_state_facts_to_ready_and_dash(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
-        fact = tokens(engine, "ready.facts")[-1]
-        assert fact["kind"] == "state"
+        [fact] = [f for f in tokens(engine, "ready.facts") if f["kind"] == "state"]
         assert fact["body"]["head"] == "h1"
         assert fact["body"]["phase"] == "running"
 
@@ -263,4 +211,5 @@ class TestCensus:
             "on_human",
             "on_runs",
             "on_provisional",
+            "on_echo",
         }

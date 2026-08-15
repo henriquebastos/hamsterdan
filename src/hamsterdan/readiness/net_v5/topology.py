@@ -20,29 +20,27 @@ from petrus.impetus.dsl import BuiltNet, NetSpec
 from petrus.impetus.petrinet import Marking
 
 from hamsterdan.contracts.readiness_v5 import (
+    ChecksFailure,
     CloseFact,
     GateFact,
     HeadWork,
     IntentFact,
-    RunWork,
 )
-from hamsterdan.readiness.net_v5 import life
+from hamsterdan.readiness.net_v5 import ci, life
 
-_LOOPS = (life,)
+_LOOPS = (life, ci)
 
 
 def _declare_pending_mailboxes(s) -> None:
     """Mailboxes owned by loops that have not landed yet (CV17.DS1).
 
     This section shrinks as each loop module arrives and declares its
-    own places; it exists so the admission hub can mail complete facts
-    from the first slice on.
+    own places; it exists so already-landed loops can mail complete
+    facts from the first slice on.
     """
     s.review.p.heads(HeadWork)
     s.review.p.closed(CloseFact)
-    s.ci.p.heads(HeadWork)
-    s.ci.p.runs(RunWork)
-    s.ci.p.closed(CloseFact)
+    s.esc.p.failures(ChecksFailure)
     s.esc.p.closed(CloseFact)
     s.conv.p.intents(IntentFact)
     s.mut.p.closed(CloseFact)

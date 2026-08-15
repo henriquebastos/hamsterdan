@@ -87,6 +87,28 @@ class LifeState(WorkflowModel):
     lineage: str
 
 
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class CiState(WorkflowModel):
+    """The CI loop's baton: newest exact-head evidence plus budget lineage.
+
+    `lineage` scopes the escalation ladder budget: fresh on new or
+    superseded code, kept across our own confirmed repair and a resume.
+    `best` is `[run_id, attempt]` of the winning run (empty until one
+    lands). `parked` holds fingerprints whose escalation MOVED under the
+    currently-held authority; the next refresh reissues them.
+    """
+
+    head: str
+    base: str
+    policy: str
+    lineage: str
+    incarnation: int
+    best: tuple[int, int] | tuple[()]
+    status: str
+    fingerprint: str
+    parked: tuple[str, ...]
+
+
 # -- directed facts (loop -> loop, dedicated colors) -------------------------
 
 
@@ -141,3 +163,44 @@ class GateFact(WorkflowModel):
     kind: str
     incarnation: int
     body: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ChecksFailure(WorkflowModel):
+    """CI -> escalation: the newest run failed under this authority claim.
+
+    The ladder budget is per fingerprint PER LINEAGE: the same flake on
+    genuinely new code earns a fresh ladder; our own repair does not
+    reset it.
+    """
+
+    fingerprint: str
+    head: str
+    base: str
+    policy: str
+    lineage: str
+    incarnation: int
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class EscMoved(WorkflowModel):
+    """Escalation -> CI echo: an escalation effect classified MOVED.
+
+    Carries the ATTEMPTED authority tuple (head, base, policy, and the
+    grant incarnation) so CI can decide between reissuing under an
+    already-fresher admitted tuple and parking until the refresh folds.
+    """
+
+    fp: str
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class CiEnded(WorkflowModel):
+    """The CI loop's terminal record: final verdict at close."""
+
+    status: str
+    reason: str
