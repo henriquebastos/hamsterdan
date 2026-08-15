@@ -82,7 +82,9 @@ def _note_routes(intent: IntentFact) -> tuple[str, dict, tuple] | None:
     if intent.kind == "resume":
         return ("rem.snoozes", {}, (SnoozeFact(mode="clear", arg=intent.arg),))
     if intent.kind == "defer":
-        return ("rem.snoozes", {}, (SnoozeFact(mode="defer", arg=intent.arg),))
+        # Defer names a finding, not a duration. Review owns the
+        # disposition; it is deliberately not a reminder clock command.
+        return ("review.dismiss", {}, (DismissFact(finding_id=intent.arg),))
     return None
 
 

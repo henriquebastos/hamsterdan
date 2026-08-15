@@ -77,13 +77,22 @@ class HumanSeen(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
-class TimerDue(WorkflowModel):
-    """A host-armed reminder timer matured. The host owns arming,
-    rearming, and cancellation; the net records the maturity as a
-    durable fact and decides whether to nudge (the decision — never the
-    fact — is what snooze and close suppress)."""
+class ReminderTimer(WorkflowModel):
+    """One actor-owned reminder generation."""
 
-    timer_id: str
+    id: str
+    incarnation: int
+    sequence: int
+    head: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class TimerDue(WorkflowModel):
+    """An identified host maturity for one exact timer generation."""
+
+    timer: ReminderTimer
+    due_at: str
+    matured_at: str
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -119,6 +128,7 @@ class LifeState(WorkflowModel):
     expected: str
     expected_op: str
     lineage: str
+    reminder_delay_s: int
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -425,10 +435,9 @@ class DismissFact(WorkflowModel):
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class SnoozeFact(WorkflowModel):
-    """Conversation -> reminders: a human snoozed, resumed (`clear`),
-    or deferred a reminder timer."""
+    """Conversation -> reminders: a human snoozed or resumed (`clear`)."""
 
-    mode: Literal["snooze", "clear", "defer"]
+    mode: Literal["snooze", "clear"]
     arg: str
 
 
@@ -902,24 +911,114 @@ class DashEnded(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReminderCycleStarted(WorkflowModel):
+    incarnation: int
+    head: str
+    delay_s: int
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReminderCyclePaused(WorkflowModel):
+    incarnation: int
+    head: str
+    reason: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class NoReminderClock(WorkflowModel):
+    kind: Literal["none"]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ArmingReminderClock(WorkflowModel):
+    kind: Literal["arming"]
+    timer: ReminderTimer
+    operation: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ArmedReminderClock(WorkflowModel):
+    kind: Literal["armed"]
+    timer: ReminderTimer
+    due_at: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class CancellingReminderClock(WorkflowModel):
+    kind: Literal["cancelling"]
+    timer: ReminderTimer
+    operation: str
+    reason: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class OverdueReminderClock(WorkflowModel):
+    kind: Literal["overdue"]
+    timer: ReminderTimer
+    due_at: str
+    matured_at: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ArmReminder(WorkflowModel):
+    kind: Literal["arm"]
+    timer: ReminderTimer
+    delay_s: int
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class CancelReminder(WorkflowModel):
+    kind: Literal["cancel"]
+    timer: ReminderTimer
+    reason: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class TimerCommand(WorkflowModel):
+    operation: str
+    command: ArmReminder | CancelReminder
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class TimerArmed(WorkflowModel):
+    kind: Literal["armed"]
+    timer: ReminderTimer
+    due_at: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class TimerCancelled(WorkflowModel):
+    kind: Literal["cancelled"]
+    timer: ReminderTimer
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class TimerCommandApplied(WorkflowModel):
+    operation: str
+    result: TimerArmed | TimerCancelled
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class RemState(WorkflowModel):
     """The reminders loop's baton.
 
-    `matured` is the durable maturity log — every TimerDue is recorded,
-    always; snooze and close suppress only the nudge DECISION. Custody
-    is per-timer data in the baton (A2): `pending` marks a nudge in
-    flight (single-flight per timer, yet the baton stays available so a
-    snooze folds mid-flight), `blocked` retains a retry-exhausted timer
-    for the `rem.recover` door, and `faulted` retains the timer plus
-    reason fail-closed — a faulted timer never reopens by maturity
-    alone. `closing` retains a deferred close reason while terminals
-    are outstanding (A3): the LAST terminal fold finalizes the loop.
-    The sentinel is None — an EMPTY close reason is still a close.
+    `clock` and `desired_timer` form a serialized Net↔host timer
+    protocol: lifecycle changes may alter intent while one persistent
+    command is awaiting acknowledgement, but never create a second
+    outstanding command. `matured` records every delivered maturity;
+    stale generations are facts but cannot trigger a nudge.
     """
 
+    subject: str
+    lifecycle_incarnation: int
+    lifecycle_head: str
+    lifecycle_active: bool
+    desired_timer: ReminderTimer | None
+    clock: NoReminderClock | ArmingReminderClock | ArmedReminderClock | CancellingReminderClock | OverdueReminderClock
+    command_generation: int
+    delay_s: int
     matured: tuple[str, ...]
     snoozed: bool
-    deferred: tuple[str, ...]
     pending: dict[str, Any]
     blocked: dict[str, Any]
     faulted: dict[str, Any]

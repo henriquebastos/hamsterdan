@@ -554,17 +554,24 @@ def _move_world(world: dict, door: str, data: dict) -> None:
 # -- spawning ----------------------------------------------------------------
 
 
-def spawn(instance: str = "pr-v5", world: dict | None = None):
+def spawn(
+    instance: str = "pr-v5",
+    world: dict | None = None,
+    initial_mail: tuple[tuple[str, str, dict], ...] = (),
+):
     """Spawn with inline dispatch: every gate settles within the drive."""
     world = fresh_world() if world is None else world
     built = build_net_v5()
     definitions = {d.declaration.name: d for d in make_activities(world)}
+    marking = seed_marking(f"test:{instance}")
+    for place, color, data in initial_mail:
+        marking = marking.deposit(NetPath(place), Token(color, data))
     engine = Engine.create(
         built.net,
         instance,
         history=InMemoryHistoryStore(),
         dispatch=InlineDispatch(definitions),
-        marking=seed_marking(f"test:{instance}"),
+        marking=marking,
         handlers=wire_gates(built, GATES, definitions, DERIVED),
         guards=dict(built.guards),
         activities=tuple(d.declaration for d in definitions.values()),

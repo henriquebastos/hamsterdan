@@ -96,16 +96,17 @@ class TestNoteIntents:
         assert reply_texts(world_of(engine))["reply:c1"] == "noted:dismiss"
         assert one(engine, "review.memory")["dismissed"] == ["f-h1"]
 
-    def test_snooze_resume_and_defer_mail_the_reminder_loop(self) -> None:
+    def test_snooze_and_resume_mail_reminders_while_defer_disposes_review_finding(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
         comment(engine, "c1", "snooze", arg="t1")
         comment(engine, "c2", "resume", arg="t1")
         comment(engine, "c3", "defer", arg="t2")
-        # the reminders loop consumed the mailed facts into its baton
+        # Snooze/resume affect the reminder clock; defer names a finding
+        # and therefore belongs to review disposition, not timer duration.
         st = one(engine, "rem.state")
         assert st["snoozed"] is False  # snoozed, then cleared by resume
-        assert st["deferred"] == ["t2"]
+        assert one(engine, "review.memory")["dismissed"] == ["t2"]
 
     def test_a_note_intent_in_terminal_phase_is_declined(self) -> None:
         engine, _ = spawn()

@@ -32,6 +32,33 @@ def land_repair(engine) -> None:
         see_run(engine, head="h1", run_id=1, attempt=attempt, conclusion="failure", fingerprint="fp1")
 
 
+def settle_reminder_close(engine) -> None:
+    arm = one(engine, "rem.commands")
+    deliver(
+        engine,
+        "on_timer_command_applied",
+        "TimerCommandApplied",
+        {
+            "operation": arm["operation"],
+            "result": {
+                "kind": "armed",
+                "timer": arm["command"]["timer"],
+                "due_at": "2026-08-16T00:00:00Z",
+            },
+        },
+    )
+    cancel = one(engine, "rem.commands")
+    deliver(
+        engine,
+        "on_timer_command_applied",
+        "TimerCommandApplied",
+        {
+            "operation": cancel["operation"],
+            "result": {"kind": "cancelled", "timer": cancel["command"]["timer"]},
+        },
+    )
+
+
 # -- admission relations ---------------------------------------------------
 
 
@@ -165,6 +192,7 @@ class TestClose:
         assert one(engine, "review.done")["reason"] == "merged"
         assert one(engine, "mut.done")["reason"] == "merged"
         assert one(engine, "dash.done")["reason"] == "merged"
+        settle_reminder_close(engine)
         assert one(engine, "rem.done")["reason"] == "merged"
         assert one(engine, "ready.done")["reason"] == "merged"
 
@@ -283,4 +311,5 @@ class TestCensus:
             "on_human",
             "on_runs",
             "on_timer",
+            "on_timer_command_applied",
         }

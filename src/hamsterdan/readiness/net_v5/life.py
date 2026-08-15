@@ -25,6 +25,8 @@ from hamsterdan.contracts.readiness_v5 import (
     LifeState,
     ProvisionalHead,
     ReadySeen,
+    ReminderCyclePaused,
+    ReminderCycleStarted,
     RunSeen,
     RunWork,
 )
@@ -49,13 +51,22 @@ def _state_fact(state: LifeState) -> GateFact:
 
 def _admitted_state_outputs(state: LifeState, work: HeadWork) -> dict:
     fact = _state_fact(state)
-    return {
+    emitted = {
         "life.state": (state,),
         "review.heads": (work,),
         "ci.heads": (work,),
         "ready.facts": (fact,),
         "dash.facts": (fact,),
     }
+    if work.relation != "refreshed":
+        emitted["rem.cycles"] = (
+            ReminderCycleStarted(
+                incarnation=state.incarnation,
+                head=state.head,
+                delay_s=state.reminder_delay_s,
+            ),
+        )
+    return emitted
 
 
 def _admit_head(binding, outputs):
@@ -97,6 +108,7 @@ def _admit_head(binding, outputs):
         expected="",
         expected_op="",
         lineage=lineage,
+        reminder_delay_s=state.reminder_delay_s,
     )
     work = HeadWork(
         incarnation=admitted.incarnation,
@@ -117,7 +129,18 @@ def _admit_draft(binding, outputs):
     fact = _state_fact(quiescent)
     return route(
         outputs,
-        {"life.state": (quiescent,), "ready.facts": (fact,), "dash.facts": (fact,)},
+        {
+            "life.state": (quiescent,),
+            "ready.facts": (fact,),
+            "dash.facts": (fact,),
+            "rem.pauses": (
+                ReminderCyclePaused(
+                    incarnation=quiescent.incarnation,
+                    head=quiescent.head,
+                    reason="draft",
+                ),
+            ),
+        },
     )
 
 
@@ -276,6 +299,7 @@ def wire(net) -> None:
             ci.p.heads,
             ready.p.facts,
             dash.p.facts,
+            rem.p.cycles,
         )
     )
     (
@@ -285,6 +309,7 @@ def wire(net) -> None:
             life.p.state,
             ready.p.facts,
             dash.p.facts,
+            rem.p.pauses,
         )
     )
     (
@@ -296,6 +321,7 @@ def wire(net) -> None:
             ci.p.heads,
             ready.p.facts,
             dash.p.facts,
+            rem.p.cycles,
         )
     )
     (
@@ -341,7 +367,7 @@ def wire(net) -> None:
     )
 
 
-def seed() -> dict:
+def seed(reminder_delay_s: int = 3 * 24 * 60 * 60) -> dict:
     """This loop's contribution to the newborn Instance marking."""
     baton = LifeState(
         phase="running",
@@ -353,5 +379,6 @@ def seed() -> dict:
         expected="",
         expected_op="",
         lineage="",
+        reminder_delay_s=reminder_delay_s,
     )
     return {NetPath("life.state"): (Token("LifeState", baton.dump()),)}

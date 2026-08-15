@@ -50,7 +50,7 @@ def build_net_v5() -> BuiltNet:
     return net.build()
 
 
-def seed_marking(subject: str) -> Marking:
+def seed_marking(subject: str, *, reminder_delay_s: int = 3 * 24 * 60 * 60) -> Marking:
     """The newborn Instance, bound to one globally unique host subject."""
     if (
         not isinstance(subject, str)
@@ -62,7 +62,12 @@ def seed_marking(subject: str) -> Marking:
         raise ValueError("V5 workflow subject is malformed")
     contributions: dict = {}
     for loop in _LOOPS:
-        seeded = loop.seed(subject) if loop is review else loop.seed()
+        if loop in (review, reminders):
+            seeded = loop.seed(subject)
+        elif loop is life:
+            seeded = loop.seed(reminder_delay_s)
+        else:
+            seeded = loop.seed()
         for path, tokens in seeded.items():
             if path in contributions:
                 raise ValueError(f"duplicate seed contribution for {path}")
