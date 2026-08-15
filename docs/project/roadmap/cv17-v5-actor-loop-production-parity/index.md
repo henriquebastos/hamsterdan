@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: Decision recorded; DS1 net rewrite is the first slice
+status_reason: DS2 host composition active; DS2.3 fail-closed selector is next
 updated: 2026-08-15
 ---
 
@@ -20,7 +20,12 @@ making that ruling.
 ## Delivery
 
 - [CV17.DS1 — The V5 net as first-class code](cv17-ds1-v5-net-first-class.md)
-- [CV17.DS2 — Host composition](cv17-ds2-host-composition.md): webhook
+  is complete.
+- [CV17.DS2 — Host composition](cv17-ds2-host-composition.md) is active:
+  provider-backed gates, durable webhook ingress, authority ordering, and
+  canonical host timer custody are complete; the fail-closed topology
+  switch is next.
+  Its scope includes webhook
   custody into ingress doors, activity binding to the existing dispatcher
   stack, one fail-closed topology switch.
 - CV17.DS3 — Durable recovery: V5 on the durable history store with
@@ -29,7 +34,7 @@ making that ruling.
   through the real host against both topologies, compared on selected
   outcomes.
 
-DS2–DS4 records are scaffolded when their slice begins.
+DS3–DS4 records are scaffolded when their slice begins.
 
 ## Done condition
 

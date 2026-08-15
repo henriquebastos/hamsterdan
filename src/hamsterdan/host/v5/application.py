@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -24,6 +26,7 @@ from hamsterdan.host.v5.mutation import V5MutationGate
 from hamsterdan.host.v5.rerun import V5RerunGate
 from hamsterdan.host.v5.review import V5ReviewGate
 from hamsterdan.host.v5.runtime import V5Runtime
+from hamsterdan.host.v5.timers import V5TimerStore
 from hamsterdan.readiness.net_v5.gating import VariantPayloadConverter
 
 _MUTATIONS = frozenset({"change", "update_base", "resolve_conflict"})
@@ -60,8 +63,18 @@ class PrReadinessV5Application:
         reminder_delay: float = 3 * 24 * 60 * 60,
         publication_fault: EffectFault | None = None,
         dispatch_path: Path | None = None,
+        timer_clock_us: Callable[[], int] | None = None,
     ) -> None:
-        del reminder_delay  # DS2.2b gives timer arming its host-owned store.
+        if (
+            isinstance(reminder_delay, bool)
+            or not isinstance(reminder_delay, (int, float))
+            or not math.isfinite(reminder_delay)
+            or reminder_delay < 1
+            or reminder_delay > 2_147_483_647
+            or not float(reminder_delay).is_integer()
+        ):
+            raise ValueError("V5 reminder delay must be a positive bounded whole second count")
+        reminder_delay_s = int(reminder_delay)
         self.root, self.instance_id = root, instance_id
         self.authority, self.runner = authority, runner
         self.public_clone_url, self.workflow_path = public_clone_url, workflow_path
@@ -124,6 +137,15 @@ class PrReadinessV5Application:
             dispatch_path=dispatch_path,
             agent_settle=agent_settle,
             mutation_operation=lambda op_key: f"mutation:{authority.repository}:pr:{authority.pr_number}:{op_key}",
+            reminder_delay_s=reminder_delay_s,
+        )
+        timer_options = {} if timer_clock_us is None else {"clock_us": timer_clock_us}
+        self.timers = V5TimerStore.open(
+            root / "timers.sqlite3",
+            instance_id,
+            history=self.runtime.timer_history(),
+            outstanding=self.runtime.timer_command(),
+            **timer_options,
         )
 
     def _bind_state_root(self) -> None:
@@ -328,7 +350,26 @@ class PrReadinessV5Application:
         raise RuntimeError(f"V5 synthetic reconciliation is not selectable before DS2.3: {reason}")
 
     def settle(self):
-        return self._runtime().drain()
+        runtime = self._runtime()
+        for _ in range(500):
+            outcome = runtime.drain()
+            if (ack := self.timers.pending_ack()) is not None:
+                runtime.deliver_timer_ack(ack, self.timers.ack_identity(ack.operation))
+                self.timers.mark_ack_delivered(ack.operation)
+                continue
+            if (command := runtime.timer_command()) is not None:
+                self.timers.apply(command)
+                continue
+            if (maturity := self.timers.pending_maturity()) is not None:
+                runtime.deliver_timer_due(maturity.value, maturity.identity)
+                self.timers.mark_maturity_delivered(maturity.value.timer.id)
+                continue
+            if (maturity := self.timers.claim_due()) is not None:
+                runtime.deliver_timer_due(maturity.value, maturity.identity)
+                self.timers.mark_maturity_delivered(maturity.value.timer.id)
+                continue
+            return replace(outcome, next_maturation=self.timers.next_due())
+        raise RuntimeError("V5 timer settlement did not reach an external wait")
 
     def activity(self, name: str):
         return self._runtime().activity(name)
@@ -346,9 +387,14 @@ class PrReadinessV5Application:
 
     def close(self) -> None:
         runtime = self.runtime
-        if runtime is not None:
-            runtime.close()
-        self.ingress.close()
+        try:
+            if runtime is not None:
+                runtime.close()
+        finally:
+            try:
+                self.timers.close()
+            finally:
+                self.ingress.close()
 
 
 __all__ = ["PrReadinessV5Application"]

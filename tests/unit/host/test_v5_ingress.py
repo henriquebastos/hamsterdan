@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,7 @@ from hamsterdan.github_app.models import (
     WireResponse,
 )
 from hamsterdan.github_app.webhooks import Observation
+from hamsterdan.host.runnable import RunnableIndex
 from hamsterdan.host.v5.application import PrReadinessV5Application
 from hamsterdan.host.v5.ingress import IngressEntry, V5IngressNormalizer, V5IngressStore
 
@@ -676,4 +678,162 @@ def test_ambiguous_petrus_delivery_reopens_history_before_exact_retry(tmp_path: 
         f"github-delivery:{identity}:on_human",
         f"github-delivery:{identity}:on_runs",
     ]
+    application.close()
+
+
+def timer_application(
+    tmp_path: Path,
+    clock: list[int],
+    authority: Authority | None = None,
+) -> PrReadinessV5Application:
+    return PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        Authority() if authority is None else authority,  # type: ignore[arg-type]
+        Runner(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+        reminder_delay=10,
+        timer_clock_us=lambda: clock[0],
+    )
+
+
+def test_v5_settle_reaches_timer_fixed_point_and_returns_canonical_store_deadline(tmp_path: Path) -> None:
+    clock = [1_000_000]
+    identity = delivery()
+    application = timer_application(tmp_path, clock)
+    application.process_observation(Observation(identity, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+
+    armed = application.settle()
+
+    assert armed.next_maturation == 11.0
+    assert application._runtime().timer_command() is None
+    [state] = application._runtime().engine.marking.place(NetPath("rem.state"))
+    assert state.data["clock"]["kind"] == "armed"
+
+    clock[0] = 11_000_000
+    rearmed = application.settle()
+
+    assert rearmed.next_maturation == 21.0
+    [state] = application._runtime().engine.marking.place(NetPath("rem.state"))
+    assert state.data["matured"] == [f"timer:{SUBJECT}:i1:s0"]
+    timer_events = [
+        record.identity
+        for record in application._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and str(record.source) == "on_timer"
+    ]
+    assert timer_events == [f"v5-timer-due:timer:{SUBJECT}:i1:s0:11000000"]
+    application.close()
+
+
+@pytest.mark.parametrize("cut", ["before_history", "after_history"])
+def test_timer_ack_crash_cuts_replay_one_identity_and_original_deadline(tmp_path: Path, cut: str) -> None:
+    clock = [1_000_000]
+    identity = delivery()
+    first = timer_application(tmp_path, clock)
+    first.process_observation(Observation(identity, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    runtime = first._runtime()
+    runtime.drain()  # freeze the TimerCommand in canonical History
+    original = runtime.deliver_timer_ack
+
+    def crash(value, timer_identity):
+        if cut == "after_history":
+            original(value, timer_identity)
+        raise RuntimeError(f"{cut} timer ack")
+
+    runtime.deliver_timer_ack = crash  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match=cut):
+        first.settle()
+    first.close()
+
+    second = timer_application(tmp_path, clock)
+    outcome = second.settle()
+
+    assert outcome.next_maturation == 11.0
+    timer_acks = [
+        record.identity
+        for record in second._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and str(record.source) == "on_timer_command_applied"
+    ]
+    assert timer_acks == [f"v5-timer-command-applied:timer-command:{SUBJECT}:g1"]
+    second.close()
+
+
+def test_timer_maturity_history_marker_crash_replays_without_duplicate_fact(tmp_path: Path) -> None:
+    clock = [1_000_000]
+    identity = delivery()
+    first = timer_application(tmp_path, clock)
+    first.process_observation(Observation(identity, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    assert first.settle().next_maturation == 11.0
+    clock[0] = 11_000_000
+    runtime = first._runtime()
+    original = runtime.deliver_timer_due
+
+    def commit_then_crash(value, timer_identity):
+        original(value, timer_identity)
+        raise RuntimeError("maturity marker lost")
+
+    runtime.deliver_timer_due = commit_then_crash  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="maturity marker lost"):
+        first.settle()
+    first.close()
+
+    second = timer_application(tmp_path, clock)
+    assert second.settle().next_maturation == 21.0
+    due = [
+        record.identity
+        for record in second._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and str(record.source) == "on_timer"
+    ]
+    assert due == [f"v5-timer-due:timer:{SUBJECT}:i1:s0:11000000"]
+    second.close()
+
+
+def test_disposable_runnable_index_rebuilds_from_intact_timer_custody(tmp_path: Path) -> None:
+    clock = [1_000_000]
+    identity = delivery()
+    first = timer_application(tmp_path, clock)
+    first.process_observation(Observation(identity, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    deadline = first.settle().next_maturation
+    first.close()
+    assert deadline == 11.0
+
+    path = tmp_path / "runnable.sqlite3"
+    index = RunnableIndex(path)
+    index.replace_timer(SUBJECT, deadline)
+    index.close()
+    path.unlink()
+
+    second = timer_application(tmp_path, clock)
+    rebuilt_deadline = second.settle().next_maturation
+    rebuilt = RunnableIndex(path)
+    rebuilt.replace_timer(SUBJECT, rebuilt_deadline)
+
+    assert rebuilt_deadline == deadline
+    assert rebuilt.take_due(now=11.0) == (SUBJECT,)
+    rebuilt.close()
+    second.close()
+
+
+def test_v5_close_cancels_exact_host_timer_before_reminder_loop_retires(tmp_path: Path) -> None:
+    clock = [1_000_000]
+    authority = Authority()
+    application = timer_application(tmp_path, clock, authority)
+    opened = delivery()
+    application.process_observation(Observation(opened, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    assert application.settle().next_maturation == 11.0
+
+    authority.pull = replace(authority.pull, state="closed", closed=True)
+    closed = delivery()
+    application.process_observation(Observation(closed, "pull_request", "closed", 44, 23, 31, "owner/repo", 7))
+    outcome = application.settle()
+
+    assert outcome.next_maturation is None
+    assert not application._runtime().engine.marking.place(NetPath("rem.state"))
+    [done] = application._runtime().engine.marking.place(NetPath("rem.done"))
+    assert done.data["reason"] == "closed"
+    with sqlite3.connect(tmp_path / "application" / "timers.sqlite3") as database:
+        assert database.execute("SELECT state FROM v5_timers ORDER BY timer_id").fetchall() == [("cancelled",)]
     application.close()

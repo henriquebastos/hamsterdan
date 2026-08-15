@@ -1,8 +1,8 @@
 ---
 code: CV17.DS1
 level: Delivery Story
-status: Active
-status_reason: Starting with loop-by-loop TDD rewrite from the ES-007 AX1 record
+status: Completed
+status_reason: Nine V5 actor loops, structural census, and boundary timelines are complete
 updated: 2026-08-15
 ---
 

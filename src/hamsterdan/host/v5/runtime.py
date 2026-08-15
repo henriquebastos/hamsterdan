@@ -2,21 +2,31 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
 from petrus.engine import DriveOutcome, Engine, choose_throughput
-from petrus.impetus.history import ActivityCompleted, ActivityFailed, ActivityRequested, ActivityTerminalQuarantined
+from petrus.impetus.history import (
+    ActivityCompleted,
+    ActivityFailed,
+    ActivityRequested,
+    ActivityTerminalQuarantined,
+    ExternalEventDelivered,
+)
 from petrus.impetus.history_store import JsonlHistoryStore
-from petrus.impetus.petrinet import Token
+from petrus.impetus.petrinet import NetPath, Token
 from petrus.motus.activity import ActivityDefinition
 from petrus.motus.dispatch import InlineDispatch, LocalDispatch
 from petrus.motus.worker import Worker
+from pydantic import TypeAdapter, ValidationError
 
+from hamsterdan.contracts.readiness_v5 import TimerCommand, TimerCommandApplied, TimerDue
 from hamsterdan.host.runtime import CompositeDispatch
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.ingress import IngressEntry
+from hamsterdan.host.v5.timers import V5TimerStore
 from hamsterdan.readiness.net_v5 import build_net_v5, seed_marking
 from hamsterdan.readiness.net_v5.gating import wire_gates
 from hamsterdan.readiness.net_v5.topology import DERIVED, GATES
@@ -65,6 +75,7 @@ class V5Runtime:
         dispatch_path: Path | None = None,
         agent_settle: Callable[[set[str]], None] | None = None,
         mutation_operation: Callable[[str], str] | None = None,
+        reminder_delay_s: int = 3 * 24 * 60 * 60,
     ) -> V5Runtime:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         built = build_net_v5()
@@ -108,7 +119,7 @@ class V5Runtime:
                 guards=built.guards,
                 policy=choose_throughput,
                 activities=declarations,
-                marking=seed_marking(instance),
+                marking=seed_marking(instance, reminder_delay_s=reminder_delay_s),
             )
         )
         durable_worker = None
@@ -230,6 +241,52 @@ class V5Runtime:
             and record.activity in _DURABLE_ACTIVITIES
             for record in records
         )
+
+    @staticmethod
+    def _timer_value(model, data: object, label: str):
+        try:
+            return TypeAdapter(model).validate_json(json.dumps(data, sort_keys=True, separators=(",", ":")))
+        except TypeError, ValidationError:
+            raise RuntimeError(f"V5 timer {label} is malformed") from None
+
+    def timer_command(self) -> TimerCommand | None:
+        """Return the intentional Net→host timer outbox token, if any."""
+        tokens = tuple(self.engine.marking.place(NetPath("rem.commands")))
+        if not tokens:
+            return None
+        if len(tokens) != 1 or tokens[0].color != "TimerCommand":
+            raise RuntimeError("V5 timer outbox has invalid cardinality or color")
+        return self._timer_value(TimerCommand, tokens[0].data, "command")
+
+    def timer_history(self) -> tuple[TimerCommandApplied | TimerDue, ...]:
+        """Project accepted typed timer boundary facts in canonical History order."""
+        facts: list[TimerCommandApplied | TimerDue] = []
+        types = {
+            NetPath("on_timer_command_applied"): ("TimerCommandApplied", TimerCommandApplied),
+            NetPath("on_timer"): ("TimerDue", TimerDue),
+        }
+        for record in self.engine.records:
+            if not isinstance(record, ExternalEventDelivered) or record.source not in types:
+                continue
+            color, model = types[record.source]
+            if len(record.tokens) != 1 or record.tokens[0].color != color:
+                raise RuntimeError("V5 timer History delivery is malformed")
+            fact = self._timer_value(model, record.tokens[0].data, "History delivery")
+            expected_identity = (
+                V5TimerStore.ack_identity(fact.operation)
+                if isinstance(fact, TimerCommandApplied)
+                else V5TimerStore.due_identity(fact)
+            )
+            if record.identity != expected_identity:
+                raise RuntimeError("V5 timer History delivery identity is malformed")
+            facts.append(fact)
+        return tuple(facts)
+
+    def deliver_timer_ack(self, value: TimerCommandApplied, identity: str) -> object:
+        return self.deliver(IngressEntry.from_value("on_timer_command_applied", value, identity))
+
+    def deliver_timer_due(self, value: TimerDue, identity: str) -> object:
+        return self.deliver(IngressEntry.from_value("on_timer", value, identity))
 
     def run_durable_activities(self, limit: int) -> int:
         if self._durable_worker is None:

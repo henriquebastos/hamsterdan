@@ -40,5 +40,7 @@ support remains unaccepted; no setup, provider, or cleanup authority survives.
 Active parity delivery: [CV17 — V5 actor-loop production parity](cv17-v5-actor-loop-production-parity/index.md).
 The ES-007 actor-loop workflow model is brought to production parity as a
 parallel, selectable implementation while production stays the untouched
-default; [CV17.DS1 — The V5 net as first-class code](cv17-v5-actor-loop-production-parity/cv17-ds1-v5-net-first-class.md)
-is active.
+default. [CV17.DS1 — The V5 net as first-class code](cv17-v5-actor-loop-production-parity/cv17-ds1-v5-net-first-class.md)
+is complete. [CV17.DS2 — Host composition](cv17-v5-actor-loop-production-parity/cv17-ds2-host-composition.md)
+is active with provider gates, durable ingress, authority ordering, and
+canonical timer custody complete; its fail-closed topology selector is next.

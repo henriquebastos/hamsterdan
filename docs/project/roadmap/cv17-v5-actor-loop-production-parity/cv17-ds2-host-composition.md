@@ -2,7 +2,7 @@
 code: CV17.DS2
 level: Delivery Story
 status: Active
-status_reason: DS2.2b1 Net-side timer protocol complete; DS2.2b2 host timer custody is next
+status_reason: DS2.2b host timer protocol and custody complete; DS2.3 fail-closed selector is next
 updated: 2026-08-15
 ---
 
@@ -79,8 +79,8 @@ contract gap and two host-boundary hazards; the slicing reflects them:
   A crash between classification and that commit may rerun the
   classifier; DS3 exercises this retained limitation. V5 remains
   non-selectable in this slice.
-- **DS2.2b — Host-owned reminder timers.** **Net-side protocol complete
-  (DS2.2b1).** Lifecycle admission/resume and draft mail monotonic,
+- **DS2.2b — Host-owned reminder timers.** **Done (DS2.2b1 +
+  DS2.2b2).** Lifecycle admission/resume and draft mail monotonic,
   incarnation-scoped clock intent to the reminder actor. The actor
   serializes that intent through one persistent typed command token;
   identified acknowledgements settle exact arm/cancel operations, and
@@ -92,10 +92,16 @@ contract gap and two host-boundary hazards; the slicing reflects them:
   order-safe: pause dominates start at one incarnation and only a newer
   incarnation can reactivate. Human `defer` remains a review finding
   disposition and never becomes a duration or timer command.
-  **Host custody remains (DS2.2b2):** apply commands into a durable,
-  restart-reconstructible timer store, deliver identified
-  acknowledgements and `on_timer` maturities, and rebuild
-  `RunnableIndex` strictly as a non-authoritative wake hint.
+  The host applies commands through one canonical WAL timer store,
+  delivers stable identified acknowledgements and `on_timer`
+  maturities, and settles Petrus plus timer custody to a bounded fixed
+  point. Store state is semantically checked against canonical Petrus
+  History before marker reconciliation; deleted, corrupt, or stale
+  custody rebuilds from accepted facts without inventing an arm
+  deadline. A truly unacknowledged arm fails without sacrificing its
+  sole deadline, while exact pending operations and both delivery crash
+  windows replay. `RunnableIndex` receives only the final deadline as a
+  disposable, reconstructible wake hint and is never timer authority.
 - **DS2.3 — The fail-closed switch.** A composition descriptor
   (topology identity, application factory, durable activity names,
   unresolved predicate, inactive-route result adapter) instead of the
