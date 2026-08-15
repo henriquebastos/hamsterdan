@@ -15,14 +15,21 @@ from petrus.motus.activity import activity as motus_activity
 from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
 
 from hamsterdan.contracts.readiness_v5 import (
+    AgentReview,
+    Publishable,
     RerunFault,
     RerunLanded,
     RerunMoved,
     RerunReq,
+    ReviewBlocked,
+    ReviewFault,
+    ReviewLanded,
+    ReviewMoved,
+    RoundOpen,
 )
 from hamsterdan.readiness.net_v5 import build_net_v5, seed_marking
 from hamsterdan.readiness.net_v5.gating import VariantPayloadConverter, wire_gates
-from hamsterdan.readiness.net_v5.topology import GATES
+from hamsterdan.readiness.net_v5.topology import DERIVED, GATES
 
 # -- the fake world ---------------------------------------------------------
 
@@ -40,6 +47,12 @@ def fresh_world() -> dict:
         "reruns": [],
         "reruns_mode": None,
         "runs_by_head": {},  # provider truth: newest (run_id, attempt) per head
+        # review: agent output per head and the provider's comment store
+        "agent_calls": 0,
+        "agent_findings": {},  # head -> findings list (default: one blocker)
+        "comments": [],
+        "comments_mode": None,  # None | "retryable" | "unknown"
+        "comment_attempts": 0,
         "log": [],
     }
 
@@ -112,7 +125,88 @@ def make_activities(world: dict):
             mem=work.mem,
         )
 
-    return (rerun_gate,)
+    @motus_activity(converter=converter)
+    def review_agent(work: RoundOpen) -> AgentReview:
+        # credential-less: sees only the work token, never the world
+        world["agent_calls"] += 1
+        fresh = world["agent_findings"].get(
+            work.head,
+            [{"id": f"f-{work.head}", "note": f"finding:{work.head}", "blocking": True}],
+        )
+        return AgentReview(
+            head=work.head,
+            base=work.base,
+            policy=work.policy,
+            incarnation=work.incarnation,
+            findings=[*work.mem["provisional"], *fresh],
+            mem=work.mem,
+        )
+
+    @motus_activity(converter=converter)
+    def publish_gate(work: Publishable) -> ReviewLanded | ReviewMoved | ReviewBlocked | ReviewFault:
+        # lookup-first: the SAME effect identity never posts twice — and
+        # a key collision with DIFFERENT content fails closed (A2)
+        prior = next((c for c in world["comments"] if c["key"] == work.effect), None)
+        if prior is not None:
+            if prior["body"] != list(work.findings):
+                return ReviewFault(reason=f"effect identity collision: {work.effect}", mem=work.mem)
+            return ReviewLanded(
+                head=work.head,
+                incarnation=work.incarnation,
+                findings=work.findings,
+                effect=work.effect,
+                mem=work.mem,
+            )
+        for _attempt in range(3):  # bounded classified retry, ONE occurrence
+            world["comment_attempts"] += 1
+            mode = world["comments_mode"]
+            if mode == "retryable":
+                continue
+            if mode == "unknown":
+                return ReviewFault(reason="unknown provider terminal", mem=work.mem)
+            # A1.5: fresh read of EVERY claimed authority field inside
+            # the gate — live provider fields AND the host grant
+            auth = world["authority"]
+            if (
+                auth["phase"] != "running"
+                or auth["incarnation"] != work.incarnation
+                or world["branch_head"] != work.head
+                or world["base_head"] != work.base
+                or world["policy"] != work.policy
+            ):
+                return ReviewMoved(
+                    head=work.head,
+                    observed=world["branch_head"],
+                    observed_base=world["base_head"],
+                    observed_policy=world["policy"],
+                    observed_incarnation=auth["incarnation"],
+                    observed_phase=auth["phase"],
+                    findings=work.findings,
+                    mem=work.mem,
+                )
+            world["comments"].append(
+                {"key": work.effect, "kind": "findings", "head": work.head, "body": list(work.findings)}
+            )
+            world["log"].append(("comment", work.effect))
+            return ReviewLanded(
+                head=work.head,
+                incarnation=work.incarnation,
+                findings=work.findings,
+                effect=work.effect,
+                mem=work.mem,
+            )
+        return ReviewBlocked(
+            head=work.head,
+            base=work.base,
+            policy=work.policy,
+            incarnation=work.incarnation,
+            findings=work.findings,
+            effect=work.effect,
+            op=work.op,
+            mem=work.mem,
+        )
+
+    return (rerun_gate, review_agent, publish_gate)
 
 
 # the host's webhook custody, keyed by engine identity: one admission
@@ -190,7 +284,7 @@ def spawn(instance: str = "pr-v5", world: dict | None = None):
         history=InMemoryHistoryStore(),
         dispatch=InlineDispatch(definitions),
         marking=seed_marking(),
-        handlers=wire_gates(built, GATES, definitions),
+        handlers=wire_gates(built, GATES, definitions, DERIVED),
         guards=dict(built.guards),
         activities=tuple(d.declaration for d in definitions.values()),
     )
@@ -213,7 +307,7 @@ def spawn_held(instance: str = "pr-v5", world: dict | None = None):
         history=InMemoryHistoryStore(),
         dispatch=dispatch,
         marking=seed_marking(),
-        handlers=wire_gates(built, GATES, definitions),
+        handlers=wire_gates(built, GATES, definitions, DERIVED),
         guards=dict(built.guards),
         activities=tuple(d.declaration for d in definitions.values()),
         policy=choose_throughput,

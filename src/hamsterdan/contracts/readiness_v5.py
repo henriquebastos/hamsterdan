@@ -142,6 +142,34 @@ class Ladder(WorkflowModel):
     rerun_faults: dict[str, dict[str, Any]]
 
 
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewMemory(WorkflowModel):
+    """The review loop's baton: one durable review memory per PR.
+
+    `reviewed` accumulates every head that completed an agent round,
+    recorded at judge time (never at settlement), membership-unique.
+    `provisional` retains findings whose publication MOVED — they
+    republish under the next refreshed authority (or feed the next
+    agent round) instead of being lost. An open publication takes
+    EXCLUSIVE custody: provisional is empty while a pending, blocked,
+    or faulted descriptor holds the attempted content. `findings` is
+    the last landed/blocked findings list (the dashboard truth).
+    `dismissed` holds finding ids the human waved off; they never
+    republish — a dismissal touching a retained blocked/faulted
+    operation CANCELS it (recovery goes inert; the descriptor stays
+    for audit). `pub` is the publication descriptor: `{"phase":
+    "idle"}` or a durable pending/blocked/faulted/cancelled record
+    retaining the operation identity (A2) so recovery can reissue the
+    SAME effect.
+    """
+
+    reviewed: tuple[str, ...]
+    provisional: tuple[dict[str, Any], ...]
+    findings: tuple[dict[str, Any], ...]
+    dismissed: tuple[str, ...]
+    pub: dict[str, Any]
+
+
 # -- directed facts (loop -> loop, dedicated colors) -------------------------
 
 
@@ -279,6 +307,14 @@ class RecoverFact(WorkflowModel):
     op: str
 
 
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DismissFact(WorkflowModel):
+    """Conversation -> review: a human waved a finding off; it never
+    counts against readiness and never republishes."""
+
+    finding_id: str
+
+
 # -- gate work and typed terminals (escalation rerun) ------------------------
 
 
@@ -358,4 +394,115 @@ class LadderEnded(WorkflowModel):
 
     reruns: dict[str, Any]
     repairs: dict[str, Any]
+    reason: str
+
+
+# -- gate work and typed terminals (review) ----------------------------------
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RoundOpen(WorkflowModel):
+    """The agent gate's work token; the review baton is HELD in `mem`.
+
+    The agent sees only this token — never the world's credentials or
+    the net's other tokens (no GitHub credential in agent territory).
+    """
+
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class AgentReview(WorkflowModel):
+    """The agent gate's output: raw findings for one head, unjudged."""
+
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+    findings: list[dict[str, Any]]
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Publishable(WorkflowModel):
+    """The publish gate's work token: live findings under one authority
+    claim, with the stable effect identity `findings:{head}:i{inc}`."""
+
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+    findings: list[dict[str, Any]]
+    effect: str
+    op: str
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class EmptyReview(WorkflowModel):
+    """A round whose live findings all filtered out: nothing to post."""
+
+    head: str
+    incarnation: int
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewLanded(WorkflowModel):
+    head: str
+    incarnation: int
+    findings: list[dict[str, Any]]
+    effect: str
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewMoved(WorkflowModel):
+    """The FULL authority the gate observed at effect time (grant +
+    live) travels back so the fold can retain findings provisionally."""
+
+    head: str
+    observed: str
+    observed_base: str
+    observed_policy: str
+    observed_incarnation: int
+    observed_phase: Phase
+    findings: list[dict[str, Any]]
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewBlocked(WorkflowModel):
+    """Retryable exhaustion: the durable pub descriptor keeps the exact
+    operation so the recovery door can reissue it (A2)."""
+
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+    findings: list[dict[str, Any]]
+    effect: str
+    op: str
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewFault(WorkflowModel):
+    """Unknown provider terminal or effect-identity collision:
+    fail-closed, surfaced for the human."""
+
+    reason: str
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewEnded(WorkflowModel):
+    """The review loop's terminal record at close."""
+
+    reviewed: tuple[str, ...]
+    pub_phase: str
     reason: str

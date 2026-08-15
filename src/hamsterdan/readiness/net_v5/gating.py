@@ -23,7 +23,7 @@ from dataclasses import asdict, dataclass, field
 from types import MappingProxyType, UnionType
 from typing import Any, cast, get_args
 
-from petrus.impetus.binding import ActivityHandler, Binding, Handler
+from petrus.impetus.binding import ActivityHandler, Binding, DerivedActivityHandler, Handler
 from petrus.impetus.dsl import BuiltNet
 from petrus.impetus.petrinet import NetPath, Token
 from petrus.impetus.petrinet.schema import Net, NetUri
@@ -149,12 +149,20 @@ def wire_gates(
     built: BuiltNet,
     gates: Mapping[str, GateSpec],
     definitions: Mapping[str, ActivityDefinition],
+    derived: Mapping[str, str] | None = None,
 ) -> dict[NetUri | str, Handler | ActivityHandler]:
-    """Bind each gate transition to its variant-routing activity handler."""
+    """Bind each gate transition to its activity handler.
+
+    `gates` binds variant-routing gates (union results); `derived` binds
+    single-output gates (one declared color, the stock derived handler).
+    """
     handlers: dict = dict(built.handlers)
     for transition, (name, variants) in gates.items():
         uri = built.net.handler_uri(NetPath(transition))
         handlers[uri] = VariantRoutingActivityHandler(
             built.net, NetPath(transition), definitions[name], variants=variants
         )
+    for transition, name in (derived or {}).items():
+        uri = built.net.handler_uri(NetPath(transition))
+        handlers[uri] = DerivedActivityHandler(built.net, NetPath(transition), definitions[name])
     return handlers

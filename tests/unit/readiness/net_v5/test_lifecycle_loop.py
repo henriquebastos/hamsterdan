@@ -7,7 +7,7 @@ loop mailboxes. No guards, no read arcs — every decision is a pure
 fold on token data (the ES-007 discipline, now first-class).
 """
 
-from harness import deliver, one, see_head, spawn, tokens
+from harness import deliver, one, see_head, spawn, tokens, world_of
 
 from hamsterdan.readiness.net_v5 import build_net_v5
 
@@ -22,9 +22,12 @@ class TestHeadAdmission:
         assert state["phase"] == "running"
         assert state["incarnation"] == 1
         assert state["head"] == "h1"
-        work = one(engine, "review.heads")
-        assert work["relation"] == "new"
-        assert work["incarnation"] == 1
+        # the review loop consumed its admission mail: relation "new"
+        # opened ONE agent round under incarnation 1 (the effect identity
+        # proves the claim the mail carried)
+        world = world_of(engine)
+        assert world["agent_calls"] == 1
+        assert [c["key"] for c in world["comments"]] == ["findings:h1:i1"]
         # the CI loop consumed its copy of the admission mail
         assert one(engine, "ci.state")["incarnation"] == 1
 
@@ -33,7 +36,8 @@ class TestHeadAdmission:
         see_head(engine, "h1")
         see_head(engine, "h1")
         assert one(engine, "life.state")["incarnation"] == 1
-        assert len(tokens(engine, "review.heads")) == 1
+        # absorbed: no second admission mail, so no second agent round
+        assert world_of(engine)["agent_calls"] == 1
 
     def test_base_refresh_keeps_incarnation_and_mails_refreshed(self) -> None:
         engine, _ = spawn()
@@ -42,8 +46,12 @@ class TestHeadAdmission:
         state = one(engine, "life.state")
         assert state["incarnation"] == 1
         assert state["base"] == "b2"
-        relations = [w["relation"] for w in tokens(engine, "review.heads")]
-        assert relations == ["new", "refreshed"]
+        # the refreshed relation opens NO new agent round (same head,
+        # same lifetime); with nothing provisional there is nothing to
+        # republish either
+        world = world_of(engine)
+        assert world["agent_calls"] == 1
+        assert [c["key"] for c in world["comments"]] == ["findings:h1:i1"]
 
     def test_new_head_supersedes_with_fresh_lineage(self) -> None:
         engine, _ = spawn()
@@ -52,9 +60,12 @@ class TestHeadAdmission:
         state = one(engine, "life.state")
         assert state["incarnation"] == 2
         assert state["head"] == "h2"
-        last = tokens(engine, "review.heads")[-1]
-        assert last["relation"] == "superseded"
-        assert last["lineage"] == ""
+        # superseded: a fresh agent round under the new incarnation, and
+        # a fresh CI budget lineage (superseded mails lineage "")
+        world = world_of(engine)
+        assert world["agent_calls"] == 2
+        assert [c["key"] for c in world["comments"]][-1] == "findings:h2:i2"
+        assert one(engine, "ci.state")["lineage"] == "L2"
 
     def test_expected_head_admits_as_confirmed_keeping_lineage(self) -> None:
         engine, _ = spawn()
@@ -69,9 +80,11 @@ class TestHeadAdmission:
         state = one(engine, "life.state")
         assert state["incarnation"] == 2
         assert state["expected"] == ""
-        last = tokens(engine, "review.heads")[-1]
-        assert last["relation"] == "confirmed"
-        assert last["lineage"] == "lin1"
+        # confirmed: our own repair does NOT reset the CI budget lineage
+        # (contrast supersession, which mints a fresh one)
+        assert one(engine, "ci.state")["lineage"] == "L1"
+        # and the confirmed head still opened its own agent round
+        assert world_of(engine)["agent_calls"] == 2
 
 
 class TestDormancy:
@@ -84,12 +97,16 @@ class TestDormancy:
         state = one(engine, "life.state")
         assert state["phase"] == "quiescent"
         assert state["head"] == "h2"
-        assert len(tokens(engine, "review.heads")) == 1
+        assert world_of(engine)["agent_calls"] == 1  # no round while dormant
         deliver(engine, "on_ready", "ReadySeen", {})
         state = one(engine, "life.state")
         assert state["phase"] == "running"
         assert state["incarnation"] == 2
-        assert tokens(engine, "review.heads")[-1]["relation"] == "resumed"
+        # resume re-admitted the recorded head: a fresh agent round under
+        # the resumed incarnation
+        world = world_of(engine)
+        assert world["agent_calls"] == 2
+        assert [c["key"] for c in world["comments"]][-1] == "findings:h2:i2"
 
     def test_ready_without_quiescence_is_absorbed(self) -> None:
         engine, _ = spawn()
@@ -105,16 +122,17 @@ class TestClose:
         deliver(engine, "on_close", "CloseSeen", {"reason": "merged"})
         assert one(engine, "life.state")["phase"] == "terminal"
         for mailbox in (
-            "review.closed",
             "mut.closed",
             "dash.closed",
             "rem.closed",
             "ready.closed",
         ):
             assert one(engine, mailbox)["reason"] == "merged"
-        # the CI and escalation loops consumed their close mail and retired
+        # the CI, escalation, and review loops consumed their close mail
+        # and retired
         assert one(engine, "ci.done")["reason"] == "merged"
         assert one(engine, "esc.done")["reason"] == "merged"
+        assert one(engine, "review.done")["reason"] == "merged"
 
     def test_terminal_absorbs_every_later_observation(self) -> None:
         engine, _ = spawn()
@@ -125,7 +143,7 @@ class TestClose:
         state = one(engine, "life.state")
         assert state["phase"] == "terminal"
         assert state["head"] == "h1"
-        assert len(tokens(engine, "review.closed")) == 1
+        assert len(tokens(engine, "review.done")) == 1
 
 
 class TestObservationRouting:
@@ -215,4 +233,5 @@ class TestCensus:
             # loops mail these facts internally
             "on_settled",
             "on_recover",
+            "on_dismiss",
         }

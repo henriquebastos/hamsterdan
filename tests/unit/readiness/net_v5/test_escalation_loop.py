@@ -328,7 +328,9 @@ class TestFaultAndRecovery:
         state = ladder(engine)
         assert state["reruns"] == {"L1:fp1": {"state": "done", "run_id": 1, "attempt": 1}}
         assert state["rerun_faults"] == {}
-        assert world["log"] == []  # lookup-first: NO duplicate effect
+        # lookup-first: NO duplicate rerun effect (the review loop's own
+        # comment effects share the world log; only reruns matter here)
+        assert [e for e in world["log"] if e[0] == "rerun"] == []
 
     def test_recovery_reissues_when_the_provider_never_held_it(self) -> None:
         engine, _ = self.spawn_faulted()
@@ -355,7 +357,8 @@ class TestFaultAndRecovery:
         assert state["rerun_faults"] == {}
         [request] = repair_requests(engine)  # the replayed evidence escalated
         assert request["op"] == "repair:L1:fp1"
-        assert world["log"] == []  # and still no duplicate effect
+        # and still no duplicate rerun effect
+        assert [e for e in world["log"] if e[0] == "rerun"] == []
 
     def test_recovery_that_issues_the_rerun_now_absorbs_older_blocked_evidence(self) -> None:
         # the provider NEVER held the rerun: evidence observed before
