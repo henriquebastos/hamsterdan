@@ -23,6 +23,7 @@ from hamsterdan.contracts.readiness import (
 )
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
 from hamsterdan.github_app.gateway import GitHubAuthority
+from hamsterdan.github_app.webhooks import Observation
 
 from .activities import PrReadinessActivities
 from .git_publish import HostGitPublisher
@@ -51,7 +52,9 @@ class PrReadinessApplication:
         reminder_delay: float = 3 * 24 * 60 * 60,
         publication_fault: EffectFault | None = None,
         dispatch_path: Path | None = None,
+        custody_path: Path | None = None,
     ):
+        del custody_path  # topology-neutral HostService factory contract
         self.root, self.instance_id, self.authority, self.runner = root, instance_id, authority, runner
         normalized_login = bot_login.strip().casefold()
         if not normalized_login or not normalized_login.endswith("[bot]"):
@@ -286,6 +289,20 @@ class PrReadinessApplication:
         )
         self._deliver("conversation_observation", value, f"github-delivery:{conversation.delivery_id}")
 
+    def process_observation(
+        self,
+        observation: Observation,
+        *,
+        conversation: AdmittedConversation | None = None,
+    ) -> None:
+        """Preserve production's settle-before-reconcile activation order."""
+        self.settle()
+        self.activate(f"github-delivery:{observation.delivery_id}", conversation=conversation)
+
+    def reconcile(self, reason: str) -> None:
+        """Reconcile provider truth without inventing a webhook identity."""
+        self.activate(reason)
+
     def _observe_actions(self, control, required_checks: tuple[str, ...]) -> None:
         run = self.authority.select_run(self.workflow_path, control.head)
         if run is None:
@@ -454,6 +471,11 @@ class PrReadinessApplication:
 
     def has_unresolved_publication(self) -> bool:
         return self.host is not None and self.host.has_unresolved_publication()
+
+    def run_durable_activities(self, limit: int) -> int:
+        """Production publications remain owned by HostService's shared worker."""
+        del limit
+        return 0
 
 
 __all__ = ["PrReadinessApplication"]

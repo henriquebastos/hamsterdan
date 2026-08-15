@@ -79,16 +79,17 @@ class CompositeDispatch:
 
     inline: Dispatch
     durable: Dispatch
+    durable_activities: frozenset[str] = _DURABLE_ACTIVITIES
 
     def dispatch(self, occurrence: int, invocation: ActivityInvocation) -> None:
-        target = self.durable if invocation.activity in _DURABLE_ACTIVITIES else self.inline
+        target = self.durable if invocation.activity in self.durable_activities else self.inline
         target.dispatch(occurrence, invocation)
 
     def collect(self) -> Sequence[tuple[int, object]]:
         return (*self.inline.collect(), *self.durable.collect())
 
     def cancel(self, instruction: CancellationInstruction) -> CancellationDisposition:
-        target = self.durable if instruction.invocation.activity in _DURABLE_ACTIVITIES else self.inline
+        target = self.durable if instruction.invocation.activity in self.durable_activities else self.inline
         if not isinstance(target, CancellableDispatch):
             raise TypeError("scope-managed Activity target does not support cancellation")
         return target.cancel(instruction)

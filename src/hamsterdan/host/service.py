@@ -39,10 +39,11 @@ from hamsterdan.readiness.payloads import PydanticPayloadConverter
 
 from .agenticus import AgentComposition, AgentRouteStore, RoutedAgentRunner
 from .application import PrReadinessApplication
+from .protocol import ReadinessApplication
 from .runnable import RunnableIndex
 
 LOG = logging.getLogger("hamsterdan.host")
-ApplicationFactory = Callable[..., PrReadinessApplication]
+ApplicationFactory = Callable[..., ReadinessApplication]
 _FAULT_BOUNDARIES = frozenset({"agent", "comment"})
 _FAULT_PHASES = frozenset({"timed_out", "malformed", "before_call", "after_call"})
 _INSTANCE_PATTERN = re.compile(r"github:([1-9][0-9]*):([1-9][0-9]*):pr:([1-9][0-9]*)\Z")
@@ -179,7 +180,7 @@ class HostService:
         self.sweep_interval = sweep_interval
         self.qualification_fault = qualification_fault
         self.installation_id: int | None = None
-        self._apps: dict[tuple[int, int, int], PrReadinessApplication] = {}
+        self._apps: dict[tuple[int, int, int], ReadinessApplication] = {}
         self._locks: dict[tuple[int, int, int], threading.Lock] = {}
         self._stop = asyncio.Event()
         self._closed = False
@@ -299,7 +300,7 @@ class HostService:
         pull_request_number: int,
         *,
         allow_inactive_binding: bool = False,
-    ) -> PrReadinessApplication:
+    ) -> ReadinessApplication:
         key = installation_id, repository_id, pull_request_number
         with self._application_lock:
             if key in self._apps:
@@ -367,6 +368,7 @@ class HostService:
                 publication_fault=None if qualification_fault is None else qualification_fault.publication,
                 agent_settle=self.agent_routes.settle,
                 dispatch_path=self._dispatch_path,
+                custody_path=self.root / "webhooks.sqlite3",
             )
             self._locks[key] = threading.Lock()
             self._apps[key] = application
@@ -410,8 +412,14 @@ class HostService:
         if instance is None:
             self._select_observation(item)
             return
+        status = self.custody.status(item.delivery_id)
+        if status not in (None, "pending"):
+            return
         try:
-            self._activate_instance(instance, observation=item)
+            # A real custodied callback is only a wake hint: subject
+            # loading owns strict row order and applies every due row.
+            # Uncustodied direct observations remain a test/operator seam.
+            self._activate_instance(instance, observation=item if status is None else None)
         except Exception:  # noqa: BLE001 -- activation already retains and classifies custody
             # Activation has already retained and classified the delivery;
             # direct callers do not own scheduler health.
@@ -442,7 +450,7 @@ class HostService:
 
     def _apply_observation(
         self,
-        application: PrReadinessApplication,
+        application: ReadinessApplication,
         item: Observation,
         conversation: AdmittedConversation | None,
     ) -> tuple[bool, str | None]:
@@ -450,8 +458,7 @@ class HostService:
         assert item.installation_id is not None and item.repository_id is not None
         if self.registry.route(item.installation_id, item.repository_id) is None:
             return False, "route inactive before work"
-        trigger = f"github-delivery:{item.delivery_id}"
-        application.activate(trigger, conversation=conversation)
+        application.process_observation(item, conversation=conversation)
         return True, None
 
     @staticmethod
@@ -499,10 +506,6 @@ class HostService:
             await asyncio.to_thread(self.pump)
             if self._stop.is_set():
                 break
-            await asyncio.to_thread(self.project_pending)
-            await asyncio.to_thread(self.run_due)
-            if self._stop.is_set():
-                break
             if loop.time() >= next_sweep:
                 await asyncio.to_thread(self.sweep)
                 next_sweep = loop.time() + self.sweep_interval
@@ -512,9 +515,32 @@ class HostService:
                 pass
 
     def pump(self, limit: int = 20) -> int:
-        """Run one bounded Activity cycle and settle only owning Instances."""
+        """Stage due authority custody before running durable Activities."""
         with self._pump_lock:
-            processed = self.activity_worker.run_available(limit=limit)
+            # A pending draft/ready/head/close can move only the V5 host
+            # grant while leaving head/base/policy unchanged. Apply all
+            # due same-subject custody before an older queued publication
+            # can claim execution under that stale incarnation.
+            self.project_pending()
+            self.run_due()
+            if self._stop.is_set():
+                return 0
+            processed = 0
+            for instance, key in tuple(self._instances.items()):
+                if processed >= limit:
+                    break
+                application = self._apps[key]
+                # V5 publications use per-instance queues. Never claim
+                # one while that PR has unresolved inbox custody;
+                # unrelated V5 instances and production continue.
+                if self.custody.has_pending(subject=key):
+                    continue
+                with self._locks[key]:
+                    completed = application.run_durable_activities(limit - processed)
+                    processed += completed
+                    if completed:
+                        self._record_posture(instance, application.settle())
+            processed += self.activity_worker.run_available(limit=limit - processed)
             # Repair locally generated terminals which did not execute through
             # the resolver. The durable Dispatch/History remain authoritative.
             for instance, key in tuple(self._instances.items()):
@@ -559,19 +585,19 @@ class HostService:
             return False
         installation_id, repository_id, pull_request_number = (int(value) for value in match.groups())
         key = installation_id, repository_id, pull_request_number
+        if observation is not None and not self.custody.eligible(observation.delivery_id, subject=key):
+            return False
         candidates = (observation,) if observation is not None else self.custody.pending(limit=1000, subject=key)
         selected = tuple(selection for item in candidates if (selection := self._select_observation(item)) is not None)
         route_active = self.registry.route(key[0], key[1]) is not None
-        if observation is not None and not selected:
+        bound = (self.root / "applications" / str(key[0]) / str(key[1]) / str(key[2]) / "history.jsonl").is_file()
+        if candidates and not selected and key not in self._apps and not bound:
             return False
-        if (
-            not route_active
-            and key not in self._apps
-            and not (self.root / "applications" / str(key[0]) / str(key[1]) / str(key[2]) / "history.jsonl").is_file()
-        ):
+        if not route_active and key not in self._apps and not bound:
             return False
         succeeded: list[tuple[Observation, str | None]] = []
         handled: set[str] = set()
+        attempted: set[str] = set()
         activation_error: Exception | None = None
         try:
             application = (
@@ -580,11 +606,15 @@ class HostService:
                 else self._application(*key, allow_inactive_binding=not route_active)
             )
             with self._locks[key]:
-                # Consume frozen provider terminals before observing provider
-                # state that could otherwise infer the operation is pending.
-                outcome = application.settle()
+                outcome = None
                 activated = False
+                if not selected:
+                    # A topology owns observation ordering, but a bare
+                    # activity/timer wake must first collect its frozen
+                    # terminal before any optional provider reconciliation.
+                    outcome = application.settle()
                 for item, conversation in selected:
+                    attempted.add(item.delivery_id)
                     try:
                         applied, reason = self._apply_observation(application, item, conversation)
                         activated = activated or applied
@@ -594,13 +624,14 @@ class HostService:
                         handled.add(item.delivery_id)
                         if activation_error is None:
                             activation_error = error
+                        break
                 if (
                     reconcile_trigger is not None
                     and not selected
                     and not self.custody.has_pending(subject=key)
                     and self.registry.route(key[0], key[1]) is not None
                 ):
-                    application.activate(f"{reconcile_trigger}:{key[0]}:{key[1]}:{key[2]}")
+                    application.reconcile(f"{reconcile_trigger}:{key[0]}:{key[1]}:{key[2]}")
                     activated = True
                 if activated:
                     outcome = application.settle()
@@ -611,8 +642,9 @@ class HostService:
                 if activation_error is not None:
                     raise activation_error
         except Exception as error:
+            retry = attempted or ({selected[0][0].delivery_id} if selected else set())
             for item, _conversation in selected:
-                if item.delivery_id not in handled:
+                if item.delivery_id in retry and item.delivery_id not in handled:
                     self._retry_observation(item, error)
             raise
         return True

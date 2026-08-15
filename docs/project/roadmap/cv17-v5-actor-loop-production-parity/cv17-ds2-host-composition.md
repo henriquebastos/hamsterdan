@@ -2,7 +2,7 @@
 code: CV17.DS2
 level: Delivery Story
 status: Active
-status_reason: DS2.1 provider-backed gates complete; DS2.2 V5 application is next
+status_reason: DS2.2a durable V5 ingress complete; DS2.2b host-owned reminder timers are next
 updated: 2026-08-15
 ---
 
@@ -60,13 +60,28 @@ contract gap and two host-boundary hazards; the slicing reflects them:
   Agent-route startup repair deliberately leaves `FaultM` unresolved so
   human recovery can reclaim the same Pi result; known terminals settle
   the route.
-- **DS2.2 — The V5 application.** Implements the application protocol
-  HostService already calls; reconciler normalizes provider truth into
-  identified door deliveries; host-side comment classification before
-  the door (durability limitation recorded: a crash between classify
-  and door commit reruns the classifier — DS3 exercises it); host-owned
-  reminder timers with restart-reconstructible canonical timer state
-  (RunnableIndex stays a reconstructible hint).
+- **DS2.2a — Durable ingress and authority ordering.** **Done.** The
+  topology-neutral webhook inbox remains the sole custody owner. A
+  formal application protocol lets the host pass each full custodied
+  observation to either topology. V5 normalizes provider truth once,
+  then atomically commits an immutable per-delivery manifest and the
+  per-PR host authority grant in the same WAL database before delivering
+  canonical identified entries to Petrus. Replay reuses the frozen
+  manifest and identities, so an entry committed before a crash
+  deduplicates while missing entries continue. Same-PR custody is strict
+  row order, authenticated draft/ready edges survive provider-state
+  collapse, and each V5 instance has its own durable publication queue.
+  The host never claims that queue while the PR has unresolved custody,
+  while unrelated PRs and production continue; fresh unstaged custody
+  also fences the final provider cut. Comment classification is frozen
+  into the manifest; route settlement is idempotently replayed after
+  the manifest commit.
+  A crash between classification and that commit may rerun the
+  classifier; DS3 exercises this retained limitation. V5 remains
+  non-selectable in this slice.
+- **DS2.2b — Host-owned reminder timers.** Arm, rearm, and cancel through
+  restart-reconstructible canonical timer custody; maturation enters
+  `on_timer`. `RunnableIndex` remains only a reconstructible wake hint.
 - **DS2.3 — The fail-closed switch.** A composition descriptor
   (topology identity, application factory, durable activity names,
   unresolved predicate, inactive-route result adapter) instead of the

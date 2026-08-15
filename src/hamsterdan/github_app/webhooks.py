@@ -262,20 +262,31 @@ class WebhookCustody:
         subject: tuple[int, int, int] | None = None,
     ) -> tuple[Observation, ...]:
         limit = max(1, min(limit, 1000))
+        now = self._clock()
         where = "status='pending' AND next_attempt_at<=?"
-        parameters: tuple[object, ...] = (self._clock(), limit)
+        parameters: tuple[object, ...] = (now, limit)
         if subject is not None:
-            where += (
-                " AND json_extract(observation,'$.installation_id')=?"
+            # Per-subject processing is strict row order. An earlier
+            # deferred failure fences every later observation for that
+            # PR until its exact manifest/History delivery can replay.
+            where = (
+                "status='pending' AND json_extract(observation,'$.installation_id')=?"
                 " AND json_extract(observation,'$.repository_id')=?"
                 " AND json_extract(observation,'$.pull_request_number')=?"
             )
-            parameters = (self._clock(), *subject, limit)
+            parameters = (*subject, limit)
         with self._lock:
             rows = self._db.execute(
-                f"SELECT observation,attempts FROM inbox WHERE {where} ORDER BY rowid LIMIT ?",
+                f"SELECT observation,attempts,next_attempt_at FROM inbox WHERE {where} ORDER BY rowid LIMIT ?",
                 parameters,
             ).fetchall()
+        if subject is not None:
+            due = []
+            for row in rows:
+                if float(row[2]) > now:
+                    break
+                due.append(row)
+            rows = due
         return tuple(
             Observation(
                 **(
@@ -286,7 +297,7 @@ class WebhookCustody:
                     }
                 )
             )
-            for raw, attempts in rows
+            for raw, attempts, _next_attempt_at in rows
         )
 
     def has_pending(self, *, subject: tuple[int, int, int]) -> bool:
@@ -299,6 +310,33 @@ class WebhookCustody:
                 subject,
             ).fetchone()
         return row is not None
+
+    def eligible(self, delivery_id: str, *, subject: tuple[int, int, int]) -> bool:
+        """Whether a custodied delivery is the due head of its PR row order.
+
+        Uncustodied observations remain eligible for direct test and
+        operator activation compatibility. A known terminal or later
+        pending delivery can never bypass the earliest pending row.
+        """
+        now = self._clock()
+        with self._lock:
+            target = self._db.execute(
+                "SELECT status FROM inbox WHERE delivery_id=?",
+                (delivery_id,),
+            ).fetchone()
+            if target is None:
+                return True
+            if target[0] != "pending":
+                return False
+            earliest = self._db.execute(
+                "SELECT delivery_id,next_attempt_at FROM inbox WHERE status='pending'"
+                " AND json_extract(observation,'$.installation_id')=?"
+                " AND json_extract(observation,'$.repository_id')=?"
+                " AND json_extract(observation,'$.pull_request_number')=?"
+                " ORDER BY rowid LIMIT 1",
+                subject,
+            ).fetchone()
+        return earliest is not None and earliest[0] == delivery_id and float(earliest[1]) <= now
 
     def acknowledge(self, delivery_id: str, reason: str = "processed") -> None:
         with self._lock, self._db:
@@ -329,7 +367,8 @@ class WebhookCustody:
             )
 
     def status(self, delivery_id: str) -> str | None:
-        row = self._db.execute("SELECT status FROM inbox WHERE delivery_id=?", (delivery_id,)).fetchone()
+        with self._lock:
+            row = self._db.execute("SELECT status FROM inbox WHERE delivery_id=?", (delivery_id,)).fetchone()
         return None if row is None else row[0]
 
     def counts(self) -> dict[str, int]:

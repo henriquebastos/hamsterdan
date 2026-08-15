@@ -79,21 +79,39 @@ class Application:
     def __init__(self, *args: Any, fail: bool = False, **kwargs: Any):
         self.args, self.kwargs, self.fail = args, kwargs, fail
         self.reconciles: list[str] = []
+        self.observations: list[Observation] = []
+        self.durable_runs = 0
         self.comments: list[dict[str, object]] = []
         self.closed = 0
 
-    def activate(self, trigger: str, *, conversation: AdmittedConversation | None = None) -> None:
-        self.reconciles.append(trigger)
+    def process_observation(
+        self,
+        observation: Observation,
+        *,
+        conversation: AdmittedConversation | None = None,
+    ) -> None:
+        self.settle()
+        self.observations.append(observation)
+        self.reconciles.append(f"github-delivery:{observation.delivery_id}")
         if self.fail:
             raise RuntimeError("provider secret must not escape")
         if conversation is not None:
             self.comments.append(conversation.__dict__)
+
+    def reconcile(self, reason: str) -> None:
+        self.reconciles.append(reason)
+        if self.fail:
+            raise RuntimeError("provider secret must not escape")
 
     def settle(self) -> None:
         return None
 
     def has_unresolved_publication(self) -> bool:
         return False
+
+    def run_durable_activities(self, limit: int) -> int:
+        self.durable_runs += 1
+        return 0
 
     def close(self) -> None:
         self.closed += 1
@@ -298,6 +316,61 @@ def test_application_identity_roots_and_operation_clients_are_exact(tmp_path: Pa
     assert "agent_fault" not in made[0].kwargs
     host.close()
     assert all(app.closed == 1 for app in made) and clients.closed == 1
+
+
+def test_application_protocol_receives_the_full_custodied_observation(tmp_path: Path) -> None:
+    made: list[Application] = []
+    host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
+    item = observation("full-observation", event="check_run", action="completed")
+
+    host.process(item)
+
+    assert made[0].observations == [item]
+    assert made[0].reconciles == ["github-delivery:full-observation"]
+    assert made[0].kwargs["custody_path"] == tmp_path / "webhooks.sqlite3"
+    host.close()
+
+
+def test_pump_prioritizes_pending_authority_custody_before_durable_activities(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = service(tmp_path)
+    events: list[str] = []
+    monkeypatch.setattr(host, "project_pending", lambda: events.append("project") or 1)
+    monkeypatch.setattr(host, "run_due", lambda: events.append("apply") or 1)
+    monkeypatch.setattr(
+        host.activity_worker,
+        "run_available",
+        lambda *, limit: events.append(f"activities:{limit}") or 0,
+    )
+
+    host.pump(limit=7)
+
+    assert events == ["project", "apply", "activities:7"]
+    host.close()
+
+
+def test_pump_does_not_claim_application_queue_while_that_pr_has_pending_custody(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host = service(tmp_path)
+    application = host._application(44, 31, 7)
+    unrelated = host._application(44, 31, 8)
+    identity, body = str(uuid.uuid4()), envelope()
+    host.custody.receive(signed(body, identity).items() | {("content-length", str(len(body)))}, body)
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        database.execute("UPDATE inbox SET next_attempt_at=9999999999 WHERE delivery_id=?", (identity,))
+    monkeypatch.setattr(host.activity_worker, "run_available", lambda *, limit: 0)
+
+    host.pump()
+    assert application.durable_runs == 0
+    assert unrelated.durable_runs == 1
+
+    host.custody.acknowledge(identity)
+    host.pump()
+    assert application.durable_runs == 1
+    assert unrelated.durable_runs == 2
+    host.close()
 
 
 def test_qualification_fault_is_exact_one_shot_and_disabled_by_default() -> None:
@@ -553,6 +626,40 @@ def test_retry_does_not_block_later_delivery_and_new_process_resumes_same_custod
         second.process(item)
     assert second.custody.pending() == () and len(resumed_apps) == 2
     second.close()
+
+
+def test_same_subject_delivery_waits_behind_an_earlier_deferred_failure(tmp_path: Path) -> None:
+    seen: list[str] = []
+
+    class FailFirst(Application):
+        def process_observation(self, observation, *, conversation=None):
+            seen.append(observation.delivery_id)
+            if len(seen) == 1:
+                raise RuntimeError("first delivery failed")
+            return super().process_observation(observation, conversation=conversation)
+
+    host = service(tmp_path, factory=FailFirst)
+    deliveries = [str(uuid.uuid4()), str(uuid.uuid4())]
+    for identity in deliveries:
+        body = envelope(pr=7)
+        host.custody.receive(signed(body, identity).items() | {("content-length", str(len(body)))}, body)
+
+    with pytest.raises(RuntimeError, match="first delivery failed"):
+        host._activate_instance("github:44:31:pr:7")
+
+    # Even an explicitly supplied later observation must respect the
+    # custodied row-order fence rather than bypassing subject loading.
+    host.process(host.custody.pending()[0])
+
+    assert seen == [deliveries[0]]
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        rows = database.execute(
+            "SELECT delivery_id,attempts FROM inbox WHERE delivery_id IN (?,?) ORDER BY rowid",
+            deliveries,
+        ).fetchall()
+    assert rows == [(deliveries[0], 1), (deliveries[1], 0)]
+    assert host.custody.pending(subject=(44, 31, 7)) == ()
+    host.close()
 
 
 def test_periodic_sweep_reopens_active_instances_and_skips_unbound_inactive_roots(tmp_path: Path) -> None:
@@ -1029,7 +1136,7 @@ def test_startup_sweep_settles_frozen_terminal_before_provider_reconciliation(tm
             events.append("settle")
             self.published = True
 
-        def activate(self, trigger: str, *, conversation: AdmittedConversation | None = None) -> None:
+        def reconcile(self, reason: str) -> None:
             events.append(f"reconcile:{self.published}")
             if not self.published:
                 events.append("duplicate-publication")
