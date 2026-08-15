@@ -1,6 +1,8 @@
 # ES-007 — The complete V5 Hamsterdan: cohabited, then sharded
 
-**Status:** open, 2026-08-14.
+**Status:** complete, 2026-08-15 (all AX0–AX4 done and
+oracle-approved; conclusions remain candidate recommendations for the
+Navigator).
 **Navigator seed:** after ES-006 AX6/AX7 (actor loops, cohabitation),
 build the decision-grade three-way comparison: production untouched ·
 a complete V5 net · the same loops sharded across instances. The deep
@@ -42,4 +44,4 @@ being an architecture fork.
 | AX1 | The complete cohabited V5 net: all loops, one instance, executed timelines | done, oracle-approved after six rounds (blockers pinned as tests; census amendment A5) → [ax1-complete-v5.md](ax1-complete-v5.md) |
 | AX2 | The courier primitive: outbox place + identified delivery across instances, crash-and-redeliver proof, generic | done — [ax2-courier.md](ax2-courier.md), oracle-approved (4 rounds) |
 | AX3 | The sharded assembly: the SAME loops across several instances; trace-equivalence against AX1 | done, oracle-approved after three rounds (shardable-net profile enforced, not documented) → [ax3-sharded.md](ax3-sharded.md) |
-| AX4 | Verdict: production vs V5 vs V5-sharded — shape, behavior coverage, machinery bill, blast radius, replay; final primitive census | pending |
+| AX4 | Verdict: production vs V5 vs V5-sharded — shape, behavior coverage, machinery bill, engine-state isolation, replay; final primitive census | done, oracle-approved after five rounds (strict/broad metrics kept apart, decompositions pinned as tests) → [ax4-verdict.md](ax4-verdict.md) |

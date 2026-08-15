@@ -26,7 +26,9 @@ Paused, Candidate, Promoted, or Archived.
   complete actor-loop V5 net in one instance, and the same authored
   loops sharded across instances via a generic courier. Tests whether
   sharding is a deployment decision rather than a design decision.
-  Oracle-checkpointed at each experiment.
+  Oracle-checkpointed at each experiment. Complete: for nets inside
+  the enforced shardable profile, placement is deployment-only;
+  conclusions remain candidate recommendations.
 
 ## Archived
 
