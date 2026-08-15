@@ -9,7 +9,13 @@ from githubkit import GitHub
 
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker
 from hamsterdan.github_app.gateway import GitHubAuthority
-from hamsterdan.github_app.models import ActionsJobSnapshot, ActionsRunSnapshot, GitHubBoundaryError, WireResponse
+from hamsterdan.github_app.models import (
+    ActionsJobSnapshot,
+    ActionsRunSnapshot,
+    GitHubBoundaryError,
+    RerunRefusedError,
+    WireResponse,
+)
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 
 HEAD = "a" * 40
@@ -1050,3 +1056,97 @@ def test_rerun_request_is_lookup_first_and_fenced_immediately_before_marker() ->
     )
     assert broker.request(run, epoch=3, operation="retry-1").status == "existing"
     assert events == ["fence"]
+
+
+def test_rerun_held_lookup_carries_no_currency_requirement() -> None:
+    # A2 recovery reconciliation must find a landed rerun even after the
+    # head moved: `held` reads ONLY the comment listing — no pull, no
+    # runs, no fence — so a stale claim can never hide the landed effect.
+    fake = FakeTransport()
+    comments = "/repos/owner/repo/issues/7/comments"
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+    broker = CommentRerunBroker(authority(fake), publisher)
+    assert broker.held(5, HEAD, "retry-1") is None
+
+    marker = "<!-- hamsterdan-rerun run=5 head=" + HEAD + " operation=retry-1 -->"
+    fake.page_values[f"{comments}?per_page=100"] = (
+        {"id": 9, "html_url": "url", "body": marker, "user": {"login": "hamsterdan[bot]"}},
+    )
+    held = broker.held(5, HEAD, "retry-1")
+    assert held is not None and held.status == "existing"
+    assert all(call[0] == "PAGES" and call[1].startswith(comments) for call in fake.calls)
+
+    # marker presence alone proves the landing: a malformed provider
+    # reference degrades to None instead of hiding the proven effect
+    fake.page_values[f"{comments}?per_page=100"] = (
+        {"html_url": "url", "body": marker, "user": {"login": "hamsterdan[bot]"}},
+    )
+    degraded = broker.held(5, HEAD, "retry-1")
+    assert degraded is not None and degraded.status == "existing" and degraded.reference is None
+
+
+def _rerun_world(fake: FakeTransport, runs: list[dict[str, Any]]) -> tuple[str, CommentRerunBroker]:
+    root = "/repos/owner/repo"
+    comments = f"{root}/issues/7/comments"
+    fake.responses[("GET", f"{root}/pulls/7")] = WireResponse(200, pull())
+    fake.responses[("GET", f"{root}/git/ref/heads/main")] = WireResponse(200, {"object": {"sha": BASE}})
+    fake.responses[("GET", f"{root}/actions/workflows/ci.yml/runs?event=pull_request&per_page=100")] = WireResponse(
+        200, {"total_count": len(runs), "workflow_runs": runs}
+    )
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+    return comments, CommentRerunBroker(authority(fake), publisher)
+
+
+def _wire_run(run_id: int, attempt: int) -> dict[str, Any]:
+    return {
+        "id": run_id,
+        "head_sha": HEAD,
+        "path": ".github/workflows/ci.yml",
+        "event": "pull_request",
+        "pull_requests": [{"number": 7}],
+        "run_attempt": attempt,
+        "status": "completed",
+        "conclusion": "failure",
+    }
+
+
+def test_rerun_issue_owns_the_final_run_read_and_the_evidence_cut() -> None:
+    # The cut is the newest (run_id, attempt) in the broker's OWN final
+    # read: a discriminating pair — old run with many attempts (5,9),
+    # newer run's first attempt (7,1) — proves lexicographic (id,
+    # attempt) ordering, not the gateway's (attempt, id) sort.
+    fake = FakeTransport()
+    comments, broker = _rerun_world(fake, [_wire_run(5, 9), _wire_run(7, 1)])
+    fake.responses[("POST", comments)] = WireResponse(201, {"id": 9, "html_url": "url"})
+    issued = broker.issue(ActionsRunSnapshot(5, HEAD, "ci.yml", 9, "completed", "failure"), epoch=3, operation="r-1")
+    assert issued.result.status == "requested"
+    assert (issued.cut_run_id, issued.cut_attempt) == (7, 1)
+
+
+def test_rerun_issue_refusal_is_a_proven_pre_effect_movement() -> None:
+    # a stale head, or an indicted run the provider no longer reports,
+    # refuses BEFORE any effect: typed refusal, never a boundary error
+    fake = FakeTransport()
+    _comments, broker = _rerun_world(fake, [_wire_run(7, 1)])
+    stale = ActionsRunSnapshot(5, "c" * 40, "ci.yml", 1, "completed", "failure")
+    with pytest.raises(RerunRefusedError):
+        broker.issue(stale, epoch=3, operation="r-1")
+    vanished = ActionsRunSnapshot(5, HEAD, "ci.yml", 1, "completed", "failure")
+    with pytest.raises(RerunRefusedError):
+        broker.issue(vanished, epoch=3, operation="r-1")
+    assert all(call[0] != "POST" for call in fake.calls)
+    # the production wrapper still classifies every refusal the same way
+    with pytest.raises(GitHubBoundaryError, match="does not belong"):
+        broker.request(stale, epoch=3, operation="r-1")
+
+
+def test_rerun_issue_degrades_a_malformed_201_reference_to_none() -> None:
+    # the 201 PROVES the landing: a malformed reference must not turn a
+    # proven effect into an activity failure
+    fake = FakeTransport()
+    comments, broker = _rerun_world(fake, [_wire_run(5, 1)])
+    fake.responses[("POST", comments)] = WireResponse(201, {"html_url": "url"})
+    issued = broker.issue(ActionsRunSnapshot(5, HEAD, "ci.yml", 1, "completed", "failure"), epoch=3, operation="r-1")
+    assert issued.result.status == "requested" and issued.result.reference is None

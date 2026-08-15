@@ -13,6 +13,13 @@ class GitHubBoundaryError(RuntimeError):
     """A secret-safe provider boundary failure."""
 
 
+class RerunRefusedError(RuntimeError):
+    """Proven pre-effect movement: the broker verified currency and
+    refused BEFORE any effect was issued. Nothing landed and nothing is
+    ambiguous — deliberately NOT a GitHubBoundaryError, so a caller can
+    classify moved instead of fail-closed fault."""
+
+
 @dataclass(frozen=True)
 class RegistrationInventory:
     installation_id: int
@@ -119,3 +126,15 @@ class PublicationResult:
     reference: CommentReference | None = None
     capability_available: bool = True
     inline: bool = False
+
+
+@dataclass(frozen=True)
+class RerunIssue:
+    """One rerun issuance plus the pre-request evidence cut: the newest
+    (run_id, attempt) the provider reported for the head in the FINAL
+    read immediately before the POST, so no run can appear between the
+    cut and the effect."""
+
+    result: PublicationResult
+    cut_run_id: int
+    cut_attempt: int

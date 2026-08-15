@@ -70,6 +70,19 @@ contract gap and two host-boundary hazards; the slicing reflects them:
   announce, dash durable ("publication" queue); rerun, review, publish,
   git, reminder inline — inline crash recovery is lookup-first
   reconciliation plus engine redispatch of unresolved requests.
+- **The V5 publisher fence is NOT the legacy production fence**
+  (DS2.1b Oracle ruling): the legacy fence resolves production request
+  bases, and operation + epoch/head alone is insufficient — the same
+  rerun operation can be reissued after a same-incarnation base/policy
+  refresh. The V5 fence must recover the active request's full claim
+  and compare phase, incarnation, head, base, AND policy immediately
+  before the POST, raising the typed proven-movement refusal
+  (RerunRefusedError-style), never a bare boundary error.
+- **V5 newest-evidence selection must not use `select_run`:**
+  `GitHubAuthority.workflow_runs` sorts by `(attempt, id)` while the V5
+  contract orders evidence lexicographically by `(run_id, attempt)`;
+  the rerun cut already computes `max((id, attempt))` itself, and DS2.2
+  door normalization must do the same.
 
 ## Out of scope
 

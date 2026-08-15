@@ -13,6 +13,8 @@ from .models import (
     CommentReference,
     GitHubBoundaryError,
     PublicationResult,
+    RerunIssue,
+    RerunRefusedError,
     Transport,
     WireResponse,
 )
@@ -447,6 +449,15 @@ def _reference(value: Mapping[str, Any]) -> CommentReference:
     return CommentReference(int(value["id"]), str(value.get("html_url", "")))
 
 
+def _lenient_reference(value: Mapping[str, Any]) -> CommentReference | None:
+    """Presence alone proves a landing: a malformed provider reference
+    degrades to None instead of turning a proven effect into a crash."""
+    try:
+        return _reference(value)
+    except KeyError, TypeError, ValueError, OverflowError:
+        return None
+
+
 def _response_mapping(value: object) -> Mapping[str, Any]:
     return cast(Mapping[str, Any], value)
 
@@ -478,18 +489,50 @@ class CommentRerunBroker:
     def __init__(self, authority: GitHubAuthority, publisher: CommentPublisher):
         self.authority, self.publisher = authority, publisher
 
-    def request(self, run: ActionsRunSnapshot, *, epoch: int, operation: str) -> PublicationResult:
+    @staticmethod
+    def marker(run_id: int, head: str, operation: str) -> str:
+        # The broker marker is intentionally its complete strict grammar.
+        return f"<!-- hamsterdan-rerun run={run_id} head={head} operation={operation} -->"
+
+    def held(self, run_id: int, head: str, operation: str) -> PublicationResult | None:
+        """Operation lookup with NO currency requirement: recovery
+        reconciliation (A2) must find a landed rerun even after the head
+        or grant moved, so this reads only the comment listing. Marker
+        presence alone proves the landing — a malformed reference never
+        hides a proven effect."""
+        existing = self.publisher._find(self.marker(run_id, head, operation))
+        if existing:
+            return PublicationResult("existing", _lenient_reference(existing))
+        return None
+
+    def issue(self, run: ActionsRunSnapshot, *, epoch: int, operation: str) -> RerunIssue:
+        """One rerun issuance whose currency read is the FINAL provider
+        run read: the returned cut is the newest run identity observed
+        immediately before the POST, so no run can appear between the
+        cut and the effect. Proven pre-effect movement raises
+        RerunRefusedError — nothing was issued; only genuinely ambiguous
+        outcomes raise GitHubBoundaryError."""
         pull = self.authority.pull_request()
-        known = {candidate.id: candidate for candidate in self.authority.workflow_runs(run.workflow, pull.head)}
-        if pull.head != run.head or run.id not in known:
-            raise GitHubBoundaryError("rerun request does not belong to the configured repository and exact head")
-        marker = f"<!-- hamsterdan-rerun run={run.id} head={run.head} operation={operation} -->"
+        known = self.authority.workflow_runs(run.workflow, pull.head)
+        if pull.head != run.head or all(candidate.id != run.id for candidate in known):
+            raise RerunRefusedError("rerun request does not belong to the configured repository and exact head")
+        cut = max((candidate.id, candidate.attempt) for candidate in known)
+        marker = self.marker(run.id, run.head, operation)
         existing = self.publisher._find(marker)
         if existing:
-            return PublicationResult("existing", _reference(existing))
-        # The broker marker is intentionally its complete strict grammar.
+            return RerunIssue(PublicationResult("existing", _lenient_reference(existing)), cut[0], cut[1])
         self.publisher.fence(self.publisher.repository, self.publisher.pr_number, epoch, run.head, operation)
         response = self.publisher.transport.request("POST", self.publisher.root, {"body": marker})
         if response.status != 201 or not isinstance(response.body, dict):
             raise GitHubBoundaryError("GitHub did not prove rerun broker publication")
-        return PublicationResult("requested", _reference(_response_mapping(response.body)))
+        # the 201 proves the landing; a malformed reference degrades to None
+        return RerunIssue(
+            PublicationResult("requested", _lenient_reference(_response_mapping(response.body))), cut[0], cut[1]
+        )
+
+    def request(self, run: ActionsRunSnapshot, *, epoch: int, operation: str) -> PublicationResult:
+        try:
+            return self.issue(run, epoch=epoch, operation=operation).result
+        except RerunRefusedError as error:
+            # the production topology classifies every refusal the same way
+            raise GitHubBoundaryError(str(error)) from error
