@@ -94,6 +94,16 @@ class TestAnnounce:
         assert snap(engine)["findings_blocking"] == 0
         assert announcements(world) == ["ready:h1:i1"]
 
+    def test_agent_inability_stays_not_ready_after_every_other_gate_passes(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        world["agent_mode"] = "unable"
+        see_head(engine, "h1")
+        see_run(engine, head="h1")
+        see_human(engine)
+        assert snap(engine)["review"] == "unable"
+        assert announcements(world) == []
+
     def test_changes_requested_and_unresolved_hold_readiness(self) -> None:
         engine, _ = spawn()
         world = world_of(engine)
@@ -283,6 +293,7 @@ class TestSettlementIdentity:
             policy="p1",
             mergeable=True,
             checks="success",
+            review="clear",
             findings_blocking=0,
             approval=True,
             changes_requested=False,

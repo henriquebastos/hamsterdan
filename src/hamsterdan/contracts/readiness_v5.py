@@ -20,6 +20,19 @@ from hamsterdan.contracts.readiness import WorkflowModel
 Phase = Literal["running", "quiescent", "terminal"]
 HeadRelation = Literal["new", "superseded", "confirmed", "resumed", "refreshed"]
 RunConclusion = Literal["queued", "in_progress", "success", "failure"]
+ReviewStatus = Literal["pending", "clear", "blocking", "unable"]
+ReviewUnableCategory = Literal[
+    "runtime_lifecycle",
+    "output_schema",
+    "correlation",
+    "unchanged",
+    "unable",
+    "workspace_reconciliation",
+    "canceled",
+    "timed_out",
+    "cleanup_unverified",
+    "protocol",
+]
 
 
 # -- ingress observations (host-normalized) --------------------------------
@@ -166,6 +179,11 @@ class Ladder(WorkflowModel):
 class ReviewMemory(WorkflowModel):
     """The review loop's baton: one durable review memory per PR.
 
+    `subject` is the host-supplied globally unique workflow identity;
+    the loop combines it with the head and incarnation to mint a
+    settleable Agenticus operation. `head`, `incarnation`, and `status`
+    scope later dismissals to the exact review whose findings they
+    recount and prevent a dismissal from reopening an unable round.
     `reviewed` accumulates every head that completed an agent round,
     recorded at judge time (never at settlement), membership-unique.
     `provisional` retains findings whose publication MOVED — they
@@ -173,19 +191,27 @@ class ReviewMemory(WorkflowModel):
     agent round) instead of being lost. An open publication takes
     EXCLUSIVE custody: provisional is empty while a pending, blocked,
     or faulted descriptor holds the attempted content. `findings` is
-    the last landed/blocked findings list (the dashboard truth).
+    the full validated current open set from the last successful agent
+    round; `lineage` is that round's finding lineage.
     `dismissed` holds finding ids the human waved off; they never
     republish — a dismissal touching a retained blocked/faulted
     operation CANCELS it (recovery goes inert; the descriptor stays
-    for audit). `pub` is the publication descriptor: `{"phase":
+    for audit). Dismissal-filtered publication content stays in the
+    publication token/descriptor rather than weakening the retained
+    agent evidence. `pub` is the publication descriptor: `{"phase":
     "idle"}` or a durable pending/blocked/faulted/cancelled record
     retaining the operation identity (A2) so recovery can reissue the
     SAME effect.
     """
 
+    subject: str
+    head: str
+    incarnation: int
+    status: ReviewStatus
     reviewed: tuple[str, ...]
     provisional: tuple[dict[str, Any], ...]
     findings: tuple[dict[str, Any], ...]
+    lineage: tuple[dict[str, Any], ...]
     dismissed: tuple[str, ...]
     pub: dict[str, Any]
 
@@ -499,10 +525,13 @@ class RoundOpen(WorkflowModel):
     the net's other tokens (no GitHub credential in agent territory).
     """
 
+    operation: str
     head: str
     base: str
     policy: str
     incarnation: int
+    prior_findings: list[dict[str, Any]]
+    prior_lineage: list[dict[str, Any]]
     mem: dict[str, Any]
 
 
@@ -515,6 +544,17 @@ class AgentReview(WorkflowModel):
     policy: str
     incarnation: int
     findings: list[dict[str, Any]]
+    lineage: list[dict[str, Any]]
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RoundUnable(WorkflowModel):
+    """A clean, classified inability to complete one agent round."""
+
+    head: str
+    incarnation: int
+    category: ReviewUnableCategory
     mem: dict[str, Any]
 
 
@@ -934,9 +974,10 @@ class Snapshot(WorkflowModel):
 
     Folds sibling GateFacts into one all-gates snapshot. A stale state
     fact never rolls the projection back; a new incarnation resets the
-    per-incarnation gates (checks, blocking findings, pending
-    mutations) while human review state persists — provider approvals
-    and unresolved threads outlive a push. `faults` is a keyed ledger
+    per-incarnation gates (checks, agent-review status, blocking
+    findings, pending mutations) while human review state persists —
+    provider approvals and unresolved threads outlive a push. `faults`
+    is a keyed ledger
     (`{where}:{op}` -> reason): a faulted publication fail-closes
     readiness until its owner mails an operation-keyed resolution.
     Custody is A2 data: `candidate` marks a revocable ready-edge
@@ -956,6 +997,7 @@ class Snapshot(WorkflowModel):
     policy: str
     mergeable: bool
     checks: str
+    review: ReviewStatus
     findings_blocking: int
     approval: bool
     changes_requested: bool

@@ -55,6 +55,7 @@ def _ready(snap: Snapshot) -> bool:
     return (
         snap.phase == "running"
         and snap.checks == "success"
+        and snap.review == "clear"
         and snap.findings_blocking == 0
         and snap.approval
         and not snap.changes_requested
@@ -134,6 +135,7 @@ def _apply(snap: Snapshot, fact: GateFact) -> Snapshot | None:
             snap = snap.validated_update(
                 incarnation=fact.incarnation,
                 checks="pending",
+                review="pending",
                 findings_blocking=0,
                 pending=(),
             )
@@ -148,6 +150,8 @@ def _apply(snap: Snapshot, fact: GateFact) -> Snapshot | None:
         return None  # A1.4: mismatched facts are inert
     elif kind == "checks":
         snap = snap.validated_update(checks=body["status"])
+    elif kind == "review":
+        snap = snap.validated_update(review=body["status"])
     elif kind == "findings":
         snap = snap.validated_update(findings_blocking=body["blocking"])
     elif kind == "human":
@@ -415,6 +419,7 @@ def seed() -> dict:
         policy="",
         mergeable=False,
         checks="pending",
+        review="pending",
         findings_blocking=0,
         approval=False,
         changes_requested=False,

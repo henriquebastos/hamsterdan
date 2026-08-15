@@ -397,7 +397,13 @@ def _terminal_operations(histories: Path) -> set[str]:
                     )
                     operation = work.get("operation") if isinstance(work, dict) else None
                     transition = str(record.transition)
-                    if transition in {"execute.review", "execute.conversation", "execute.repair", "execute.change"}:
+                    if transition in {
+                        "execute.review",
+                        "execute.conversation",
+                        "execute.repair",
+                        "execute.change",
+                        "review.agent",
+                    }:
                         if not isinstance(operation, str) or record.occurrence in requests:
                             raise ValueError("agent Activity request is ambiguous")
                         requests[record.occurrence] = transition, operation

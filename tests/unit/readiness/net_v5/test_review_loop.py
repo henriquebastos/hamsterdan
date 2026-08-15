@@ -10,6 +10,7 @@ new agent round; a superseding head feeds them into its fresh round.
 The baton is HELD through every in-flight round.
 """
 
+import pytest
 from harness import (
     comment,
     comment_held,
@@ -26,6 +27,8 @@ from harness import (
     world_of,
 )
 
+from hamsterdan.readiness.net_v5 import seed_marking
+
 HOLD_AGENT = frozenset({"review_agent"})
 HOLD_PUBLISH = frozenset({"publish_gate"})
 
@@ -38,6 +41,10 @@ def memory(engine) -> dict:
 
 def findings_facts(engine) -> list[dict]:
     return [f for f in projection(engine) if f["kind"] == "findings"]
+
+
+def review_facts(engine) -> list[dict]:
+    return [f for f in projection(engine) if f["kind"] == "review"]
 
 
 def findings_comments(world: dict) -> list[dict]:
@@ -63,7 +70,10 @@ class TestAgentRound:
         assert findings_comments(world)[0]["body"] == [FINDING_H1]
         state = memory(engine)
         assert state["reviewed"] == ["h1"]
+        assert state["head"] == "h1" and state["incarnation"] == 1
+        assert state["status"] == "blocking"
         assert state["findings"] == [FINDING_H1]
+        assert state["lineage"] == [{"finding_id": "f-h1", "state": "new", "supersedes": None}]
         assert state["provisional"] == []
         assert state["pub"] == {"phase": "idle"}
         fact = findings_facts(engine)[-1]
@@ -93,6 +103,9 @@ class TestAgentRound:
         state = memory(engine)
         assert state["reviewed"] == ["h1"]
         assert state["dismissed"] == ["f-h1"]
+        assert state["findings"] == [FINDING_H1]  # full agent set retained for lineage
+        assert state["lineage"] == [{"finding_id": "f-h1", "state": "new", "supersedes": None}]
+        assert state["status"] == "clear"
 
     def test_agent_sees_only_its_work_token(self) -> None:
         engine, _, dispatch, definitions = spawn_held()
@@ -108,9 +121,38 @@ class TestAgentRound:
         [invocation] = [i for i in dispatch.pending.values() if i.activity == "review_agent"]
         assert set(invocation.input) == {"work"}
         # the claim plus the HELD baton — no credential, no world handle
-        assert set(invocation.input["work"]) == {"head", "base", "policy", "incarnation", "mem"}
+        assert set(invocation.input["work"]) == {
+            "operation",
+            "head",
+            "base",
+            "policy",
+            "incarnation",
+            "prior_findings",
+            "prior_lineage",
+            "mem",
+        }
+        assert invocation.input["work"]["operation"] == "review:test:pr-v5:h1:i1"
+        assert invocation.input["work"]["prior_findings"] == []
+        assert invocation.input["work"]["prior_lineage"] == []
         release_one(engine, dispatch, definitions, "review_agent")
         assert memory(engine)["reviewed"] == ["h1"]
+
+    def test_clean_agent_inability_fails_closed_without_an_effect_fault(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        world["agent_mode"] = "unable"
+        see_head(engine, "h1")
+        state = memory(engine)
+        assert state["reviewed"] == ["h1"]
+        assert state["status"] == "unable"
+        assert findings_comments(world) == []
+        assert review_facts(engine)[-1]["body"] == {
+            "head": "h1",
+            "status": "unable",
+            "category": "unable",
+        }
+        assert [fact for fact in projection(engine) if fact["kind"] == "fault"] == []
+        assert one(engine, "ready.snap")["review"] == "unable"
 
 
 # -- publication identity and terminals --------------------------------------
@@ -247,6 +289,87 @@ class TestAuthorityMovement:
         state = memory(engine)
         assert state["reviewed"] == ["h1", "h2"]  # BOTH rounds completed
         assert state["provisional"] == []
+
+    def test_superseding_round_uses_agent_lineage_instead_of_concatenating_provisionals(self) -> None:
+        engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=HOLD_PUBLISH,
+        )
+        world = world_of(engine)
+        world["agent_results"]["h2"] = {
+            "findings": [{"id": "f-h2", "note": "finding:h2", "blocking": False}],
+            "lineage": [
+                {"finding_id": "f-h1", "state": "resolved", "supersedes": None},
+                {"finding_id": "f-h2", "state": "new", "supersedes": None},
+            ],
+        }
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h2", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=HOLD_PUBLISH,
+        )
+        release_one(engine, dispatch, definitions, "publish_gate")
+        assert comment_keys(world) == ["findings:h2:i2"]
+        assert findings_comments(world)[0]["body"] == [{"id": "f-h2", "note": "finding:h2", "blocking": False}]
+        state = memory(engine)
+        assert state["findings"] == [{"id": "f-h2", "note": "finding:h2", "blocking": False}]
+        assert state["lineage"] == world["agent_results"]["h2"]["lineage"]
+        assert state["status"] == "clear"
+
+    def test_refresh_after_superseding_agent_inability_emits_no_uncategorized_unable_fact(self) -> None:
+        engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=HOLD_PUBLISH,
+        )
+        world = world_of(engine)
+        world["agent_mode"] = "unable"
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h2", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=HOLD_PUBLISH,
+        )
+        release_one(engine, dispatch, definitions, "publish_gate")
+        assert memory(engine)["status"] == "unable"
+        assert memory(engine)["provisional"] == [FINDING_H1]
+        assert review_facts(engine)[-1]["body"] == {
+            "head": "h2",
+            "status": "unable",
+            "category": "unable",
+        }
+
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h2", "base": "b2", "mergeable": True, "policy": "p1"},
+        )
+
+        unable = [fact for fact in review_facts(engine) if fact["body"]["status"] == "unable"]
+        assert unable == [{"kind": "review", "body": {"head": "h2", "status": "unable", "category": "unable"}}]
+        assert one(engine, "ready.snap")["review"] == "unable"
+        assert comment_keys(world) == ["findings:h2:i2"]
 
     def test_base_refresh_republishes_provisionals_without_a_new_agent_round(self) -> None:
         engine, _, dispatch, definitions = spawn_held()
@@ -437,6 +560,8 @@ class TestDismissalAndClose:
         faults = [f["body"] for f in projection(engine) if f["kind"] == "fault"]
         assert faults[-1] == {"where": "review", "op": "findings:h1:i1", "status": "cancelled"}
         assert one(engine, "ready.snap")["faults"] == {}  # readiness reopened
+        assert one(engine, "ready.snap")["review"] == "clear"
+        assert review_facts(engine)[-1]["body"] == {"head": "h1", "status": "clear"}
         world["comments_mode"] = None
         comment(engine, "rec6", "recover_publication", arg="findings:h1:i1")
         assert findings_comments(world) == []  # the cancelled operation never posts
@@ -449,6 +574,27 @@ class TestDismissalAndClose:
         fact = findings_facts(engine)[-1]
         assert fact["body"]["blocking"] == 0
         assert fact["body"]["count"] == 1  # the finding remains, waved off
+        assert review_facts(engine)[-1]["body"] == {"head": "h1", "status": "clear"}
+
+    def test_dismissal_after_an_unable_round_cannot_reopen_readiness(self) -> None:
+        engine, _ = spawn()
+        see_head(engine, "h1")
+        world = world_of(engine)
+        world["agent_mode"] = "unable"
+        deliver(engine, "on_draft", "DraftSeen", {})
+        deliver(engine, "on_ready", "ReadySeen", {})
+        assert memory(engine)["status"] == "unable"
+        assert one(engine, "ready.snap")["review"] == "unable"
+        comment(engine, "dis-unable", "dismiss", arg="f-h1")
+        assert memory(engine)["status"] == "unable"
+        assert one(engine, "ready.snap")["review"] == "unable"
+
+    def test_predismissal_of_an_unknown_finding_emits_no_current_review_evidence(self) -> None:
+        engine, _ = spawn()
+        before = (len(findings_facts(engine)), len(review_facts(engine)))
+        comment(engine, "future", "dismiss", arg="not-yet-seen")
+        assert (len(findings_facts(engine)), len(review_facts(engine))) == before
+        assert memory(engine)["dismissed"] == ["not-yet-seen"]
 
     def test_resume_after_landing_reviews_again_without_duplicating_reviewed(self) -> None:
         engine, _ = spawn()
@@ -501,3 +647,9 @@ class TestDismissalAndClose:
         assert done["reason"] == "closed"
         assert done["reviewed"] == ["h1"]  # the round DID complete
         assert tokens(engine, "review.memory") == []
+
+
+@pytest.mark.parametrize("subject", ["", "bad\nsubject", "é", "x" * 901])
+def test_seed_refuses_a_noncanonical_global_subject(subject: str) -> None:
+    with pytest.raises(ValueError, match="subject"):
+        seed_marking(subject)

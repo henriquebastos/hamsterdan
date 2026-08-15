@@ -383,6 +383,35 @@ def test_terminal_history_repairs_crash_gap_before_composition_change(tmp_path: 
     reopened.activate(agenticus, tmp_path / "applications")
 
 
+def test_v5_review_terminal_history_repairs_the_global_agent_route(tmp_path: Path) -> None:
+    agenticus = compose_agent()
+    operation = "review:github:1:2:pr:3:" + "a" * 40 + ":i1"
+    store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    store.activate(agenticus, tmp_path / "applications")
+    store.claim(operation, agenticus)
+    store.close()
+    history = tmp_path / "applications/1/2/3/history.jsonl"
+    history.parent.mkdir(parents=True)
+    request = ActivityRequested(
+        NetPath("review.agent"),
+        activity="review_agent",
+        input={"work": {"operation": operation}},
+        policy=ExecutionPolicy(1, 300),
+        correlation=operation,
+        idempotency=operation,
+        occurrence=1,
+    )
+    completed = ActivityCompleted(NetPath("review.agent"), {"$variant": "RoundUnable"}, occurrence=1)
+    history.write_text("\n".join(json.dumps(encode_record(record)) for record in (request, completed)) + "\n")
+
+    reopened = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    reopened.activate(agenticus, tmp_path / "applications")
+
+    assert reopened._database.execute(
+        "SELECT resolved FROM agent_routes WHERE operation = ?", (operation,)
+    ).fetchone() == (1,)
+
+
 def test_history_repair_refuses_a_mismatched_terminal_transition(tmp_path: Path) -> None:
     agenticus = compose_agent()
     store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")

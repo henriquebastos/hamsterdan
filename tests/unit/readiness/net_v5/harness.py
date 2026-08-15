@@ -50,6 +50,7 @@ from hamsterdan.contracts.readiness_v5 import (
     ReviewLanded,
     ReviewMoved,
     RoundOpen,
+    RoundUnable,
 )
 from hamsterdan.readiness.net_v5 import build_net_v5, seed_marking
 from hamsterdan.readiness.net_v5.gating import VariantPayloadConverter, wire_gates
@@ -74,6 +75,8 @@ def fresh_world() -> dict:
         # review: agent output per head and the provider's comment store
         "agent_calls": 0,
         "agent_findings": {},  # head -> findings list (default: one blocker)
+        "agent_results": {},  # head -> exact {findings, lineage} result
+        "agent_mode": None,  # None | "unable"
         "comments": [],
         "comments_mode": None,  # None | "retryable" | "unknown"
         "comment_attempts": 0,
@@ -157,19 +160,49 @@ def make_activities(world: dict):
         )
 
     @motus_activity(converter=converter)
-    def review_agent(work: RoundOpen) -> AgentReview:
+    def review_agent(work: RoundOpen) -> AgentReview | RoundUnable:
         # credential-less: sees only the work token, never the world
         world["agent_calls"] += 1
-        fresh = world["agent_findings"].get(
-            work.head,
-            [{"id": f"f-{work.head}", "note": f"finding:{work.head}", "blocking": True}],
-        )
+        if world["agent_mode"] == "unable":
+            return RoundUnable(
+                head=work.head,
+                incarnation=work.incarnation,
+                category="unable",
+                mem=work.mem,
+            )
+        configured = world["agent_results"].get(work.head)
+        if configured is not None:
+            findings = configured["findings"]
+            lineage = configured["lineage"]
+        else:
+            # The fake agent, like the real provider contract, returns
+            # the COMPLETE current open set and explicit lineage. Prior
+            # findings are not blindly concatenated: fresh findings
+            # replace the same identity, while absent prior identities
+            # remain still-open by the fake world's default policy.
+            fresh = world["agent_findings"].get(
+                work.head,
+                [{"id": f"f-{work.head}", "note": f"finding:{work.head}", "blocking": True}],
+            )
+            by_id = {finding["id"]: finding for finding in work.prior_findings}
+            by_id.update({finding["id"]: finding for finding in fresh})
+            findings = list(by_id.values())
+            prior_ids = {finding["id"] for finding in work.prior_findings}
+            lineage = [
+                {
+                    "finding_id": finding["id"],
+                    "state": "still_open" if finding["id"] in prior_ids else "new",
+                    "supersedes": None,
+                }
+                for finding in findings
+            ]
         return AgentReview(
             head=work.head,
             base=work.base,
             policy=work.policy,
             incarnation=work.incarnation,
-            findings=[*work.mem["provisional"], *fresh],
+            findings=findings,
+            lineage=lineage,
             mem=work.mem,
         )
 
@@ -527,7 +560,7 @@ def spawn(instance: str = "pr-v5", world: dict | None = None):
         instance,
         history=InMemoryHistoryStore(),
         dispatch=InlineDispatch(definitions),
-        marking=seed_marking(),
+        marking=seed_marking(f"test:{instance}"),
         handlers=wire_gates(built, GATES, definitions, DERIVED),
         guards=dict(built.guards),
         activities=tuple(d.declaration for d in definitions.values()),
@@ -550,7 +583,7 @@ def spawn_held(instance: str = "pr-v5", world: dict | None = None):
         instance,
         history=InMemoryHistoryStore(),
         dispatch=dispatch,
-        marking=seed_marking(),
+        marking=seed_marking(f"test:{instance}"),
         handlers=wire_gates(built, GATES, definitions, DERIVED),
         guards=dict(built.guards),
         activities=tuple(d.declaration for d in definitions.values()),

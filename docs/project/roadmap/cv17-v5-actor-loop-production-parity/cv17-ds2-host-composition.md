@@ -2,7 +2,7 @@
 code: CV17.DS2
 level: Delivery Story
 status: Active
-status_reason: Oracle boundary review reshaped the slicing; DS2.0 contract closure first
+status_reason: DS2.1c review-agent gate complete; mutation/git gate is next
 updated: 2026-08-15
 ---
 
@@ -42,7 +42,13 @@ contract gap and two host-boundary hazards; the slicing reflects them:
   GitHubAuthority / CommentPublisher / HostGitPublisher /
   RoutedAgentRunner, declared with VariantPayloadConverter; the host
   grant read fresh from the `life.state` baton via a V5 lease. TDD with
-  fake transports per existing host test conventions.
+  fake transports per existing host test conventions. Publication
+  gates (DS2.1a), rerun (DS2.1b), and the review agent (DS2.1c) are
+  complete. DS2.1c gives each round one globally scoped, restart-
+  settleable operation; carries prior findings through validated agent
+  lineage rather than concatenation; and folds typed clean inability
+  into fail-closed readiness/dashboard review status without treating
+  it as an effect fault. The mutation/git gate remains.
 - **DS2.2 — The V5 application.** Implements the application protocol
   HostService already calls; reconciler normalizes provider truth into
   identified door deliveries; host-side comment classification before
