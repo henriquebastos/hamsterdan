@@ -16,7 +16,11 @@ from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
 
 from hamsterdan.contracts.readiness_v5 import (
     AgentReview,
+    FaultM,
+    MovedM,
+    MutWork,
     Publishable,
+    Pushed,
     RerunFault,
     RerunLanded,
     RerunMoved,
@@ -53,6 +57,9 @@ def fresh_world() -> dict:
         "comments": [],
         "comments_mode": None,  # None | "retryable" | "unknown"
         "comment_attempts": 0,
+        # mutation: the provider's push ledger, keyed by operation identity
+        "pushes": [],  # {"key", "op", "from", "to"}
+        "git_mode": None,  # None | "fault" | "crash" (landed, terminal lost)
         "log": [],
     }
 
@@ -206,7 +213,85 @@ def make_activities(world: dict):
             mem=work.mem,
         )
 
-    return (rerun_gate, review_agent, publish_gate)
+    @motus_activity(converter=converter)
+    def git_gate(work: MutWork) -> Pushed | MovedM | FaultM:
+        # lookup-first reconciliation (A2): a crash AFTER the push landed
+        # but BEFORE acknowledgment must not push twice — the SAME
+        # operation identity reconciles to the landed outcome
+        prior = next((p for p in world["pushes"] if p["key"] == work.op_key), None)
+        if prior is not None:
+            return Pushed(
+                op=work.op,
+                op_key=work.op_key,
+                head=work.head,
+                new_head=prior["to"],
+                incarnation=work.incarnation,
+                lineage=work.lineage,
+            )
+        # A1.5: base/policy/grant are fenced by a fresh read here (the
+        # push CAS only covers the head): any op authored under an old
+        # base, a revoked policy, a non-running phase, or a previous
+        # grant incarnation classifies MOVED
+        auth = world["authority"]
+        if (
+            auth["phase"] != "running"
+            or auth["incarnation"] != work.incarnation
+            or world["base_head"] != work.base
+            or world["policy"] != work.policy
+        ):
+            return MovedM(
+                op=work.op,
+                head=work.head,
+                incarnation=work.incarnation,
+                observed=world["branch_head"],
+                observed_incarnation=auth["incarnation"],
+                observed_phase=auth["phase"],
+            )
+        # server-side CAS: the push itself is the head authority check
+        if world["branch_head"] != work.head:
+            return MovedM(
+                op=work.op,
+                head=work.head,
+                incarnation=work.incarnation,
+                observed=world["branch_head"],
+                observed_incarnation=auth["incarnation"],
+                observed_phase=auth["phase"],
+            )
+        if world["git_mode"] == "fault":
+            return FaultM(
+                op=work.op,
+                op_key=work.op_key,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                reason="unknown provider terminal",
+                incarnation=work.incarnation,
+            )
+        new_head = f"{work.head}+{work.op}"
+        world["branch_head"] = new_head
+        world["pushes"].append({"key": work.op_key, "op": work.op, "from": work.head, "to": new_head})
+        world["log"].append(("push", work.op_key))
+        if world["git_mode"] == "crash":
+            # the push LANDED but the terminal was lost before the ack
+            return FaultM(
+                op=work.op,
+                op_key=work.op_key,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                reason="link lost after push",
+                incarnation=work.incarnation,
+            )
+        return Pushed(
+            op=work.op,
+            op_key=work.op_key,
+            head=work.head,
+            new_head=new_head,
+            incarnation=work.incarnation,
+            lineage=work.lineage,
+        )
+
+    return (rerun_gate, review_agent, publish_gate, git_gate)
 
 
 # the host's webhook custody, keyed by engine identity: one admission

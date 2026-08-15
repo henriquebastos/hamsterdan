@@ -39,6 +39,9 @@ GATES = {"esc.rerun_gate": ("rerun_gate", ("RerunLanded", "RerunMoved", "RerunFa
 
 def _decide(binding, outputs):
     failure, ladder = values(binding, ChecksFailure, Ladder)
+    if ladder.closing is not None:
+        # no new rung after close: late evidence is absorbed
+        return route(outputs, {"esc.ladder": (ladder,)})
     fp = failure.fingerprint
     key = f"{failure.lineage}:{fp}"
     evidence = (failure.run_id, failure.attempt)
@@ -101,6 +104,7 @@ def _decide(binding, outputs):
         held = ladder.validated_update(repairs={**ladder.repairs, key: pending})
         req = MutationRequest(
             op=f"repair:{key}",
+            rid=f"repair:{key}",  # the rung key IS the request identity
             head=failure.head,
             base=failure.base,
             policy=failure.policy,
@@ -136,7 +140,12 @@ def _recover(binding, outputs):
     fact, ladder = values(binding, RecoverFact, Ladder)
     faults = ladder.rerun_faults
     key = next((k for k, v in faults.items() if v["op"] == fact.op), None)
-    if fact.target != "esc" or key is None or ladder.reruns.get(key, {}).get("state") != "fault":
+    if (
+        ladder.closing is not None  # no reissue after close
+        or fact.target != "esc"
+        or key is None
+        or ladder.reruns.get(key, {}).get("state") != "fault"
+    ):
         return route(outputs, {"esc.ladder": (ladder,)})
     held = faults[key]
     cleared = ladder.validated_update(
@@ -232,6 +241,15 @@ def _fold_rerun_fault(binding, outputs):
     )
 
 
+def _pending_repairs(repairs: dict) -> bool:
+    return any(entry["state"] == "pending" for entry in repairs.values())
+
+
+def _retire(ladder: Ladder, repairs: dict, reason: str, outputs):
+    ended = LadderEnded(reruns=ladder.reruns, repairs=repairs, reason=reason)
+    return route(outputs, {"esc.done": (ended,)})
+
+
 def _fold_settled(binding, outputs):
     settled, ladder = values(binding, MutationSettled, Ladder)
     key = settled.fingerprint
@@ -250,6 +268,9 @@ def _fold_settled(binding, outputs):
         # the world did not change: refund the budget AND echo a recheck
         # (the failure may still stand under the fresh authority)
         del repairs[key]
+        if ladder.closing is not None and not _pending_repairs(repairs):
+            # closing: the world is done — no recheck, retire instead
+            return _retire(ladder, repairs, ladder.closing, outputs)
         echo = EscMoved(
             fp=entry["fp"],
             head=entry["head"],
@@ -269,11 +290,20 @@ def _fold_settled(binding, outputs):
         # entry's fields to echo the recheck (a bare string would strand
         # the custody and crash the fold)
         repairs[key] = {**entry, "state": "fault"}
+    if ladder.closing is not None and not _pending_repairs(repairs):
+        # the settlement this close was waiting for: retire NOW
+        return _retire(ladder, repairs, ladder.closing, outputs)
     return route(outputs, {"esc.ladder": (ladder.validated_update(repairs=repairs),)})
 
 
 def _end(binding, outputs):
     close, ladder = values(binding, CloseFact, Ladder)
+    if _pending_repairs(ladder.repairs):
+        # a repair is in mutation custody: its settlement WILL arrive
+        # (mutation settles every mailboxed request, even after its own
+        # close). Retiring now would strand it and record a lie — hold
+        # the ladder in `closing` until the last settlement folds.
+        return route(outputs, {"esc.ladder": (ladder.validated_update(closing=close.reason),)})
     ended = LadderEnded(reruns=ladder.reruns, repairs=ladder.repairs, reason=close.reason)
     return route(outputs, {"esc.done": (ended,)})
 
@@ -301,9 +331,9 @@ def wire(net) -> None:
     s = net.s
     esc, ci, mut, dash, ready = s.esc, s.ci, s.mut, s.dash, s.ready
 
-    # scaffolding: the mutation loop will mail MutationSettled and the
-    # conversation loop will mail RecoverFact internally
-    net.t.on_settled >> esc.p.settled
+    # scaffolding: the conversation loop will mail RecoverFact
+    # internally once it lands (MutationSettled arrives from the
+    # mutation loop, first-class)
     net.t.on_recover >> esc.p.recover
 
     (
@@ -356,6 +386,7 @@ def wire(net) -> None:
         >> (
             esc.p.ladder,
             ci.p.echo,
+            esc.p.done,  # a closing ladder retires on its last settlement
         )
     )
     # the exact-recovery door (A2): a faulted rerun reissues under the
@@ -368,7 +399,9 @@ def wire(net) -> None:
             esc.p.rerun_req,
         )
     )
-    (esc.p.closed, esc.p.ladder) >> esc.t.end(handler=petri_handler(_end)) >> esc.p.done
+    # end retires immediately, or holds the ladder in `closing` while a
+    # repair settlement is still owed by the mutation loop
+    ((esc.p.closed, esc.p.ladder) >> esc.t.end(handler=petri_handler(_end)) >> (esc.p.done, esc.p.ladder))
 
 
 def seed() -> dict:

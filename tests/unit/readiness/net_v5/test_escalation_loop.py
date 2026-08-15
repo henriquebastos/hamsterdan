@@ -24,15 +24,7 @@ from harness import (
 )
 
 HOLD = frozenset({"rerun_gate"})
-
-
-def see_settled(engine, op: str, outcome: str, fingerprint: str, incarnation: int = 1):
-    deliver(
-        engine,
-        "on_settled",
-        "MutationSettled",
-        {"op": op, "outcome": outcome, "incarnation": incarnation, "fingerprint": fingerprint},
-    )
+GATE_HOLD = frozenset({"git_gate"})
 
 
 def fail(engine, run_id: int = 1, attempt: int = 1, fingerprint: str = "fp1", head: str = "h1"):
@@ -50,8 +42,15 @@ def ladder(engine) -> dict:
     return one(engine, "esc.ladder")
 
 
-def repair_requests(engine) -> list[dict]:
-    return tokens(engine, "mut.requests")
+def pushes(engine) -> list[str]:
+    """Operations the provider's push ledger holds (LANDED effects)."""
+    return [p["op"] for p in world_of(engine)["pushes"]]
+
+
+def push_rounds(engine) -> list[dict]:
+    """Every mutation round the loop ever opened (a landed, moved, or
+    faulted round each left exactly one pending fact)."""
+    return [f["body"] for f in tokens(engine, "dash.facts") if f["kind"] == "mutation_pending"]
 
 
 def human_pages(engine) -> list[dict]:
@@ -143,16 +142,17 @@ class TestRerunRung:
         release_one(engine, dispatch, definitions, "rerun_gate")
         # the cut (1,2) absorbed the queued pre-request evidence: no repair
         assert ladder(engine)["reruns"] == {"L1:fp1": {"state": "done", "run_id": 1, "attempt": 2}}
-        assert tokens(engine, "mut.requests") == []
+        assert push_rounds(engine) == []
         # the rerun's OWN outcome is strictly newer — the repair is earned
-        deliver(
+        deliver_held(
             engine,
+            dispatch,
+            definitions,
             "on_runs",
             "RunSeen",
             {"head": "h1", "run_id": 1, "attempt": 3, "conclusion": "failure", "fingerprint": "fp1"},
         )
-        [request] = tokens(engine, "mut.requests")
-        assert request["op"] == "repair:L1:fp1"
+        assert pushes(engine) == ["repair:L1:fp1"]  # the repair landed
 
     def test_landed_rerun_records_the_answered_evidence_on_the_rung(self) -> None:
         engine, _ = spawn()
@@ -168,63 +168,88 @@ class TestRerunRung:
         see_head(engine, "h2")  # superseded: fresh lineage L2
         fail(engine, run_id=2, head="h2")
         assert world_of(engine)["reruns"] == ["L1:fp1", "L2:fp1"]
-        assert repair_requests(engine) == []  # neither rung escalated
+        assert push_rounds(engine) == []  # neither rung escalated
 
     def test_confirmed_own_repair_keeps_the_lineage_and_the_burned_rungs(self) -> None:
         # the REAL repair sequence: rerun burned, repair requested and
-        # pushed, our push confirmed as the new head — then the same
-        # flake failing on the repaired head must not earn a second
-        # rerun OR a second push; the exhausted ladder pages the human
+        # PUSHED by the mutation loop, our push confirmed as the new
+        # head — then the same flake failing on the repaired head must
+        # not earn a second rerun OR a second push; the exhausted ladder
+        # pages the human
         engine, _ = spawn()
         see_head(engine, "h1")
         fail(engine, run_id=1, attempt=1)  # burns the L1:fp1 rerun rung
-        fail(engine, run_id=1, attempt=2)  # burns the repair rung
-        [request] = repair_requests(engine)
-        assert request["op"] == "repair:L1:fp1"
-        # the (future) mutation loop pushes: provisional note, settle
-        deliver(
-            engine,
-            "on_provisional",
-            "ProvisionalHead",
-            {"expected": "h2", "op": "repair:L1:fp1", "lineage": "L1"},
-        )
-        see_settled(engine, op="repair:L1:fp1", outcome="landed", fingerprint="L1:fp1")
-        see_head(engine, "h2")  # CONFIRMED: same lineage L1
-        fail(engine, run_id=2, attempt=1, head="h2")
+        fail(engine, run_id=1, attempt=2)  # burns the repair rung: the push LANDS
+        assert pushes(engine) == ["repair:L1:fp1"]
+        new_head = world_of(engine)["branch_head"]
+        assert new_head == "h1+repair:L1:fp1"
+        # the landed push noted the provisional expectation with lifecycle
+        assert one(engine, "life.state")["expected"] == new_head
+        see_head(engine, new_head)  # CONFIRMED: same lineage L1
+        fail(engine, run_id=2, attempt=1, head=new_head)
         assert world_of(engine)["reruns"] == ["L1:fp1"]  # no second rerun
-        assert len(repair_requests(engine)) == 1  # no second push
+        assert pushes(engine) == ["repair:L1:fp1"]  # no second push
         [page] = human_pages(engine)  # the ladder is exhausted
-        assert page["body"] == {"fingerprint": "fp1", "head": "h2"}
+        assert page["body"] == {"fingerprint": "fp1", "head": new_head}
 
 
 class TestRepairRung:
     def test_newer_failing_evidence_after_a_landed_rerun_requests_repair_once(self) -> None:
-        engine, _ = spawn()
-        see_head(engine, "h1", base="b1", policy="p1")
-        fail(engine, run_id=1, attempt=1)
-        fail(engine, run_id=1, attempt=2)  # the rerun's own attempt still fails
-        [request] = repair_requests(engine)
-        assert request == {
+        engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=GATE_HOLD,
+        )
+        for attempt in (1, 2):  # the rerun's own attempt still fails
+            deliver_held(
+                engine,
+                dispatch,
+                definitions,
+                "on_runs",
+                "RunSeen",
+                {"head": "h1", "run_id": 1, "attempt": attempt, "conclusion": "failure", "fingerprint": "fp1"},
+                hold=GATE_HOLD,
+            )
+        # the repair is IN FLIGHT: one gate invocation, full claim,
+        # stable operation identity
+        [invocation] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        assert invocation.input["work"] == {
             "op": "repair:L1:fp1",
+            "op_key": "push:repair:L1:fp1:h1:i1",
             "head": "h1",
             "base": "b1",
             "policy": "p1",
             "incarnation": 1,
-            "source": "escalation",
+            "lineage": "L1",
         }
         assert ladder(engine)["repairs"]["L1:fp1"]["state"] == "pending"
         # a third failure while the repair is in flight is the same
         # breakage, not grounds for a second push
-        fail(engine, run_id=1, attempt=3)
-        assert len(repair_requests(engine)) == 1
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_runs",
+            "RunSeen",
+            {"head": "h1", "run_id": 1, "attempt": 3, "conclusion": "failure", "fingerprint": "fp1"},
+            hold=GATE_HOLD,
+        )
+        assert len([i for i in dispatch.pending.values() if i.activity == "git_gate"]) == 1
         assert human_pages(engine) == []
+        release_one(engine, dispatch, definitions, "git_gate")
+        assert pushes(engine) == ["repair:L1:fp1"]
 
     def test_landed_repair_then_strictly_newer_failure_pages_the_human(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
         fail(engine, run_id=1, attempt=1)
-        fail(engine, run_id=1, attempt=2)  # -> repair requested
-        see_settled(engine, op="repair:L1:fp1", outcome="landed", fingerprint="L1:fp1")
+        fail(engine, run_id=1, attempt=2)  # -> the repair pushes and LANDS
+        assert pushes(engine) == ["repair:L1:fp1"]
         assert ladder(engine)["repairs"]["L1:fp1"]["state"] == "done"
         assert human_pages(engine) == []
         fail(engine, run_id=1, attempt=3)  # the ladder is exhausted
@@ -232,37 +257,73 @@ class TestRepairRung:
         assert page["body"] == {"fingerprint": "fp1", "head": "h1"}
 
     def test_declined_repair_consumes_the_rung_with_a_known_terminal(self) -> None:
+        # a faulted mutation baton declines every further push BEFORE
+        # any gate attempt — the rung is consumed with a KNOWN terminal
         engine, _ = spawn()
+        world_of(engine)["git_mode"] = "fault"
         see_head(engine, "h1")
         fail(engine, run_id=1, attempt=1)
-        fail(engine, run_id=1, attempt=2)
-        see_settled(engine, op="repair:L1:fp1", outcome="declined", fingerprint="L1:fp1")
-        assert ladder(engine)["repairs"]["L1:fp1"]["state"] == "declined"
-        fail(engine, run_id=1, attempt=3)  # newer evidence: straight to the human
+        fail(engine, run_id=1, attempt=2)  # this repair FAULTS the baton
+        assert ladder(engine)["repairs"]["L1:fp1"]["state"] == "fault"
+        # a second fingerprint climbs its own ladder; its repair is declined
+        fail(engine, run_id=2, attempt=1, fingerprint="fp2")
+        fail(engine, run_id=2, attempt=2, fingerprint="fp2")
+        assert ladder(engine)["repairs"]["L1:fp2"]["state"] == "declined"
+        fail(engine, run_id=2, attempt=3, fingerprint="fp2")  # straight to the human
         assert len(human_pages(engine)) == 1
-        assert len(repair_requests(engine)) == 1  # never a second push
+        assert pushes(engine) == []  # never a push landed
 
     def test_moved_repair_refunds_the_budget_and_converges_through_ci(self) -> None:
-        engine, _ = spawn()
-        see_head(engine, "h1", base="b1")
-        fail(engine, run_id=1, attempt=1)
-        fail(engine, run_id=1, attempt=2)  # -> repair pending under b1
-        # the repair settle says MOVED: budget refunded, recheck echoed
-        # to CI — the attempted tuple is still current, so CI parks
-        see_settled(engine, op="repair:L1:fp1", outcome="moved", fingerprint="L1:fp1")
+        engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=GATE_HOLD,
+        )
+        for attempt in (1, 2):
+            deliver_held(
+                engine,
+                dispatch,
+                definitions,
+                "on_runs",
+                "RunSeen",
+                {"head": "h1", "run_id": 1, "attempt": attempt, "conclusion": "failure", "fingerprint": "fp1"},
+                hold=GATE_HOLD,
+            )
+        # the repair flies under b1; the provider's base moves BEFORE the
+        # webhook arrives — the gate's fresh read classifies MOVED
+        world_of(engine)["base_head"] = "b2"
+        release_one(engine, dispatch, definitions, "git_gate")
+        # budget refunded; the recheck echoed to CI — the attempted tuple
+        # is still what CI holds (no webhook yet), so CI parks
         assert "L1:fp1" not in ladder(engine)["repairs"]
         assert one(engine, "ci.state")["parked"] == ["fp1"]
-        # the base refresh reissues; the rerun rung already answered
-        # (1,2), so the refunded REPAIR is re-requested under b2
-        see_head(engine, "h1", base="b2")
-        assert [r["base"] for r in repair_requests(engine)] == ["b1", "b2"]
+        assert pushes(engine) == []
+        # the webhook lands: the refresh reissues, the refunded REPAIR is
+        # re-requested under b2 and this time the push LANDS
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b2", "mergeable": True, "policy": "p1"},
+        )
+        assert pushes(engine) == ["repair:L1:fp1"]
+        entry = ladder(engine)["repairs"]["L1:fp1"]
+        assert entry["state"] == "done"
+        assert entry["base"] == "b2"  # the fresh claim, not the stale one
 
     def test_faulted_repair_retains_the_entry_for_recovery_time_echoes(self) -> None:
         engine, _ = spawn()
+        world_of(engine)["git_mode"] = "fault"
         see_head(engine, "h1", base="b1", policy="p1")
         fail(engine, run_id=1, attempt=1)
-        fail(engine, run_id=1, attempt=2)
-        see_settled(engine, op="repair:L1:fp1", outcome="faulted", fingerprint="L1:fp1")
+        fail(engine, run_id=1, attempt=2)  # the repair's gate terminal is unknown
         entry = ladder(engine)["repairs"]["L1:fp1"]
         assert entry["state"] == "fault"
         # the retained entry keeps the raw fp, attempted authority, and
@@ -271,15 +332,31 @@ class TestRepairRung:
         assert (entry["run_id"], entry["attempt"]) == (1, 2)
         fail(engine, run_id=1, attempt=3)  # newer evidence: page, no push
         assert len(human_pages(engine)) == 1
-        assert len(repair_requests(engine)) == 1
+        assert pushes(engine) == []
 
     def test_settle_for_an_unknown_key_is_inert(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
         fail(engine)
         before = ladder(engine)
-        see_settled(engine, op="repair:L9:zz", outcome="landed", fingerprint="L9:zz")
-        assert ladder(engine) == before
+        # a human-commanded repair-shaped op the ladder never requested
+        # lands and settles; the foreign settle is absorbed untouched
+        deliver(
+            engine,
+            "on_mutation",
+            "MutationRequest",
+            {
+                "op": "repair:L9:zz",
+                "rid": "repair:L9:zz",
+                "head": "h1",
+                "base": "b1",
+                "policy": "p1",
+                "incarnation": 1,
+                "source": "conversation",
+            },
+        )
+        assert pushes(engine) == ["repair:L9:zz"]  # it DID land
+        assert ladder(engine) == before  # but burned no rung
 
 
 class TestFaultAndRecovery:
@@ -314,7 +391,7 @@ class TestFaultAndRecovery:
     def test_a_faulted_rung_never_authorizes_the_repair_rung(self) -> None:
         engine, _ = self.spawn_faulted()
         fail(engine, run_id=1, attempt=2)  # newer evidence, rung unproven
-        assert repair_requests(engine) == []  # FAIL-CLOSED: no mutation
+        assert push_rounds(engine) == []  # FAIL-CLOSED: no mutation
         [page] = human_pages(engine)
         assert page["body"]["why"] == "rerun-fault"
 
@@ -347,7 +424,7 @@ class TestFaultAndRecovery:
         # it must come back and advance the ladder to repair
         engine, _ = self.spawn_faulted()
         fail(engine, run_id=1, attempt=2)  # blocked by the fault
-        assert repair_requests(engine) == []  # fail-closed: nothing yet
+        assert push_rounds(engine) == []  # fail-closed: nothing yet
         world = world_of(engine)
         world["reruns_mode"] = None
         world["reruns"].append("L1:fp1")  # the provider held it
@@ -355,8 +432,8 @@ class TestFaultAndRecovery:
         state = ladder(engine)
         assert state["reruns"]["L1:fp1"] == {"state": "done", "run_id": 1, "attempt": 1}
         assert state["rerun_faults"] == {}
-        [request] = repair_requests(engine)  # the replayed evidence escalated
-        assert request["op"] == "repair:L1:fp1"
+        # the replayed evidence escalated: the repair pushed and landed
+        assert pushes(engine) == ["repair:L1:fp1"]
         # and still no duplicate rerun effect
         assert [e for e in world["log"] if e[0] == "rerun"] == []
 
@@ -373,10 +450,9 @@ class TestFaultAndRecovery:
         assert world["reruns"] == ["L1:fp1"]  # issued NOW
         # the rung watermark advanced to the blocked evidence: absorbed
         assert state["reruns"]["L1:fp1"] == {"state": "done", "run_id": 1, "attempt": 2}
-        assert repair_requests(engine) == []  # no push on stale evidence
+        assert pushes(engine) == []  # no push on stale evidence
         fail(engine, run_id=1, attempt=3)  # the fresh rerun still fails
-        [request] = repair_requests(engine)  # NOW the repair is earned
-        assert request["op"] == "repair:L1:fp1"
+        assert pushes(engine) == ["repair:L1:fp1"]  # NOW the repair is earned
 
     def test_evidence_arriving_while_recovery_is_in_flight_cannot_indict_the_fresh_rerun(self) -> None:
         # the sharpest race: recovery's reissue is IN FLIGHT when new
@@ -430,16 +506,17 @@ class TestFaultAndRecovery:
         release_one(engine, dispatch, definitions, "rerun_gate")
         # the cut (1,2) absorbed the pre-request evidence: no repair yet
         assert ladder(engine)["reruns"] == {"L1:fp1": {"state": "done", "run_id": 1, "attempt": 2}}
-        assert tokens(engine, "mut.requests") == []
+        assert pushes(engine) == []
         # only the fresh rerun's own failure earns the repair
-        deliver(
+        deliver_held(
             engine,
+            dispatch,
+            definitions,
             "on_runs",
             "RunSeen",
             {"head": "h1", "run_id": 1, "attempt": 3, "conclusion": "failure", "fingerprint": "fp1"},
         )
-        [request] = tokens(engine, "mut.requests")
-        assert request["op"] == "repair:L1:fp1"
+        assert pushes(engine) == ["repair:L1:fp1"]
 
     def test_a_refaulted_recovery_round_keeps_the_blocked_evidence(self) -> None:
         engine, _ = self.spawn_faulted()
@@ -454,8 +531,7 @@ class TestFaultAndRecovery:
         world["reruns_mode"] = None
         world["reruns"].append("L1:fp1")
         deliver(engine, "on_recover", "RecoverFact", {"target": "esc", "op": "rerun:L1:fp1"})
-        [request] = repair_requests(engine)
-        assert request["op"] == "repair:L1:fp1"
+        assert pushes(engine) == ["repair:L1:fp1"]
 
     def test_recovery_for_an_unknown_operation_is_inert(self) -> None:
         engine, _ = self.spawn_faulted()

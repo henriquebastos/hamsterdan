@@ -197,7 +197,7 @@ class TestCiAssessment:
         [invocation] = dispatch.pending.values()
         assert invocation.activity == "rerun_gate"
         claim = dict(invocation.input["work"])
-        assert claim.pop("mem") == {"reruns": {}, "repairs": {}, "rerun_faults": {}}
+        assert claim.pop("mem") == {"reruns": {}, "repairs": {}, "rerun_faults": {}, "closing": None}
         assert claim == {
             "fingerprint": "L1:fp1",
             "fp": "fp1",

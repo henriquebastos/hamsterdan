@@ -70,13 +70,24 @@ class TestHeadAdmission:
     def test_expected_head_admits_as_confirmed_keeping_lineage(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
+        # the mutation loop pushes for real: the landed push mails the
+        # provisional expectation, and the webhook later confirms it
         deliver(
             engine,
-            "on_provisional",
-            "ProvisionalHead",
-            {"expected": "h2", "op": "repair", "lineage": "lin1"},
+            "on_mutation",
+            "MutationRequest",
+            {
+                "op": "repair:L1:fp1",
+                "rid": "repair:L1:fp1",
+                "head": "h1",
+                "base": "b1",
+                "policy": "p1",
+                "incarnation": 1,
+                "source": "escalation",
+            },
         )
-        see_head(engine, "h2")
+        assert one(engine, "life.state")["expected"] == "h1+repair:L1:fp1"
+        see_head(engine, "h1+repair:L1:fp1")
         state = one(engine, "life.state")
         assert state["incarnation"] == 2
         assert state["expected"] == ""
@@ -114,6 +125,38 @@ class TestDormancy:
         deliver(engine, "on_ready", "ReadySeen", {})
         assert one(engine, "life.state")["incarnation"] == 1
 
+    def test_resume_clears_a_provisional_expectation(self) -> None:
+        # a push lands, its expectation is installed, and the PR drafts
+        # BEFORE the pushed head's webhook arrives: dormancy records the
+        # head without admission (expected retained). Resume must clear
+        # the expectation — running with `head == expected` would mark
+        # every later committing intent provisional forever
+        engine, _ = spawn()
+        see_head(engine, "h1")
+        deliver(
+            engine,
+            "on_mutation",
+            "MutationRequest",
+            {
+                "op": "repair:L1:fp1",
+                "rid": "repair:L1:fp1",
+                "head": "h1",
+                "base": "b1",
+                "policy": "p1",
+                "incarnation": 1,
+                "source": "escalation",
+            },
+        )
+        assert one(engine, "life.state")["expected"] == "h1+repair:L1:fp1"
+        deliver(engine, "on_draft", "DraftSeen", {})
+        see_head(engine, "h1+repair:L1:fp1")  # recorded while dormant
+        deliver(engine, "on_ready", "ReadySeen", {})
+        state = one(engine, "life.state")
+        assert state["phase"] == "running"
+        assert state["expected"] == ""  # cleared at the resume boundary
+        assert state["expected_op"] == ""
+        assert state["lineage"] == ""  # accepted loss across the grant move
+
 
 class TestClose:
     def test_close_goes_terminal_and_fans_out_to_every_loop(self) -> None:
@@ -122,17 +165,17 @@ class TestClose:
         deliver(engine, "on_close", "CloseSeen", {"reason": "merged"})
         assert one(engine, "life.state")["phase"] == "terminal"
         for mailbox in (
-            "mut.closed",
             "dash.closed",
             "rem.closed",
             "ready.closed",
         ):
             assert one(engine, mailbox)["reason"] == "merged"
-        # the CI, escalation, and review loops consumed their close mail
-        # and retired
+        # the CI, escalation, review, and mutation loops consumed their
+        # close mail and retired
         assert one(engine, "ci.done")["reason"] == "merged"
         assert one(engine, "esc.done")["reason"] == "merged"
         assert one(engine, "review.done")["reason"] == "merged"
+        assert one(engine, "mut.done")["reason"] == "merged"
 
     def test_terminal_absorbs_every_later_observation(self) -> None:
         engine, _ = spawn()
@@ -228,10 +271,9 @@ class TestCensus:
             "on_comment",
             "on_human",
             "on_runs",
-            "on_provisional",
-            # scaffolding doors until the mutation and conversation
-            # loops mail these facts internally
-            "on_settled",
+            # scaffolding doors until the conversation loop mails these
+            # facts internally
+            "on_mutation",
             "on_recover",
             "on_dismiss",
         }

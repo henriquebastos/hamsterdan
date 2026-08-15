@@ -125,7 +125,18 @@ def _admit_ready(binding, outputs):
     _, state = values(binding, ReadySeen, LifeState)
     if state.phase != "quiescent":
         return route(outputs, {"life.state": (state,)})
-    resumed = state.validated_update(phase="running", incarnation=state.incarnation + 1)
+    # resume clears any provisional expectation and lineage: a pushed
+    # head observed DURING dormancy was recorded without admission, so
+    # a retained `expected == head` would wedge every later committing
+    # intent as provisional. Only lifecycle's provisional lineage is
+    # cleared here; CI preserves its own budget lineage across resume.
+    resumed = state.validated_update(
+        phase="running",
+        incarnation=state.incarnation + 1,
+        expected="",
+        expected_op="",
+        lineage="",
+    )
     work = HeadWork(
         incarnation=resumed.incarnation,
         head=resumed.head,
@@ -211,6 +222,14 @@ def _admit_runs(binding, outputs):
 
 def _note_provisional(binding, outputs):
     note, state = values(binding, ProvisionalHead, LifeState)
+    # the from_head fence: the note only installs while lifecycle still
+    # stands on the head the push moved FROM. A late note (recovery
+    # reconciled after the webhook already admitted the pushed head, or
+    # the world moved further) is inert — the admission it would have
+    # upgraded already happened as `superseded`, an accepted lineage
+    # loss. Without this fence a late note wedges `expected` forever.
+    if state.phase != "running" or state.head != note.from_head:
+        return route(outputs, {"life.state": (state,)})
     noted = state.validated_update(expected=note.expected, expected_op=note.op, lineage=note.lineage)
     return route(outputs, {"life.state": (noted,)})
 
@@ -246,8 +265,6 @@ def wire(net) -> None:
     net.t.on_comment >> life.p.comments
     net.t.on_human >> life.p.humans
     net.t.on_runs >> life.p.runs
-    # scaffolding: the mutation loop will mail ProvisionalHead internally
-    net.t.on_provisional >> life.p.provisional
 
     # admission folds (each: one mailbox + the state baton)
     (

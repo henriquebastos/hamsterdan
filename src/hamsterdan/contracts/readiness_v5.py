@@ -135,11 +135,21 @@ class Ladder(WorkflowModel):
     authority, and evidence, so a moved settle can echo a recheck).
     `rerun_faults` retains the EXACT faulted request (A2) so the
     recovery door can reissue the same operation identity.
+
+    `closing` is the close reason while the ladder waits for pending
+    repair settlements (None otherwise — a reason may be any string,
+    including empty, so the sentinel must be distinct): close with a
+    repair in custody
+    must not retire the ladder before the mutation terminal folds, or
+    the settlement would strand and the terminal record would lie
+    `pending`. While closing, new evidence and recovery are absorbed —
+    no new rung is ever opened after close.
     """
 
     reruns: dict[str, Any]
     repairs: dict[str, Any]
     rerun_faults: dict[str, dict[str, Any]]
+    closing: str | None = None
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -168,6 +178,28 @@ class ReviewMemory(WorkflowModel):
     findings: tuple[dict[str, Any], ...]
     dismissed: tuple[str, ...]
     pub: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class MutState(WorkflowModel):
+    """The mutation loop's baton: the serialization IS the baton.
+
+    While a push round is in flight the baton is HELD (no token in the
+    place), so a second request waits visibly in the mailbox — one
+    mutation at a time by construction. `idle` carries empty retention
+    fields; `faulted` retains the EXACT operation identity and the FULL
+    attempted authority claim (A2) so the recovery door can reissue the
+    same operation, and declines every further request fail-closed.
+    """
+
+    state: Literal["idle", "faulted"]
+    op_key: str
+    op: str
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+    reason: str
 
 
 # -- directed facts (loop -> loop, dedicated colors) -------------------------
@@ -214,7 +246,18 @@ class RunWork(WorkflowModel):
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class ProvisionalHead(WorkflowModel):
+    """Mutation -> lifecycle: expect our own push as the next head.
+
+    `from_head` is the head the push moved FROM — the causal fence: the
+    note only installs while lifecycle still stands on that head. A late
+    note (recovery reconciled after the webhook already admitted the
+    pushed head, or after the world moved further) is inert; the
+    admission it would have upgraded already happened as `superseded`,
+    an accepted lineage loss.
+    """
+
     expected: str
+    from_head: str
     op: str
     lineage: str
 
@@ -277,9 +320,17 @@ class MutationRequest(WorkflowModel):
 
     The gate compares ALL claim fields at effect time (A1.5); the fold
     that mints the request never re-checks the world.
+
+    `rid` is the producer's stable REQUEST identity, distinct from the
+    semantic `op`: the rung key for escalation repairs (where the op IS
+    the identity), the comment identity for conversation ops. Two
+    distinct requests of the same kind at the same head must carry
+    distinct rids, or the second would lookup-reconcile onto the first
+    push's landed effect instead of reaching its own CAS refusal.
     """
 
     op: str
+    rid: str
     head: str
     base: str
     policy: str
@@ -505,4 +556,79 @@ class ReviewEnded(WorkflowModel):
 
     reviewed: tuple[str, ...]
     pub_phase: str
+    reason: str
+
+
+# -- gate work and typed terminals (mutation) ---------------------------------
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class MutWork(WorkflowModel):
+    """The git gate's work token: one push under a FULL authority claim.
+
+    `op_key` is the stable operation identity (`push:{rid}:{head}:i{inc}`,
+    keyed by the producer's REQUEST identity, not the semantic op) for
+    lookup-first reconciliation: a crash after the push landed but
+    before acknowledgment must not push twice. The gate fences the head
+    by server-side CAS and base/policy/grant by a fresh read (A1.5).
+    `lineage` is the budget lineage the pushed head inherits when it is
+    later confirmed — derived from the op, echoed by the gate.
+    """
+
+    op: str
+    op_key: str
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+    lineage: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class Pushed(WorkflowModel):
+    """The push landed (or lookup-first found it already landed):
+    `new_head` is the head the provider now reports for this operation."""
+
+    op: str
+    op_key: str
+    head: str
+    new_head: str
+    incarnation: int
+    lineage: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class MovedM(WorkflowModel):
+    """Authority moved under the push: CAS lost the head race, or the
+    fresh read found a different base/policy/grant. The FULL observed
+    authority travels back for the record."""
+
+    op: str
+    head: str
+    incarnation: int
+    observed: str
+    observed_incarnation: int
+    observed_phase: Phase
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class FaultM(WorkflowModel):
+    """Unknown provider terminal: the push may or may not have landed.
+    A2: retains the EXACT operation and the FULL authority claim so the
+    recovery door can reissue the same operation identity."""
+
+    op: str
+    op_key: str
+    head: str
+    base: str
+    policy: str
+    reason: str
+    incarnation: int
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class MutEnded(WorkflowModel):
+    """The mutation loop's terminal record at close."""
+
+    state: str
     reason: str

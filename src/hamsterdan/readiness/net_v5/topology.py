@@ -23,11 +23,10 @@ from hamsterdan.contracts.readiness_v5 import (
     CloseFact,
     GateFact,
     IntentFact,
-    MutationRequest,
 )
-from hamsterdan.readiness.net_v5 import ci, esc, life, review
+from hamsterdan.readiness.net_v5 import ci, esc, life, mutation, review
 
-_LOOPS = (life, ci, esc, review)
+_LOOPS = (life, ci, esc, review, mutation)
 
 # transition path -> (activity name, declared variant colors), for every
 # gate in the composed topology; the host (or a test world) binds these
@@ -50,8 +49,6 @@ def _declare_pending_mailboxes(s) -> None:
     facts from the first slice on.
     """
     s.conv.p.intents(IntentFact)
-    s.mut.p.requests(MutationRequest)
-    s.mut.p.closed(CloseFact)
     s.dash.p.facts(GateFact)
     s.dash.p.closed(CloseFact)
     s.rem.p.closed(CloseFact)
