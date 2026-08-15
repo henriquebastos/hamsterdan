@@ -28,6 +28,9 @@ from harness import (
     world_of,
 )
 
+from hamsterdan.contracts.readiness_v5 import GateFact, Snapshot
+from hamsterdan.readiness.net_v5.readiness import _apply
+
 
 def snap(engine) -> dict:
     return one(engine, "ready.snap")
@@ -167,7 +170,7 @@ class TestAnnounce:
             {"approval": True, "changes_requested": False, "unresolved": 0},
             hold=hold,
         )
-        assert snap(engine)["pending"] == ["change"]
+        assert snap(engine)["pending"] == ["push:comment:c1:h1:i1"]  # the round's identity
         assert announcements(world) == []  # ready in every OTHER gate
         release_one(engine, dispatch, definitions, "git_gate")
         assert snap(engine)["pending"] == []
@@ -254,6 +257,77 @@ class TestAnnounce:
         assert announcements(world) == []  # B's true head is unknown
 
 
+class TestSettlementIdentity:
+    """CV17.DS2.0: a settlement clears exactly ITS OWN round.
+
+    Mailed facts carry no cross-loop ordering guarantee: an older
+    round's settlement may fold AFTER a newer same-kind round's pending
+    fact reached the snapshot. Keyed by the semantic op alone,
+    settled(A) would strip pending(B) — two "change" comments look
+    identical — and readiness could announce while B's push terminal is
+    still unknown. The facts therefore carry the stable operation
+    identity (`op_key`) and the snapshot stores and removes by it, so
+    the folded outcome is invariant under fold order.
+    """
+
+    KEY_A = "push:comment:c1:h1:i1"
+    KEY_B = "push:comment:c2:h1:i1"
+
+    @staticmethod
+    def _snap() -> Snapshot:
+        return Snapshot(
+            incarnation=1,
+            phase="running",
+            head="h1",
+            base="b1",
+            policy="p1",
+            mergeable=True,
+            checks="success",
+            findings_blocking=0,
+            approval=True,
+            changes_requested=False,
+            unresolved=0,
+            pending=(),
+            faults={},
+            announced=(),
+            candidate=False,
+            announcing={},
+            blocked={},
+            closing=None,
+        )
+
+    def test_an_old_settlement_cannot_clear_a_newer_same_kind_round(self) -> None:
+        pending_a = GateFact(kind="mutation_pending", incarnation=1, body={"op": "change", "op_key": self.KEY_A})
+        pending_b = GateFact(kind="mutation_pending", incarnation=1, body={"op": "change", "op_key": self.KEY_B})
+        settled_a = GateFact(
+            kind="mutation_settled",
+            incarnation=1,
+            body={"op": "change", "op_key": self.KEY_A, "outcome": "moved", "fingerprint": "", "incarnation": 1},
+        )
+        # both orders respect per-round causality (pending(A) first);
+        # they differ in whether A's settlement overtakes B's pending
+        for order in ((pending_a, settled_a, pending_b), (pending_a, pending_b, settled_a)):
+            snap_ = self._snap()
+            for fact in order:
+                applied = _apply(snap_, fact)
+                snap_ = applied if applied is not None else snap_
+            assert snap_.pending == (self.KEY_B,), [f.body for f in order]
+
+    def test_the_pending_gate_holds_on_identity_not_display(self) -> None:
+        # the snapshot's pending gate is an identity ledger: the display
+        # op ("change") never keys it
+        pending = GateFact(kind="mutation_pending", incarnation=1, body={"op": "change", "op_key": self.KEY_A})
+        settled = GateFact(
+            kind="mutation_settled",
+            incarnation=1,
+            body={"op": "change", "op_key": self.KEY_A, "outcome": "landed", "fingerprint": "", "incarnation": 1},
+        )
+        snap_ = _apply(self._snap(), pending)
+        assert snap_ is not None and snap_.pending == (self.KEY_A,)
+        snap_ = _apply(snap_, settled)
+        assert snap_ is not None and snap_.pending == ()
+
+
 class TestIncarnations:
     def test_draft_resume_announces_again_under_the_new_incarnation(self) -> None:
         engine, _ = spawn()
@@ -310,7 +384,7 @@ class TestIncarnations:
             {"id": "c1", "kind": "change", "arg": "", "authorized": True},
             hold=hold,
         )
-        assert snap(engine)["pending"] == ["change"]
+        assert snap(engine)["pending"] == ["push:comment:c1:h1:i1"]
         deliver_held(
             engine,
             dispatch,
@@ -513,7 +587,7 @@ class TestFaultLedger:
         comment(engine, "c1", "change")
         st = snap(engine)
         [key] = [k for k in st["faults"] if k.startswith("mutation:")]
-        assert st["pending"] == ["change"]  # the settle never reached ready
+        assert st["pending"] == ["push:comment:c1:h1:i1"]  # the settle never reached ready
         world["git_mode"] = None
         op = key.removeprefix("mutation:")
         comment(engine, "c2", "recover_publication", op)

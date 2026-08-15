@@ -72,8 +72,16 @@ class TestLandedPush:
         assert world["branch_head"] == "h1+change"
         assert world["pushes"] == [{"key": "push:comment:c1:h1:i1", "op": "change", "from": "h1", "to": "h1+change"}]
         assert one(engine, "mut.state")["state"] == "idle"  # the baton returned
-        assert pending_facts(engine) == [{"op": "change"}]
-        assert settled_facts(engine) == [{"op": "change", "outcome": "landed", "incarnation": 1, "fingerprint": ""}]
+        assert pending_facts(engine) == [{"op": "change", "op_key": "push:comment:c1:h1:i1"}]
+        assert settled_facts(engine) == [
+            {
+                "op": "change",
+                "op_key": "push:comment:c1:h1:i1",
+                "outcome": "landed",
+                "incarnation": 1,
+                "fingerprint": "",
+            }
+        ]
 
     def test_a_landed_human_push_notes_the_provisional_head_with_lifecycle(self) -> None:
         # the expected-head note is what later admits OUR OWN push as
@@ -145,7 +153,15 @@ class TestAuthorityFencing:
         world_of(engine)["branch_head"] = "h2"  # someone else pushed
         release_one(engine, dispatch, definitions, "git_gate")
         assert pushes(engine) == []
-        assert settled_facts(engine) == [{"op": "change", "outcome": "moved", "incarnation": 1, "fingerprint": ""}]
+        assert settled_facts(engine) == [
+            {
+                "op": "change",
+                "op_key": "push:comment:c1:h1:i1",
+                "outcome": "moved",
+                "incarnation": 1,
+                "fingerprint": "",
+            }
+        ]
         assert one(engine, "mut.state")["state"] == "idle"
 
     def test_a_moved_base_is_fenced_by_the_fresh_read_not_the_cas(self) -> None:
@@ -230,6 +246,10 @@ class TestFaultAndRecovery:
             "policy": "p1",
             "incarnation": 1,
             "reason": "unknown provider terminal",
+            "kind": "change",
+            "instruction": "",
+            "run_id": 0,
+            "attempt": 0,
         }
         faults = [f for f in projection(engine) if f["kind"] == "fault"]
         assert faults[-1]["body"] == {
@@ -249,6 +269,7 @@ class TestFaultAndRecovery:
         assert pushes(engine) == []
         assert settled_facts(engine)[-1] == {
             "op": "update_base",
+            "op_key": "push:comment:c2:h1:i1",
             "outcome": "declined",
             "incarnation": 1,
             "fingerprint": "",
@@ -441,3 +462,171 @@ class TestClose:
         [ended] = tokens(engine, "esc.done")
         assert ended["reason"] == ""
         assert tokens(engine, "esc.ladder") == []  # retired, not parked
+
+
+class TestMutationPayload:
+    """CV17.DS2.0: the work token carries the CHANGE, not just its identity.
+
+    A real git gate is coding-agent-plus-CAS-push as ONE classified
+    activity (production's `_code` shape): it needs the request kind,
+    the human's instruction, and the repair's evidence identity — all
+    credential-free — INSIDE the token. An external host ledger keyed
+    by rid would put canonical workflow state outside History.
+    """
+
+    def test_a_change_comment_carries_its_instruction_to_the_gate(self) -> None:
+        engine, _, dispatch, definitions = spawn_held()
+        see_head_held(engine, dispatch, definitions)
+        comment_held(engine, dispatch, definitions, "c1", "change", arg="rename the config key", hold=HOLD)
+        [invocation] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        work = invocation.input["work"]
+        assert work["kind"] == "change"
+        assert work["instruction"] == "rename the config key"
+        assert (work["run_id"], work["attempt"]) == (0, 0)  # no CI evidence
+
+    def test_a_repair_carries_its_evidence_identity_to_the_gate(self) -> None:
+        engine, _, dispatch, definitions = spawn_held()
+        see_head_held(engine, dispatch, definitions)
+        for attempt in (1, 2):  # rerun burns, then the repair mints
+            deliver_held(
+                engine,
+                dispatch,
+                definitions,
+                "on_runs",
+                "RunSeen",
+                {"head": "h1", "run_id": 1, "attempt": attempt, "conclusion": "failure", "fingerprint": "fp1"},
+                hold=HOLD,
+            )
+        [invocation] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        work = invocation.input["work"]
+        assert work["kind"] == "repair"
+        assert work["instruction"] == ""  # the evidence, not a human, speaks
+        assert (work["run_id"], work["attempt"]) == (1, 2)  # the indicting run
+
+    def test_a_faulted_round_retains_the_instruction_for_exact_reissue(self) -> None:
+        # A2: recovery reissues the EXACT operation — including the
+        # change payload the original round attempted
+        engine, _, dispatch, definitions = spawn_held()
+        world_of(engine)["git_mode"] = "fault"
+        see_head_held(engine, dispatch, definitions)
+        comment_held(engine, dispatch, definitions, "c1", "change", arg="rename the config key", hold=HOLD)
+        release_one(engine, dispatch, definitions, "git_gate")
+        pump(engine, dispatch, definitions)
+        state = one(engine, "mut.state")
+        assert state["state"] == "faulted"
+        assert state["kind"] == "change"
+        assert state["instruction"] == "rename the config key"
+        world_of(engine)["git_mode"] = None
+        comment_held(engine, dispatch, definitions, "r1", "recover_publication", arg="push:comment:c1:h1:i1", hold=HOLD)
+        [invocation] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        assert invocation.input["work"]["instruction"] == "rename the config key"
+
+    def test_recovery_reissues_the_exact_work_byte_for_byte(self) -> None:
+        # A2's full proof: the recovered MutWork EQUALS the original —
+        # every field, not just the instruction. The payload's exact
+        # association with the operation identity survives the fault
+        # round-trip through the retained MutState.
+        engine, _, dispatch, definitions = spawn_held()
+        world_of(engine)["git_mode"] = "fault"
+        see_head_held(engine, dispatch, definitions)
+        comment_held(engine, dispatch, definitions, "c1", "change", arg="rename the config key", hold=HOLD)
+        [first] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        original = dict(first.input["work"])
+        release_one(engine, dispatch, definitions, "git_gate")
+        pump(engine, dispatch, definitions)
+        world_of(engine)["git_mode"] = None
+        comment_held(engine, dispatch, definitions, "r1", "recover_publication", arg="push:comment:c1:h1:i1", hold=HOLD)
+        [second] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        assert second.input["work"] == original
+
+    def test_recovery_reissues_the_exact_repair_work_byte_for_byte(self) -> None:
+        # the repair's indicting evidence identity (run_id, attempt)
+        # survives the same round-trip
+        engine, _, dispatch, definitions = spawn_held()
+        world_of(engine)["git_mode"] = "fault"
+        see_head_held(engine, dispatch, definitions)
+        for attempt in (1, 2):  # rerun burns, then the repair mints
+            deliver_held(
+                engine,
+                dispatch,
+                definitions,
+                "on_runs",
+                "RunSeen",
+                {"head": "h1", "run_id": 1, "attempt": attempt, "conclusion": "failure", "fingerprint": "fp1"},
+                hold=HOLD,
+            )
+        [first] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        original = dict(first.input["work"])
+        assert (original["kind"], original["run_id"], original["attempt"]) == ("repair", 1, 2)
+        release_one(engine, dispatch, definitions, "git_gate")
+        pump(engine, dispatch, definitions)
+        world_of(engine)["git_mode"] = None
+        comment_held(engine, dispatch, definitions, "r1", "recover_publication", arg=original["op_key"], hold=HOLD)
+        [second] = [i for i in dispatch.pending.values() if i.activity == "git_gate"]
+        assert second.input["work"] == original
+
+
+class TestDeclined:
+    """CV17.DS2.0: a clean agent-unable is a DECLINED settlement, not a
+    fault. The agent investigated and produced no change; nothing was
+    pushed, the branch's true head is fully known — classifying this as
+    FaultM would fail the baton closed and page a human for a
+    non-incident, and MovedM would forge an authority move."""
+
+    def test_agent_unable_settles_declined_and_returns_the_baton(self) -> None:
+        engine, _ = spawn()
+        world_of(engine)["git_mode"] = "unable"
+        see_head(engine, "h1")
+        comment(engine, "c1", "change")
+        assert pushes(engine) == []  # nothing landed
+        assert settled_facts(engine)[-1] == {
+            "op": "change",
+            "op_key": "push:comment:c1:h1:i1",
+            "outcome": "declined",
+            "incarnation": 1,
+            "fingerprint": "",
+        }
+        assert one(engine, "mut.state")["state"] == "idle"  # NOT fail-closed
+
+    def test_a_declined_round_does_not_block_the_next_request(self) -> None:
+        engine, _ = spawn()
+        world_of(engine)["git_mode"] = "unable"
+        see_head(engine, "h1")
+        comment(engine, "c1", "change")
+        world_of(engine)["git_mode"] = None  # the next round is on its own
+        comment(engine, "c2", "update_base")
+        assert [s["outcome"] for s in settled_facts(engine)] == ["declined", "landed"]
+        assert pushes(engine) == [("push", "push:comment:c2:h1:i1")]
+
+    def test_a_declined_repair_consumes_the_rung(self) -> None:
+        # the ladder already consumes `declined` settlements (a known
+        # terminal): strictly newer failing evidence pages the human
+        # instead of re-repairing
+        engine, _ = spawn()
+        world_of(engine)["git_mode"] = "unable"
+        see_head(engine, "h1")
+        for attempt in (1, 2):  # rerun burns, then the repair declines
+            see_run(engine, head="h1", run_id=1, attempt=attempt, conclusion="failure", fingerprint="fp1")
+        assert settled_facts(engine)[-1]["outcome"] == "declined"
+        see_run(engine, head="h1", run_id=2, attempt=1, conclusion="failure", fingerprint="fp1")
+        needed = [f for f in projection(engine) if f["kind"] == "human_needed"]
+        assert needed and needed[-1]["body"]["fingerprint"] == "fp1"
+
+    def test_close_before_the_gate_starts_classifies_moved_not_declined(self) -> None:
+        # A3: close defers while the round is out — but this round never
+        # STARTED: the gate fences authority BEFORE the coding agent
+        # runs, and close already moved it to terminal. The agent never
+        # investigates against authority known to be gone, so the round
+        # settles MOVED (not declined), then the baton retires. A close
+        # arriving MID-agent needs a controllable mid-activity seam
+        # (DS2.1) to exercise the genuine late decline.
+        engine, _, dispatch, definitions = spawn_held()
+        world_of(engine)["git_mode"] = "unable"
+        see_head_held(engine, dispatch, definitions)
+        comment_held(engine, dispatch, definitions, "c1", "change", hold=HOLD)
+        deliver_held(engine, dispatch, definitions, "on_close", "CloseSeen", {"reason": "closed"}, hold=HOLD)
+        release_one(engine, dispatch, definitions, "git_gate")
+        pump(engine, dispatch, definitions)
+        assert settled_facts(engine)[-1]["outcome"] == "moved"
+        [ended] = tokens(engine, "mut.done")
+        assert ended["state"] == "idle"

@@ -118,13 +118,15 @@ def _fault_key(body: dict) -> str:
     return f"{body.get('where', '')}:{body.get('op', '')}"
 
 
-def _fold_fact(binding, outputs):
-    fact, snap = values(binding, GateFact, Snapshot)
+def _apply(snap: Snapshot, fact: GateFact) -> Snapshot | None:
+    """Pure fact application: the next snapshot, or None when the fact
+    is inert (stale, mismatched, or unknown) and must not reopen the
+    announce decision."""
     kind, body = fact.kind, fact.body
     if kind == "state":
         if fact.incarnation < snap.incarnation:
             # a STALE state fact must never roll the projection back
-            return route(outputs, {"ready.snap": (snap,)})
+            return None
         if fact.incarnation != snap.incarnation:
             # new authority: the per-incarnation gates reset; human
             # review state persists — approvals and unresolved threads
@@ -143,7 +145,7 @@ def _fold_fact(binding, outputs):
             policy=body["policy"],
         )
     elif fact.incarnation not in (0, snap.incarnation):
-        return route(outputs, {"ready.snap": (snap,)})  # A1.4: mismatched facts are inert
+        return None  # A1.4: mismatched facts are inert
     elif kind == "checks":
         snap = snap.validated_update(checks=body["status"])
     elif kind == "findings":
@@ -155,9 +157,12 @@ def _fold_fact(binding, outputs):
             unresolved=body["unresolved"],
         )
     elif kind == "mutation_pending":
-        snap = snap.validated_update(pending=(*snap.pending, body["op"]))
+        # the pending gate is an identity ledger (op_key), never the
+        # display op: a settlement must clear exactly ITS OWN round —
+        # two "change" comments look identical by op (CV17.DS2.0)
+        snap = snap.validated_update(pending=(*snap.pending, body["op_key"]))
     elif kind == "mutation_settled":
-        snap = snap.validated_update(pending=tuple(op for op in snap.pending if op != body["op"]))
+        snap = snap.validated_update(pending=tuple(k for k in snap.pending if k != body["op_key"]))
     elif kind == "fault":
         key = _fault_key(body)
         if body.get("status") in ("resolved", "cancelled"):
@@ -168,8 +173,16 @@ def _fold_fact(binding, outputs):
         else:
             snap = snap.validated_update(faults={**snap.faults, key: body.get("reason", "")})
     else:
+        return None
+    return snap
+
+
+def _fold_fact(binding, outputs):
+    fact, snap = values(binding, GateFact, Snapshot)
+    applied = _apply(snap, fact)
+    if applied is None:
         return route(outputs, {"ready.snap": (snap,)})
-    return route(outputs, _announce_open(snap))
+    return route(outputs, _announce_open(applied))
 
 
 def _ended(snap: Snapshot) -> ReadyEnded:

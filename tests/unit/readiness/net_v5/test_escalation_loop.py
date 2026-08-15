@@ -229,6 +229,10 @@ class TestRepairRung:
             "policy": "p1",
             "incarnation": 1,
             "lineage": "L1",
+            "kind": "repair",
+            "instruction": "",  # the evidence, not a human, speaks
+            "run_id": 1,
+            "attempt": 2,  # the indicting run
         }
         assert ladder(engine)["repairs"]["L1:fp1"]["state"] == "pending"
         # a third failure while the repair is in flight is the same

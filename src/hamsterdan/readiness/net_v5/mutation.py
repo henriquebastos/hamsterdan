@@ -29,6 +29,7 @@ from petrus.impetus.petrinet import NetPath, Token
 
 from hamsterdan.contracts.readiness_v5 import (
     CloseFact,
+    DeclinedM,
     FaultM,
     GateFact,
     MovedM,
@@ -43,9 +44,22 @@ from hamsterdan.contracts.readiness_v5 import (
 )
 from hamsterdan.readiness.net_v5.folding import route, values
 
-GATES = {"mut.git_gate": ("git_gate", ("Pushed", "MovedM", "FaultM"))}
+GATES = {"mut.git_gate": ("git_gate", ("Pushed", "MovedM", "FaultM", "DeclinedM"))}
 
-_IDLE = MutState(state="idle", op_key="", op="", head="", base="", policy="", incarnation=0, reason="")
+_IDLE = MutState(
+    state="idle",
+    op_key="",
+    op="",
+    head="",
+    base="",
+    policy="",
+    incarnation=0,
+    reason="",
+    kind="",
+    instruction="",
+    run_id=0,
+    attempt=0,
+)
 
 # -- folds ---------------------------------------------------------------
 
@@ -62,8 +76,17 @@ def _lineage(op: str) -> str:
     return key.split(":", 1)[0] if key else ""
 
 
-def _settled(op: str, outcome: Literal["landed", "declined", "moved", "faulted"], incarnation: int) -> MutationSettled:
-    return MutationSettled(op=op, outcome=outcome, incarnation=incarnation, fingerprint=_budget_key(op))
+def _op_key(req: MutationRequest) -> str:
+    """The round's stable operation identity: built from the REQUEST
+    identity (rid), not the semantic op — two distinct requests of the
+    same kind at the same head must not reconcile onto each other."""
+    return f"push:{req.rid}:{req.head}:i{req.incarnation}"
+
+
+def _settled(
+    op: str, op_key: str, outcome: Literal["landed", "declined", "moved", "faulted"], incarnation: int
+) -> MutationSettled:
+    return MutationSettled(op=op, op_key=op_key, outcome=outcome, incarnation=incarnation, fingerprint=_budget_key(op))
 
 
 def _settled_fact(settled: MutationSettled) -> GateFact:
@@ -76,32 +99,33 @@ def _start(binding, outputs):
         # FAIL-CLOSED: an unresolved push terminal means the branch's
         # true head is unknown — no further mutation may claim it. The
         # request settles `declined` BEFORE any gate attempt.
-        settled = _settled(req.op, "declined", req.incarnation)
+        settled = _settled(req.op, _op_key(req), "declined", req.incarnation)
         fact = _settled_fact(settled)
         return route(
             outputs,
             {"mut.state": (st,), "esc.settled": (settled,), "ready.facts": (fact,), "dash.facts": (fact,)},
         )
-    # the baton is HELD until a terminal fold returns it: one at a time.
-    # The key is built from the REQUEST identity (rid), not the semantic
-    # op: two distinct requests of the same kind at the same head must
-    # not reconcile onto each other's landed effect.
+    # the baton is HELD until a terminal fold returns it: one at a time
     work = MutWork(
         op=req.op,
-        op_key=f"push:{req.rid}:{req.head}:i{req.incarnation}",
+        op_key=_op_key(req),
         head=req.head,
         base=req.base,
         policy=req.policy,
         incarnation=req.incarnation,
         lineage=_lineage(req.op),
+        kind=req.kind,
+        instruction=req.instruction,
+        run_id=req.run_id,
+        attempt=req.attempt,
     )
-    fact = GateFact(kind="mutation_pending", incarnation=req.incarnation, body={"op": req.op})
+    fact = GateFact(kind="mutation_pending", incarnation=req.incarnation, body={"op": req.op, "op_key": work.op_key})
     return route(outputs, {"mut.work": (work,), "ready.facts": (fact,), "dash.facts": (fact,)})
 
 
 def _fold_pushed(binding, outputs):
     (out,) = values(binding, Pushed)
-    settled = _settled(out.op, "landed", out.incarnation)
+    settled = _settled(out.op, out.op_key, "landed", out.incarnation)
     fact = _settled_fact(settled)
     # from_head is the causal fence: lifecycle installs the expectation
     # only while it still stands on the head this push moved FROM
@@ -122,7 +146,20 @@ def _fold_moved(binding, outputs):
     (out,) = values(binding, MovedM)
     # the world did not change: the gate refused the write. Escalation
     # refunds the budget and echoes a recheck through CI.
-    settled = _settled(out.op, "moved", out.incarnation)
+    settled = _settled(out.op, out.op_key, "moved", out.incarnation)
+    fact = _settled_fact(settled)
+    return route(
+        outputs,
+        {"mut.state": (_IDLE,), "esc.settled": (settled,), "ready.facts": (fact,), "dash.facts": (fact,)},
+    )
+
+
+def _fold_declined(binding, outputs):
+    (out,) = values(binding, DeclinedM)
+    # the agent investigated and produced no change: nothing was pushed,
+    # the branch's true head is fully known — the baton returns IDLE
+    # (not fail-closed) and the rung is consumed with a known terminal
+    settled = _settled(out.op, out.op_key, "declined", out.incarnation)
     fact = _settled_fact(settled)
     return route(
         outputs,
@@ -132,7 +169,7 @@ def _fold_moved(binding, outputs):
 
 def _fold_fault(binding, outputs):
     (out,) = values(binding, FaultM)
-    settled = _settled(out.op, "faulted", out.incarnation)
+    settled = _settled(out.op, out.op_key, "faulted", out.incarnation)
     fact = GateFact(kind="fault", incarnation=0, body={"where": "mutation", "op": out.op_key, "reason": out.reason})
     # A2: Faulted retains the exact operation identity and the FULL
     # authority claim so recovery reissues the SAME operation
@@ -145,6 +182,10 @@ def _fold_fault(binding, outputs):
         policy=out.policy,
         incarnation=out.incarnation,
         reason=out.reason,
+        kind=out.kind,
+        instruction=out.instruction,
+        run_id=out.run_id,
+        attempt=out.attempt,
     )
     return route(
         outputs,
@@ -167,8 +208,12 @@ def _recover(binding, outputs):
         policy=st.policy,
         incarnation=st.incarnation,
         lineage=_lineage(st.op),
+        kind=st.kind,
+        instruction=st.instruction,
+        run_id=st.run_id,
+        attempt=st.attempt,
     )
-    pending = GateFact(kind="mutation_pending", incarnation=st.incarnation, body={"op": st.op})
+    pending = GateFact(kind="mutation_pending", incarnation=st.incarnation, body={"op": st.op, "op_key": st.op_key})
     # the reissue CLEARS the operation-keyed fault: readiness never
     # stays fail-closed after the human ruled — and it cannot announce
     # during the reopened round either, because `pending` holds the op
@@ -194,7 +239,7 @@ def _drain(binding, outputs):
     # escalation's closing ladder waits on exactly these settlements —
     # a silently parked request would strand it forever
     req, ended = values(binding, MutationRequest, MutEnded)
-    settled = _settled(req.op, "declined", req.incarnation)
+    settled = _settled(req.op, _op_key(req), "declined", req.incarnation)
     fact = _settled_fact(settled)
     return route(
         outputs,
@@ -216,6 +261,7 @@ def declare(s) -> None:
     mut.p.pushed(Pushed)
     mut.p.movedm(MovedM)
     mut.p.faultm(FaultM)
+    mut.p.declinedm(DeclinedM)
     mut.p.done(MutEnded)
 
 
@@ -242,6 +288,7 @@ def wire(net) -> None:
             mut.p.pushed,
             mut.p.movedm,
             mut.p.faultm,
+            mut.p.declinedm,
         )
     )
     (
@@ -258,6 +305,16 @@ def wire(net) -> None:
     (
         mut.p.movedm
         >> mut.t.fold_moved(handler=petri_handler(_fold_moved))
+        >> (
+            mut.p.state,
+            esc.p.settled,
+            ready.p.facts,
+            dash.p.facts,
+        )
+    )
+    (
+        mut.p.declinedm
+        >> mut.t.fold_declined(handler=petri_handler(_fold_declined))
         >> (
             mut.p.state,
             esc.p.settled,

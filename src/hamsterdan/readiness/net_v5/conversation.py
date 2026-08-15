@@ -133,6 +133,10 @@ def _classify(binding, outputs):
                     policy=intent.policy,
                     incarnation=intent.incarnation,
                     source="conversation",
+                    kind=intent.kind,  # committing grades ARE coding kinds
+                    instruction=intent.arg,  # the human's exact words
+                    run_id=0,
+                    attempt=0,
                 ),
             )
 

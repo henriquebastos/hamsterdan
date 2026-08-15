@@ -27,6 +27,7 @@ from hamsterdan.contracts.readiness_v5 import (
     DashFault,
     DashLanded,
     DashReq,
+    DeclinedM,
     FaultM,
     MovedM,
     MutWork,
@@ -237,7 +238,7 @@ def make_activities(world: dict):
         )
 
     @motus_activity(converter=converter)
-    def git_gate(work: MutWork) -> Pushed | MovedM | FaultM:
+    def git_gate(work: MutWork) -> Pushed | MovedM | FaultM | DeclinedM:
         # lookup-first reconciliation (A2): a crash AFTER the push landed
         # but BEFORE acknowledgment must not push twice — the SAME
         # operation identity reconciles to the landed outcome
@@ -251,10 +252,11 @@ def make_activities(world: dict):
                 incarnation=work.incarnation,
                 lineage=work.lineage,
             )
-        # A1.5: base/policy/grant are fenced by a fresh read here (the
-        # push CAS only covers the head): any op authored under an old
-        # base, a revoked policy, a non-running phase, or a previous
-        # grant incarnation classifies MOVED
+        # A1.5: base/policy/grant are fenced by a fresh read BEFORE the
+        # coding agent starts (the push CAS only covers the head): any
+        # op authored under an old base, a revoked policy, a non-running
+        # phase, or a previous grant incarnation classifies MOVED — the
+        # agent never runs against authority already known to be gone
         auth = world["authority"]
         if (
             auth["phase"] != "running"
@@ -264,16 +266,31 @@ def make_activities(world: dict):
         ):
             return MovedM(
                 op=work.op,
+                op_key=work.op_key,
                 head=work.head,
                 incarnation=work.incarnation,
                 observed=world["branch_head"],
                 observed_incarnation=auth["incarnation"],
                 observed_phase=auth["phase"],
             )
+        # the coding agent runs here, AFTER the fence and BEFORE the
+        # push: an agent that produced no change never reaches the CAS —
+        # nothing was pushed, the branch state is fully known, and the
+        # authority it began under stood: a clean decline
+        if world["git_mode"] == "unable":
+            return DeclinedM(
+                op=work.op,
+                op_key=work.op_key,
+                head=work.head,
+                incarnation=work.incarnation,
+                category="unable",
+                reason="agent produced no change",
+            )
         # server-side CAS: the push itself is the head authority check
         if world["branch_head"] != work.head:
             return MovedM(
                 op=work.op,
+                op_key=work.op_key,
                 head=work.head,
                 incarnation=work.incarnation,
                 observed=world["branch_head"],
@@ -289,6 +306,10 @@ def make_activities(world: dict):
                 policy=work.policy,
                 reason="unknown provider terminal",
                 incarnation=work.incarnation,
+                kind=work.kind,
+                instruction=work.instruction,
+                run_id=work.run_id,
+                attempt=work.attempt,
             )
         new_head = f"{work.head}+{work.op}"
         world["branch_head"] = new_head
@@ -304,6 +325,10 @@ def make_activities(world: dict):
                 policy=work.policy,
                 reason="link lost after push",
                 incarnation=work.incarnation,
+                kind=work.kind,
+                instruction=work.instruction,
+                run_id=work.run_id,
+                attempt=work.attempt,
             )
         return Pushed(
             op=work.op,

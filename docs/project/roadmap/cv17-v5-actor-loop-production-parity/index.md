@@ -20,8 +20,9 @@ making that ruling.
 ## Delivery
 
 - [CV17.DS1 — The V5 net as first-class code](cv17-ds1-v5-net-first-class.md)
-- CV17.DS2 — Host composition: webhook custody into ingress doors, activity
-  binding to the existing dispatcher stack, one fail-closed topology switch.
+- [CV17.DS2 — Host composition](cv17-ds2-host-composition.md): webhook
+  custody into ingress doors, activity binding to the existing dispatcher
+  stack, one fail-closed topology switch.
 - CV17.DS3 — Durable recovery: V5 on the durable history store with
   kill/restart/converge scenarios.
 - CV17.DS4 — Parity harness: ES-005 chapter-17 boundary scenarios executed

@@ -110,6 +110,10 @@ def _decide(binding, outputs):
             policy=failure.policy,
             incarnation=failure.incarnation,
             source="escalation",
+            kind="repair",
+            instruction="",  # the evidence, not a human, speaks
+            run_id=failure.run_id,  # the indicting run's identity
+            attempt=failure.attempt,
         )
         return route(outputs, {"esc.ladder": (held,), "mut.requests": (req,)})
     if entry["state"] == "pending":

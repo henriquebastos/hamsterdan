@@ -197,9 +197,11 @@ class MutState(WorkflowModel):
     While a push round is in flight the baton is HELD (no token in the
     place), so a second request waits visibly in the mailbox — one
     mutation at a time by construction. `idle` carries empty retention
-    fields; `faulted` retains the EXACT operation identity and the FULL
-    attempted authority claim (A2) so the recovery door can reissue the
-    same operation, and declines every further request fail-closed.
+    fields; `faulted` retains the EXACT operation identity, the FULL
+    attempted authority claim, and the change payload (kind,
+    instruction, CI evidence identity) so the recovery door can reissue
+    the same operation byte-for-byte (A2), and declines every further
+    request fail-closed.
     """
 
     state: Literal["idle", "faulted"]
@@ -210,6 +212,10 @@ class MutState(WorkflowModel):
     policy: str
     incarnation: int
     reason: str
+    kind: str
+    instruction: str
+    run_id: int
+    attempt: int
 
 
 # -- directed facts (loop -> loop, dedicated colors) -------------------------
@@ -337,6 +343,13 @@ class MutationRequest(WorkflowModel):
     distinct requests of the same kind at the same head must carry
     distinct rids, or the second would lookup-reconcile onto the first
     push's landed effect instead of reaching its own CAS refusal.
+
+    CV17.DS2.0: the request carries the CHANGE itself, credential-free —
+    `kind` names the coding request, `instruction` is the human's text
+    for conversation ops ("" otherwise), and `run_id`/`attempt` carry
+    the indicting evidence identity for repairs ((0, 0) otherwise) — so
+    the real git gate (coding agent + CAS push as one classified
+    activity) needs no state outside History.
     """
 
     op: str
@@ -346,14 +359,22 @@ class MutationRequest(WorkflowModel):
     policy: str
     incarnation: int
     source: str
+    kind: Literal["repair", "change", "update_base", "resolve_conflict"]
+    instruction: str
+    run_id: int
+    attempt: int
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class MutationSettled(WorkflowModel):
     """Mutation -> escalation: a repair push settled.
-    `fingerprint` is the composite budget key."""
+    `fingerprint` is the composite budget key. `op_key` is the round's
+    stable operation identity: consumers that clear a pending round
+    match on it, never on the semantic `op` — two "change" comments
+    look identical by op (CV17.DS2.0)."""
 
     op: str
+    op_key: str
     outcome: Literal["landed", "declined", "moved", "faulted"]
     incarnation: int
     fingerprint: str
@@ -592,6 +613,10 @@ class MutWork(WorkflowModel):
     by server-side CAS and base/policy/grant by a fresh read (A1.5).
     `lineage` is the budget lineage the pushed head inherits when it is
     later confirmed — derived from the op, echoed by the gate.
+
+    CV17.DS2.0: `kind`, `instruction`, and `run_id`/`attempt` carry the
+    credential-free change payload (see MutationRequest) so the real
+    gate can reconstruct the coding request from the token alone.
     """
 
     op: str
@@ -601,6 +626,10 @@ class MutWork(WorkflowModel):
     policy: str
     incarnation: int
     lineage: str
+    kind: str
+    instruction: str
+    run_id: int
+    attempt: int
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -623,6 +652,7 @@ class MovedM(WorkflowModel):
     authority travels back for the record."""
 
     op: str
+    op_key: str
     head: str
     incarnation: int
     observed: str
@@ -633,8 +663,9 @@ class MovedM(WorkflowModel):
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class FaultM(WorkflowModel):
     """Unknown provider terminal: the push may or may not have landed.
-    A2: retains the EXACT operation and the FULL authority claim so the
-    recovery door can reissue the same operation identity."""
+    A2: retains the EXACT operation, the FULL authority claim, and the
+    change payload so the recovery door can reissue the same operation
+    identity with the same content."""
 
     op: str
     op_key: str
@@ -643,6 +674,26 @@ class FaultM(WorkflowModel):
     policy: str
     reason: str
     incarnation: int
+    kind: str
+    instruction: str
+    run_id: int
+    attempt: int
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DeclinedM(WorkflowModel):
+    """The round produced no push and the branch state is fully known:
+    the coding agent investigated and declined (unable, unchanged, or a
+    malformed result). Not a fault — the baton returns idle — and not a
+    move — authority stood. Settles `declined`, which the escalation
+    ladder already consumes as a known rung terminal (CV17.DS2.0)."""
+
+    op: str
+    op_key: str
+    head: str
+    incarnation: int
+    category: str
+    reason: str
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
