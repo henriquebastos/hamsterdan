@@ -36,3 +36,9 @@ one-shot setup command with exact readback and managed cleanup evidence.
 Both exact disposable targets remain explicit cleanup obligations externally
 deferred to Puck custody. The historical live causes remain unchanged and live
 support remains unaccepted; no setup, provider, or cleanup authority survives.
+
+Active parity delivery: [CV17 — V5 actor-loop production parity](cv17-v5-actor-loop-production-parity/index.md).
+The ES-007 actor-loop workflow model is brought to production parity as a
+parallel, selectable implementation while production stays the untouched
+default; [CV17.DS1 — The V5 net as first-class code](cv17-v5-actor-loop-production-parity/cv17-ds1-v5-net-first-class.md)
+is active.
