@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; eight DS4 semantic oracles through draft-ready pass while remaining lifecycle and fresh live V5 evidence remain
+status_reason: DS2 and DS3 are complete; nine DS4 semantic oracles through stale-base update pass while remaining lifecycle and fresh live V5 evidence remain
 updated: 2026-08-16
 ---
 
@@ -39,7 +39,7 @@ making that ruling.
   proves a settled but unacknowledged webhook replays from frozen custody on
   startup without duplicate provider, agent, History, or reconciliation work.
 - [CV17.DS4 — Production-parity evidence](cv17-ds4-production-parity-harness.md)
-  is active. DS4.0 through DS4.7 run strict clean-green,
+  is active. DS4.0 through DS4.8 run strict clean-green,
   first-attempt-flake, persistent-CI, seeded-review-finding, and conversational
   change plus agent-repair, hero-review, and draft-to-ready GitHub journeys
   independently through the real host against both topologies and judge
@@ -50,8 +50,11 @@ making that ruling.
   one explicit request advances to one host-owned generation-2 head; prove a
   changed repair through real Git object creation, exact ref CAS, repaired-head
   admission, finding resolution, and terminal readiness; and preserve the
-  hero's suggestion, conceptual, and multi-location review meaning. Lifecycle
-  scenarios and a fresh live selected-V5 GitHub campaign remain.
+  hero's suggestion, conceptual, and multi-location review meaning. The newest
+  oracle proves stale-base update through a real two-parent Git commit and
+  exact ref CAS.
+  True-conflict and collaboration scenarios plus a fresh live selected-V5
+  GitHub campaign remain.
 
 ## Done condition
 

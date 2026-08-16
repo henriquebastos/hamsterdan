@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Eight semantic oracles through draft-ready pass; remaining lifecycle scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Nine semantic oracles through stale-base update pass; remaining lifecycle scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -263,17 +263,50 @@ formatting, Ruff, typing, and source/wheel builds.
 Fresh live selected-V5 acceptance remains the final user-visible proof; this
 deterministic reconstruction does not replace it.
 
+### DS4.8 — Stale-base update semantic oracle
+
+The ninth journey reconstructs historical live PR 30's strict-base behavior
+without conflating it with a true merge conflict. It first reaches ordinary
+clean-green readiness. The controlled provider then advances `main`
+independently while leaving the feature head unchanged and cleanly mergeable.
+A separate signed PR delivery must be durably pending before either topology
+observes the new base and updates its singleton dashboard to fail readiness
+closed. No coding or conversation agent runs merely because the base moved.
+
+One explicit authorized owner comment requests an update from the latest base.
+Both topologies classify one declared `update_base` intent and send the exact
+head and current base, `merge_base=True`, and no credentials to one coding
+operation. The agent returns the base change as a patch. The production
+`HostGitPublisher` applies it against a real local remote, creates exactly one
+blob, tree, and two-parent commit ordered as feature head then current base,
+and advances the feature ref through one exact GraphQL compare-and-swap. Every
+reconciliation uses the same globally scoped operation and payload digest;
+the provider and remote ref agree on the resulting head.
+
+The branch write alone does not authorize current-head readiness. A fourth
+signed PR delivery must be pending in durable custody before the new head is
+admitted. Both topologies then observe successful run 102, complete a clear
+exact-head review, update the dashboard to a current base, publish a readiness
+advisory for the new head, and quiesce with all four deliveries terminal. The
+old-head readiness advisory remains historical evidence. No finding, rerun,
+native review comment, REST merge, duplicate Git object, or second ref update
+occurs.
+
+The focused topology-parity file passes with 18 tests. `scripts/check full`
+passes with 1,091 Python tests, nine Bun relay tests, formatting, Ruff, typing,
+and source/wheel builds. This deterministic update-base proof is intermediate;
+the fresh explicitly selected-V5 GitHub campaign remains mandatory.
+
 ## Remaining deterministic portfolio
 
 The delivered scenarios are clean green, first-attempt flake,
 persistent CI regression, seeded review finding, conversational change, agent
-repair, hero review, and draft to ready.
+repair, hero review, draft to ready, and stale-base update.
 Grow the semantic oracle in small slices over the remaining user journeys
 recovered from the prior live campaign:
 
-- lifecycle and authority: stale base, true conflict, and collaboration
-  approval including requested review, changes requested, thread resolution,
-  and final approval.
+- lifecycle and authority: true conflict and collaboration approval including
+  requested review, changes requested, thread resolution, and final approval.
 
 Scenario assertions own visible meaning and safety invariants. They do not
 require production and V5 to take the same transitions, mint the same internal
