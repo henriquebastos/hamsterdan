@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2.3a safe topology composition complete; DS2.3b synthetic reconciliation and selected-V5 webhook route are next
+status_reason: DS2 host composition is complete; DS3 durable V5 recovery is next
 updated: 2026-08-16
 ---
 
@@ -21,15 +21,13 @@ making that ruling.
 
 - [CV17.DS1 — The V5 net as first-class code](cv17-ds1-v5-net-first-class.md)
   is complete.
-- [CV17.DS2 — Host composition](cv17-ds2-host-composition.md) is active:
+- [CV17.DS2 — Host composition](cv17-ds2-host-composition.md) is complete:
   provider-backed gates, durable webhook ingress, authority ordering, and
   canonical host timer custody are complete. DS2.3a adds the fail-closed
   topology descriptor, topology-owned state roots, and safe revoked-route
-  V5 publication settlement; DS2.3b synthetic reconciliation and the
-  selected-V5 webhook route are next.
-  Its scope includes webhook
-  custody into ingress doors, activity binding to the existing dispatcher
-  stack, one fail-closed topology switch.
+  V5 publication settlement; DS2.3b adds stable identified synthetic
+  reconciliation and proves the selected V5 custodied webhook route. Production
+  remains untouched and default.
 - CV17.DS3 — Durable recovery: V5 on the durable history store with
   kill/restart/converge scenarios.
 - CV17.DS4 — Parity harness: ES-005 chapter-17 boundary scenarios executed

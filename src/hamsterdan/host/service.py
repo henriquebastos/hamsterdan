@@ -613,8 +613,12 @@ class HostService:
                     and not self.custody.has_pending(subject=key)
                     and self.registry.route(key[0], key[1]) is not None
                 ):
-                    application.reconcile(f"{reconcile_trigger}:{key[0]}:{key[1]}:{key[2]}")
-                    activated = True
+                    reconciled = application.reconcile(f"{reconcile_trigger}:{key[0]}:{key[1]}:{key[2]}")
+                    activated = (
+                        reconciled is not False
+                        and not self.custody.has_pending(subject=key)
+                        and self.registry.route(key[0], key[1]) is not None
+                    )
                 if activated:
                     outcome = application.settle()
                 self._record_posture(instance, outcome)

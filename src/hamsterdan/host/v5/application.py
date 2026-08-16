@@ -169,6 +169,8 @@ class PrReadinessV5Application:
         grant = self.ingress.claim(self.instance_id)
         pull = self.authority.pull_request()
         policy = self.authority.policy(pull.base_ref)
+        if self.ingress.has_unstaged_custody(self.instance_id):
+            raise GitHubBoundaryError("custodied authority is not staged in the V5 host grant")
         phase = "terminal" if pull.closed or pull.merged else ("quiescent" if pull.draft else "running")
         if (phase, pull.head, pull.base, policy.digest) != (grant.phase, grant.head, grant.base, grant.policy):
             raise GitHubBoundaryError("fresh provider authority is not staged in the V5 host grant")
@@ -338,8 +340,26 @@ class PrReadinessV5Application:
             for name in _ALLOWED
         ]
 
-    def reconcile(self, reason: str) -> None:
-        raise RuntimeError(f"V5 synthetic reconciliation is not selectable before DS2.3: {reason}")
+    def reconcile(self, reason: str) -> bool:
+        del reason  # wake metadata never enters reconciliation identity
+        runtime = self._runtime()
+        frozen = self.ingress.latest_reconciliation(self.instance_id)
+        if frozen is not None and not runtime.manifest_accepted(frozen.entries):
+            if self.ingress.has_pending_custody(self.instance_id):
+                return False
+            for entry in frozen.entries:
+                runtime.deliver(entry)
+            return True
+        if self.ingress.has_pending_custody(self.instance_id):
+            return False
+        projected = self.normalizer.project_reconciliation()
+        manifest = self.ingress.stage_reconciliation(self.instance_id, projected)
+        if manifest is None or self.ingress.has_pending_custody(self.instance_id):
+            return False
+        if not runtime.manifest_accepted(manifest.entries):
+            for entry in manifest.entries:
+                runtime.deliver(entry)
+        return True
 
     def settle(self):
         runtime = self._runtime()

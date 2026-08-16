@@ -158,6 +158,30 @@ class V5Runtime:
             previous.close()
             raise
 
+    def manifest_accepted(self, entries: tuple[IngressEntry, ...]) -> bool:
+        """Whether canonical History has accepted every frozen ingress identity."""
+        accepted: dict[str, ExternalEventDelivered] = {}
+        for record in self.engine.records:
+            if not isinstance(record, ExternalEventDelivered):
+                continue
+            if record.identity in accepted:
+                raise RuntimeError("V5 ingress identity occurs more than once in canonical History")
+            accepted[record.identity] = record
+        missing = False
+        for entry in entries:
+            record = accepted.get(entry.identity)
+            if record is None:
+                missing = True
+                continue
+            if (
+                str(record.source) != entry.source
+                or len(record.tokens) != 1
+                or record.tokens[0].color != entry.color
+                or record.tokens[0].data != entry.payload
+            ):
+                raise RuntimeError("V5 ingress manifest conflicts with canonical History")
+        return not missing
+
     def drain(self, limit: int = 500) -> DriveOutcome:
         self._settle_agent_routes()
         for _ in range(limit):

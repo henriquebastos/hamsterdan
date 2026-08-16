@@ -1,8 +1,8 @@
 ---
 code: CV17.DS2
 level: Delivery Story
-status: Active
-status_reason: DS2.3a safe topology composition complete; DS2.3b synthetic reconciliation and selected-V5 webhook route are next
+status: Completed
+status_reason: Provider gates, durable ingress and timers, safe topology selection, and selectable V5 reconciliation are complete
 updated: 2026-08-16
 ---
 
@@ -118,11 +118,24 @@ contract gap and two host-boundary hazards; the slicing reflects them:
   entries. Shutdown stops those workers before they can claim another
   attempt. Production's shared worker and stale-publication classification
   remain unchanged.
-- **DS2.3b — Selectable reconciliation and webhook route.** Next. Replace
-  V5's deliberate synthetic-reconciliation refusal with durable,
-  identified reconciliation, then drive a real custodied webhook through
-  the selected V5 application into its ingress doors. DS2.3a does not
-  claim this end-to-end selection boundary.
+- **DS2.3b — Selectable reconciliation and webhook route.** **Done.**
+  One per-subject revision orders both webhook and synthetic authority
+  sources. Synthetic manifests derive stable global identities from the
+  revision and canonical normalized projection, commit atomically with
+  the current grant before Petrus delivery, and reuse an unchanged source
+  only while it remains the grant's latest source. Canonical History
+  distinguishes committed partial replay from a completed sweep and
+  rejects source, color, or payload disagreement before replay. Pending
+  webhook custody fences provider reads, synthetic staging, delivery, and
+  post-reconciliation settlement; exact legacy webhook grants migrate to
+  the discriminated source lineage while partial or corrupt lineage fails
+  closed. The selected V5 HostService route now proves authenticated
+  custody remains pending until its immutable webhook manifest, identified
+  ingress deliveries, and fixed-point settlement complete. Startup and
+  periodic reconciliation reuse unchanged identities, advance changed or
+  post-webhook truth, and remain stable across host restart. Production
+  remains the default and retains its existing reconciliation return
+  contract.
 
 ## Ruled hazards to pin in tests
 

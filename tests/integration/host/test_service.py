@@ -14,10 +14,12 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from petrus.impetus.history import ExternalEventDelivered
 from petrus.motus.activity import ActivityError, ActivityInvocation, activity
 from petrus.motus.dispatch import LocalDispatch
 from petrus.motus.worker import Worker
 
+from hamsterdan.agents.protocol import ReviewResult
 from hamsterdan.contracts.readiness import AdmittedConversation, ConversationPublicationRequest, Intent
 from hamsterdan.contracts.readiness_v5 import (
     ABlocked,
@@ -35,7 +37,7 @@ from hamsterdan.contracts.readiness_v5 import (
     ReplyReq,
 )
 from hamsterdan.github_app.config import HostConfig
-from hamsterdan.github_app.models import RegistrationInventory
+from hamsterdan.github_app.models import RegistrationInventory, WireResponse
 from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host import __main__ as host_main
 from hamsterdan.host.__main__ import inspect_instance
@@ -97,6 +99,76 @@ class Clients:
 
     def close(self) -> None:
         self.closed += 1
+
+
+class V5Provider:
+    def __init__(self) -> None:
+        self.head, self.base = "a" * 40, "b" * 40
+        self.calls: list[tuple[str, str]] = []
+
+    def pages(self, path: str):
+        self.calls.append(("PAGES", path))
+        return ()
+
+    def request(self, method: str, path: str, body: object | None = None):
+        self.calls.append((method, path))
+        if method == "GET" and path == "/repos/owner/one/pulls/7":
+            return WireResponse(
+                200,
+                {
+                    "state": "open",
+                    "draft": False,
+                    "mergeable": True,
+                    "mergeable_state": "clean",
+                    "merged": False,
+                    "html_url": "https://example.test/owner/one/pull/7",
+                    "user": {"login": "author"},
+                    "head": {"sha": self.head, "ref": "feature", "repo": {"full_name": "owner/one"}},
+                    "base": {"sha": self.base, "ref": "main"},
+                },
+            )
+        if method == "GET" and path == "/repos/owner/one/git/ref/heads/main":
+            return WireResponse(200, {"object": {"sha": self.base}})
+        if method == "GET" and path == "/repos/owner/one/rules/branches/main":
+            return WireResponse(404, {})
+        if method == "GET" and path == "/repos/owner/one/branches/main/protection":
+            return WireResponse(404, {})
+        if method == "GET" and path == "/repos/owner/one/pulls/7/requested_reviewers":
+            return WireResponse(200, {"users": []})
+        if method == "GET" and path.startswith("/repos/owner/one/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?"):
+            return WireResponse(200, {"total_count": 0, "workflow_runs": []})
+        if method == "POST" and path == "/graphql":
+            return WireResponse(
+                200,
+                {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {
+                                "reviewThreads": {
+                                    "nodes": [],
+                                    "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        raise AssertionError(f"unexpected provider request: {method} {path} {body!r}")
+
+
+class V5Runner:
+    def review(self, repository_url, request, *, operation, attempt, is_current=None):
+        assert attempt == 1 and (is_current is None or is_current())
+        return ReviewResult(
+            request.repository,
+            request.pull_request,
+            request.epoch,
+            request.head,
+            request.base,
+            "clear",
+            [],
+            [],
+        )
 
 
 class Application:
@@ -1028,6 +1100,190 @@ def test_explicit_v5_composition_opens_the_real_v5_application_and_labeled_histo
     binding = read_instance_binding(tmp_path / "applications/44/31/7/binding.json")
     assert binding.topology == "v5" and not binding.legacy
     assert (tmp_path / "applications/44/31/7/history.jsonl").is_file()
+    host.close()
+
+
+def test_selected_v5_routes_custodied_webhook_into_identified_history_before_acknowledgement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = V5Provider()
+    monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
+    composition, routes = agent_custody(tmp_path)
+    host = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=V5Runner(),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=V5,
+    )
+    host.registry.reconcile(44, ((31, "owner/one"),))
+    delivery, body = str(uuid.uuid4()), envelope()
+    receipt = host.custody.receive(
+        signed(body, delivery).items() | {("content-length", str(len(body)))},
+        body,
+    )
+    assert receipt.disposition == "accepted" and host.custody.status(delivery) == "pending"
+    acknowledged_after: list[tuple[str, ...]] = []
+    acknowledge = host.custody.acknowledge
+
+    def observe_acknowledgement(identity: str, reason: str | None = None) -> None:
+        application = host._apps[(44, 31, 7)]
+        accepted = tuple(
+            record.identity
+            for record in application._runtime().engine.records
+            if isinstance(record, ExternalEventDelivered)
+        )
+        acknowledged_after.append(accepted)
+        acknowledge(identity, reason)
+
+    monkeypatch.setattr(host.custody, "acknowledge", observe_acknowledgement)
+
+    host.process(host.custody.pending()[0])
+
+    application = host._apps[(44, 31, 7)]
+    assert isinstance(application, PrReadinessV5Application)
+    expected = tuple(f"github-delivery:{delivery}:{door}" for door in ("on_head", "on_ready", "on_human"))
+    assert len(acknowledged_after) == 1 and acknowledged_after[0][:3] == expected
+    assert any(identity.startswith("v5-timer-command-applied:") for identity in acknowledged_after[0])
+    assert host.custody.status(delivery) == "terminal"
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        assert database.execute(
+            "SELECT revision,source_kind,source_id FROM v5_authority_grants WHERE subject='github:44:31:pr:7'"
+        ).fetchone() == (1, "github-delivery", delivery)
+    host.close()
+
+
+def test_selected_v5_sweep_reconciliation_reuses_unchanged_identity_and_advances_changed_truth(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = V5Provider()
+    monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
+    composition, routes = agent_custody(tmp_path)
+    host = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=V5Runner(),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=V5,
+    )
+    host.registry.reconcile(44, ((31, "owner/one"),))
+    application = host._application(44, 31, 7)
+
+    assert host.sweep("startup") == 1
+    startup = tuple(
+        record.identity
+        for record in application._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and record.identity.startswith("host-reconcile:")
+    )
+    assert len(startup) == 3 and all(":github:44:31:pr:7:1:" in identity for identity in startup)
+
+    assert host.sweep("periodic") == 1
+    unchanged = tuple(
+        record.identity
+        for record in application._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and record.identity.startswith("host-reconcile:")
+    )
+    assert unchanged == startup
+
+    provider.head = "c" * 40
+    assert host.sweep("periodic") == 1
+    changed = tuple(
+        record.identity
+        for record in application._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and record.identity.startswith("host-reconcile:")
+    )
+    assert changed[:3] == startup
+    assert len(changed) == 6 and all(":github:44:31:pr:7:2:" in identity for identity in changed[3:])
+    host.close()
+
+    composition, routes = agent_custody(tmp_path)
+    restarted = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=V5Runner(),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=V5,
+    )
+    restarted.registry.reconcile(44, ((31, "owner/one"),))
+    assert restarted.sweep("startup") == 1
+    reopened = restarted._apps[(44, 31, 7)]
+    after_restart = tuple(
+        record.identity
+        for record in reopened._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and record.identity.startswith("host-reconcile:")
+    )
+    assert after_restart == changed
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        assert database.execute(
+            "SELECT revision,source_kind FROM v5_authority_grants WHERE subject='github:44:31:pr:7'"
+        ).fetchone() == (2, "host-reconcile")
+    restarted.close()
+
+
+def test_host_skips_post_reconciliation_settlement_when_application_reports_a_custody_fence(tmp_path: Path) -> None:
+    class FencedApplication(Application):
+        def __init__(self, *args: Any, **kwargs: Any):
+            super().__init__(*args, **kwargs)
+            self.settlements = 0
+
+        def settle(self) -> None:
+            self.settlements += 1
+
+        def reconcile(self, reason: str) -> bool:
+            self.reconciles.append(reason)
+            return False
+
+    host = service(tmp_path, factory=FencedApplication, readiness_composition=V5)
+
+    assert host._activate_instance("github:44:31:pr:7", reconcile_trigger="startup")
+
+    application = host._apps[(44, 31, 7)]
+    assert application.reconciles == ["startup:44:31:7"]
+    assert application.settlements == 1
+    host.close()
+
+
+def test_host_rechecks_custody_and_route_before_post_reconciliation_settlement(tmp_path: Path) -> None:
+    host: HostService
+
+    class CustodyRaceApplication(Application):
+        def __init__(self, *args: Any, **kwargs: Any):
+            super().__init__(*args, **kwargs)
+            self.settlements = 0
+
+        def settle(self) -> None:
+            self.settlements += 1
+
+        def reconcile(self, reason: str) -> bool:
+            self.reconciles.append(reason)
+            pending = observation(str(uuid.uuid4()))
+            with sqlite3.connect(self.kwargs["custody_path"]) as database:
+                database.execute(
+                    "INSERT INTO inbox(delivery_id,event,observation,status) VALUES(?,?,?,'pending')",
+                    (pending.delivery_id, pending.event, json.dumps(pending.__dict__, separators=(",", ":"))),
+                )
+            return True
+
+    host = service(tmp_path, factory=CustodyRaceApplication, readiness_composition=V5)
+    assert host._activate_instance("github:44:31:pr:7", reconcile_trigger="startup")
+    application = host._apps[(44, 31, 7)]
+    assert application.settlements == 1
+    host.close()
+
+    class RouteRaceApplication(CustodyRaceApplication):
+        def reconcile(self, reason: str) -> None:
+            self.reconciles.append(reason)
+            host.registry.installation("suspend", 44, 23)
+
+    host = service(tmp_path / "route", factory=RouteRaceApplication, readiness_composition=V5)
+    assert host._activate_instance("github:44:31:pr:7", reconcile_trigger="startup")
+    application = host._apps[(44, 31, 7)]
+    assert application.settlements == 1
     host.close()
 
 

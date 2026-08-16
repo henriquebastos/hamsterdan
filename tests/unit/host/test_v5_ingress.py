@@ -6,6 +6,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -28,7 +29,7 @@ from hamsterdan.github_app.models import (
 from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host.runnable import RunnableIndex
 from hamsterdan.host.v5.application import PrReadinessV5Application
-from hamsterdan.host.v5.ingress import IngressEntry, V5IngressNormalizer, V5IngressStore
+from hamsterdan.host.v5.ingress import IngressEntry, ProjectedEntry, V5IngressNormalizer, V5IngressStore
 
 SUBJECT = "github:44:31:pr:7"
 
@@ -60,6 +61,15 @@ def human(identity: str) -> IngressEntry:
 
 def projection(identity: str, source: str, value: str = "a" * 40) -> tuple[IngressEntry, ...]:
     return head(identity, value), lifecycle(identity, source), human(identity)
+
+
+def reconciliation_projection(source: str, value: str = "a" * 40) -> tuple[ProjectedEntry, ...]:
+    lifecycle_value = DraftSeen() if source == "on_draft" else ReadySeen()
+    return (
+        ProjectedEntry.from_value("on_head", HeadSeen(head=value, base="b" * 40, mergeable=True, policy="policy-1")),
+        ProjectedEntry.from_value(source, lifecycle_value),
+        ProjectedEntry.from_value("on_human", HumanSeen(approval=False, changes_requested=False, unresolved=0)),
+    )
 
 
 def test_manifest_and_authority_grant_commit_together_before_replay(tmp_path: Path) -> None:
@@ -107,6 +117,247 @@ def test_replay_uses_frozen_manifest_even_when_fresh_projection_differs(tmp_path
     store.close()
 
 
+def test_unchanged_reconciliation_reuses_one_lineaged_manifest_and_grant_revision(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    store = V5IngressStore(path)
+    projected = reconciliation_projection("on_ready")
+
+    first = store.stage_reconciliation(SUBJECT, projected)
+    second = store.stage_reconciliation(SUBJECT, projected)
+
+    assert first is not None and second == first
+    digest = sha256(
+        json.dumps(
+            {"topology": "v5", "schema_version": 1, "entries": [entry.dump() for entry in projected]},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    assert first.source_id == f"host-reconcile:{SUBJECT}:1:{digest}"
+    assert all(entry.identity == f"{first.source_id}:{entry.source}" for entry in first.entries)
+    with sqlite3.connect(path) as database:
+        assert database.execute("SELECT COUNT(*) FROM v5_reconciliation_manifests").fetchone() == (1,)
+        assert database.execute(
+            "SELECT revision,source_kind,source_id FROM v5_authority_grants WHERE subject=?", (SUBJECT,)
+        ).fetchone() == (1, "host-reconcile", first.source_id)
+    store.close()
+
+
+def test_intervening_webhook_makes_byte_identical_reconciliation_a_new_lifecycle_occurrence(
+    tmp_path: Path,
+) -> None:
+    store = V5IngressStore(tmp_path / "webhooks.sqlite3")
+    first = store.stage_reconciliation(SUBJECT, reconciliation_projection("on_draft"))
+    assert first is not None
+    readied = delivery()
+    store.stage(readied, SUBJECT, projection(readied, "on_ready"))
+
+    second = store.stage_reconciliation(SUBJECT, reconciliation_projection("on_draft"))
+
+    assert second is not None and second.source_id != first.source_id
+    assert first.entries[1].identity != second.entries[1].identity
+    assert (store.claim(SUBJECT).phase, store.claim(SUBJECT).incarnation) == ("quiescent", 2)
+    store.close()
+
+
+def test_pending_webhook_custody_wins_reconciliation_stage_without_manifest_or_grant(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    store = V5IngressStore(path)
+    pending = delivery()
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "CREATE TABLE inbox (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, observation TEXT NOT NULL)"
+        )
+        database.execute(
+            "INSERT INTO inbox VALUES (?, 'pending', ?)",
+            (
+                pending,
+                json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7}),
+            ),
+        )
+
+    assert store.stage_reconciliation(SUBJECT, reconciliation_projection("on_ready")) is None
+    with sqlite3.connect(path) as database:
+        assert database.execute("SELECT COUNT(*) FROM v5_reconciliation_manifests").fetchone() == (0,)
+        assert database.execute("SELECT COUNT(*) FROM v5_authority_grants").fetchone() == (0,)
+    store.close()
+
+
+def test_legacy_webhook_grant_migrates_to_a_discriminated_source_before_reconciliation(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    identity = delivery()
+    entries = projection(identity, "on_ready")
+    encoded = json.dumps(
+        [entry.dump() for entry in entries],
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    with sqlite3.connect(path) as database:
+        database.executescript(
+            """
+            CREATE TABLE v5_ingress_manifests (
+              delivery_id TEXT PRIMARY KEY, subject TEXT NOT NULL, topology TEXT NOT NULL,
+              schema_version INTEGER NOT NULL, entries TEXT NOT NULL
+            );
+            CREATE TABLE v5_authority_grants (
+              subject TEXT PRIMARY KEY, phase TEXT NOT NULL, incarnation INTEGER NOT NULL,
+              head TEXT NOT NULL, base TEXT NOT NULL, policy TEXT NOT NULL,
+              revision INTEGER NOT NULL, source_delivery TEXT NOT NULL
+            );
+            """
+        )
+        database.execute(
+            "INSERT INTO v5_ingress_manifests VALUES(?,?,?,?,?)",
+            (identity, SUBJECT, "v5", 1, encoded),
+        )
+        database.execute(
+            "INSERT INTO v5_authority_grants VALUES(?,?,?,?,?,?,?,?)",
+            (SUBJECT, "running", 1, "a" * 40, "b" * 40, "policy-1", 1, identity),
+        )
+
+    store = V5IngressStore(path)
+
+    assert store.claim(SUBJECT).head == "a" * 40
+    reconciled = store.stage_reconciliation(SUBJECT, reconciliation_projection("on_ready"))
+    assert reconciled is not None and f":{SUBJECT}:2:" in reconciled.source_id
+    store.close()
+
+    reopened = V5IngressStore(path)
+    assert reopened.latest_reconciliation(SUBJECT) == reconciled
+    with sqlite3.connect(path) as database:
+        assert database.execute(
+            "SELECT revision,source_kind,source_id,source_delivery FROM v5_authority_grants WHERE subject=?",
+            (SUBJECT,),
+        ).fetchone() == (2, "host-reconcile", reconciled.source_id, reconciled.source_id)
+    reopened.close()
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "UPDATE v5_authority_grants SET source_delivery=? WHERE subject=?",
+            (identity, SUBJECT),
+        )
+    divergent = V5IngressStore(path)
+    with pytest.raises(RuntimeError, match="grant is malformed"):
+        divergent.claim(SUBJECT)
+    divergent.close()
+
+
+def test_reconciliation_manifest_and_grant_corruption_fail_closed(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    store = V5IngressStore(path)
+    manifest = store.stage_reconciliation(SUBJECT, reconciliation_projection("on_ready"))
+    assert manifest is not None
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "UPDATE v5_reconciliation_manifests SET digest=? WHERE source_id=?",
+            ("0" * 64, manifest.source_id),
+        )
+
+    with pytest.raises(RuntimeError, match="manifest is malformed"):
+        store.latest_reconciliation(SUBJECT)
+    with pytest.raises(RuntimeError, match="manifest is malformed"):
+        store.claim(SUBJECT)
+    store.close()
+
+
+def test_current_webhook_grant_validates_its_manifest_and_exact_revision(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    identity = delivery()
+    store = V5IngressStore(path)
+    store.stage(identity, SUBJECT, projection(identity, "on_ready"))
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "UPDATE v5_ingress_manifests SET entries='[]' WHERE delivery_id=?",
+            (identity,),
+        )
+
+    with pytest.raises(ValueError, match="door order"):
+        store.claim(SUBJECT)
+
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "UPDATE v5_ingress_manifests SET entries=? WHERE delivery_id=?",
+            (
+                json.dumps(
+                    [entry.dump() for entry in projection(identity, "on_ready")],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                identity,
+            ),
+        )
+        database.execute("UPDATE v5_authority_grants SET revision=7 WHERE subject=?", (SUBJECT,))
+
+    with pytest.raises(RuntimeError, match="grant is malformed"):
+        store.claim(SUBJECT)
+    store.close()
+
+
+def test_cross_kind_revision_collision_fails_closed(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    store = V5IngressStore(path)
+    reconciled = store.stage_reconciliation(SUBJECT, reconciliation_projection("on_ready"))
+    assert reconciled is not None
+    identity = delivery()
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "INSERT INTO v5_ingress_manifests"
+            "(delivery_id,subject,revision,topology,schema_version,entries) VALUES(?,?,?,?,?,?)",
+            (
+                identity,
+                SUBJECT,
+                1,
+                "v5",
+                1,
+                json.dumps(
+                    [entry.dump() for entry in projection(identity, "on_ready")],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            ),
+        )
+
+    with pytest.raises(RuntimeError, match="grant is malformed"):
+        store.claim(SUBJECT)
+    store.close()
+
+
+def test_partial_source_pointer_migration_fails_closed_instead_of_repairing(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    identity = delivery()
+    encoded = json.dumps(
+        [entry.dump() for entry in projection(identity, "on_ready")],
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    with sqlite3.connect(path) as database:
+        database.executescript(
+            """
+            CREATE TABLE v5_ingress_manifests (
+              delivery_id TEXT PRIMARY KEY, subject TEXT NOT NULL, topology TEXT NOT NULL,
+              schema_version INTEGER NOT NULL, entries TEXT NOT NULL
+            );
+            CREATE TABLE v5_authority_grants (
+              subject TEXT PRIMARY KEY, phase TEXT NOT NULL, incarnation INTEGER NOT NULL,
+              head TEXT NOT NULL, base TEXT NOT NULL, policy TEXT NOT NULL,
+              revision INTEGER NOT NULL, source_delivery TEXT NOT NULL, source_kind TEXT
+            );
+            """
+        )
+        database.execute(
+            "INSERT INTO v5_ingress_manifests VALUES(?,?,?,?,?)",
+            (identity, SUBJECT, "v5", 1, encoded),
+        )
+        database.execute(
+            "INSERT INTO v5_authority_grants VALUES(?,?,?,?,?,?,?,?,?)",
+            (SUBJECT, "running", 1, "a" * 40, "b" * 40, "policy-1", 1, identity, "github-delivery"),
+        )
+
+    with pytest.raises(RuntimeError, match="source pointer migration is partial"):
+        V5IngressStore(path)
+
+
 def test_draft_ready_same_claim_mints_a_new_host_incarnation(tmp_path: Path) -> None:
     store = V5IngressStore(tmp_path / "webhooks.sqlite3")
     drafted, readied = delivery(), delivery()
@@ -141,6 +392,26 @@ def test_manifest_and_grant_roll_back_as_one_transaction(tmp_path: Path, monkeyp
         assert (
             database.execute("SELECT 1 FROM v5_ingress_manifests WHERE delivery_id=?", (identity,)).fetchone() is None
         )
+        assert database.execute("SELECT 1 FROM v5_authority_grants WHERE subject=?", (SUBJECT,)).fetchone() is None
+    store.close()
+
+
+def test_reconciliation_manifest_and_grant_roll_back_as_one_transaction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    store = V5IngressStore(path)
+
+    def fail(*args: object) -> None:
+        raise RuntimeError("grant write interrupted")
+
+    monkeypatch.setattr(store, "_write_claim", fail)
+    with pytest.raises(RuntimeError, match="grant write interrupted"):
+        store.stage_reconciliation(SUBJECT, reconciliation_projection("on_ready"))
+
+    with sqlite3.connect(path) as database:
+        assert database.execute("SELECT 1 FROM v5_reconciliation_manifests").fetchone() is None
         assert database.execute("SELECT 1 FROM v5_authority_grants WHERE subject=?", (SUBJECT,)).fetchone() is None
     store.close()
 
@@ -487,6 +758,294 @@ def test_v5_application_stages_grant_before_identified_delivery_and_replays_froz
     ]
     assert tuple(runtime.engine.records) == first_records
     assert settled == []
+    application.close()
+
+
+def test_v5_application_reconciliation_is_stable_across_startup_and_periodic_reasons(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=path,
+    )
+
+    assert application.reconcile("startup:44:31:7")
+    first = tuple(application._runtime().engine.records)
+    assert application.reconcile("periodic:44:31:7")
+
+    assert tuple(application._runtime().engine.records) == first
+    identities = [record.identity for record in first if isinstance(record, ExternalEventDelivered)]
+    assert len(identities) == 4
+    assert all(identity.startswith(f"host-reconcile:{SUBJECT}:1:") for identity in identities)
+    with sqlite3.connect(path) as database:
+        assert database.execute("SELECT COUNT(*) FROM v5_reconciliation_manifests").fetchone() == (1,)
+        assert database.execute(
+            "SELECT revision,source_kind FROM v5_authority_grants WHERE subject=?", (SUBJECT,)
+        ).fetchone() == (1, "host-reconcile")
+    application.close()
+
+
+def test_v5_application_replays_committed_reconciliation_before_reading_changed_provider_truth(
+    tmp_path: Path,
+) -> None:
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+    runtime = application._runtime()
+    deliver = runtime.deliver
+    crashed = False
+
+    def fail_before_first_delivery(entry: IngressEntry):
+        nonlocal crashed
+        if not crashed:
+            crashed = True
+            raise RuntimeError("crash after reconciliation commit")
+        return deliver(entry)
+
+    runtime.deliver = fail_before_first_delivery  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="crash after reconciliation commit"):
+        application.reconcile("startup")
+    authority.review = HumanReviewSnapshot(("reviewer",), (), (), (), 0, "available")
+    provider_reads = authority.pull_calls
+
+    assert application.reconcile("restart")
+
+    deliveries = [record for record in runtime.engine.records if isinstance(record, ExternalEventDelivered)]
+    assert authority.pull_calls == provider_reads
+    assert len(deliveries) == 4
+    assert deliveries[2].tokens[0].data["approval"] is True
+
+    assert application.reconcile("periodic")
+
+    deliveries = [record for record in runtime.engine.records if isinstance(record, ExternalEventDelivered)]
+    assert len(deliveries) == 8
+    first_sources = {record.identity.rsplit(":", 1)[0] for record in deliveries[:4]}
+    second_sources = {record.identity.rsplit(":", 1)[0] for record in deliveries[4:]}
+    assert len(first_sources) == len(second_sources) == 1
+    assert first_sources != second_sources
+    assert deliveries[6].tokens[0].data["approval"] is False
+    application.close()
+
+
+def test_v5_application_restart_replays_committed_reconciliation_without_provider_reads(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    store = V5IngressStore(path)
+    committed = store.stage_reconciliation(SUBJECT, reconciliation_projection("on_ready"))
+    assert committed is not None
+    store.close()
+    authority = Authority()
+    authority.pull = PullRequestSnapshot(**(authority.pull.__dict__ | {"head": "c" * 40}))
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=path,
+    )
+
+    assert application.reconcile("restart")
+
+    assert authority.pull_calls == 0
+    identities = tuple(
+        record.identity
+        for record in application._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered)
+    )
+    assert identities == tuple(entry.identity for entry in committed.entries)
+    application.close()
+
+
+def test_v5_application_fails_closed_when_manifest_identity_conflicts_with_canonical_history(tmp_path: Path) -> None:
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+    committed = application.ingress.stage_reconciliation(
+        SUBJECT,
+        application.normalizer.project_reconciliation(),
+    )
+    assert committed is not None
+    conflicting = replace(
+        committed.entries[0],
+        payload=HeadSeen(head="c" * 40, base="b" * 40, mergeable=True, policy="policy-1").dump(),
+    )
+    runtime = application._runtime()
+    runtime.deliver(conflicting)
+    for entry in committed.entries[1:]:
+        runtime.deliver(entry)
+
+    with pytest.raises(RuntimeError, match="conflicts with canonical History"):
+        application.reconcile("restart")
+    application.close()
+
+
+def test_v5_application_checks_later_history_conflicts_before_replaying_an_earlier_gap(tmp_path: Path) -> None:
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+    committed = application.ingress.stage_reconciliation(
+        SUBJECT,
+        application.normalizer.project_reconciliation(),
+    )
+    assert committed is not None
+    runtime = application._runtime()
+    runtime.deliver(committed.entries[1])
+    runtime.deliver(
+        replace(
+            committed.entries[2],
+            payload=HumanSeen(approval=False, changes_requested=False, unresolved=0).dump(),
+        )
+    )
+    for entry in committed.entries[3:]:
+        runtime.deliver(entry)
+    before = tuple(runtime.engine.records)
+
+    with pytest.raises(RuntimeError, match="conflicts with canonical History"):
+        application.reconcile("restart")
+    assert tuple(runtime.engine.records) == before
+    application.close()
+
+
+def test_v5_application_does_not_deliver_reconciliation_when_webhook_custody_commits_after_stage(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=path,
+    )
+    stage = application.ingress.stage_reconciliation
+
+    def admit_after_stage(subject: str, projected: tuple[ProjectedEntry, ...]):
+        manifest = stage(subject, projected)
+        with sqlite3.connect(path) as database:
+            database.execute(
+                "CREATE TABLE inbox (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, observation TEXT NOT NULL)"
+            )
+            database.execute(
+                "INSERT INTO inbox VALUES (?, 'pending', ?)",
+                (
+                    delivery(),
+                    json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7}),
+                ),
+            )
+        return manifest
+
+    application.ingress.stage_reconciliation = admit_after_stage  # type: ignore[method-assign]
+
+    assert not application.reconcile("startup")
+    assert not any(isinstance(record, ExternalEventDelivered) for record in application._runtime().engine.records)
+    application.close()
+
+
+def test_v5_application_does_not_read_provider_while_webhook_custody_is_pending(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=path,
+    )
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "CREATE TABLE inbox (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, observation TEXT NOT NULL)"
+        )
+        database.execute(
+            "INSERT INTO inbox VALUES (?, 'pending', ?)",
+            (
+                delivery(),
+                json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7}),
+            ),
+        )
+
+    assert not application.reconcile("startup")
+    assert authority.pull_calls == 0
+    assert not any(isinstance(record, ExternalEventDelivered) for record in application._runtime().engine.records)
+    application.close()
+
+
+def test_v5_application_does_not_stage_provider_projection_when_custody_arrives_during_read(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=path,
+    )
+    pull_request = authority.pull_request
+
+    def admit_during_read():
+        pull = pull_request()
+        with sqlite3.connect(path) as database:
+            database.execute(
+                "CREATE TABLE inbox (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, observation TEXT NOT NULL)"
+            )
+            database.execute(
+                "INSERT INTO inbox VALUES (?, 'pending', ?)",
+                (
+                    delivery(),
+                    json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7}),
+                ),
+            )
+        return pull
+
+    authority.pull_request = admit_during_read  # type: ignore[method-assign]
+
+    assert not application.reconcile("startup")
+    with sqlite3.connect(path) as database:
+        assert database.execute("SELECT COUNT(*) FROM v5_reconciliation_manifests").fetchone() == (0,)
+    assert not any(isinstance(record, ExternalEventDelivered) for record in application._runtime().engine.records)
     application.close()
 
 
