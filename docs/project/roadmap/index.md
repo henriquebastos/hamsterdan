@@ -48,8 +48,9 @@ canonical timer custody, fail-closed topology selection, stable synthetic
 reconciliation, and selected-host restart convergence across publication,
 inline-effect, timer-wake, and webhook-acknowledgement crash cuts.
 [CV17.DS4 — Production-parity evidence](cv17-v5-actor-loop-production-parity/cv17-ds4-production-parity-harness.md)
-is active: clean-green and first-attempt-flake semantic oracles pass through
-both real host compositions. They close a V5 strict stale-base gap and prove
-one exact brokered rerun reaches successful attempt 2 without repair or
-duplication. Broader deterministic journeys and fresh live selected-V5 GitHub
-demonstrations remain mandatory.
+is active: clean-green, first-attempt-flake, and persistent-CI semantic oracles
+pass through both real host compositions. They close a V5 strict stale-base
+gap, prove one exact brokered rerun, and prove reproduced failure invokes
+credential-free repair without a branch write or false readiness. Broader
+deterministic journeys and fresh live selected-V5 GitHub demonstrations remain
+mandatory.

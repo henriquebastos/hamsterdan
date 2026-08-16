@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Clean-green and first-attempt-flake semantic oracles pass; broader scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Clean-green, first-attempt-flake, and persistent-CI semantic oracles pass; broader scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -69,18 +69,36 @@ agent, finding, Git/ref mutation, merge, or duplicate rerun. This preserves the
 prior live PR 24 meaning—one brokered rerun recovered a transient failure and
 no repair ran—without requiring the two nets to share states or traces.
 
-The focused rerun and parity portfolio passes with 34 selected tests.
-`scripts/check full` passes with 1,067 Python tests, nine Bun relay tests,
-formatting, Ruff, typing, and source/wheel builds.
+### DS4.2 — Persistent-CI semantic oracle
+
+The third journey retains failed attempt 2 after the one brokered rerun. Its
+signed `workflow_run` delivery must be pending in durable custody before either
+topology reads the second required-job failure. Each then asks a
+credential-free coding agent to investigate an exact-head repair with the
+failed run, attempt, conclusion, and non-empty fingerprint as evidence. The
+controlled agent reports `unchanged`.
+
+Both topologies keep one current dashboard and publish no readiness or finding,
+no second rerun, no Git object/ref write, and no merge. The V5 pre-agent
+operation lookup is a deterministic absent-operation seam, while publication
+is fail-if-called; the later agent-repair journey remains responsible for real
+Git object creation and exact ref CAS. This oracle preserves historical PR
+25's GitHub-visible meaning—both CI attempts fail and bounded repair recovery
+cannot alter the branch or scenario controls—rather than its internal number
+of agent attempts.
+
+The focused escalation, mutation, and parity portfolio passes with 118 selected
+tests. `scripts/check full` passes with 1,069 Python tests, nine Bun relay
+tests, formatting, Ruff, typing, and source/wheel builds.
 
 ## Remaining deterministic portfolio
 
-The delivered content scenarios are clean green and first-attempt flake. Grow
-the semantic oracle in small slices over the remaining user journeys recovered
-from the prior live campaign:
+The delivered content scenarios are clean green, first-attempt flake, and
+persistent CI regression. Grow the semantic oracle in small slices over the
+remaining user journeys recovered from the prior live campaign:
 
-- content: persistent CI regression, seeded review finding, conversational
-  change, agent repair, and hero review;
+- content: seeded review finding, conversational change, agent repair, and hero
+  review;
 - lifecycle and authority: draft to ready, stale base, true conflict, and
   collaboration approval including requested review, changes requested,
   thread resolution, and final approval.
