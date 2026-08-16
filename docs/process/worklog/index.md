@@ -63,3 +63,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-16 — V5 seeded-review-finding parity oracle established](entries/2026-08-16T1249Z-v5-seeded-finding-parity-oracle.md)
 - [2026-08-16 — V5 conversational-change parity oracle established](entries/2026-08-16T1313Z-v5-conversational-change-parity-oracle.md)
 - [2026-08-16 — V5 agent-repair parity oracle established](entries/2026-08-16T1344Z-v5-agent-repair-parity-oracle.md)
+- [2026-08-16 — V5 hero-review parity oracle established](entries/2026-08-16T1414Z-v5-hero-review-parity-oracle.md)

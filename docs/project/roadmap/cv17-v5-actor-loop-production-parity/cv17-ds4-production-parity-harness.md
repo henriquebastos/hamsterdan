@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Six content semantic oracles through agent repair pass; broader scenarios and fresh live V5 GitHub acceptance remain
+status_reason: All seven content semantic oracles through hero review pass; lifecycle scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -181,15 +181,49 @@ The focused parity, Git publication, and V5 mutation checks pass with 81 tests.
 `scripts/check full` passes with 1,077 Python tests, nine Bun relay tests,
 formatting, Ruff, typing, and source/wheel builds.
 
+### DS4.6 — Hero-review semantic oracle
+
+The seventh journey recovers the review-only moment from the prior three-actor
+hero. Green exact-head CI reaches one credential-free coordinating review that
+returns exactly three blocking defects: a seconds/minutes lease bug with a
+one-line replacement, a conceptual approval-policy bug, and a capitalization-
+sensitive cache-key bug with one non-contiguous related location. The fake
+provider sends the JSON-shaped result through the real agent result validator,
+so each topology retains the complete admitted finding set and new-finding
+lineage rather than trusting an already-constructed result object.
+
+Production publishes three exact-head native review comments: one GitHub
+suggestion, one ordinary conceptual inline comment, and one inline comment with
+the clickable related location. V5 publishes one App-owned batch comment that
+shows the same identities, titles, explanations, severity, primary locations,
+evidence, suggestion, and related location. The semantic oracle deliberately
+accepts that presentation difference while requiring every defect to be visible
+exactly once under a stable head-bound operation.
+
+The journey also replays from a second independent fresh provider and host
+world at the same head. Agent and finding-publication operation identities stay
+identical across the worlds even though no durable host or provider state is
+shared, proving that lookup-first settlement can recover the same global work
+identity rather than relying on one local execution.
+
+Both topologies keep one blocked current dashboard, publish no readiness
+advisory, and quiesce without coding, conversation, rerun, Git/ref mutation, or
+merge work. This content slice does not claim the later hero repair, base
+update, review-thread resolution, or human approval; those behaviors remain in
+the lifecycle and collaboration portfolio.
+
+The focused parity, production finding, and V5 gate checks pass with 64 tests.
+`scripts/check full` passes with 1,079 Python tests, nine Bun relay tests,
+formatting, Ruff, typing, and source/wheel builds.
+
 ## Remaining deterministic portfolio
 
 The delivered content scenarios are clean green, first-attempt flake,
-persistent CI regression, seeded review finding, conversational change, and
-agent repair.
+persistent CI regression, seeded review finding, conversational change, agent
+repair, and hero review.
 Grow the semantic oracle in small slices over the remaining user journeys
 recovered from the prior live campaign:
 
-- content: hero review;
 - lifecycle and authority: draft to ready, stale base, true conflict, and
   collaboration approval including requested review, changes requested,
   thread resolution, and final approval.

@@ -20,6 +20,7 @@ from hamsterdan.agents.protocol import (
     ConversationResult,
     ReviewRequest,
     ReviewResult,
+    _validate_result,
 )
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.models import WireResponse
@@ -52,6 +53,48 @@ BLOCKING_FINDING = {
     "suggestion": "if mergeable and all_gates_clear:",
 }
 BLOCKING_LINEAGE = [{"finding_id": FINDING_ID, "state": "new", "supersedes": None}]
+HERO_FINDINGS = [
+    {
+        "id": "F-ttl-unit",
+        "path": "scenario-fixtures/hero_review/gate.py",
+        "line": 10,
+        "related_locations": [],
+        "title": "Lease lasts 60× longer than requested",
+        "body": "The duration is supplied in seconds but applied as minutes.",
+        "severity": "high",
+        "confidence": 0.99,
+        "evidence": "The lease passes ttl_seconds to timedelta(minutes=...).",
+        "blocking": True,
+        "suggestion": "timedelta(seconds=ttl_seconds)",
+    },
+    {
+        "id": "F-approval-policy",
+        "path": "scenario-fixtures/hero_review/gate.py",
+        "line": 16,
+        "related_locations": [],
+        "title": "Rejected reviews count as approvals",
+        "body": "The code counts every recorded review, including values explicitly marked false.",
+        "severity": "high",
+        "confidence": 0.99,
+        "evidence": "The approval count tests review presence rather than its accepted value.",
+        "blocking": True,
+        "suggestion": "",
+    },
+    {
+        "id": "F-cache-key",
+        "path": "scenario-fixtures/hero_review/cache.py",
+        "line": 11,
+        "related_locations": [{"path": "scenario-fixtures/hero_review/cache.py", "line": 6}],
+        "title": "Cache lookup changes with capitalization",
+        "body": "Storage normalizes the repository name, but lookup does not, so one repository can produce two keys.",
+        "severity": "high",
+        "confidence": 0.99,
+        "evidence": "The write path lowercases repository names while the read path uses the original spelling.",
+        "blocking": True,
+        "suggestion": "",
+    },
+]
+HERO_LINEAGE = [{"finding_id": finding["id"], "state": "new", "supersedes": None} for finding in HERO_FINDINGS]
 CHANGE_INSTRUCTION = "Add a short usage note to README.md"
 CHANGE_DIFF = """diff --git a/README.md b/README.md
 --- a/README.md
@@ -441,6 +484,7 @@ class ScenarioRunner:
         seeded_finding: bool = False,
         conversational_change: bool = False,
         finding_head: str | None = None,
+        review_findings: list[dict[str, object]] | None = None,
     ) -> None:
         self.reviews: list[tuple[str, ReviewRequest, str, int]] = []
         self.review_results: list[ReviewResult] = []
@@ -452,6 +496,7 @@ class ScenarioRunner:
         self.seeded_finding = seeded_finding
         self.conversational_change = conversational_change
         self.finding_head = finding_head
+        self.review_findings = [BLOCKING_FINDING] if review_findings is None else review_findings
         self.codes = 0
         self.conversations = 0
 
@@ -466,20 +511,33 @@ class ScenarioRunner:
                 [prior] = request.prior_findings
                 assert all(prior[key] == value for key, value in BLOCKING_FINDING.items())
                 assert request.applied_changes == BLOCKING_LINEAGE
-        result = ReviewResult(
-            request.repository,
-            request.pull_request,
-            request.epoch,
-            request.head,
-            request.base,
-            "blocking" if finding_open else "clear",
-            [BLOCKING_FINDING] if finding_open else [],
-            BLOCKING_LINEAGE
-            if finding_open
-            else [{"finding_id": FINDING_ID, "state": "resolved", "supersedes": None}]
-            if self.seeded_finding
-            else [],
+        result = _validate_result(
+            "review",
+            asdict(
+                ReviewResult(
+                    request.repository,
+                    request.pull_request,
+                    request.epoch,
+                    request.head,
+                    request.base,
+                    "blocking" if finding_open else "clear",
+                    self.review_findings if finding_open else [],
+                    [
+                        {"finding_id": finding["id"], "state": "new", "supersedes": None}
+                        for finding in self.review_findings
+                    ]
+                    if finding_open
+                    else [
+                        {"finding_id": finding["id"], "state": "resolved", "supersedes": None}
+                        for finding in self.review_findings
+                    ]
+                    if self.seeded_finding
+                    else [],
+                )
+            ),
+            request,
         )
+        assert isinstance(result, ReviewResult)
         self.review_results.append(result)
         return result
 
@@ -670,6 +728,7 @@ def _run_journey(
     seeded_finding: bool = False,
     conversational_change: bool = False,
     agent_repair: bool = False,
+    hero_review: bool = False,
 ) -> JourneyResult:
     assert not conversational_change or rerun_conclusion is None
     assert not agent_repair or rerun_conclusion == "failure"
@@ -690,9 +749,10 @@ def _run_journey(
         else "unchanged"
         if rerun_conclusion == "failure"
         else None,
-        seeded_finding=seeded_finding or agent_repair,
+        seeded_finding=seeded_finding or agent_repair or hero_review,
         conversational_change=conversational_change,
         finding_head=initial_head if agent_repair else None,
+        review_findings=HERO_FINDINGS if hero_review else None,
     )
     monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
     if agent_repair:
@@ -958,6 +1018,14 @@ def run_agent_repair(
     topology: ReadinessComposition,
 ) -> JourneyResult:
     return _run_journey(root, monkeypatch, topology, rerun_conclusion="failure", agent_repair=True)
+
+
+def run_hero_review(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> JourneyResult:
+    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, hero_review=True)
 
 
 def assert_public_clone(repository_url: str) -> None:
@@ -1629,6 +1697,136 @@ def assert_agent_repair(result: JourneyResult) -> None:
     assert len(result.runner.reviews) == result.quiescent_review_count
 
 
+def finding_operations(result: JourneyResult) -> tuple[str, ...]:
+    effects = [
+        item for item in (*result.comments, *result.review_comments) if "<!-- hamsterdan:finding " in str(item["body"])
+    ]
+    operations: list[str] = []
+    for item in effects:
+        marker = re.search(r"<!-- hamsterdan:finding operation=([^ >]+) head=([^ >]+) -->", str(item["body"]))
+        assert marker is not None and marker.group(2) == HEAD
+        operations.append(marker.group(1))
+    return tuple(operations)
+
+
+def assert_hero_review(result: JourneyResult) -> None:
+    assert result.custody_before == "pending"
+    assert result.custody_after == "terminal" and result.custody_counts == {"terminal": 1}
+    assert len(result.runner.reviews) == 1
+    repository_url, request, operation, attempt = result.runner.reviews[0]
+    assert_public_clone(repository_url)
+    assert (request.repository, request.pull_request, request.epoch, request.head, request.base) == (
+        "owner/repo",
+        7,
+        1,
+        HEAD,
+        BASE,
+    )
+    assert request.prior_findings == request.applied_changes == []
+    [actions] = request.actions_evidence
+    assert (actions["id"], actions["head"], actions["attempt"], actions["status"], actions["conclusion"]) == (
+        101,
+        HEAD,
+        1,
+        "completed",
+        "success",
+    )
+    assert operation and attempt == 1
+    encoded_request = repository_url + json.dumps(asdict(request), sort_keys=True)
+    assert all(
+        canary not in encoded_request for canary in (PRIVATE_KEY, WEBHOOK_SECRET, CLIENT_SECRET, INSTALLATION_TOKEN)
+    )
+    [review] = result.runner.review_results
+    assert (review.repository, review.pull_request, review.epoch, review.head, review.base, review.status) == (
+        "owner/repo",
+        7,
+        1,
+        HEAD,
+        BASE,
+        "blocking",
+    )
+    assert review.findings == HERO_FINDINGS
+    assert review.lineage == HERO_LINEAGE
+    assert result.runner.codes == result.runner.conversations == 0
+
+    dashboard = [item for item in result.comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
+    readiness = [item for item in result.comments if "<!-- hamsterdan:readiness " in str(item["body"])]
+    finding_effects = [
+        item for item in (*result.comments, *result.review_comments) if "<!-- hamsterdan:finding " in str(item["body"])
+    ]
+    assert len(dashboard) == 1 and readiness == []
+    assert all(
+        sum(str(finding["id"]) in str(item["body"]) for item in finding_effects) == 1 for finding in HERO_FINDINGS
+    )
+    operations = finding_operations(result)
+
+    for finding in HERO_FINDINGS:
+        body = next(str(item["body"]) for item in finding_effects if str(finding["id"]) in str(item["body"]))
+        assert all(str(finding[field]) in body for field in ("title", "body", "evidence", "path", "line"))
+    if result.topology == "production":
+        assert len(finding_effects) == len(result.review_comments) == 3
+        parent_operations: set[str] = set()
+        for finding, effect_operation in zip(HERO_FINDINGS, operations, strict=True):
+            match = re.fullmatch(rf"(finding:[0-9a-f]{{64}}):{re.escape(str(finding['id']))}", effect_operation)
+            assert match is not None
+            parent_operations.add(match.group(1))
+        assert len(parent_operations) == 1
+        assert [(item["commit_id"], item["path"], item["line"], item["side"]) for item in result.review_comments] == [
+            (HEAD, "scenario-fixtures/hero_review/gate.py", 10, "RIGHT"),
+            (HEAD, "scenario-fixtures/hero_review/gate.py", 16, "RIGHT"),
+            (HEAD, "scenario-fixtures/hero_review/cache.py", 11, "RIGHT"),
+        ]
+        ttl_body, approval_body, cache_body = (str(item["body"]) for item in result.review_comments)
+        assert "```suggestion\ntimedelta(seconds=ttl_seconds)\n```" in ttl_body
+        assert "```suggestion" not in approval_body
+        assert (
+            f"[`scenario-fixtures/hero_review/cache.py:6`](https://github.com/owner/repo/blob/{HEAD}/"
+            "scenario-fixtures/hero_review/cache.py#L6)"
+        ) in cache_body
+    else:
+        assert result.topology == "v5" and len(finding_effects) == 1 and result.review_comments == ()
+        assert operations == (f"findings:{HEAD}:i1",)
+        [body] = [str(item["body"]) for item in finding_effects]
+        sections = {}
+        for section in body.split("\n### `")[1:]:
+            finding_id, separator, remainder = section.partition("`")
+            assert separator and finding_id not in sections
+            sections[finding_id] = remainder
+        assert tuple(sections) == tuple(str(finding["id"]) for finding in HERO_FINDINGS)
+        for finding in HERO_FINDINGS:
+            section = sections[str(finding["id"])]
+            assert all(str(finding[field]) in section for field in ("title", "body", "evidence"))
+            assert "**blocking** · severity: **high**" in section
+            assert f"Primary location: `{finding['path']}:{finding['line']}`" in section
+            if finding["id"] == "F-ttl-unit":
+                assert "Suggested change:\n```suggestion\ntimedelta(seconds=ttl_seconds)\n```" in section
+            else:
+                assert "Suggested change:" not in section
+            if finding["id"] == "F-cache-key":
+                assert "Related locations:\n- `scenario-fixtures/hero_review/cache.py:6`" in section
+            else:
+                assert "Related locations:" not in section
+
+    dashboard_body = str(dashboard[0]["body"])
+    assert HEAD in dashboard_body and "blocking" in dashboard_body
+    assert all(str(finding["id"]) in dashboard_body for finding in HERO_FINDINGS) or "'count': 3" in dashboard_body
+    finding_writes = [
+        body for _method, _path, _identifier, body in result.provider_writes if "<!-- hamsterdan:finding " in body
+    ]
+    assert finding_writes == [str(item["body"]) for item in finding_effects]
+    forbidden = ("/git/blobs", "/git/trees", "/git/commits", "/git/refs", "/merge", "/rerun", "updateRefs")
+    assert not any(
+        any(fragment in path or fragment in body for fragment in forbidden)
+        for _method, path, body in result.provider_requests
+    )
+    assert (result.run_id, result.run_attempt, result.run_conclusion, result.rerun_requests) == (101, 1, "success", 0)
+    assert result.provider_state == ("open", False, False, True, "clean", HEAD, BASE)
+    assert result.git_reconciliations == result.git_publications == result.git_cas_updates == ()
+    assert all(item["user"] == {"login": BOT} for item in (*result.comments, *result.review_comments))
+    assert result.comments == result.quiescent_comments
+    assert len(result.runner.reviews) == result.quiescent_review_count
+
+
 @pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_clean_green_user_journey(
     tmp_path: Path,
@@ -1681,3 +1879,17 @@ def test_agent_repair_user_journey(
     topology: ReadinessComposition,
 ) -> None:
     assert_agent_repair(run_agent_repair(tmp_path / topology.topology, monkeypatch, topology))
+
+
+@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
+def test_hero_review_user_journey(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> None:
+    first = run_hero_review(tmp_path / topology.topology / "first", monkeypatch, topology)
+    second = run_hero_review(tmp_path / topology.topology / "second", monkeypatch, topology)
+    assert_hero_review(first)
+    assert_hero_review(second)
+    assert first.runner.reviews[0][2] == second.runner.reviews[0][2]
+    assert finding_operations(first) == finding_operations(second)
