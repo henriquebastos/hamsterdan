@@ -359,6 +359,20 @@ class TestDashGate:
         assert operation == "dash:d1"
         assert "row1" in body and "row2" in body
 
+    def test_an_upsert_never_reads_authority(self) -> None:
+        publisher = FakePublisher()
+
+        def forbidden_claim() -> CurrentClaim:
+            raise AssertionError("the authority-orthogonal dashboard must not read a claim")
+
+        gate = V5PublicationGates(
+            publisher=publisher,
+            claim=forbidden_claim,
+            recipients=lambda: ("the-reviewer", "the-author"),
+        )
+
+        assert isinstance(gate.dash_gate(self.WORK), DashLanded)
+
     def test_retryable_exhaustion_retains_the_exact_effect(self) -> None:
         publisher = FakePublisher(mode="boundary")
         result = gates(publisher).dash_gate(self.WORK)

@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Four content semantic oracles through seeded review finding pass; broader scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Five content semantic oracles through conversational change pass; broader scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -112,14 +112,51 @@ The focused finding/gate and parity checks pass with 53 selected tests.
 `scripts/check full` passes with 1,072 Python tests, nine Bun relay tests,
 formatting, Ruff, typing, and source/wheel builds.
 
+### DS4.4 — Conversational-change semantic oracle
+
+The fifth journey begins from clean green, then admits an authorized owner's
+explicit `@hamsterdan-test` README request through its own signed, durably
+pending `issue_comment` delivery. Each topology classifies exactly one declared
+change intent, sends the natural instruction and no credentials to one coding
+operation, and reaches one host-owned publication under a non-empty stable
+operation, payload digest, old-head lease, base, and non-merge publication
+shape. A strict publication seam advances the provider head exactly once. A
+third signed, durably pending PR delivery then admits that expected head as
+generation 2. Its distinct run 102 and required job are observed in progress;
+both topologies review generation 2 once, show that CI state on the current
+dashboard, and publish no readiness for the new head. The oracle pins
+production's coding/publication operation equality, V5's complete
+`push:comment:501:{old-head}:i1` identity and Agenticus wrapper, every changed
+result correlation field, and a lowercase 64-hex publication digest.
+
+This preserves historical PR 27's human-visible meaning—one natural request
+causes one host-owned branch change—under the current product ruling. The old
+second-comment digest confirmation is deliberately absent because it was
+superseded: an explicit authorized mutation now executes immediately, while an
+ambiguous request must clarify without mutating. The deterministic seam proves
+the mutation handoff and single head movement; the agent-repair journey still
+owns real Git object construction and exact ref CAS evidence.
+
+The scenario exposed a V5 dashboard boundary error. Although the singleton
+dashboard is authority-orthogonal, its gate read the full current claim before
+every upsert. During the legitimate interval after Hamsterdan's own push and
+before the new-head webhook staged the provider head in the host grant, that
+read failed outside the typed gate outcomes. The dashboard gate now performs
+its explicitly unfenced digest upsert without an authority read; a focused
+test rejects any future claim dependency.
+
+The focused V5 gate and parity checks pass with 56 selected tests.
+`scripts/check full` passes with 1,075 Python tests, nine Bun relay tests,
+formatting, Ruff, typing, and source/wheel builds.
+
 ## Remaining deterministic portfolio
 
 The delivered content scenarios are clean green, first-attempt flake,
-persistent CI regression, and seeded review finding. Grow the semantic oracle
-in small slices over the remaining user journeys recovered from the prior live
-campaign:
+persistent CI regression, seeded review finding, and conversational change.
+Grow the semantic oracle in small slices over the remaining user journeys
+recovered from the prior live campaign:
 
-- content: conversational change, agent repair, and hero review;
+- content: agent repair and hero review;
 - lifecycle and authority: draft to ready, stale base, true conflict, and
   collaboration approval including requested review, changes requested,
   thread resolution, and final approval.

@@ -358,11 +358,14 @@ class V5PublicationGates:
     # -- dashboard: unfenced idempotent upsert, digest identity --------
 
     def dash_gate(self, work: DashReq) -> DashLanded | DashBlocked | DashFault:
-        context = self.claim()
         try:
-            result = self.publisher.dashboard(
-                f"dash:{work.digest}", context.incarnation, context.head, "\n".join(work.entries)
-            )
+            # CommentPublisher retains an epoch/head-shaped signature,
+            # but `dash:` operations explicitly bypass its authority
+            # fence and the singleton marker embeds neither value. Do not
+            # turn this authority-orthogonal projection into a claim read:
+            # after our own push, provider head legitimately moves before
+            # the next webhook stages that head in the host grant.
+            result = self.publisher.dashboard(f"dash:{work.digest}", 0, "0" * 40, "\n".join(work.entries))
         except GitHubBoundaryError:
             return DashBlocked(
                 entries=work.entries,

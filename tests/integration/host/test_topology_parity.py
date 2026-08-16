@@ -10,15 +10,23 @@ from pathlib import Path
 
 import pytest
 
-from hamsterdan.agents.protocol import CodingRequest, CodingResult, ReviewRequest, ReviewResult
+from hamsterdan.agents.protocol import (
+    CodingRequest,
+    CodingResult,
+    ConversationRequest,
+    ConversationResult,
+    ReviewRequest,
+    ReviewResult,
+)
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.models import WireResponse
 from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
-from hamsterdan.host.git_publish import GitReconciliation, HostGitPublisher
+from hamsterdan.host.git_publish import GitPublishResult, GitReconciliation, HostGitPublisher
 from hamsterdan.host.service import HostService
 from hamsterdan.host.topology import PRODUCTION, V5, ReadinessComposition
 
 HEAD = "a" * 40
+NEW_HEAD = "c" * 40
 BASE = "b" * 40
 BOT = "hamsterdan-test[bot]"
 PRIVATE_KEY = "private-key-parity-canary"
@@ -41,6 +49,15 @@ BLOCKING_FINDING = {
     "suggestion": "if mergeable and all_gates_clear:",
 }
 BLOCKING_LINEAGE = [{"finding_id": FINDING_ID, "state": "new", "supersedes": None}]
+CHANGE_INSTRUCTION = "Add a short usage note to README.md"
+CHANGE_DIFF = """diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1 +1,3 @@
+ # Project
++
++Run `hamsterdan` to check pull-request readiness.
+"""
 
 
 class Clients:
@@ -58,7 +75,9 @@ class ScenarioProvider:
         self.state, self.draft, self.merged = "open", False, False
         self.mergeable, self.mergeable_state = True, "clean"
         self.rerun_conclusion = rerun_conclusion
+        self.run_id = 101
         self.run_attempt = 1
+        self.run_status = "completed"
         self.run_conclusion = "failure" if rerun_conclusion is not None else "success"
         self.rerun_requests = 0
         self.git_reconciliations: list[dict[str, object]] = []
@@ -126,7 +145,7 @@ class ScenarioProvider:
                     },
                 ],
             )
-        if method == "GET" and path == f"/repos/owner/repo/compare/{BASE}...{HEAD}":
+        if method == "GET" and path == f"/repos/owner/repo/compare/{BASE}...{self.head}":
             return WireResponse(200, {"status": "ahead", "behind_by": 0})
         if method == "GET" and path == "/repos/owner/repo/pulls/7/requested_reviewers":
             return WireResponse(200, {"users": []})
@@ -141,12 +160,12 @@ class ScenarioProvider:
                     "total_count": 1,
                     "workflow_runs": [
                         {
-                            "id": 101,
+                            "id": self.run_id,
                             "run_attempt": self.run_attempt,
-                            "head_sha": HEAD,
+                            "head_sha": self.head,
                             "event": "pull_request",
                             "path": ".github/workflows/ci.yml",
-                            "status": "completed",
+                            "status": self.run_status,
                             "conclusion": self.run_conclusion,
                             "pull_requests": [{"number": 7}],
                         }
@@ -155,7 +174,7 @@ class ScenarioProvider:
             )
         if (
             method == "GET"
-            and path == f"/repos/owner/repo/actions/runs/101/attempts/{self.run_attempt}/jobs?per_page=100"
+            and path == f"/repos/owner/repo/actions/runs/{self.run_id}/attempts/{self.run_attempt}/jobs?per_page=100"
         ):
             return WireResponse(
                 200,
@@ -165,7 +184,7 @@ class ScenarioProvider:
                         {
                             "id": 200 + self.run_attempt,
                             "name": "build",
-                            "status": "completed",
+                            "status": self.run_status,
                             "conclusion": self.run_conclusion,
                         }
                     ],
@@ -232,16 +251,26 @@ class ScenarioProvider:
         if (self.run_attempt, self.run_conclusion) != (1, "failure"):
             raise AssertionError("only failed attempt 1 can advance to the rerun outcome")
         self.run_attempt = 2
+        self.run_status = "completed"
         self.run_conclusion = self.rerun_conclusion
 
 
 class ScenarioRunner:
-    def __init__(self, *, coding_status: str | None = None, seeded_finding: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        coding_status: str | None = None,
+        seeded_finding: bool = False,
+        conversational_change: bool = False,
+    ) -> None:
         self.reviews: list[tuple[str, ReviewRequest, str, int]] = []
         self.review_results: list[ReviewResult] = []
+        self.conversation_calls: list[tuple[str, ConversationRequest, str, int]] = []
+        self.conversation_results: list[ConversationResult] = []
         self.code_calls: list[tuple[str, CodingRequest, str, int]] = []
         self.coding_status = coding_status
         self.seeded_finding = seeded_finding
+        self.conversational_change = conversational_change
         self.codes = 0
         self.conversations = 0
 
@@ -267,6 +296,22 @@ class ScenarioRunner:
         assert is_current is None or is_current()
         if self.coding_status is None:
             raise AssertionError("this parity journey must not invoke a coding agent")
+        if self.coding_status == "changed":
+            return CodingResult(
+                request.kind,
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                request.ref,
+                "changed",
+                "not_attempted",
+                CHANGE_DIFF,
+                ["README.md"],
+                [{"command": "readme-check", "outcome": "passed"}],
+                "docs: add usage note",
+            )
         return CodingResult(
             request.kind,
             request.repository,
@@ -283,9 +328,30 @@ class ScenarioRunner:
             "",
         )
 
-    def converse(self, *args: object, **kwargs: object) -> None:
+    def converse(self, repository_url, request, *, operation, attempt, is_current=None):
         self.conversations += 1
-        raise AssertionError("this parity journey must not invoke a conversation agent")
+        self.conversation_calls.append((repository_url, request, operation, attempt))
+        assert is_current is None or is_current()
+        if not self.conversational_change:
+            raise AssertionError("this parity journey must not invoke a conversation agent")
+        result = ConversationResult(
+            request.repository,
+            request.pull_request,
+            request.epoch,
+            request.head,
+            request.base,
+            [
+                {
+                    "type": "change",
+                    "arguments": {"request": CHANGE_INSTRUCTION},
+                    "mutation": True,
+                    "explicit": True,
+                    "confidence": 1.0,
+                }
+            ],
+        )
+        self.conversation_results.append(result)
+        return result
 
 
 @dataclass(frozen=True)
@@ -302,7 +368,8 @@ class JourneyResult:
     topology: str
     runner: ScenarioRunner
     run_attempt: int
-    run_conclusion: str
+    run_id: int
+    run_conclusion: str | None
     rerun_requests: int
     git_reconciliations: tuple[dict[str, object], ...]
     git_publications: tuple[dict[str, object], ...]
@@ -310,6 +377,8 @@ class JourneyResult:
     before_follow_up_calls: tuple[tuple[str, str], ...]
     before_follow_up_write_count: int
     follow_up_custody_before: str | None
+    head_follow_up_custody_before: str | None
+    conversation_delivery_id: str | None
     quiescent_comments: tuple[dict[str, object], ...]
     quiescent_review_count: int
 
@@ -357,6 +426,23 @@ def workflow_envelope(conclusion: str) -> bytes:
     ).encode()
 
 
+def comment_envelope(comment_id: int) -> bytes:
+    return json.dumps(
+        {
+            "action": "created",
+            "installation": {"id": 44, "account": {"id": 23}},
+            "repository": {"id": 31, "full_name": "owner/repo"},
+            "issue": {"number": 7, "pull_request": {"url": "https://api.github.com/repos/owner/repo/pulls/7"}},
+            "comment": {
+                "id": comment_id,
+                "body": f"@hamsterdan-test {CHANGE_INSTRUCTION}",
+                "author_association": "OWNER",
+                "user": {"id": 701, "login": "author", "type": "User"},
+            },
+        }
+    ).encode()
+
+
 def signed(body: bytes, delivery: str, event: str = "pull_request") -> dict[str, str]:
     digest = hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
     return {
@@ -375,22 +461,33 @@ def _run_journey(
     *,
     rerun_conclusion: str | None,
     seeded_finding: bool = False,
+    conversational_change: bool = False,
 ) -> JourneyResult:
+    assert not (rerun_conclusion is not None and conversational_change)
     provider = ScenarioProvider(rerun_conclusion=rerun_conclusion)
     runner = ScenarioRunner(
-        coding_status="unchanged" if rerun_conclusion == "failure" else None,
+        coding_status="changed" if conversational_change else "unchanged" if rerun_conclusion == "failure" else None,
         seeded_finding=seeded_finding,
+        conversational_change=conversational_change,
     )
     monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
-    if rerun_conclusion == "failure":
+    if rerun_conclusion == "failure" or conversational_change:
 
         def reconcile(_publisher, **kwargs):
             provider.git_reconciliations.append(dict(kwargs))
             return GitReconciliation("absent", provider.head)
 
-        def publish(_publisher, _result, **kwargs):
-            provider.git_publications.append(dict(kwargs))
-            raise AssertionError("an unchanged repair must never reach Git publication")
+        def publish(_publisher, result, **kwargs):
+            provider.git_publications.append({**kwargs, "result": asdict(result)})
+            if not conversational_change:
+                raise AssertionError("an unchanged repair must never reach Git publication")
+            assert provider.head == HEAD
+            provider.head = NEW_HEAD
+            provider.run_id = 102
+            provider.run_attempt = 1
+            provider.run_status = "in_progress"
+            provider.run_conclusion = None
+            return GitPublishResult(NEW_HEAD)
 
         monkeypatch.setattr(HostGitPublisher, "reconcile", reconcile)
         monkeypatch.setattr(HostGitPublisher, "publish", publish)
@@ -420,6 +517,8 @@ def _run_journey(
             tuple(provider.writes),
             tuple(runner.reviews),
             tuple(runner.review_results),
+            tuple(runner.conversation_calls),
+            tuple(runner.conversation_results),
             tuple(runner.code_calls),
             runner.conversations,
             tuple(provider.git_reconciliations),
@@ -440,7 +539,36 @@ def _run_journey(
     before_follow_up_calls = tuple(provider.calls)
     before_follow_up_write_count = len(provider.writes)
     follow_up_custody_before = None
-    if rerun_conclusion is not None:
+    head_follow_up_custody_before = None
+    conversation_delivery_id = None
+    if conversational_change:
+        comment_id = 501
+        provider.comments.append(
+            {
+                "id": comment_id,
+                "html_url": "https://github.com/owner/repo/pull/7#issuecomment-501",
+                "body": f"@hamsterdan-test {CHANGE_INSTRUCTION}",
+                "user": {"login": "author"},
+            }
+        )
+        follow_up, follow_up_body = str(uuid.uuid4()), comment_envelope(comment_id)
+        conversation_delivery_id = follow_up
+        receipt = host.custody.receive(signed(follow_up_body, follow_up, "issue_comment").items(), follow_up_body)
+        assert receipt.disposition == "accepted"
+        follow_up_custody_before = host.custody.status(follow_up)
+        pending = next(item for item in host.custody.pending() if item.delivery_id == follow_up)
+        host.process(pending)
+        converge()
+        assert provider.head == NEW_HEAD
+
+        head_follow_up, head_follow_up_body = str(uuid.uuid4()), envelope()
+        receipt = host.custody.receive(signed(head_follow_up_body, head_follow_up).items(), head_follow_up_body)
+        assert receipt.disposition == "accepted"
+        head_follow_up_custody_before = host.custody.status(head_follow_up)
+        pending = next(item for item in host.custody.pending() if item.delivery_id == head_follow_up)
+        host.process(pending)
+        converge()
+    elif rerun_conclusion is not None:
         provider.complete_rerun()
         follow_up, follow_up_body = str(uuid.uuid4()), workflow_envelope(rerun_conclusion)
         receipt = host.custody.receive(signed(follow_up_body, follow_up, "workflow_run").items(), follow_up_body)
@@ -476,6 +604,7 @@ def _run_journey(
         topology.topology,
         runner,
         provider.run_attempt,
+        provider.run_id,
         provider.run_conclusion,
         provider.rerun_requests,
         tuple(provider.git_reconciliations),
@@ -484,6 +613,8 @@ def _run_journey(
         before_follow_up_calls,
         before_follow_up_write_count,
         follow_up_custody_before,
+        head_follow_up_custody_before,
+        conversation_delivery_id,
         tuple(dict(item) for item in provider.comments),
         len(runner.reviews),
     )
@@ -528,6 +659,14 @@ def run_seeded_review_finding(
     topology: ReadinessComposition,
 ) -> JourneyResult:
     return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, seeded_finding=True)
+
+
+def run_conversational_change(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> JourneyResult:
+    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, conversational_change=True)
 
 
 def assert_public_clone(repository_url: str) -> None:
@@ -839,6 +978,168 @@ def assert_seeded_review_finding(result: JourneyResult) -> None:
     assert len(result.runner.reviews) == result.quiescent_review_count
 
 
+def assert_conversational_change(result: JourneyResult) -> None:
+    assert result.custody_before == result.follow_up_custody_before == result.head_follow_up_custody_before == "pending"
+    assert result.custody_after == "terminal"
+    assert result.custody_counts == {"terminal": 3}
+    assert result.runner.conversations == len(result.runner.conversation_calls) == 1
+    repository_url, conversation, conversation_operation, conversation_attempt = result.runner.conversation_calls[0]
+    assert (conversation.repository, conversation.pull_request, conversation.head, conversation.base) == (
+        "owner/repo",
+        7,
+        HEAD,
+        BASE,
+    )
+    assert conversation.comment_context.get("text", conversation.comment_context.get("body")) == CHANGE_INSTRUCTION
+    assert conversation.actor["login"] == "author"
+    change_declaration = next(item for item in conversation.allowed_intents if item["type"] == "change")
+    assert change_declaration["mutation"] is True and change_declaration["requires_explicit"] is True
+    assert result.runner.conversation_results == [
+        ConversationResult(
+            "owner/repo",
+            7,
+            conversation.epoch,
+            HEAD,
+            BASE,
+            [
+                {
+                    "type": "change",
+                    "arguments": {"request": CHANGE_INSTRUCTION},
+                    "mutation": True,
+                    "explicit": True,
+                    "confidence": 1.0,
+                }
+            ],
+        )
+    ]
+    if result.topology == "v5":
+        assert conversation_operation == (f"conversation:owner/repo:pr:7:delivery:{result.conversation_delivery_id}")
+    else:
+        assert result.topology == "production"
+        assert re.fullmatch(r"conversation:[0-9a-f]{64}", conversation_operation)
+    assert conversation_attempt == 1
+    assert_public_clone(repository_url)
+
+    assert result.runner.codes == len(result.runner.code_calls) == 1
+    repository_url, coding, coding_operation, coding_attempt = result.runner.code_calls[0]
+    assert (coding.kind, coding.repository, coding.pull_request, coding.head, coding.base) == (
+        "change",
+        "owner/repo",
+        7,
+        HEAD,
+        BASE,
+    )
+    assert CHANGE_INSTRUCTION in json.dumps(coding.selected_work, sort_keys=True)
+    assert coding.failure_evidence == [] and not coding.merge_base
+    expected_v5_operation = f"push:comment:501:{HEAD}:i1"
+    if result.topology == "v5":
+        assert coding_operation == f"mutation:owner/repo:pr:7:{expected_v5_operation}"
+    else:
+        assert result.topology == "production"
+        assert re.fullmatch(r"change:[0-9a-f]{64}", coding_operation)
+    assert coding_attempt == 1
+    assert_public_clone(repository_url)
+    encoded_agent_work = json.dumps(
+        {"conversation": asdict(conversation), "coding": asdict(coding)},
+        sort_keys=True,
+    )
+    assert all(
+        canary not in repository_url + encoded_agent_work
+        for canary in (PRIVATE_KEY, WEBHOOK_SECRET, CLIENT_SECRET, INSTALLATION_TOKEN)
+    )
+
+    [publication] = result.git_publications
+    assert publication["expected_head"] == HEAD
+    assert publication["base_head"] == BASE
+    assert publication["merge_base"] is False
+    assert re.fullmatch(r"[0-9a-f]{64}", str(publication["payload_digest"]))
+    published_result = publication["result"]
+    assert isinstance(published_result, dict)
+    for field in ("kind", "repository", "pull_request", "epoch", "head", "base", "ref"):
+        assert published_result[field] == getattr(coding, field)
+    assert published_result["status"] == "changed"
+    assert published_result["changed_files"] == ["README.md"]
+    assert published_result["diff"] == CHANGE_DIFF
+    if result.topology == "v5":
+        assert publication["operation"] == expected_v5_operation
+        [reconciliation] = result.git_reconciliations
+        assert reconciliation["expected_head"] == HEAD
+        assert reconciliation["base_head"] == BASE
+        assert reconciliation["merge_base"] is False
+        assert reconciliation["operation"] == publication["operation"]
+        assert reconciliation["payload_digest"] == publication["payload_digest"]
+    else:
+        assert result.topology == "production"
+        assert publication["operation"] == coding_operation
+        assert result.git_reconciliations == ()
+
+    assert len(result.runner.reviews) == len(result.runner.review_results) == 2
+    assert [request.head for _url, request, _operation, _attempt in result.runner.reviews] == [HEAD, NEW_HEAD]
+    assert [request.epoch for _url, request, _operation, _attempt in result.runner.reviews] == [1, 2]
+    assert [review.epoch for review in result.runner.review_results] == [1, 2]
+    assert [review.status for review in result.runner.review_results] == ["clear", "clear"]
+    assert all(
+        url == "https://github.com/owner/repo.git" for url, _request, _operation, _attempt in result.runner.reviews
+    )
+    _url, new_review, _operation, _attempt = result.runner.reviews[1]
+    [new_actions] = new_review.actions_evidence
+    assert (
+        new_actions["id"],
+        new_actions["head"],
+        new_actions["attempt"],
+        new_actions["status"],
+        new_actions["conclusion"],
+    ) == (102, NEW_HEAD, 1, "in_progress", None)
+    assert (result.run_id, result.run_attempt, result.run_conclusion, result.rerun_requests) == (102, 1, None, 0)
+    assert result.provider_state == ("open", False, False, True, "clean", NEW_HEAD, BASE)
+
+    human_comments = [item for item in result.comments if item["user"] == {"login": "author"}]
+    bot_comments = [item for item in result.comments if item["user"] == {"login": BOT}]
+    dashboard = [item for item in bot_comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
+    readiness = [item for item in bot_comments if "<!-- hamsterdan:readiness " in str(item["body"])]
+    assert human_comments == [
+        {
+            "id": 501,
+            "html_url": "https://github.com/owner/repo/pull/7#issuecomment-501",
+            "body": f"@hamsterdan-test {CHANGE_INSTRUCTION}",
+            "user": {"login": "author"},
+        }
+    ]
+    assert len(dashboard) == len(readiness) == 1
+    dashboard_body = str(dashboard[0]["body"])
+    assert NEW_HEAD in dashboard_body
+    if result.topology == "production":
+        assert "Generation: `2`" in dashboard_body
+        assert "Actions: **running**" in dashboard_body
+        assert "actions/runs/102" in dashboard_body
+    else:
+        assert "checks:{'status': 'in_progress'}" in dashboard_body
+    assert f"head={HEAD}" in str(readiness[0]["body"])
+    assert NEW_HEAD not in str(readiness[0]["body"])
+    assert not any("<!-- hamsterdan:finding " in str(item["body"]) for item in bot_comments)
+    assert not any("hamsterdan-rerun" in str(item["body"]) for item in bot_comments)
+
+    [before_dashboard] = [
+        item for item in result.before_follow_up_comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])
+    ]
+    assert dashboard[0]["id"] == before_dashboard["id"]
+    assert dashboard[0]["body"] != before_dashboard["body"]
+    follow_up_writes = result.provider_writes[result.before_follow_up_write_count :]
+    assert any(
+        method == "PATCH" and identifier == dashboard[0]["id"] and body == dashboard[0]["body"]
+        for method, _path, identifier, body in follow_up_writes
+    )
+    assert ("GET", f"/repos/owner/repo/compare/{BASE}...{NEW_HEAD}") in result.provider_calls
+    assert ("GET", "/repos/owner/repo/actions/runs/102/attempts/1/jobs?per_page=100") in result.provider_calls
+    forbidden = ("/git/blobs", "/git/trees", "/git/commits", "/git/refs", "/merge", "/rerun", "updateRefs")
+    assert not any(
+        any(fragment in path or fragment in body for fragment in forbidden)
+        for _method, path, body in result.provider_requests
+    )
+    assert result.comments == result.quiescent_comments
+    assert len(result.runner.reviews) == result.quiescent_review_count
+
+
 @pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_clean_green_user_journey(
     tmp_path: Path,
@@ -873,3 +1174,12 @@ def test_seeded_review_finding_user_journey(
     topology: ReadinessComposition,
 ) -> None:
     assert_seeded_review_finding(run_seeded_review_finding(tmp_path / topology.topology, monkeypatch, topology))
+
+
+@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
+def test_conversational_change_user_journey(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> None:
+    assert_conversational_change(run_conversational_change(tmp_path / topology.topology, monkeypatch, topology))
