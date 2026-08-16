@@ -258,6 +258,16 @@ class ScenarioProvider:
         self.git_publications: list[dict[str, object]] = []
         self.comments: list[dict[str, object]] = []
         self.review_comments: list[dict[str, object]] = []
+        self.requested_reviewers: list[str] = []
+        self.human_reviews: list[dict[str, object]] = [
+            {
+                "id": 301,
+                "submitted_at": "2026-08-16T00:00:00Z",
+                "state": "APPROVED",
+                "user": {"login": "reviewer"},
+            }
+        ]
+        self.review_threads: list[bool] = [True]
         self.calls: list[tuple[str, str]] = []
         self.requests: list[tuple[str, str, str]] = []
         self.writes: list[tuple[str, str, int, str]] = []
@@ -269,14 +279,7 @@ class ScenarioProvider:
         if path == "/repos/owner/repo/pulls/7/comments?per_page=100":
             return tuple(self.review_comments)
         if path == "/repos/owner/repo/pulls/7/reviews?per_page=100":
-            return (
-                {
-                    "id": 301,
-                    "submitted_at": "2026-08-16T00:00:00Z",
-                    "state": "APPROVED",
-                    "user": {"login": "reviewer"},
-                },
-            )
+            return tuple(self.human_reviews)
         raise AssertionError(f"unexpected provider pages request: {path}")
 
     def request(self, method: str, path: str, body: object | None = None) -> WireResponse:
@@ -322,7 +325,7 @@ class ScenarioProvider:
         if method == "GET" and path == f"/repos/owner/repo/compare/{self.base}...{self.head}":
             return WireResponse(200, {"status": "ahead", "behind_by": self.behind_by})
         if method == "GET" and path == "/repos/owner/repo/pulls/7/requested_reviewers":
-            return WireResponse(200, {"users": []})
+            return WireResponse(200, {"users": [{"login": login} for login in self.requested_reviewers]})
         if (
             method == "GET"
             and path
@@ -377,7 +380,10 @@ class ScenarioProvider:
                         "repository": {
                             "pullRequest": {
                                 "reviewThreads": {
-                                    "nodes": [{"id": "thread-1", "isResolved": True}],
+                                    "nodes": [
+                                        {"id": f"thread-{index}", "isResolved": resolved}
+                                        for index, resolved in enumerate(self.review_threads, start=1)
+                                    ],
                                     "pageInfo": {"hasNextPage": False, "endCursor": None},
                                 }
                             }
@@ -734,6 +740,13 @@ class StaleBasePhase:
 
 
 @dataclass(frozen=True)
+class CollaborationPhase:
+    deliveries: tuple[tuple[str, str | None, str | None], ...]
+    dashboards: tuple[str, ...]
+    readiness_counts: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class JourneyResult:
     custody_before: str | None
     custody_after: str | None
@@ -773,6 +786,7 @@ class JourneyResult:
     quiescent_review_count: int
     draft_phase: DraftPhase | None
     stale_base_phase: StaleBasePhase | None
+    collaboration_phase: CollaborationPhase | None
 
 
 def config(root: Path) -> HostConfig:
@@ -859,12 +873,14 @@ def _run_journey(
     draft_ready: bool = False,
     update_base: bool = False,
     resolve_conflict: bool = False,
+    collaboration: bool = False,
 ) -> JourneyResult:
     assert not conversational_change or rerun_conclusion is None
     assert not agent_repair or rerun_conclusion == "failure"
     base_mutation = update_base or resolve_conflict
     assert not (update_base and resolve_conflict)
     assert not base_mutation or (rerun_conclusion is None and not conversational_change and not agent_repair)
+    assert not collaboration or (rerun_conclusion is None and not conversational_change and not agent_repair)
     git_work = git_remote = None
     initial_base, initial_head = BASE, HEAD
     if resolve_conflict:
@@ -879,6 +895,9 @@ def _run_journey(
         git_remote=git_remote,
     )
     provider.draft = draft_ready
+    if collaboration:
+        provider.human_reviews = []
+        provider.review_threads = []
     runner = ScenarioRunner(
         coding_status="changed"
         if conversational_change or agent_repair or base_mutation
@@ -987,6 +1006,7 @@ def _run_journey(
     converge()
     draft_phase = None
     stale_base_phase = None
+    collaboration_phase = None
     if draft_ready:
         draft_custody_after = host.custody.status(delivery)
         draft_custody_counts = host.custody.counts()
@@ -1040,6 +1060,58 @@ def _run_journey(
             current_base,
             tuple(dict(item) for item in provider.comments),
             (runner.review_entries, runner.codes, runner.conversations),
+        )
+    if collaboration:
+        collaboration_deliveries: list[tuple[str, str | None, str | None]] = []
+
+        def collaboration_snapshot() -> tuple[str, int]:
+            [dashboard] = [item for item in provider.comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
+            readiness_count = sum("<!-- hamsterdan:readiness " in str(item["body"]) for item in provider.comments)
+            return str(dashboard["body"]), readiness_count
+
+        snapshots = [collaboration_snapshot()]
+
+        def observe(label: str, event: str, action: str) -> None:
+            collaboration_delivery, collaboration_body = str(uuid.uuid4()), envelope(action)
+            receipt = host.custody.receive(
+                signed(collaboration_body, collaboration_delivery, event).items(), collaboration_body
+            )
+            assert receipt.disposition == "accepted"
+            before = host.custody.status(collaboration_delivery)
+            pending = next(item for item in host.custody.pending() if item.delivery_id == collaboration_delivery)
+            host.process(pending)
+            converge()
+            collaboration_deliveries.append((label, before, host.custody.status(collaboration_delivery)))
+            snapshots.append(collaboration_snapshot())
+
+        provider.requested_reviewers = ["reviewer"]
+        observe("review_requested", "pull_request", "review_requested")
+        provider.requested_reviewers = []
+        provider.human_reviews = [
+            {
+                "id": 401,
+                "submitted_at": "2026-08-16T01:00:00Z",
+                "state": "CHANGES_REQUESTED",
+                "user": {"login": "reviewer"},
+            }
+        ]
+        provider.review_threads = [False]
+        observe("changes_requested", "pull_request_review", "submitted")
+        provider.human_reviews.append(
+            {
+                "id": 402,
+                "submitted_at": "2026-08-16T02:00:00Z",
+                "state": "APPROVED",
+                "user": {"login": "reviewer"},
+            }
+        )
+        observe("approved_thread_open", "pull_request_review", "submitted")
+        provider.review_threads = [True]
+        observe("thread_resolved", "pull_request_review_thread", "resolved")
+        collaboration_phase = CollaborationPhase(
+            tuple(collaboration_deliveries),
+            tuple(snapshot[0] for snapshot in snapshots),
+            tuple(snapshot[1] for snapshot in snapshots),
         )
     before_follow_up_comments = tuple(dict(item) for item in provider.comments)
     before_follow_up_calls = tuple(provider.calls)
@@ -1176,6 +1248,7 @@ def _run_journey(
         len(runner.reviews),
         draft_phase,
         stale_base_phase,
+        collaboration_phase,
     )
     provider.state, provider.draft, provider.merged = "closed", True, True
     provider.mergeable, provider.mergeable_state = False, "dirty"
@@ -1266,6 +1339,14 @@ def run_true_conflict_resolution(
     topology: ReadinessComposition,
 ) -> JourneyResult:
     return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, resolve_conflict=True)
+
+
+def run_collaboration_approval(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> JourneyResult:
+    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, collaboration=True)
 
 
 def assert_public_clone(repository_url: str) -> None:
@@ -2365,6 +2446,68 @@ def _assert_base_mutation(
     assert len(result.runner.reviews) == result.quiescent_review_count
 
 
+def assert_collaboration_approval(result: JourneyResult) -> None:
+    assert result.collaboration_phase is not None
+    phase = result.collaboration_phase
+    assert phase.deliveries == (
+        ("review_requested", "pending", "terminal"),
+        ("changes_requested", "pending", "terminal"),
+        ("approved_thread_open", "pending", "terminal"),
+        ("thread_resolved", "pending", "terminal"),
+    )
+    assert len(phase.dashboards) == 5
+    assert phase.readiness_counts == (0, 0, 0, 0, 1)
+    initial, requested, changes, approved, resolved = phase.dashboards
+    if result.topology == "production":
+        assert "Waiting for: human review" in initial
+        assert "Review requested: True" in requested and "Waiting for: human review" in requested
+        assert "Waiting for: requested changes" in changes and "Unresolved conversations: 1" in changes
+        assert "Human approved: True" in approved and "Waiting for: conversation resolution" in approved
+        assert "Human approved: True" in resolved
+        assert "Distinct approval: True" in resolved and "Unresolved conversations: 0" in resolved
+        assert "Readiness: **ready**" in resolved
+    else:
+        assert result.topology == "v5"
+        assert "human:{'approval': False, 'changes_requested': False, 'unresolved': 0}" in initial
+        assert "human:{'approval': False, 'changes_requested': False, 'unresolved': 0}" in requested
+        assert "human:{'approval': False, 'changes_requested': True, 'unresolved': 1}" in changes
+        assert "human:{'approval': True, 'changes_requested': False, 'unresolved': 1}" in approved
+        assert "human:{'approval': True, 'changes_requested': False, 'unresolved': 0}" in resolved
+
+    assert result.custody_before == "pending" and result.custody_after == "terminal"
+    assert result.custody_counts == {"terminal": 5}
+    assert result.provider_state == ("open", False, False, True, "clean", HEAD, BASE)
+    assert (result.run_id, result.run_attempt, result.run_conclusion, result.rerun_requests) == (101, 1, "success", 0)
+    assert result.runner.codes == result.runner.conversations == 0
+    assert result.runner.code_calls == result.runner.conversation_calls == []
+    assert len(result.runner.reviews) == len(result.runner.review_results) == 1
+    repository_url, review_request, operation, attempt = result.runner.reviews[0]
+    assert_public_clone(repository_url)
+    assert (review_request.head, review_request.base, review_request.epoch) == (HEAD, BASE, 1)
+    assert operation and attempt == 1
+    [review] = result.runner.review_results
+    assert (review.head, review.base, review.status, review.findings) == (HEAD, BASE, "clear", [])
+
+    dashboard = [item for item in result.comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
+    readiness = [item for item in result.comments if "<!-- hamsterdan:readiness " in str(item["body"])]
+    assert len(dashboard) == len(readiness) == 1
+    assert str(dashboard[0]["body"]) == resolved
+    assert f"head={HEAD}" in str(readiness[0]["body"])
+    assert "All observed gates are ready" in str(readiness[0]["body"])
+    assert result.review_comments == ()
+    assert not any("<!-- hamsterdan:finding " in str(item["body"]) for item in result.comments)
+    assert not any("hamsterdan-rerun" in str(item["body"]) for item in result.comments)
+    assert result.git_reconciliations == result.git_publications == result.git_cas_updates == ()
+    forbidden = ("/git/blobs", "/git/trees", "/git/commits", "/git/refs", "/merge", "/rerun", "updateRefs")
+    assert not any(
+        any(fragment in path or fragment in body for fragment in forbidden)
+        for _method, path, body in result.provider_requests
+    )
+    assert all(item["user"] == {"login": BOT} for item in result.comments)
+    assert result.comments == result.quiescent_comments
+    assert len(result.runner.reviews) == result.quiescent_review_count
+
+
 @pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_clean_green_user_journey(
     tmp_path: Path,
@@ -2458,3 +2601,12 @@ def test_true_conflict_resolution_user_journey(
     topology: ReadinessComposition,
 ) -> None:
     assert_true_conflict_resolution(run_true_conflict_resolution(tmp_path / topology.topology, monkeypatch, topology))
+
+
+@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
+def test_collaboration_approval_user_journey(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> None:
+    assert_collaboration_approval(run_collaboration_approval(tmp_path / topology.topology, monkeypatch, topology))

@@ -50,8 +50,8 @@ inline-effect, timer-wake, and webhook-acknowledgement crash cuts.
 [CV17.DS4 — Production-parity evidence](cv17-v5-actor-loop-production-parity/cv17-ds4-production-parity-harness.md)
 is active: clean-green, first-attempt-flake, persistent-CI, seeded review
 finding, conversational change, agent-repair, hero-review, draft-to-ready,
-stale-base update, and true-conflict resolution semantic oracles pass through
-both real host compositions. They close V5 strict
+stale-base update, true-conflict resolution, and collaboration approval
+semantic oracles pass through both real host compositions. They close V5 strict
 stale-base, actionable finding rendering, draft dashboard-silence, lifecycle
 admission ordering, and authority-orthogonal dashboard gaps; prove
 one exact brokered rerun; prove bounded credential-free repair with and without
@@ -61,5 +61,7 @@ exact ref CAS, repaired-head admission, finding resolution, and terminal
 readiness; preserve the hero's three actionable review shapes; prove draft
 silence followed by ready-state admission; and prove strict-base update and
 genuine same-line conflict resolution through real two-parent Git commits and
-exact ref CAS. Collaboration journeys and fresh live selected-V5 GitHub
-demonstrations remain mandatory.
+exact ref CAS; and prove requested review, changes requested, open-thread
+blocking, distinct approval, native thread-resolution custody, and final
+readiness. The selected deterministic portfolio is complete. Fresh live
+selected-V5 GitHub demonstrations remain mandatory.

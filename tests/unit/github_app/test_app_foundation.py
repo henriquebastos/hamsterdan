@@ -794,7 +794,8 @@ def test_installation_webhook_admits_initial_repositories_and_reconciliation_por
     body = json.dumps(payload).encode()
     custody.receive(signed_headers(body, "installation"), body)
     assert routes.route(44, 31) is not None and routes.route(44, 99) is None
-    assert {"pull_request_review_comment", "check_run", "check_suite"} <= SUPPORTED_EVENTS
+    assert {"pull_request_review_comment", "pull_request_review_thread", "check_run", "check_suite"} <= SUPPORTED_EVENTS
+    assert "pull_request_review_thread" in APP_EVENTS
 
 
 @pytest.mark.parametrize(
@@ -803,6 +804,7 @@ def test_installation_webhook_admits_initial_repositories_and_reconciliation_por
         ("pull_request", "pull_request"),
         ("pull_request_review", "pull_request"),
         ("pull_request_review_comment", "pull_request"),
+        ("pull_request_review_thread", "pull_request"),
         ("workflow_run", "workflow_run"),
         ("check_run", "check_run"),
         ("check_suite", "check_suite"),

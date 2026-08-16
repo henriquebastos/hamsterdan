@@ -32,6 +32,7 @@ SUPPORTED_EVENTS = frozenset(
         "issue_comment",
         "pull_request_review",
         "pull_request_review_comment",
+        "pull_request_review_thread",
         "workflow_run",
         "check_run",
         "check_suite",

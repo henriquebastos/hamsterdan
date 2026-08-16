@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; ten DS4 semantic oracles through true-conflict resolution pass while collaboration and fresh live V5 evidence remain
+status_reason: DS2 and DS3 are complete; eleven DS4 semantic oracles complete deterministic parity while fresh live V5 evidence remains
 updated: 2026-08-16
 ---
 
@@ -39,7 +39,7 @@ making that ruling.
   proves a settled but unacknowledged webhook replays from frozen custody on
   startup without duplicate provider, agent, History, or reconciliation work.
 - [CV17.DS4 — Production-parity evidence](cv17-ds4-production-parity-harness.md)
-  is active. DS4.0 through DS4.9 run strict clean-green,
+  is active. DS4.0 through DS4.10 run strict clean-green,
   first-attempt-flake, persistent-CI, seeded-review-finding, and conversational
   change plus agent-repair, hero-review, and draft-to-ready GitHub journeys
   independently through the real host against both topologies and judge
@@ -52,8 +52,11 @@ making that ruling.
   admission, finding resolution, and terminal readiness; and preserve the
   hero's suggestion, conceptual, and multi-location review meaning. The newest
   oracles prove stale-base update and genuine same-line conflict resolution
-  through real two-parent Git commits and exact ref CAS. Collaboration
-  scenarios plus a fresh live selected-V5 GitHub campaign remain.
+  through real two-parent Git commits and exact ref CAS. The collaboration
+  oracle proves requested review, changes requested, open-thread blocking,
+  distinct approval, native thread-resolution custody, and final readiness.
+  The selected deterministic portfolio is complete; a fresh live selected-V5
+  GitHub campaign remains.
 
 ## Done condition
 

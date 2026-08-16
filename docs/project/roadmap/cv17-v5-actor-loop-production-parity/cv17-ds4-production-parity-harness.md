@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Ten semantic oracles through true-conflict resolution pass; collaboration scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Eleven semantic oracles complete the selected deterministic portfolio; fresh live V5 GitHub acceptance remains
 updated: 2026-08-16
 ---
 
@@ -332,17 +332,49 @@ passes with 1,093 Python tests, nine Bun relay tests, formatting, Ruff, typing,
 and source/wheel builds. Fresh selected-V5 GitHub demonstrations remain the
 acceptance boundary.
 
-## Remaining deterministic portfolio
+### DS4.10 — Collaboration approval semantic oracle
+
+The eleventh journey reconstructs historical live PR 33's unchanged-head human
+collaboration flow. It begins with green exact-head CI and a clear coordinating
+review but no human approval. Four independent signed deliveries must each be
+pending in durable custody before the host observes their provider state:
+native reviewer request; changes requested with one unresolved inline thread;
+later approval while that thread remains open; and the thread's native
+`pull_request_review_thread.resolved` event. The singleton dashboard remains
+not ready through the first four snapshots, showing requested changes and then
+conversation resolution as the active blockers. Only the resolved-thread
+delivery permits one exact-head readiness advisory.
+
+Both topologies retain one clear agent review and never invoke coding,
+conversation, rerun, finding, Git/ref, or merge work. The final dashboard shows
+the distinct non-author approval and zero unresolved conversations in
+production; V5 shows the corresponding approved/clear human fact. All five
+webhook deliveries become terminal and both worlds quiesce.
+
+The scenario first exposed an invalid fake wake-up: resolving a GitHub review
+thread does not edit its review comment. GitHub sends the dedicated
+`pull_request_review_thread` event with `resolved` or `unresolved` action. The
+host custody allowlist and required GitHub App registration contract now include
+that event, and its pull request number enters the same neutral observation
+boundary as other review events. Production and V5 topology code remain
+untouched; a live registration missing the event fails inventory closed until
+the App subscription is updated.
+
+The complete topology-parity file passes with 22 tests. `scripts/check full`
+passes with 1,096 Python tests, nine Bun relay tests, formatting, Ruff, typing,
+and source/wheel builds. The selected deterministic portfolio is complete.
+Fresh explicitly selected-V5 GitHub demonstrations remain mandatory for CV17
+acceptance.
+
+## Deterministic portfolio status
 
 The delivered scenarios are clean green, first-attempt flake,
 persistent CI regression, seeded review finding, conversational change, agent
 repair, hero review, draft to ready, stale-base update, and true-conflict
-resolution.
-Grow the semantic oracle in small slices over the remaining user journeys
-recovered from the prior live campaign:
-
-- collaboration approval including requested review, changes requested,
-  thread resolution, and final approval.
+resolution, plus collaboration approval with requested review, changes
+requested, thread resolution, and final approval. No selected deterministic
+journey remains; additions require a new evidence need rather than scenario
+count for its own sake.
 
 Scenario assertions own visible meaning and safety invariants. They do not
 require production and V5 to take the same transitions, mint the same internal

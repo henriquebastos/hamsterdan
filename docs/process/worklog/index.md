@@ -67,3 +67,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-16 — V5 draft-to-ready parity oracle established](entries/2026-08-16T1459Z-v5-draft-ready-parity-oracle.md)
 - [2026-08-16 — V5 stale-base update parity oracle established](entries/2026-08-16T1556Z-v5-stale-base-update-parity-oracle.md)
 - [2026-08-16 — V5 true-conflict resolution parity oracle established](entries/2026-08-16T1611Z-v5-true-conflict-resolution-parity-oracle.md)
+- [2026-08-16 — V5 collaboration approval parity oracle established](entries/2026-08-16T1629Z-v5-collaboration-approval-parity-oracle.md)
