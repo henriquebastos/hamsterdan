@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
+import os
 import re
+import subprocess
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -58,6 +61,18 @@ CHANGE_DIFF = """diff --git a/README.md b/README.md
 +
 +Run `hamsterdan` to check pull-request readiness.
 """
+REPAIR_DIFF = """diff --git a/src/readiness.py b/src/readiness.py
+--- a/src/readiness.py
++++ b/src/readiness.py
+@@ -14,6 +14,6 @@
+ # Readiness must fail closed while GitHub reports unmergeable.
+ def ready(mergeable, all_gates_clear):
+     # Keep the provider guard attached to the ready branch.
+-    if all_gates_clear:
++    if mergeable and all_gates_clear:
+         return True
+     return False
+"""
 
 
 class Clients:
@@ -69,9 +84,62 @@ class Clients:
         pass
 
 
+def git(root: Path, *arguments: str, input_text: str | None = None) -> str:
+    return subprocess.run(
+        ("git", "-C", str(root), *arguments),
+        check=True,
+        capture_output=True,
+        text=True,
+        input=input_text,
+    ).stdout.strip()
+
+
+def repair_repository(root: Path) -> tuple[Path, Path, str, str]:
+    root.mkdir(parents=True)
+    remote = root / "remote.git"
+    subprocess.run(("git", "init", "--bare", "-q", str(remote)), check=True)
+    work = root / "work"
+    subprocess.run(("git", "clone", "-q", str(remote), str(work)), check=True)
+    git(work, "config", "user.name", "Parity Test")
+    git(work, "config", "user.email", "parity@example.invalid")
+    (work / "README.md").write_text("# Project\n")
+    git(work, "add", "README.md")
+    git(work, "commit", "-qm", "base")
+    base = git(work, "rev-parse", "HEAD")
+    git(work, "push", "-q", "origin", "HEAD:refs/heads/main")
+    source = work / "src" / "readiness.py"
+    source.parent.mkdir()
+    source.write_text(
+        "".join(f"# Fixture context {line}\n" for line in range(1, 14))
+        + "# Readiness must fail closed while GitHub reports unmergeable.\n"
+        + "def ready(mergeable, all_gates_clear):\n"
+        + "    # Keep the provider guard attached to the ready branch.\n"
+        + "    if all_gates_clear:\n"
+        + "        return True\n"
+        + "    return False\n"
+    )
+    git(work, "add", "src/readiness.py")
+    git(work, "commit", "-qm", "seed failing behavior")
+    head = git(work, "rev-parse", "HEAD")
+    git(work, "push", "-q", "origin", "HEAD:refs/heads/feature")
+    return work, remote, base, head
+
+
 class ScenarioProvider:
-    def __init__(self, *, rerun_conclusion: str | None = None) -> None:
-        self.head, self.base = HEAD, BASE
+    def __init__(
+        self,
+        *,
+        rerun_conclusion: str | None = None,
+        head: str = HEAD,
+        base: str = BASE,
+        git_work: Path | None = None,
+        git_remote: Path | None = None,
+    ) -> None:
+        self.head, self.base = head, base
+        self.git_work, self.git_remote = git_work, git_remote
+        self.created_git_objects: set[str] = set()
+        self.cas_updates: list[dict[str, str]] = []
+        self.git_boundary_events: list[dict[str, object]] = []
         self.state, self.draft, self.merged = "open", False, False
         self.mergeable, self.mergeable_state = True, "clean"
         self.rerun_conclusion = rerun_conclusion
@@ -145,7 +213,7 @@ class ScenarioProvider:
                     },
                 ],
             )
-        if method == "GET" and path == f"/repos/owner/repo/compare/{BASE}...{self.head}":
+        if method == "GET" and path == f"/repos/owner/repo/compare/{self.base}...{self.head}":
             return WireResponse(200, {"status": "ahead", "behind_by": 0})
         if method == "GET" and path == "/repos/owner/repo/pulls/7/requested_reviewers":
             return WireResponse(200, {"users": []})
@@ -211,6 +279,116 @@ class ScenarioProvider:
                     }
                 },
             )
+        if method == "POST" and path.startswith("/repos/owner/repo/git/") and isinstance(body, dict):
+            if self.git_work is None:
+                raise AssertionError("this journey forbids Git object creation")
+            self.git_boundary_events.append({"kind": "object", "path": path})
+            if path.endswith("/blobs"):
+                completed = subprocess.run(
+                    ("git", "-C", str(self.git_work), "hash-object", "-w", "--stdin"),
+                    input=base64.b64decode(str(body["content"])),
+                    check=True,
+                    capture_output=True,
+                )
+                created = completed.stdout.decode().strip()
+            elif path.endswith("/trees"):
+                index = self.git_work / ".git" / "parity-publication-index"
+                index.unlink(missing_ok=True)
+                environment = os.environ | {"GIT_INDEX_FILE": str(index)}
+                subprocess.run(
+                    ("git", "-C", str(self.git_work), "read-tree", str(body["base_tree"])),
+                    check=True,
+                    capture_output=True,
+                    env=environment,
+                )
+                for entry in body["tree"]:
+                    subprocess.run(
+                        (
+                            "git",
+                            "-C",
+                            str(self.git_work),
+                            "update-index",
+                            "--add",
+                            "--cacheinfo",
+                            f"{entry['mode']},{entry['sha']},{entry['path']}",
+                        ),
+                        check=True,
+                        capture_output=True,
+                        env=environment,
+                    )
+                created = subprocess.run(
+                    ("git", "-C", str(self.git_work), "write-tree"),
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=environment,
+                ).stdout.strip()
+                index.unlink()
+            elif path.endswith("/commits"):
+                environment = os.environ | {
+                    "GIT_AUTHOR_NAME": str(body["author"]["name"]),
+                    "GIT_AUTHOR_EMAIL": str(body["author"]["email"]),
+                    "GIT_COMMITTER_NAME": str(body["committer"]["name"]),
+                    "GIT_COMMITTER_EMAIL": str(body["committer"]["email"]),
+                    "GIT_AUTHOR_DATE": "2001-01-01T00:00:00Z",
+                    "GIT_COMMITTER_DATE": "2001-01-01T00:00:00Z",
+                }
+                command = ["git", "-C", str(self.git_work), "commit-tree", str(body["tree"])]
+                for parent in body["parents"]:
+                    command.extend(("-p", str(parent)))
+                created = subprocess.run(
+                    command,
+                    input=str(body["message"]),
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    env=environment,
+                ).stdout.strip()
+            else:
+                raise AssertionError(f"unexpected Git object request: {path}")
+            self.created_git_objects.add(created)
+            return WireResponse(201, {"sha": created})
+        if (
+            method == "POST"
+            and path == "/graphql"
+            and isinstance(body, dict)
+            and "repository(owner" in str(body.get("query"))
+        ):
+            assert body["variables"] == {"owner": "owner", "repository": "repo"}
+            return WireResponse(200, {"data": {"repository": {"id": "R_owner_repo"}}})
+        if (
+            method == "POST"
+            and path == "/graphql"
+            and isinstance(body, dict)
+            and "updateRefs" in str(body.get("query"))
+        ):
+            if self.git_work is None or self.git_remote is None:
+                raise AssertionError("this journey forbids ref mutation")
+            values = body["variables"]["input"]
+            [update] = values["refUpdates"]
+            assert values["repositoryId"] == "R_owner_repo"
+            assert update["name"] == "refs/heads/feature" and update["force"] is False
+            assert update["beforeOid"] == self.head
+            assert update["afterOid"] in self.created_git_objects
+            assert git(self.git_remote, "rev-parse", "refs/heads/feature") == self.head
+            git(self.git_work, "push", "-q", str(self.git_remote), f"{update['afterOid']}:{update['name']}")
+            self.cas_updates.append(
+                {
+                    "before": str(update["beforeOid"]),
+                    "after": str(update["afterOid"]),
+                    "client": str(values["clientMutationId"]),
+                }
+            )
+            self.git_boundary_events.append({"kind": "cas", "before": self.head, "after": update["afterOid"]})
+            self.head = str(update["afterOid"])
+            self.run_id = 102
+            self.run_attempt = 1
+            self.run_status = "completed"
+            self.run_conclusion = "success"
+            return WireResponse(
+                200,
+                {"data": {"updateRefs": {"clientMutationId": values["clientMutationId"]}}},
+            )
         if method == "POST" and path == "/repos/owner/repo/issues/7/comments" and isinstance(body, dict):
             comment = {
                 "id": len(self.comments) + 1,
@@ -262,30 +440,45 @@ class ScenarioRunner:
         coding_status: str | None = None,
         seeded_finding: bool = False,
         conversational_change: bool = False,
+        finding_head: str | None = None,
     ) -> None:
         self.reviews: list[tuple[str, ReviewRequest, str, int]] = []
         self.review_results: list[ReviewResult] = []
         self.conversation_calls: list[tuple[str, ConversationRequest, str, int]] = []
         self.conversation_results: list[ConversationResult] = []
         self.code_calls: list[tuple[str, CodingRequest, str, int]] = []
+        self.code_results: list[CodingResult] = []
         self.coding_status = coding_status
         self.seeded_finding = seeded_finding
         self.conversational_change = conversational_change
+        self.finding_head = finding_head
         self.codes = 0
         self.conversations = 0
 
     def review(self, repository_url, request, *, operation, attempt, is_current=None):
         self.reviews.append((repository_url, request, operation, attempt))
         assert is_current is None or is_current()
+        finding_open = self.seeded_finding and (self.finding_head is None or request.head == self.finding_head)
+        if self.finding_head is not None:
+            if finding_open:
+                assert request.prior_findings == request.applied_changes == []
+            else:
+                [prior] = request.prior_findings
+                assert all(prior[key] == value for key, value in BLOCKING_FINDING.items())
+                assert request.applied_changes == BLOCKING_LINEAGE
         result = ReviewResult(
             request.repository,
             request.pull_request,
             request.epoch,
             request.head,
             request.base,
-            "blocking" if self.seeded_finding else "clear",
-            [BLOCKING_FINDING] if self.seeded_finding else [],
-            BLOCKING_LINEAGE if self.seeded_finding else [],
+            "blocking" if finding_open else "clear",
+            [BLOCKING_FINDING] if finding_open else [],
+            BLOCKING_LINEAGE
+            if finding_open
+            else [{"finding_id": FINDING_ID, "state": "resolved", "supersedes": None}]
+            if self.seeded_finding
+            else [],
         )
         self.review_results.append(result)
         return result
@@ -297,7 +490,8 @@ class ScenarioRunner:
         if self.coding_status is None:
             raise AssertionError("this parity journey must not invoke a coding agent")
         if self.coding_status == "changed":
-            return CodingResult(
+            repair = request.kind == "repair"
+            result = CodingResult(
                 request.kind,
                 request.repository,
                 request.pull_request,
@@ -306,27 +500,30 @@ class ScenarioRunner:
                 request.base,
                 request.ref,
                 "changed",
-                "not_attempted",
-                CHANGE_DIFF,
-                ["README.md"],
-                [{"command": "readme-check", "outcome": "passed"}],
-                "docs: add usage note",
+                "confirmed" if repair else "not_attempted",
+                REPAIR_DIFF if repair else CHANGE_DIFF,
+                ["src/readiness.py"] if repair else ["README.md"],
+                [{"command": "repair-check" if repair else "readme-check", "outcome": "passed"}],
+                "fix: repair seeded failure" if repair else "docs: add usage note",
             )
-        return CodingResult(
-            request.kind,
-            request.repository,
-            request.pull_request,
-            request.epoch,
-            request.head,
-            request.base,
-            request.ref,
-            self.coding_status,
-            "reproduced" if request.kind == "repair" else "not_attempted",
-            "",
-            [],
-            [],
-            "",
-        )
+        else:
+            result = CodingResult(
+                request.kind,
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                request.ref,
+                self.coding_status,
+                "reproduced" if request.kind == "repair" else "not_attempted",
+                "",
+                [],
+                [],
+                "",
+            )
+        self.code_results.append(result)
+        return result
 
     def converse(self, repository_url, request, *, operation, attempt, is_current=None):
         self.conversations += 1
@@ -365,6 +562,8 @@ class JourneyResult:
     provider_requests: tuple[tuple[str, str, str], ...]
     provider_writes: tuple[tuple[str, str, int, str], ...]
     provider_state: tuple[str, bool, bool, bool, str, str, str]
+    initial_head: str
+    initial_base: str
     topology: str
     runner: ScenarioRunner
     run_attempt: int
@@ -378,7 +577,15 @@ class JourneyResult:
     before_follow_up_write_count: int
     follow_up_custody_before: str | None
     head_follow_up_custody_before: str | None
+    head_follow_up_comments_before: tuple[dict[str, object], ...] | None
     conversation_delivery_id: str | None
+    git_cas_updates: tuple[dict[str, str], ...]
+    git_created_objects: tuple[str, ...]
+    git_boundary_events: tuple[dict[str, object], ...]
+    git_remote_head: str
+    git_commit_body: str
+    git_commit_parents: tuple[str, ...]
+    git_repaired_content: str
     quiescent_comments: tuple[dict[str, object], ...]
     quiescent_review_count: int
 
@@ -408,7 +615,7 @@ def envelope() -> bytes:
     ).encode()
 
 
-def workflow_envelope(conclusion: str) -> bytes:
+def workflow_envelope(conclusion: str, *, head: str = HEAD) -> bytes:
     return json.dumps(
         {
             "action": "completed",
@@ -417,7 +624,7 @@ def workflow_envelope(conclusion: str) -> bytes:
             "workflow_run": {
                 "id": 101,
                 "run_attempt": 2,
-                "head_sha": HEAD,
+                "head_sha": head,
                 "status": "completed",
                 "conclusion": conclusion,
                 "pull_requests": [{"number": 7}],
@@ -462,16 +669,57 @@ def _run_journey(
     rerun_conclusion: str | None,
     seeded_finding: bool = False,
     conversational_change: bool = False,
+    agent_repair: bool = False,
 ) -> JourneyResult:
-    assert not (rerun_conclusion is not None and conversational_change)
-    provider = ScenarioProvider(rerun_conclusion=rerun_conclusion)
+    assert not conversational_change or rerun_conclusion is None
+    assert not agent_repair or rerun_conclusion == "failure"
+    git_work = git_remote = None
+    initial_base, initial_head = BASE, HEAD
+    if agent_repair:
+        git_work, git_remote, initial_base, initial_head = repair_repository(root / "git-world")
+    provider = ScenarioProvider(
+        rerun_conclusion=rerun_conclusion,
+        head=initial_head,
+        base=initial_base,
+        git_work=git_work,
+        git_remote=git_remote,
+    )
     runner = ScenarioRunner(
-        coding_status="changed" if conversational_change else "unchanged" if rerun_conclusion == "failure" else None,
-        seeded_finding=seeded_finding,
+        coding_status="changed"
+        if conversational_change or agent_repair
+        else "unchanged"
+        if rerun_conclusion == "failure"
+        else None,
+        seeded_finding=seeded_finding or agent_repair,
         conversational_change=conversational_change,
+        finding_head=initial_head if agent_repair else None,
     )
     monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
-    if rerun_conclusion == "failure" or conversational_change:
+    if agent_repair:
+        assert git_remote is not None
+        monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+        monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{git_remote.as_uri()}.insteadOf")
+        monkeypatch.setenv("GIT_CONFIG_VALUE_0", "https://github.com/owner/repo.git")
+        original_reconcile = HostGitPublisher.reconcile
+        original_publish = HostGitPublisher.publish
+
+        def observed_reconcile(self, **kwargs):
+            reconciliation = original_reconcile(self, **kwargs)
+            observed = {**kwargs, "result": asdict(reconciliation)}
+            provider.git_reconciliations.append(observed)
+            provider.git_boundary_events.append({"kind": "reconcile", **observed})
+            return reconciliation
+
+        def observed_publish(self, result, **kwargs):
+            publication = original_publish(self, result, **kwargs)
+            observed = {**kwargs, "result": asdict(result), "outcome": asdict(publication)}
+            provider.git_publications.append(observed)
+            provider.git_boundary_events.append({"kind": "publish", **observed})
+            return publication
+
+        monkeypatch.setattr(HostGitPublisher, "reconcile", observed_reconcile)
+        monkeypatch.setattr(HostGitPublisher, "publish", observed_publish)
+    elif rerun_conclusion == "failure" or conversational_change:
 
         def reconcile(_publisher, **kwargs):
             provider.git_reconciliations.append(dict(kwargs))
@@ -520,9 +768,13 @@ def _run_journey(
             tuple(runner.conversation_calls),
             tuple(runner.conversation_results),
             tuple(runner.code_calls),
+            tuple(runner.code_results),
             runner.conversations,
             tuple(provider.git_reconciliations),
             tuple(provider.git_publications),
+            tuple(provider.cas_updates),
+            tuple(sorted(provider.created_git_objects)),
+            tuple(provider.git_boundary_events),
         )
 
     def converge() -> None:
@@ -538,8 +790,11 @@ def _run_journey(
     before_follow_up_comments = tuple(dict(item) for item in provider.comments)
     before_follow_up_calls = tuple(provider.calls)
     before_follow_up_write_count = len(provider.writes)
+    if agent_repair:
+        assert runner.code_calls == []
     follow_up_custody_before = None
     head_follow_up_custody_before = None
+    head_follow_up_comments_before = None
     conversation_delivery_id = None
     if conversational_change:
         comment_id = 501
@@ -561,6 +816,7 @@ def _run_journey(
         converge()
         assert provider.head == NEW_HEAD
 
+        head_follow_up_comments_before = tuple(dict(item) for item in provider.comments)
         head_follow_up, head_follow_up_body = str(uuid.uuid4()), envelope()
         receipt = host.custody.receive(signed(head_follow_up_body, head_follow_up).items(), head_follow_up_body)
         assert receipt.disposition == "accepted"
@@ -570,13 +826,28 @@ def _run_journey(
         converge()
     elif rerun_conclusion is not None:
         provider.complete_rerun()
-        follow_up, follow_up_body = str(uuid.uuid4()), workflow_envelope(rerun_conclusion)
+        follow_up, follow_up_body = str(uuid.uuid4()), workflow_envelope(rerun_conclusion, head=initial_head)
         receipt = host.custody.receive(signed(follow_up_body, follow_up, "workflow_run").items(), follow_up_body)
         assert receipt.disposition == "accepted"
         follow_up_custody_before = host.custody.status(follow_up)
         pending = next(item for item in host.custody.pending() if item.delivery_id == follow_up)
         host.process(pending)
         converge()
+        if agent_repair:
+            assert provider.head != initial_head
+            head_follow_up_comments_before = tuple(dict(item) for item in provider.comments)
+            assert [request.head for _url, request, _operation, _attempt in runner.reviews] == [initial_head]
+            [dashboard_before_head] = [
+                item for item in head_follow_up_comments_before if "<!-- hamsterdan:dashboard -->" in str(item["body"])
+            ]
+            assert provider.head not in str(dashboard_before_head["body"])
+            head_follow_up, head_follow_up_body = str(uuid.uuid4()), envelope()
+            receipt = host.custody.receive(signed(head_follow_up_body, head_follow_up).items(), head_follow_up_body)
+            assert receipt.disposition == "accepted"
+            head_follow_up_custody_before = host.custody.status(head_follow_up)
+            pending = next(item for item in host.custody.pending() if item.delivery_id == head_follow_up)
+            host.process(pending)
+            converge()
     comments = tuple(dict(item) for item in provider.comments)
     application = host._apps[application_key]
     frozen = external_state()
@@ -601,6 +872,8 @@ def _run_journey(
             provider.head,
             provider.base,
         ),
+        initial_head,
+        initial_base,
         topology.topology,
         runner,
         provider.run_attempt,
@@ -614,7 +887,17 @@ def _run_journey(
         before_follow_up_write_count,
         follow_up_custody_before,
         head_follow_up_custody_before,
+        head_follow_up_comments_before,
         conversation_delivery_id,
+        tuple(dict(item) for item in provider.cas_updates),
+        tuple(sorted(provider.created_git_objects)),
+        tuple(dict(item) for item in provider.git_boundary_events),
+        "" if git_remote is None else git(git_remote, "rev-parse", "refs/heads/feature"),
+        "" if git_remote is None else git(git_remote, "log", "-1", "--format=%B", provider.head),
+        ()
+        if git_remote is None
+        else tuple(git(git_remote, "rev-list", "--parents", "-n", "1", provider.head).split()[1:]),
+        "" if git_remote is None else git(git_remote, "show", f"{provider.head}:src/readiness.py"),
         tuple(dict(item) for item in provider.comments),
         len(runner.reviews),
     )
@@ -667,6 +950,14 @@ def run_conversational_change(
     topology: ReadinessComposition,
 ) -> JourneyResult:
     return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, conversational_change=True)
+
+
+def run_agent_repair(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> JourneyResult:
+    return _run_journey(root, monkeypatch, topology, rerun_conclusion="failure", agent_repair=True)
 
 
 def assert_public_clone(repository_url: str) -> None:
@@ -1140,6 +1431,204 @@ def assert_conversational_change(result: JourneyResult) -> None:
     assert len(result.runner.reviews) == result.quiescent_review_count
 
 
+def assert_agent_repair(result: JourneyResult) -> None:
+    initial_head, initial_base = result.initial_head, result.initial_base
+    final_head = result.provider_state[5]
+    assert result.custody_before == result.follow_up_custody_before == result.head_follow_up_custody_before == "pending"
+    assert result.custody_after == "terminal" and result.custody_counts == {"terminal": 3}
+    assert (result.run_id, result.run_attempt, result.run_conclusion, result.rerun_requests) == (102, 1, "success", 1)
+    assert result.provider_state == ("open", False, False, True, "clean", final_head, initial_base)
+    assert final_head not in {initial_head, initial_base}
+    assert result.runner.conversations == 0 and result.runner.conversation_calls == []
+
+    assert len(result.runner.code_calls) == len(result.runner.code_results) == result.runner.codes == 1
+    repository_url, coding, coding_operation, coding_attempt = result.runner.code_calls[0]
+    assert_public_clone(repository_url)
+    assert (coding.kind, coding.repository, coding.pull_request, coding.epoch) == ("repair", "owner/repo", 7, 1)
+    assert (coding.head, coding.base, coding_attempt) == (initial_head, initial_base, 1)
+    assert coding.ref.startswith("hamsterdan/") and len(coding.failure_evidence) == 1
+    [failure] = coding.failure_evidence
+    assert (
+        str(failure["run_id"]),
+        failure["head"],
+        failure["attempt"],
+        failure["conclusion"],
+        failure["fingerprint"],
+    ) == ("101", initial_head, 2, "failure", FAILURE_FINGERPRINT)
+    encoded_agent_work = repository_url + json.dumps(asdict(coding), sort_keys=True)
+    assert all(
+        canary not in encoded_agent_work for canary in (PRIVATE_KEY, WEBHOOK_SECRET, CLIENT_SECRET, INSTALLATION_TOKEN)
+    )
+    [coding_result] = result.runner.code_results
+    assert coding_result == CodingResult(
+        "repair",
+        "owner/repo",
+        7,
+        1,
+        initial_head,
+        initial_base,
+        coding.ref,
+        "changed",
+        "confirmed",
+        REPAIR_DIFF,
+        ["src/readiness.py"],
+        [{"command": "repair-check", "outcome": "passed"}],
+        "fix: repair seeded failure",
+    )
+
+    assert len(result.runner.reviews) == len(result.runner.review_results) == 2
+    assert [(request.epoch, request.head) for _url, request, _operation, _attempt in result.runner.reviews] == [
+        (1, initial_head),
+        (2, final_head),
+    ]
+    assert all(
+        url == "https://github.com/owner/repo.git" and request.base == initial_base and attempt == 1 and operation
+        for url, request, operation, attempt in result.runner.reviews
+    )
+    first_review, repaired_review = result.runner.review_results
+    assert (first_review.status, first_review.findings, first_review.lineage) == (
+        "blocking",
+        [BLOCKING_FINDING],
+        BLOCKING_LINEAGE,
+    )
+    assert (repaired_review.status, repaired_review.findings, repaired_review.lineage) == (
+        "clear",
+        [],
+        [{"finding_id": FINDING_ID, "state": "resolved", "supersedes": None}],
+    )
+    first_actions = result.runner.reviews[0][1].actions_evidence
+    repaired_actions = result.runner.reviews[1][1].actions_evidence
+    assert result.runner.reviews[0][1].prior_findings == result.runner.reviews[0][1].applied_changes == []
+    [prior_finding] = result.runner.reviews[1][1].prior_findings
+    assert all(prior_finding[key] == value for key, value in BLOCKING_FINDING.items())
+    assert result.runner.reviews[1][1].applied_changes == BLOCKING_LINEAGE
+    assert [(item["id"], item["head"], item["attempt"], item["conclusion"]) for item in first_actions] == [
+        (101, initial_head, 1, "failure")
+    ]
+    assert [(item["id"], item["head"], item["attempt"], item["conclusion"]) for item in repaired_actions] == [
+        (102, final_head, 1, "success")
+    ]
+    assert ("GET", "/repos/owner/repo/actions/runs/101/attempts/1/jobs?per_page=100") in result.provider_calls
+    assert ("GET", "/repos/owner/repo/actions/runs/101/attempts/2/jobs?per_page=100") in result.provider_calls
+    assert ("GET", "/repos/owner/repo/actions/runs/102/attempts/1/jobs?per_page=100") in result.provider_calls
+
+    if result.topology == "v5":
+        publication_operation = f"push:repair:L1:{FAILURE_FINGERPRINT}:{initial_head}:i1"
+        assert coding_operation == f"mutation:owner/repo:pr:7:{publication_operation}"
+    else:
+        assert result.topology == "production"
+        assert re.fullmatch(r"repair:[0-9a-f]{64}", coding_operation)
+        publication_operation = coding_operation
+
+    [publication] = result.git_publications
+    assert publication["operation"] == publication_operation
+    assert publication["expected_head"] == initial_head
+    assert publication["base_head"] == initial_base and publication["merge_base"] is False
+    payload_digest = str(publication["payload_digest"])
+    assert re.fullmatch(r"[0-9a-f]{64}", payload_digest)
+    assert publication["result"] == asdict(coding_result)
+    assert publication["outcome"] == {"head": final_head, "recovered": False}
+    dispositions = [item["result"]["disposition"] for item in result.git_reconciliations]
+    assert dispositions[0] == "absent" and dispositions[-1] == "existing"
+    assert dispositions.count("existing") == 1 and set(dispositions) == {"absent", "existing"}
+    for reconciliation in result.git_reconciliations:
+        assert reconciliation["operation"] == publication_operation
+        assert reconciliation["payload_digest"] == payload_digest
+        assert reconciliation["expected_head"] == initial_head
+        assert reconciliation["base_head"] == initial_base and reconciliation["merge_base"] is False
+    assert result.git_reconciliations[0]["result"]["observed_head"] == initial_head
+    assert result.git_reconciliations[-1]["result"] == {
+        "disposition": "existing",
+        "observed_head": final_head,
+        "commit": final_head,
+        "parents": (initial_head,),
+    }
+
+    [cas] = result.git_cas_updates
+    assert (cas["before"], cas["after"]) == (initial_head, final_head)
+    expected_client = hashlib.sha256(
+        json.dumps(
+            {
+                "repository": "owner/repo",
+                "ref": "refs/heads/feature",
+                "expected_head": initial_head,
+                "commit": final_head,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    assert cas["client"] == expected_client
+    assert result.git_remote_head == final_head
+    assert result.git_commit_parents == (initial_head,)
+    assert "if mergeable and all_gates_clear:" in result.git_repaired_content
+    assert "    if all_gates_clear:" not in result.git_repaired_content
+    assert result.git_commit_body == (
+        "fix: repair seeded failure\n\n"
+        f"Hamsterdan-Operation: {publication_operation}\n"
+        f"Hamsterdan-Payload-Digest: {payload_digest}"
+    )
+    assert len(result.git_created_objects) == 3 and final_head in result.git_created_objects
+    object_writes = [
+        path
+        for method, path, _body in result.provider_requests
+        if method == "POST" and path.startswith("/repos/owner/repo/git/")
+    ]
+    assert object_writes == [
+        "/repos/owner/repo/git/blobs",
+        "/repos/owner/repo/git/trees",
+        "/repos/owner/repo/git/commits",
+    ]
+    events = result.git_boundary_events
+    object_events = [event["path"] for event in events if event["kind"] == "object"]
+    assert object_events == object_writes
+    object_indices = [index for index, event in enumerate(events) if event["kind"] == "object"]
+    cas_event = next(index for index, event in enumerate(events) if event["kind"] == "cas")
+    final_reconciliation = max(index for index, event in enumerate(events) if event["kind"] == "reconcile")
+    publication_event = next(index for index, event in enumerate(events) if event["kind"] == "publish")
+    assert events[0]["kind"] == "reconcile" and events[0]["result"]["disposition"] == "absent"
+    assert 0 < object_indices[0] <= object_indices[-1] < cas_event < final_reconciliation < publication_event
+    assert events[cas_event] == {"kind": "cas", "before": initial_head, "after": final_head}
+    assert events[final_reconciliation]["result"]["disposition"] == "existing"
+    assert publication_event == len(events) - 1
+    assert (
+        sum(
+            "updateRefs" in body
+            for method, path, body in result.provider_requests
+            if method == "POST" and path == "/graphql"
+        )
+        == 1
+    )
+    assert not any("/merge" in path for _method, path, _body in result.provider_requests)
+
+    rerun = [item for item in result.comments if "<!-- hamsterdan-rerun " in str(item["body"])]
+    dashboard = [item for item in result.comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
+    readiness = [item for item in result.comments if "<!-- hamsterdan:readiness " in str(item["body"])]
+    findings = [
+        item for item in (*result.comments, *result.review_comments) if "<!-- hamsterdan:finding " in str(item["body"])
+    ]
+    assert len(rerun) == len(dashboard) == len(readiness) == len(findings) == 1
+    assert f"run=101 head={initial_head}" in str(rerun[0]["body"])
+    assert FINDING_ID in str(findings[0]["body"]) and initial_head in str(findings[0]["body"])
+    assert final_head in str(dashboard[0]["body"])
+    assert f"head={final_head}" in str(readiness[0]["body"])
+    if result.topology == "production":
+        assert "Generation: `2`" in str(dashboard[0]["body"])
+        assert f"`{FINDING_ID}` resolved" in str(dashboard[0]["body"])
+    else:
+        assert f"findings:{{'blocking': 0, 'count': 0, 'head': '{final_head}'}}" in str(dashboard[0]["body"])
+        assert f"review:{{'head': '{final_head}', 'status': 'clear'}}" in str(dashboard[0]["body"])
+    assert result.head_follow_up_comments_before is not None
+    assert not any("<!-- hamsterdan:readiness " in str(item["body"]) for item in result.head_follow_up_comments_before)
+    readiness_writes = [
+        body for _method, _path, _identifier, body in result.provider_writes if "<!-- hamsterdan:readiness " in body
+    ]
+    assert readiness_writes == [readiness[0]["body"]]
+    assert all(item["user"] == {"login": BOT} for item in (*result.comments, *result.review_comments))
+    assert result.comments == result.quiescent_comments
+    assert len(result.runner.reviews) == result.quiescent_review_count
+
+
 @pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_clean_green_user_journey(
     tmp_path: Path,
@@ -1183,3 +1672,12 @@ def test_conversational_change_user_journey(
     topology: ReadinessComposition,
 ) -> None:
     assert_conversational_change(run_conversational_change(tmp_path / topology.topology, monkeypatch, topology))
+
+
+@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
+def test_agent_repair_user_journey(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> None:
+    assert_agent_repair(run_agent_repair(tmp_path / topology.topology, monkeypatch, topology))

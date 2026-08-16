@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; five DS4 content semantic oracles pass while broader deterministic and fresh live V5 evidence remain
+status_reason: DS2 and DS3 are complete; six DS4 content semantic oracles pass while broader deterministic and fresh live V5 evidence remain
 updated: 2026-08-16
 ---
 
@@ -39,15 +39,17 @@ making that ruling.
   proves a settled but unacknowledged webhook replays from frozen custody on
   startup without duplicate provider, agent, History, or reconciliation work.
 - [CV17.DS4 — Production-parity evidence](cv17-ds4-production-parity-harness.md)
-  is active. DS4.0 through DS4.4 run strict clean-green,
+  is active. DS4.0 through DS4.5 run strict clean-green,
   first-attempt-flake, persistent-CI, seeded-review-finding, and conversational
-  change GitHub journeys independently through the real host against both
-  topologies and judge user-visible semantics rather than traces. They close
-  V5 strict stale-base, actionable finding-rendering, and authority-orthogonal
-  dashboard gaps; prove one exact brokered rerun; prove reproduced failure
-  invokes bounded credential-free repair without a branch write; and prove one
-  explicit request advances to one host-owned generation-2 head. Broader
-  deterministic scenarios and a fresh live selected-V5 GitHub campaign remain.
+  change plus agent-repair GitHub journeys independently through the real host
+  against both topologies and judge user-visible semantics rather than traces.
+  They close V5 strict stale-base, actionable finding-rendering, and
+  authority-orthogonal dashboard gaps; prove one exact brokered rerun; prove
+  bounded credential-free repair with and without a changed patch; prove one
+  explicit request advances to one host-owned generation-2 head; and prove a
+  changed repair through real Git object creation, exact ref CAS, repaired-head
+  admission, finding resolution, and terminal readiness. Broader deterministic
+  scenarios and a fresh live selected-V5 GitHub campaign remain.
 
 ## Done condition
 

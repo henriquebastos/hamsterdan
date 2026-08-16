@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Five content semantic oracles through conversational change pass; broader scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Six content semantic oracles through agent repair pass; broader scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -149,14 +149,47 @@ The focused V5 gate and parity checks pass with 56 selected tests.
 `scripts/check full` passes with 1,075 Python tests, nine Bun relay tests,
 formatting, Ruff, typing, and source/wheel builds.
 
+### DS4.5 — Agent-repair semantic oracle
+
+The sixth journey begins with an exact-head CI failure and a blocking seeded
+review finding. Each topology publishes one brokered rerun marker; signed,
+durably pending `workflow_run` custody then admits attempt 2 as another failure.
+Only after that second failure does one credential-free repair operation receive
+the exact run, head, attempt, conclusion, and fingerprint. The controlled agent
+returns a real patch restoring the missing mergeability guard identified by the
+seeded finding.
+
+Unlike the earlier strict publication seam, this journey runs the production
+`HostGitPublisher` against real local Git objects while preserving its normal
+public credential-free clone URL. The host performs lookup-first
+reconciliation, creates exactly one blob, tree, and commit, and advances the
+same-repository feature ref once through the real GraphQL exact compare-and-swap
+boundary. The oracle reads the resulting repository to prove the changed
+content, old-head parent, stable operation and payload trailers, provider/ref
+agreement, and no recovery or second publication.
+
+The ref advance exposes a distinct repaired head with successful run 102, but
+neither topology may announce it immediately. A third signed PR delivery is
+durably pending before generation 2 is admitted. Both topologies then review
+that exact head once, resolve the original finding through lineage, update the
+singleton dashboard to clear, publish exactly one repaired-head readiness
+advisory, and quiesce. Assertions preserve each topology's globally scoped
+operation identity without requiring those identities or GitHub rendering
+surfaces to be identical. No credential enters agent work and no merge occurs.
+
+The focused parity, Git publication, and V5 mutation checks pass with 81 tests.
+`scripts/check full` passes with 1,077 Python tests, nine Bun relay tests,
+formatting, Ruff, typing, and source/wheel builds.
+
 ## Remaining deterministic portfolio
 
 The delivered content scenarios are clean green, first-attempt flake,
-persistent CI regression, seeded review finding, and conversational change.
+persistent CI regression, seeded review finding, conversational change, and
+agent repair.
 Grow the semantic oracle in small slices over the remaining user journeys
 recovered from the prior live campaign:
 
-- content: agent repair and hero review;
+- content: hero review;
 - lifecycle and authority: draft to ready, stale base, true conflict, and
   collaboration approval including requested review, changes requested,
   thread resolution, and final approval.
