@@ -58,3 +58,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-16 — V5 reminder and timer-wake crash recovery completed](entries/2026-08-16T0256Z-v5-reminder-timer-wake-crash-recovery.md)
 - [2026-08-16 — V5 durable webhook host-restart recovery completed](entries/2026-08-16T0336Z-v5-durable-webhook-host-restart-recovery.md)
 - [2026-08-16 — V5 clean-green parity oracle established](entries/2026-08-16T1136Z-v5-clean-green-parity-oracle.md)
+- [2026-08-16 — V5 first-attempt-flake parity oracle established](entries/2026-08-16T1208Z-v5-first-attempt-flake-parity-oracle.md)

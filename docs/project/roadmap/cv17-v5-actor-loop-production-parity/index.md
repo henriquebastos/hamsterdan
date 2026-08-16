@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; DS4 has begun with the clean-green semantic oracle while broader deterministic and fresh live V5 evidence remain
+status_reason: DS2 and DS3 are complete; DS4 clean-green and first-attempt-flake semantic oracles pass while broader deterministic and fresh live V5 evidence remain
 updated: 2026-08-16
 ---
 
@@ -39,11 +39,12 @@ making that ruling.
   proves a settled but unacknowledged webhook replays from frozen custody on
   startup without duplicate provider, agent, History, or reconciliation work.
 - [CV17.DS4 — Production-parity evidence](cv17-ds4-production-parity-harness.md)
-  is active. DS4.0 runs a strict clean-green fake GitHub journey independently
-  through the real host against both topologies and judges user-visible
-  semantics rather than traces. It also closes the V5 strict stale-base gap
-  this first oracle exposed. Broader deterministic scenarios and a fresh live
-  selected-V5 GitHub campaign remain.
+  is active. DS4.0 and DS4.1 run strict clean-green and first-attempt-flake
+  GitHub journeys independently through the real host against both topologies
+  and judge user-visible semantics rather than traces. The first closed a V5
+  strict stale-base gap; the second proves one exact brokered rerun reaches
+  successful attempt 2 without repair or duplication. Broader deterministic
+  scenarios and a fresh live selected-V5 GitHub campaign remain.
 
 ## Done condition
 

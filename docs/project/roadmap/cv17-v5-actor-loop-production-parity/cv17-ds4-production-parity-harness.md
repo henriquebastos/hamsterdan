@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: The deterministic clean-green semantic oracle is complete; broader scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Clean-green and first-attempt-flake semantic oracles pass; broader scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -53,17 +53,34 @@ legacy manifests retain their exact payload and digest while replaying. A
 pre-DS4 readiness request still reconciles lookup-first, but if no effect
 landed it settles moved without posting and waits for fresh evidence.
 
-The focused V5 and parity portfolio passes with 439 tests. `scripts/check full`
-passes with 1,065 Python tests, nine Bun relay tests, formatting, Ruff, typing,
-and source/wheel builds.
+### DS4.1 — First-attempt-flake semantic oracle
+
+The same real-host boundary now begins with an exact-head required Actions job
+failed on attempt 1. Each topology independently publishes exactly one
+operation-bound rerun marker for that run and head. The strict fake provider
+then exposes successful attempt 2, which enters through a second signed
+`workflow_run` delivery and durable custody before either topology can decide
+the final outcome.
+
+Both journeys observe required-job evidence for attempts 1 and 2, update the
+single dashboard, publish one readiness advisory, and quiesce with both
+deliveries terminal. They run one clear review and no coding or conversation
+agent, finding, Git/ref mutation, merge, or duplicate rerun. This preserves the
+prior live PR 24 meaning—one brokered rerun recovered a transient failure and
+no repair ran—without requiring the two nets to share states or traces.
+
+The focused rerun and parity portfolio passes with 34 selected tests.
+`scripts/check full` passes with 1,067 Python tests, nine Bun relay tests,
+formatting, Ruff, typing, and source/wheel builds.
 
 ## Remaining deterministic portfolio
 
-Grow the semantic oracle in small slices over the user journeys recovered from
-the prior live campaign:
+The delivered content scenarios are clean green and first-attempt flake. Grow
+the semantic oracle in small slices over the remaining user journeys recovered
+from the prior live campaign:
 
-- content: clean green, first-attempt flake, persistent CI regression, seeded
-  review finding, conversational change, agent repair, and hero review;
+- content: persistent CI regression, seeded review finding, conversational
+  change, agent repair, and hero review;
 - lifecycle and authority: draft to ready, stale base, true conflict, and
   collaboration approval including requested review, changes requested,
   thread resolution, and final approval.
