@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Nine semantic oracles through stale-base update pass; remaining lifecycle scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Ten semantic oracles through true-conflict resolution pass; collaboration scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -297,16 +297,52 @@ passes with 1,091 Python tests, nine Bun relay tests, formatting, Ruff, typing,
 and source/wheel builds. This deterministic update-base proof is intermediate;
 the fresh explicitly selected-V5 GitHub campaign remains mandatory.
 
+### DS4.9 — True-conflict resolution semantic oracle
+
+The tenth journey reconstructs historical live PR 31's true-conflict behavior
+without mistaking ordinary strict-base staleness for a conflict. Its real local
+Git graph starts with one shared fixture line, changes that line differently on
+the feature and base branches, and requires `git merge-tree` to prove conflict
+markers before the host sees the advanced base. A separate signed PR delivery
+is pending in durable custody before both topologies update the singleton
+dashboard to show a stale, unmergeable/conflicted head and remain not ready.
+Neither topology starts coding or conversation work merely from that state.
+
+One unambiguous authorized owner comment selects `resolve_conflict` under the
+current immediate-execution product rule. The historical two-comment digest
+confirmation is deliberately not restored; it was superseded before the parity
+portfolio. Both topologies send the exact old head and current base,
+`merge_base=True`, natural request, and no credentials to one coding operation.
+The returned patch resolves the contested line. `HostGitPublisher` creates one
+blob, tree, and ordered two-parent commit, then advances the same-repository
+feature ref once through exact GraphQL compare-and-swap under the stable
+lookup-first operation and payload identity.
+
+The branch write still does not authorize the new head. Before the fourth
+webhook, the dashboard remains on the stale conflicted head, only the historical
+old-head readiness marker exists, and every review request is still old-head
+work. A separately custodied signed PR delivery then admits the resulting head.
+Both topologies observe successful run 102, complete one new-head clear review,
+show current base and mergeability, publish new-head readiness, and quiesce with
+all four deliveries terminal. No finding, rerun, native review comment, REST
+merge, duplicate Git object, or second ref update occurs.
+
+The complete topology-parity file passes with 20 tests. `scripts/check full`
+passes with 1,093 Python tests, nine Bun relay tests, formatting, Ruff, typing,
+and source/wheel builds. Fresh selected-V5 GitHub demonstrations remain the
+acceptance boundary.
+
 ## Remaining deterministic portfolio
 
 The delivered scenarios are clean green, first-attempt flake,
 persistent CI regression, seeded review finding, conversational change, agent
-repair, hero review, draft to ready, and stale-base update.
+repair, hero review, draft to ready, stale-base update, and true-conflict
+resolution.
 Grow the semantic oracle in small slices over the remaining user journeys
 recovered from the prior live campaign:
 
-- lifecycle and authority: true conflict and collaboration approval including
-  requested review, changes requested, thread resolution, and final approval.
+- collaboration approval including requested review, changes requested,
+  thread resolution, and final approval.
 
 Scenario assertions own visible meaning and safety invariants. They do not
 require production and V5 to take the same transitions, mint the same internal

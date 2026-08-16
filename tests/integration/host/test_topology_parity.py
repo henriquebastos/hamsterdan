@@ -98,6 +98,7 @@ HERO_FINDINGS = [
 HERO_LINEAGE = [{"finding_id": finding["id"], "state": "new", "supersedes": None} for finding in HERO_FINDINGS]
 CHANGE_INSTRUCTION = "Add a short usage note to README.md"
 UPDATE_BASE_INSTRUCTION = "Update this branch with the latest main branch"
+RESOLVE_CONFLICT_INSTRUCTION = "Resolve the merge conflict with the latest main branch"
 CHANGE_DIFF = """diff --git a/README.md b/README.md
 --- a/README.md
 +++ b/README.md
@@ -112,6 +113,13 @@ new file mode 100644
 +++ b/BASE-NOTES.md
 @@ -0,0 +1 @@
 +Latest base behavior.
+"""
+CONFLICT_DIFF = """diff --git a/src/pr_fixture/__init__.py b/src/pr_fixture/__init__.py
+--- a/src/pr_fixture/__init__.py
++++ b/src/pr_fixture/__init__.py
+@@ -1 +1 @@
+-\"\"\"Minimal domain module for the PR-readiness laboratory fixtures.\"\"\"
++\"\"\"Minimal release-qualified domain for the PR-readiness laboratory fixtures.\"\"\"
 """
 REPAIR_DIFF = """diff --git a/src/readiness.py b/src/readiness.py
 --- a/src/readiness.py
@@ -184,6 +192,40 @@ def advance_base_repository(work: Path, remote: Path, base: str, head: str) -> s
     git(work, "commit", "-qm", "base: advance independently")
     advanced = git(work, "rev-parse", "HEAD")
     git(work, "push", "-q", str(remote), f"{advanced}:refs/heads/main")
+    git(work, "checkout", "-q", "--detach", head)
+    return advanced
+
+
+def conflict_repository(root: Path) -> tuple[Path, Path, str, str]:
+    root.mkdir(parents=True)
+    remote = root / "remote.git"
+    subprocess.run(("git", "init", "--bare", "-q", str(remote)), check=True)
+    work = root / "work"
+    subprocess.run(("git", "clone", "-q", str(remote), str(work)), check=True)
+    git(work, "config", "user.name", "Parity Test")
+    git(work, "config", "user.email", "parity@example.invalid")
+    fixture = work / "src" / "pr_fixture" / "__init__.py"
+    fixture.parent.mkdir(parents=True)
+    fixture.write_text('"""Tiny domain used by the PR-readiness laboratory."""\n')
+    git(work, "add", "src/pr_fixture/__init__.py")
+    git(work, "commit", "-qm", "base")
+    base = git(work, "rev-parse", "HEAD")
+    git(work, "push", "-q", "origin", "HEAD:refs/heads/main")
+    fixture.write_text('"""Minimal domain module for the PR-readiness laboratory fixtures."""\n')
+    git(work, "commit", "-qam", "feature: customize domain")
+    head = git(work, "rev-parse", "HEAD")
+    git(work, "push", "-q", "origin", "HEAD:refs/heads/feature")
+    return work, remote, base, head
+
+
+def advance_conflicting_base_repository(work: Path, remote: Path, base: str, head: str) -> str:
+    git(work, "checkout", "-q", "--detach", base)
+    fixture = work / "src" / "pr_fixture" / "__init__.py"
+    fixture.write_text('"""Tiny domain used by the PR-readiness laboratory and release qualification."""\n')
+    git(work, "commit", "-qam", "base: change domain incompatibly")
+    advanced = git(work, "rev-parse", "HEAD")
+    git(work, "push", "-q", str(remote), f"{advanced}:refs/heads/main")
+    assert "<<<<<<<" in git(work, "merge-tree", base, head, advanced)
     git(work, "checkout", "-q", "--detach", head)
     return advanced
 
@@ -446,6 +488,7 @@ class ScenarioProvider:
             self.git_boundary_events.append({"kind": "cas", "before": self.head, "after": update["afterOid"]})
             self.head = str(update["afterOid"])
             self.behind_by = 0
+            self.mergeable, self.mergeable_state = True, "clean"
             self.run_id = 102
             self.run_attempt = 1
             self.run_status = "completed"
@@ -506,6 +549,7 @@ class ScenarioRunner:
         seeded_finding: bool = False,
         conversational_change: bool = False,
         update_base: bool = False,
+        resolve_conflict: bool = False,
         finding_head: str | None = None,
         review_findings: list[dict[str, object]] | None = None,
     ) -> None:
@@ -520,6 +564,7 @@ class ScenarioRunner:
         self.seeded_finding = seeded_finding
         self.conversational_change = conversational_change
         self.update_base = update_base
+        self.resolve_conflict = resolve_conflict
         self.finding_head = finding_head
         self.review_findings = [BLOCKING_FINDING] if review_findings is None else review_findings
         self.codes = 0
@@ -576,7 +621,26 @@ class ScenarioRunner:
             raise AssertionError("this parity journey must not invoke a coding agent")
         if self.coding_status == "changed":
             repair = request.kind == "repair"
-            update_base = self.update_base and not repair
+            if repair:
+                diff = REPAIR_DIFF
+                changed_files = ["src/readiness.py"]
+                check = "repair-check"
+                message = "fix: repair seeded failure"
+            elif self.resolve_conflict:
+                diff = CONFLICT_DIFF
+                changed_files = ["src/pr_fixture/__init__.py"]
+                check = "conflict-check"
+                message = "merge: resolve feature and main conflict"
+            elif self.update_base:
+                diff = UPDATE_BASE_DIFF
+                changed_files = ["BASE-NOTES.md"]
+                check = "base-check"
+                message = "merge: update feature from main"
+            else:
+                diff = CHANGE_DIFF
+                changed_files = ["README.md"]
+                check = "readme-check"
+                message = "docs: add usage note"
             result = CodingResult(
                 request.kind,
                 request.repository,
@@ -587,19 +651,10 @@ class ScenarioRunner:
                 request.ref,
                 "changed",
                 "confirmed" if repair else "not_attempted",
-                REPAIR_DIFF if repair else UPDATE_BASE_DIFF if update_base else CHANGE_DIFF,
-                ["src/readiness.py"] if repair else ["BASE-NOTES.md"] if update_base else ["README.md"],
-                [
-                    {
-                        "command": "repair-check" if repair else "base-check" if update_base else "readme-check",
-                        "outcome": "passed",
-                    }
-                ],
-                "fix: repair seeded failure"
-                if repair
-                else "merge: update feature from main"
-                if update_base
-                else "docs: add usage note",
+                diff,
+                changed_files,
+                [{"command": check, "outcome": "passed"}],
+                message,
             )
         else:
             result = CodingResult(
@@ -624,10 +679,16 @@ class ScenarioRunner:
         self.conversations += 1
         self.conversation_calls.append((repository_url, request, operation, attempt))
         assert is_current is None or is_current()
-        if not self.conversational_change and not self.update_base:
+        if not self.conversational_change and not self.update_base and not self.resolve_conflict:
             raise AssertionError("this parity journey must not invoke a conversation agent")
-        kind = "update_base" if self.update_base else "change"
-        instruction = UPDATE_BASE_INSTRUCTION if self.update_base else CHANGE_INSTRUCTION
+        kind = "resolve_conflict" if self.resolve_conflict else "update_base" if self.update_base else "change"
+        instruction = (
+            RESOLVE_CONFLICT_INSTRUCTION
+            if self.resolve_conflict
+            else UPDATE_BASE_INSTRUCTION
+            if self.update_base
+            else CHANGE_INSTRUCTION
+        )
         result = ConversationResult(
             request.repository,
             request.pull_request,
@@ -797,13 +858,18 @@ def _run_journey(
     hero_review: bool = False,
     draft_ready: bool = False,
     update_base: bool = False,
+    resolve_conflict: bool = False,
 ) -> JourneyResult:
     assert not conversational_change or rerun_conclusion is None
     assert not agent_repair or rerun_conclusion == "failure"
-    assert not update_base or (rerun_conclusion is None and not conversational_change and not agent_repair)
+    base_mutation = update_base or resolve_conflict
+    assert not (update_base and resolve_conflict)
+    assert not base_mutation or (rerun_conclusion is None and not conversational_change and not agent_repair)
     git_work = git_remote = None
     initial_base, initial_head = BASE, HEAD
-    if agent_repair or update_base:
+    if resolve_conflict:
+        git_work, git_remote, initial_base, initial_head = conflict_repository(root / "git-world")
+    elif agent_repair or update_base:
         git_work, git_remote, initial_base, initial_head = repair_repository(root / "git-world")
     provider = ScenarioProvider(
         rerun_conclusion=rerun_conclusion,
@@ -815,18 +881,19 @@ def _run_journey(
     provider.draft = draft_ready
     runner = ScenarioRunner(
         coding_status="changed"
-        if conversational_change or agent_repair or update_base
+        if conversational_change or agent_repair or base_mutation
         else "unchanged"
         if rerun_conclusion == "failure"
         else None,
         seeded_finding=seeded_finding or agent_repair or hero_review,
         conversational_change=conversational_change,
         update_base=update_base,
+        resolve_conflict=resolve_conflict,
         finding_head=initial_head if agent_repair else None,
         review_findings=HERO_FINDINGS if hero_review else None,
     )
     monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
-    if agent_repair or update_base:
+    if agent_repair or base_mutation:
         assert git_remote is not None
         monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
         monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{git_remote.as_uri()}.insteadOf")
@@ -948,11 +1015,17 @@ def _run_journey(
             ready_custody_before,
             host.custody.status(ready_delivery),
         )
-    if update_base:
+    if base_mutation:
         assert git_work is not None and git_remote is not None
-        current_base = advance_base_repository(git_work, git_remote, initial_base, initial_head)
+        current_base = (
+            advance_conflicting_base_repository(git_work, git_remote, initial_base, initial_head)
+            if resolve_conflict
+            else advance_base_repository(git_work, git_remote, initial_base, initial_head)
+        )
         provider.base = current_base
         provider.behind_by = 1
+        if resolve_conflict:
+            provider.mergeable, provider.mergeable_state = False, "dirty"
         stale_delivery, stale_body = str(uuid.uuid4()), envelope()
         receipt = host.custody.receive(signed(stale_body, stale_delivery).items(), stale_body)
         assert receipt.disposition == "accepted"
@@ -971,16 +1044,22 @@ def _run_journey(
     before_follow_up_comments = tuple(dict(item) for item in provider.comments)
     before_follow_up_calls = tuple(provider.calls)
     before_follow_up_write_count = len(provider.writes)
-    if agent_repair or update_base:
+    if agent_repair or base_mutation:
         assert runner.code_calls == []
     follow_up_custody_before = None
     head_follow_up_custody_before = None
     head_follow_up_comments_before = None
     head_follow_up_review_count_before = None
     conversation_delivery_id = None
-    if conversational_change or update_base:
+    if conversational_change or base_mutation:
         comment_id = 501
-        instruction = UPDATE_BASE_INSTRUCTION if update_base else CHANGE_INSTRUCTION
+        instruction = (
+            RESOLVE_CONFLICT_INSTRUCTION
+            if resolve_conflict
+            else UPDATE_BASE_INSTRUCTION
+            if update_base
+            else CHANGE_INSTRUCTION
+        )
         provider.comments.append(
             {
                 "id": comment_id,
@@ -1090,7 +1169,8 @@ def _run_journey(
         else git(
             git_remote,
             "show",
-            f"{provider.head}:{'BASE-NOTES.md' if update_base else 'src/readiness.py'}",
+            f"{provider.head}:"
+            f"{'src/pr_fixture/__init__.py' if resolve_conflict else 'BASE-NOTES.md' if update_base else 'src/readiness.py'}",
         ),
         tuple(dict(item) for item in provider.comments),
         len(runner.reviews),
@@ -1178,6 +1258,14 @@ def run_stale_base_update(
     topology: ReadinessComposition,
 ) -> JourneyResult:
     return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, update_base=True)
+
+
+def run_true_conflict_resolution(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> JourneyResult:
+    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, resolve_conflict=True)
 
 
 def assert_public_clone(repository_url: str) -> None:
@@ -2014,6 +2102,45 @@ def assert_draft_ready(result: JourneyResult) -> None:
 
 
 def assert_stale_base_update(result: JourneyResult) -> None:
+    _assert_base_mutation(
+        result,
+        mutation_kind="update_base",
+        instruction=UPDATE_BASE_INSTRUCTION,
+        diff=UPDATE_BASE_DIFF,
+        changed_file="BASE-NOTES.md",
+        check="base-check",
+        message="merge: update feature from main",
+        final_content="Latest base behavior.",
+        conflicted=False,
+    )
+
+
+def assert_true_conflict_resolution(result: JourneyResult) -> None:
+    _assert_base_mutation(
+        result,
+        mutation_kind="resolve_conflict",
+        instruction=RESOLVE_CONFLICT_INSTRUCTION,
+        diff=CONFLICT_DIFF,
+        changed_file="src/pr_fixture/__init__.py",
+        check="conflict-check",
+        message="merge: resolve feature and main conflict",
+        final_content='"""Minimal release-qualified domain for the PR-readiness laboratory fixtures."""',
+        conflicted=True,
+    )
+
+
+def _assert_base_mutation(
+    result: JourneyResult,
+    *,
+    mutation_kind: str,
+    instruction: str,
+    diff: str,
+    changed_file: str,
+    check: str,
+    message: str,
+    final_content: str,
+    conflicted: bool,
+) -> None:
     initial_head, initial_base = result.initial_head, result.initial_base
     final_head, current_base = result.provider_state[5:]
     assert result.stale_base_phase is not None
@@ -2028,6 +2155,11 @@ def assert_stale_base_update(result: JourneyResult) -> None:
     [stale_dashboard] = [item for item in stale.comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
     stale_body = str(stale_dashboard["body"])
     assert "base_current': False" in stale_body or "Base current: False" in stale_body
+    if conflicted:
+        assert any(
+            evidence in stale_body
+            for evidence in ("conflict': True", "Conflict: True", "mergeable': False", "Mergeable: False")
+        )
     assert stale.agent_counts[1:] == (0, 0)
 
     assert result.custody_before == result.follow_up_custody_before == result.head_follow_up_custody_before == "pending"
@@ -2044,14 +2176,14 @@ def assert_stale_base_update(result: JourneyResult) -> None:
         initial_head,
         current_base,
     )
-    assert conversation.comment_context.get("text", conversation.comment_context.get("body")) == UPDATE_BASE_INSTRUCTION
-    declaration = next(item for item in conversation.allowed_intents if item["type"] == "update_base")
+    assert conversation.comment_context.get("text", conversation.comment_context.get("body")) == instruction
+    declaration = next(item for item in conversation.allowed_intents if item["type"] == mutation_kind)
     assert declaration["mutation"] is True and declaration["requires_explicit"] is True
     [classified] = result.runner.conversation_results
     [intent] = classified.intents
     assert intent == {
-        "type": "update_base",
-        "arguments": {"request": UPDATE_BASE_INSTRUCTION},
+        "type": mutation_kind,
+        "arguments": {"request": instruction},
         "mutation": True,
         "explicit": True,
         "confidence": 1.0,
@@ -2073,11 +2205,11 @@ def assert_stale_base_update(result: JourneyResult) -> None:
         current_base,
     )
     [selected_work] = coding.selected_work
-    assert selected_work["kind"] == "update_base"
+    assert selected_work["kind"] == mutation_kind
     selected_instruction = selected_work.get("request")
     if selected_instruction is None:
         selected_instruction = selected_work["arguments"]["request"]
-    assert selected_instruction == UPDATE_BASE_INSTRUCTION
+    assert selected_instruction == instruction
     assert coding.failure_evidence == [] and coding.merge_base is True and coding_attempt == 1
     [coding_result] = result.runner.code_results
     assert coding_result == CodingResult(
@@ -2090,10 +2222,10 @@ def assert_stale_base_update(result: JourneyResult) -> None:
         coding.ref,
         "changed",
         "not_attempted",
-        UPDATE_BASE_DIFF,
-        ["BASE-NOTES.md"],
-        [{"command": "base-check", "outcome": "passed"}],
-        "merge: update feature from main",
+        diff,
+        [changed_file],
+        [{"command": check, "outcome": "passed"}],
+        message,
     )
     encoded_agent_work = repository_url + json.dumps(
         {"conversation": asdict(conversation), "coding": asdict(coding)}, sort_keys=True
@@ -2138,11 +2270,9 @@ def assert_stale_base_update(result: JourneyResult) -> None:
     assert (cas["before"], cas["after"]) == (initial_head, final_head)
     assert result.git_remote_head == final_head
     assert result.git_commit_parents == (initial_head, current_base)
-    assert result.git_repaired_content == "Latest base behavior."
+    assert result.git_repaired_content == final_content
     assert result.git_commit_body == (
-        "merge: update feature from main\n\n"
-        f"Hamsterdan-Operation: {publication_operation}\n"
-        f"Hamsterdan-Payload-Digest: {payload_digest}"
+        f"{message}\n\nHamsterdan-Operation: {publication_operation}\nHamsterdan-Payload-Digest: {payload_digest}"
     )
     assert len(result.git_created_objects) == 3 and final_head in result.git_created_objects
     object_writes = [
@@ -2174,6 +2304,11 @@ def assert_stale_base_update(result: JourneyResult) -> None:
     before_head_dashboard_body = str(before_head_dashboard["body"])
     assert final_head not in before_head_dashboard_body
     assert "base_current': False" in before_head_dashboard_body or "Base current: False" in before_head_dashboard_body
+    if conflicted:
+        assert any(
+            evidence in before_head_dashboard_body
+            for evidence in ("conflict': True", "Conflict: True", "mergeable': False", "Mergeable: False")
+        )
     before_head_readiness = [item for item in before_head_comments if "<!-- hamsterdan:readiness " in str(item["body"])]
     assert len(before_head_readiness) == 1
     assert f"head={initial_head}" in str(before_head_readiness[0]["body"])
@@ -2203,7 +2338,7 @@ def assert_stale_base_update(result: JourneyResult) -> None:
         {
             "id": 501,
             "html_url": "https://github.com/owner/repo/pull/7#issuecomment-501",
-            "body": f"@hamsterdan-test {UPDATE_BASE_INSTRUCTION}",
+            "body": f"@hamsterdan-test {instruction}",
             "user": {"login": "author"},
         }
     ]
@@ -2213,8 +2348,16 @@ def assert_stale_base_update(result: JourneyResult) -> None:
     assert len(readiness) == 2
     assert any(f"head={initial_head}" in str(item["body"]) for item in readiness)
     assert any(f"head={final_head}" in str(item["body"]) for item in readiness)
-    assert final_head in str(dashboard["body"])
-    assert "base_current': True" in str(dashboard["body"]) or "Base current: True" in str(dashboard["body"])
+    dashboard_body = str(dashboard["body"])
+    assert final_head in dashboard_body
+    assert "base_current': True" in dashboard_body or "Base current: True" in dashboard_body
+    if conflicted and result.topology == "production":
+        assert "Mergeable: True" in dashboard_body and "Conflict: False" in dashboard_body
+    elif conflicted:
+        final_state = next(
+            line for line in dashboard_body.splitlines() if line.startswith("state:") and final_head in line
+        )
+        assert "'base_current': True" in final_state and "'mergeable': True" in final_state
     assert not any("<!-- hamsterdan:finding " in str(item["body"]) for item in bot_comments)
     assert not any("hamsterdan-rerun" in str(item["body"]) for item in bot_comments)
     assert result.review_comments == ()
@@ -2306,3 +2449,12 @@ def test_stale_base_update_user_journey(
     topology: ReadinessComposition,
 ) -> None:
     assert_stale_base_update(run_stale_base_update(tmp_path / topology.topology, monkeypatch, topology))
+
+
+@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
+def test_true_conflict_resolution_user_journey(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> None:
+    assert_true_conflict_resolution(run_true_conflict_resolution(tmp_path / topology.topology, monkeypatch, topology))
