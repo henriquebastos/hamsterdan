@@ -31,6 +31,7 @@ from hamsterdan.contracts.readiness_v5 import (
     AMoved,
     AnnounceReq,
     DashBlocked,
+    DashDeferred,
     DashFault,
     DashLanded,
     DashReq,
@@ -129,6 +130,7 @@ def gates(publisher: FakePublisher, claim: CurrentClaim = CLAIM) -> V5Publicatio
         publisher=publisher,
         claim=lambda: claim,
         recipients=lambda: ("the-reviewer", "the-author"),
+        dashboard_phase=lambda: claim.phase,
     )
 
 
@@ -347,6 +349,14 @@ class TestDashGate:
     idempotent overwrite, so no lookup-first ledger either."""
 
     WORK = DashReq(entries=["row1", "row2"], digest="d1", desired_entries=["row1", "row2"], desired_digest="d1")
+
+    def test_a_dormant_pr_defers_without_a_provider_effect(self) -> None:
+        publisher = FakePublisher()
+        result = gates(publisher, claim=moved(phase="quiescent")).dash_gate(self.WORK)
+        assert result == DashDeferred(
+            entries=["row1", "row2"], digest="d1", desired_entries=["row1", "row2"], desired_digest="d1"
+        )
+        assert publisher.calls == []
 
     def test_an_upsert_lands_and_echoes_the_desired_state(self) -> None:
         publisher = FakePublisher()

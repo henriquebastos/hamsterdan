@@ -25,6 +25,7 @@ from petrus.impetus.petrinet import NetPath, Token
 from hamsterdan.contracts.readiness_v5 import (
     CloseFact,
     DashBlocked,
+    DashDeferred,
     DashEnded,
     DashFault,
     DashHeal,
@@ -36,7 +37,7 @@ from hamsterdan.contracts.readiness_v5 import (
 )
 from hamsterdan.readiness.net_v5.folding import route, values
 
-GATES = {"dash.publish": ("dash_gate", ("DashLanded", "DashBlocked", "DashFault"))}
+GATES = {"dash.publish": ("dash_gate", ("DashLanded", "DashDeferred", "DashBlocked", "DashFault"))}
 
 # -- folds ---------------------------------------------------------------
 
@@ -48,9 +49,17 @@ def _digest(fact: GateFact) -> str:
     return f"{fact.kind}:{sorted(fact.body.items())!r}"
 
 
-def _live_req(entries: list[str], digest: str) -> DashReq:
+def _live_req(entries: list[str], digest: str, mem: DashMemory) -> DashReq:
     """A live publish IS the desired state."""
-    return DashReq(entries=entries, digest=digest, desired_entries=entries, desired_digest=digest)
+    return DashReq(
+        entries=entries,
+        digest=digest,
+        desired_entries=entries,
+        desired_digest=digest,
+        landed=mem.landed,
+        blocked=mem.blocked,
+        faulted=mem.faulted,
+    )
 
 
 def _fold(binding, outputs):
@@ -65,7 +74,7 @@ def _fold(binding, outputs):
         # stays EXACTLY as attempted, and recovery reconciles the two
         return route(outputs, {"dash.memory": (mem.validated_update(entries=entries, digest=digest),)})
     # memory is HELD through the upsert round; the landed fold recreates it
-    return route(outputs, {"dash.pub_req": (_live_req(entries, digest),)})
+    return route(outputs, {"dash.pub_req": (_live_req(entries, digest, mem),)})
 
 
 def _fold_landed(binding, outputs):
@@ -89,6 +98,24 @@ def _fold_landed(binding, outputs):
     return route(outputs, {"dash.memory": (mem,)})
 
 
+def _fold_deferred(binding, outputs):
+    (out,) = values(binding, DashDeferred)
+    return route(
+        outputs,
+        {
+            "dash.memory": (
+                DashMemory(
+                    entries=tuple(out.desired_entries),
+                    digest=out.desired_digest,
+                    landed=out.landed,
+                    blocked=out.blocked,
+                    faulted=out.faulted,
+                ),
+            )
+        },
+    )
+
+
 def _selfheal(binding, outputs):
     heal, mem = values(binding, DashHeal, DashMemory)
     if mem.blocked or mem.faulted or (mem.entries, mem.digest) != (heal.entries, heal.digest):
@@ -100,7 +127,7 @@ def _selfheal(binding, outputs):
     # comparison — never `digest == landed` — decides staleness: after a
     # cyclic drift the desired digest EQUALS the landed one while the
     # board still misses entries.
-    return route(outputs, {"dash.pub_req": (_live_req(list(mem.entries), mem.digest),)})
+    return route(outputs, {"dash.pub_req": (_live_req(list(mem.entries), mem.digest, mem),)})
 
 
 def _fold_blocked(binding, outputs):
@@ -151,6 +178,9 @@ def _recover(binding, outputs):
         digest=held["digest"],
         desired_entries=list(mem.entries),
         desired_digest=mem.digest,
+        landed=mem.landed,
+        blocked=mem.blocked,
+        faulted=mem.faulted,
     )
     return route(outputs, {"dash.pub_req": (req,)})
 
@@ -195,6 +225,7 @@ def declare(s) -> None:
     dash.p.memory(DashMemory)
     dash.p.pub_req(DashReq)
     dash.p.landed(DashLanded)
+    dash.p.deferred(DashDeferred)
     dash.p.dblocked(DashBlocked)
     dash.p.dfault(DashFault)
     dash.p.heal(DashHeal)
@@ -218,6 +249,7 @@ def wire(net) -> None:
         >> dash.t.publish(handler="dash_gate")
         >> (
             dash.p.landed,
+            dash.p.deferred,
             dash.p.dblocked,
             dash.p.dfault,
         )
@@ -241,6 +273,7 @@ def wire(net) -> None:
             dash.p.pub_req,
         )
     )
+    (dash.p.deferred >> dash.t.fold_deferred(handler=petri_handler(_fold_deferred)) >> dash.p.memory)
     (dash.p.dblocked >> dash.t.fold_blocked(handler=petri_handler(_fold_blocked)) >> dash.p.memory)
     (dash.p.dfault >> dash.t.fold_fault(handler=petri_handler(_fold_fault)) >> dash.p.memory)
     # the exact-recovery door (A2): a blocked or faulted upsert reissues

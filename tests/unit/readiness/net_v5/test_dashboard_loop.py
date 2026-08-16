@@ -11,6 +11,7 @@ request verbatim under the same digest identity, and the landed fold
 self-heals any drift with a follow-up upsert (A2).
 """
 
+import pytest
 from harness import (
     comment,
     comment_held,
@@ -67,6 +68,45 @@ class TestBoard:
         assert state["digest"] == state["landed"]  # desired == shown
         assert state["blocked"] == {} and state["faulted"] == {}
 
+    def test_a_dormant_board_retains_desired_state_and_publishes_after_resume(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        world["authority"] = {**world["authority"], "phase": "quiescent"}
+
+        see_human(engine)
+
+        deferred = memory(engine)
+        assert deferred["entries"] and deferred["landed"] == ""
+        assert deferred["blocked"] == deferred["faulted"] == {}
+        assert board(world) == [] and upserts(world) == []
+
+        world["authority"] = {**world["authority"], "phase": "running"}
+        deliver(
+            engine,
+            "on_human",
+            "HumanSeen",
+            {"approval": False, "changes_requested": True, "unresolved": 1},
+        )
+
+        landed = memory(engine)
+        assert board(world) == landed["entries"]
+        assert landed["digest"] == landed["landed"]
+
+    def test_a_healthy_board_preserves_what_landed_while_draft_defers_new_state(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        see_head(engine, "h1")
+        shown = list(board(world))
+        landed_digest = memory(engine)["landed"]
+        world["authority"] = {**world["authority"], "phase": "quiescent"}
+
+        see_human(engine)
+
+        deferred = memory(engine)
+        assert board(world) == shown
+        assert deferred["landed"] == landed_digest
+        assert deferred["digest"] != deferred["landed"]
+
     def test_an_identical_consecutive_fact_republishes_nothing(self) -> None:
         # two successive passing runs mail two checks facts with the
         # SAME body: drift is the decision — the second is inert
@@ -106,6 +146,29 @@ class TestBoard:
 
 
 class TestBlockedAndRecovery:
+    @pytest.mark.parametrize(("mode", "held"), [("retryable", "blocked"), ("unknown", "faulted")])
+    def test_dormant_recovery_preserves_exact_custody_until_a_running_retry(self, mode: str, held: str) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        world["dash_mode"] = mode
+        see_head(engine, "h1")
+        retained = dict(memory(engine)[held])
+        world["dash_mode"] = None
+        world["authority"] = {**world["authority"], "phase": "quiescent"}
+
+        comment(engine, "c1", "recover_publication", arg=f"dash:{retained['digest']}")
+
+        deferred = memory(engine)
+        assert deferred[held] == retained
+        assert deferred["blocked" if held == "faulted" else "faulted"] == {}
+        assert board(world) == []
+
+        world["authority"] = {**world["authority"], "phase": "running"}
+        comment(engine, "c2", "recover_publication", arg=f"dash:{retained['digest']}")
+        settled = memory(engine)
+        assert settled["blocked"] == settled["faulted"] == {}
+        assert board(world) == settled["entries"]
+
     def test_retryable_exhaustion_blocks_and_accumulates_fail_closed(self) -> None:
         # entries accumulated while the board is blocked are all carried
         # by the recovery upsert — nothing is lost to the race the
@@ -198,11 +261,16 @@ class TestBlockedAndRecovery:
         world = world_of(engine)
         see_head(engine, "h1")  # a healthy board first
         world["dash_mode"] = "unknown"
-        deliver(engine, "on_draft", "DraftSeen", {})  # fact A faults, retained
+        see_human(engine)  # fact A faults, retained
         exact = dict(memory(engine)["faulted"])
         assert exact["digest"]
-        deliver(engine, "on_ready", "ReadySeen", {})  # fact B accumulates
-        deliver(engine, "on_draft", "DraftSeen", {})  # fact A again: the cycle closes
+        deliver(
+            engine,
+            "on_human",
+            "HumanSeen",
+            {"approval": False, "changes_requested": True, "unresolved": 1},
+        )  # fact B accumulates
+        see_human(engine)  # fact A again: the cycle closes
         state = memory(engine)
         assert state["digest"] == exact["digest"]  # desired digest == retained digest
         desired = list(state["entries"])
@@ -320,12 +388,28 @@ class TestClose:
         )
         release_one(engine, dispatch, definitions, "dash_gate")  # healthy board
         world["dash_mode"] = "unknown"
-        deliver_held(engine, dispatch, definitions, "on_draft", "DraftSeen", {}, hold=hold)
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_human",
+            "HumanSeen",
+            {"approval": True, "changes_requested": False, "unresolved": 0},
+            hold=hold,
+        )
         release_one(engine, dispatch, definitions, "dash_gate")  # the fault retains
         exact = dict(memory(engine)["faulted"])
         assert exact["digest"]
         # desired drifts while the fault is held
-        deliver_held(engine, dispatch, definitions, "on_ready", "ReadySeen", {}, hold=hold)
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_human",
+            "HumanSeen",
+            {"approval": False, "changes_requested": True, "unresolved": 1},
+            hold=hold,
+        )
         desired = list(memory(engine)["entries"])
         assert len(desired) > len(exact["entries"])  # real drift
         world["dash_mode"] = None

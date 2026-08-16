@@ -154,6 +154,31 @@ class TestAgentRound:
         assert [fact for fact in projection(engine) if fact["kind"] == "fault"] == []
         assert one(engine, "ready.snap")["review"] == "unable"
 
+    def test_draft_movement_before_agent_custody_is_inert_until_ready_opens_the_current_round(self) -> None:
+        engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+            hold=HOLD_AGENT,
+        )
+        deliver_held(engine, dispatch, definitions, "on_draft", "DraftSeen", {}, hold=HOLD_AGENT)
+
+        release_one(engine, dispatch, definitions, "review_agent")
+
+        world = world_of(engine)
+        assert world["agent_calls"] == 0
+        assert review_facts(engine) == []
+        assert memory(engine)["status"] == "pending"
+
+        deliver_held(engine, dispatch, definitions, "on_ready", "ReadySeen", {})
+        assert world["agent_calls"] == 1
+        assert review_facts(engine)[-1]["body"] == {"head": "h1", "status": "blocking"}
+        assert not any(fact["body"].get("status") == "unable" for fact in review_facts(engine))
+
 
 # -- publication identity and terminals --------------------------------------
 
@@ -637,15 +662,16 @@ class TestDismissalAndClose:
             {"reason": "closed"},
             hold=HOLD_AGENT,
         )
-        # the round completes against a terminal world: the publication
-        # gate classifies MOVED (no stale comment lands), the baton
-        # returns, and only then does close retire the loop
+        # terminal authority wins before agent custody: the round moves
+        # without an agent attempt or stale publication, the baton returns,
+        # and only then does close retire the loop
         release_one(engine, dispatch, definitions, "review_agent")
         world = world_of(engine)
+        assert world["agent_calls"] == 0
         assert findings_comments(world) == []
         [done] = tokens(engine, "review.done")
         assert done["reason"] == "closed"
-        assert done["reviewed"] == ["h1"]  # the round DID complete
+        assert done["reviewed"] == []
         assert tokens(engine, "review.memory") == []
 
 

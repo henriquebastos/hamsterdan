@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from hamsterdan.agents.protocol import (
+    AgentProtocolError,
     CodingRequest,
     CodingResult,
     ConversationRequest,
@@ -486,6 +487,7 @@ class ScenarioRunner:
         finding_head: str | None = None,
         review_findings: list[dict[str, object]] | None = None,
     ) -> None:
+        self.review_entries = 0
         self.reviews: list[tuple[str, ReviewRequest, str, int]] = []
         self.review_results: list[ReviewResult] = []
         self.conversation_calls: list[tuple[str, ConversationRequest, str, int]] = []
@@ -501,8 +503,10 @@ class ScenarioRunner:
         self.conversations = 0
 
     def review(self, repository_url, request, *, operation, attempt, is_current=None):
+        self.review_entries += 1
+        if is_current is not None and not is_current():
+            raise AgentProtocolError("review authority moved", canceled=True)
         self.reviews.append((repository_url, request, operation, attempt))
-        assert is_current is None or is_current()
         finding_open = self.seeded_finding and (self.finding_head is None or request.head == self.finding_head)
         if self.finding_head is not None:
             if finding_open:
@@ -610,6 +614,20 @@ class ScenarioRunner:
 
 
 @dataclass(frozen=True)
+class DraftPhase:
+    custody_before: str | None
+    custody_after: str | None
+    custody_counts: dict[str, int]
+    comments: tuple[dict[str, object], ...]
+    review_comments: tuple[dict[str, object], ...]
+    provider_writes: tuple[tuple[str, str, int, str], ...]
+    agent_counts: tuple[int, int, int]
+    rerun_requests: int
+    ready_custody_before: str | None
+    ready_custody_after: str | None
+
+
+@dataclass(frozen=True)
 class JourneyResult:
     custody_before: str | None
     custody_after: str | None
@@ -646,6 +664,7 @@ class JourneyResult:
     git_repaired_content: str
     quiescent_comments: tuple[dict[str, object], ...]
     quiescent_review_count: int
+    draft_phase: DraftPhase | None
 
 
 def config(root: Path) -> HostConfig:
@@ -662,10 +681,10 @@ def config(root: Path) -> HostConfig:
     )
 
 
-def envelope() -> bytes:
+def envelope(action: str = "synchronize") -> bytes:
     return json.dumps(
         {
-            "action": "synchronize",
+            "action": action,
             "installation": {"id": 44, "account": {"id": 23}},
             "repository": {"id": 31, "full_name": "owner/repo"},
             "pull_request": {"number": 7},
@@ -729,6 +748,7 @@ def _run_journey(
     conversational_change: bool = False,
     agent_repair: bool = False,
     hero_review: bool = False,
+    draft_ready: bool = False,
 ) -> JourneyResult:
     assert not conversational_change or rerun_conclusion is None
     assert not agent_repair or rerun_conclusion == "failure"
@@ -743,6 +763,7 @@ def _run_journey(
         git_work=git_work,
         git_remote=git_remote,
     )
+    provider.draft = draft_ready
     runner = ScenarioRunner(
         coding_status="changed"
         if conversational_change or agent_repair
@@ -811,7 +832,7 @@ def _run_journey(
         readiness_composition=topology,
     )
     host.registry.reconcile(44, ((31, "owner/repo"),))
-    delivery, body = str(uuid.uuid4()), envelope()
+    delivery, body = str(uuid.uuid4()), envelope("opened" if draft_ready else "synchronize")
     receipt = host.custody.receive(signed(body, delivery).items(), body)
     assert receipt.disposition == "accepted"
     custody_before = host.custody.status(delivery)
@@ -847,6 +868,35 @@ def _run_journey(
         raise AssertionError("parity journey host did not converge")
 
     converge()
+    draft_phase = None
+    if draft_ready:
+        draft_custody_after = host.custody.status(delivery)
+        draft_custody_counts = host.custody.counts()
+        draft_comments = tuple(dict(item) for item in provider.comments)
+        draft_review_comments = tuple(dict(item) for item in provider.review_comments)
+        draft_provider_writes = tuple(provider.writes)
+        draft_agent_counts = (runner.review_entries, runner.codes, runner.conversations)
+        draft_rerun_requests = provider.rerun_requests
+        provider.draft = False
+        ready_delivery, ready_body = str(uuid.uuid4()), envelope("ready_for_review")
+        receipt = host.custody.receive(signed(ready_body, ready_delivery).items(), ready_body)
+        assert receipt.disposition == "accepted"
+        ready_custody_before = host.custody.status(ready_delivery)
+        pending = next(item for item in host.custody.pending() if item.delivery_id == ready_delivery)
+        host.process(pending)
+        converge()
+        draft_phase = DraftPhase(
+            custody_before,
+            draft_custody_after,
+            draft_custody_counts,
+            draft_comments,
+            draft_review_comments,
+            draft_provider_writes,
+            draft_agent_counts,
+            draft_rerun_requests,
+            ready_custody_before,
+            host.custody.status(ready_delivery),
+        )
     before_follow_up_comments = tuple(dict(item) for item in provider.comments)
     before_follow_up_calls = tuple(provider.calls)
     before_follow_up_write_count = len(provider.writes)
@@ -960,6 +1010,7 @@ def _run_journey(
         "" if git_remote is None else git(git_remote, "show", f"{provider.head}:src/readiness.py"),
         tuple(dict(item) for item in provider.comments),
         len(runner.reviews),
+        draft_phase,
     )
     provider.state, provider.draft, provider.merged = "closed", True, True
     provider.mergeable, provider.mergeable_state = False, "dirty"
@@ -1026,6 +1077,14 @@ def run_hero_review(
     topology: ReadinessComposition,
 ) -> JourneyResult:
     return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, hero_review=True)
+
+
+def run_draft_ready(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> JourneyResult:
+    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, draft_ready=True)
 
 
 def assert_public_clone(repository_url: str) -> None:
@@ -1827,6 +1886,40 @@ def assert_hero_review(result: JourneyResult) -> None:
     assert len(result.runner.reviews) == result.quiescent_review_count
 
 
+def assert_draft_ready(result: JourneyResult) -> None:
+    assert result.draft_phase is not None
+    draft = result.draft_phase
+    assert draft.custody_before == "pending"
+    assert draft.custody_after == "terminal" and draft.custody_counts == {"terminal": 1}
+    assert draft.comments == draft.review_comments == draft.provider_writes == ()
+    assert draft.agent_counts == (0, 0, 0) and draft.rerun_requests == 0
+    assert draft.ready_custody_before == "pending" and draft.ready_custody_after == "terminal"
+
+    assert result.custody_after == "terminal" and result.custody_counts == {"terminal": 2}
+    assert_clear_review(result)
+    assert result.runner.codes == result.runner.conversations == 0
+    dashboard = [item for item in result.comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
+    readiness = [item for item in result.comments if "<!-- hamsterdan:readiness " in str(item["body"])]
+    assert len(dashboard) == len(readiness) == 1
+    assert "unable" not in str(dashboard[0]["body"]).lower()
+    assert "canceled" not in str(dashboard[0]["body"]).lower()
+    assert f"head={HEAD}" in str(readiness[0]["body"])
+    assert "All observed gates are ready" in str(readiness[0]["body"])
+    assert result.review_comments == ()
+    assert not any("<!-- hamsterdan:finding " in str(item["body"]) for item in result.comments)
+    assert not any("hamsterdan-rerun" in str(item["body"]) for item in result.comments)
+    assert (result.run_attempt, result.run_conclusion, result.rerun_requests) == (1, "success", 0)
+    assert result.provider_state == ("open", False, False, True, "clean", HEAD, BASE)
+    forbidden = ("/git/blobs", "/git/trees", "/git/commits", "/git/refs", "/merge", "/rerun", "updateRefs")
+    assert not any(
+        any(fragment in path or fragment in body for fragment in forbidden)
+        for _method, path, body in result.provider_requests
+    )
+    assert all(item["user"] == {"login": BOT} for item in result.comments)
+    assert result.comments == result.quiescent_comments
+    assert len(result.runner.reviews) == result.quiescent_review_count
+
+
 @pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_clean_green_user_journey(
     tmp_path: Path,
@@ -1893,3 +1986,12 @@ def test_hero_review_user_journey(
     assert_hero_review(second)
     assert first.runner.reviews[0][2] == second.runner.reviews[0][2]
     assert finding_operations(first) == finding_operations(second)
+
+
+@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
+def test_draft_ready_user_journey(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> None:
+    assert_draft_ready(run_draft_ready(tmp_path / topology.topology, monkeypatch, topology))

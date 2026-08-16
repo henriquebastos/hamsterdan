@@ -21,7 +21,7 @@ from hamsterdan.agents.protocol import (
     AgentResultCategory,
     ReviewResult,
 )
-from hamsterdan.contracts.readiness_v5 import AgentReview, RoundOpen, RoundUnable
+from hamsterdan.contracts.readiness_v5 import AgentReview, RoundMoved, RoundOpen, RoundUnable
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.review import V5ReviewGate, V5ReviewRequestStore
 
@@ -105,11 +105,15 @@ def result(*, status: str = "clear", findings=None, lineage=None) -> ReviewResul
 
 
 class PassthroughRequests:
+    def __init__(self) -> None:
+        self.claims = 0
+
     def lookup(self, operation):
         del operation
 
     def claim(self, operation, request):
         del operation
+        self.claims += 1
         return request
 
 
@@ -157,12 +161,27 @@ class TestReviewAgentGate:
         ]
         assert is_current is not None and is_current() is True
 
-    def test_currentness_callback_detects_any_claim_movement(self) -> None:
+    def test_moved_claim_cancels_before_request_custody_provider_reads_or_agent_entry(self) -> None:
         runner = Runner(result())
         moved = replace(CLAIM, incarnation=4)
-        gate(runner, moved).review_agent(WORK)
-        is_current = runner.calls[0][-1]
-        assert is_current is not None and is_current() is False
+        authority = FakeAuthority()
+        requests = PassthroughRequests()
+
+        out = gate(runner, moved, authority=authority, requests=requests).review_agent(WORK)
+
+        assert out == RoundMoved(
+            head=HEAD,
+            incarnation=3,
+            observed=moved.head,
+            observed_base=moved.base,
+            observed_policy=moved.policy,
+            observed_incarnation=moved.incarnation,
+            observed_phase=moved.phase,
+            mem=MEM,
+        )
+        assert runner.calls == []
+        assert authority.reads == 0
+        assert requests.claims == 0
 
     def test_validated_unable_result_is_a_clean_round_outcome(self) -> None:
         out = gate(Runner(result(status="unable", findings=[{"ignored": True}]))).review_agent(WORK)

@@ -231,12 +231,30 @@ def test_expired_publication_claim_projects_blocked_and_only_explicit_recovery_r
         ),
         identity=f"recover-{activity}",
     )
-    _advance_until(stable, lambda: len(_requests(stable, activity, work)) == 2)
-    original, recovered = _requests(stable, activity, work)
+
+    def activity_requests():
+        return [
+            record
+            for record in stable.records
+            if isinstance(record, ActivityRequested) and record.activity == activity and record.correlation == operation
+        ]
+
+    _advance_until(stable, lambda: len(activity_requests()) == 2)
+    original, recovered = activity_requests()
 
     assert original == requested
     assert recovered.occurrence != original.occurrence
-    assert recovered.input == original.input == {"work": work.dump()}
+    if isinstance(work, DashReq):
+        original_work = original.input["work"]
+        recovered_work = recovered.input["work"]
+        effect_fields = ("entries", "digest", "desired_entries", "desired_digest", "landed")
+        assert {field: recovered_work[field] for field in effect_fields} == {
+            field: original_work[field] for field in effect_fields
+        }
+        assert recovered_work["blocked"] == {"entries": work.entries, "digest": work.digest}
+        assert recovered_work["faulted"] == {}
+    else:
+        assert recovered.input == original.input == {"work": work.dump()}
     assert recovered.correlation == recovered.idempotency == operation
     stable.close()
 

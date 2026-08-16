@@ -46,6 +46,7 @@ from hamsterdan.contracts.readiness_v5 import (
     AMoved,
     AnnounceReq,
     DashBlocked,
+    DashDeferred,
     DashFault,
     DashLanded,
     DashReq,
@@ -68,6 +69,8 @@ from hamsterdan.host.v5.claim import ClaimReader, CurrentClaim
 
 Recipients = Callable[[], tuple[str | None, str]]
 """A zero-argument port yielding the current (reviewer, author)."""
+DashboardPhase = Callable[[], str]
+"""A host-grant-only port yielding the staged lifecycle phase."""
 
 _ANNOUNCE_BODY = (
     "## Hamsterdan readiness advisory\n\n"
@@ -204,6 +207,7 @@ class V5PublicationGates:
     publisher: PublicationProvider
     claim: ClaimReader
     recipients: Recipients
+    dashboard_phase: DashboardPhase = lambda: "running"
 
     # -- reply: unfenced, immutable, identity `reply:{id}` -------------
 
@@ -357,12 +361,24 @@ class V5PublicationGates:
 
     # -- dashboard: unfenced idempotent upsert, digest identity --------
 
-    def dash_gate(self, work: DashReq) -> DashLanded | DashBlocked | DashFault:
+    def dash_gate(self, work: DashReq) -> DashLanded | DashDeferred | DashBlocked | DashFault:
+        if self.dashboard_phase() == "quiescent":
+            return DashDeferred(
+                entries=work.entries,
+                digest=work.digest,
+                desired_entries=work.desired_entries,
+                desired_digest=work.desired_digest,
+                landed=work.landed,
+                blocked=work.blocked,
+                faulted=work.faulted,
+            )
         try:
             # CommentPublisher retains an epoch/head-shaped signature,
             # but `dash:` operations explicitly bypass its authority
-            # fence and the singleton marker embeds neither value. Do not
-            # turn this authority-orthogonal projection into a claim read:
+            # fence and the singleton marker embeds neither value. The
+            # staged phase check above suppresses user-visible draft work
+            # without reading mutable provider authority. Do not turn this
+            # authority-orthogonal projection into a full claim read:
             # after our own push, provider head legitimately moves before
             # the next webhook stages that head in the host grant.
             result = self.publisher.dashboard(f"dash:{work.digest}", 0, "0" * 40, "\n".join(work.entries))

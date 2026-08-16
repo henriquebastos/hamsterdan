@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
-from petrus.engine import DriveOutcome, Engine, choose_throughput
+from petrus.engine import Action, BeginCandidate, DriveOutcome, Engine, Snapshot, choose_throughput
 from petrus.impetus.history import (
     ActivityCompleted,
     ActivityFailed,
@@ -16,7 +16,8 @@ from petrus.impetus.history import (
     ExternalEventDelivered,
 )
 from petrus.impetus.history_store import JsonlHistoryStore
-from petrus.impetus.petrinet import NetPath, Token
+from petrus.impetus.petrinet import Binding, NetPath, Token
+from petrus.impetus.selection import SelectionPipeline, SelectionProposal, SelectionState
 from petrus.motus.activity import Activity, ActivityDefinition
 from petrus.motus.dispatch import InlineDispatch, LocalDispatch
 from petrus.motus.worker import Worker
@@ -33,6 +34,15 @@ from hamsterdan.readiness.net_v5.gating import wire_gates
 from hamsterdan.readiness.net_v5.topology import DERIVED, GATES
 
 _DURABLE_ACTIVITIES = frozenset({"reply_gate", "dash_gate", "announce_gate"})
+_INGRESS_FOLDS = {
+    "on_head": (NetPath("life.heads"), NetPath("life.admit_head")),
+    "on_draft": (NetPath("life.drafts"), NetPath("life.admit_draft")),
+    "on_ready": (NetPath("life.readies"), NetPath("life.admit_ready")),
+    "on_close": (NetPath("life.closes"), NetPath("life.admit_close")),
+    "on_comment": (NetPath("life.comments"), NetPath("life.admit_comment")),
+    "on_human": (NetPath("life.humans"), NetPath("life.admit_human")),
+    "on_runs": (NetPath("life.runs"), NetPath("life.admit_runs")),
+}
 
 
 def _durable_queue(instance: str) -> str:
@@ -47,6 +57,36 @@ def _terminal_occurrences(records: tuple[object, ...]) -> set[int]:
     }
 
 
+class _V5EnginePolicy:
+    """Throughput normally; select one exact lifecycle fold during ingress admission."""
+
+    target: NetPath | None = None
+    _selection = SelectionPipeline()
+
+    def propose(self, candidates: tuple[Binding, ...], state: SelectionState) -> SelectionProposal | None:
+        if self.target is not None:
+            candidates = tuple(candidate for candidate in candidates if candidate.transition == self.target)
+        return self._selection.propose(candidates, state)
+
+    def fold_committed(self, state: SelectionState, transition: NetPath) -> SelectionState:
+        return self._selection.fold_committed(state, transition)
+
+    def __call__(self, snapshot: Snapshot) -> Action:
+        if self.target is not None:
+            selected = next(
+                (
+                    action
+                    for action in snapshot.actions
+                    if isinstance(action, BeginCandidate) and action.binding.transition == self.target
+                ),
+                None,
+            )
+            if selected is None:
+                raise RuntimeError(f"V5 ingress row cannot fold through {self.target}")
+            return selected
+        return choose_throughput(snapshot)
+
+
 class V5Runtime:
     """One V5 Engine whose JSONL History is the workflow authority."""
 
@@ -58,6 +98,7 @@ class V5Runtime:
         agent_settle: Callable[[set[str]], None] | None,
         mutation_operation: Callable[[str], str] | None,
         durable_worker: Worker | None,
+        policy: _V5EnginePolicy,
     ) -> None:
         self.engine = engine
         self._loader = loader
@@ -65,6 +106,7 @@ class V5Runtime:
         self._agent_settle = agent_settle
         self._mutation_operation = mutation_operation
         self._durable_worker = durable_worker
+        self._policy = policy
 
     @classmethod
     def open(
@@ -83,6 +125,7 @@ class V5Runtime:
         built = build_net_v5()
         handlers = wire_gates(built, GATES, definitions, DERIVED)
         declarations = tuple(definition.declaration for definition in definitions.values())
+        policy = _V5EnginePolicy()
 
         def dispatch():
             inline = InlineDispatch(definitions)
@@ -105,7 +148,8 @@ class V5Runtime:
                 dispatch=dispatch(),
                 handlers=handlers,
                 guards=built.guards,
-                policy=choose_throughput,
+                policy=policy,
+                selection=policy,
                 activities=declarations,
             )
 
@@ -119,7 +163,8 @@ class V5Runtime:
                 dispatch=dispatch(),
                 handlers=handlers,
                 guards=built.guards,
-                policy=choose_throughput,
+                policy=policy,
+                selection=policy,
                 activities=declarations,
                 marking=seed_marking(instance, reminder_delay_s=reminder_delay_s),
             )
@@ -139,7 +184,7 @@ class V5Runtime:
 
                 resolver = resolve
             durable_worker = Worker(provider, activities, resolver=resolver)
-        return cls(engine, load, definitions, agent_settle, mutation_operation, durable_worker)
+        return cls(engine, load, definitions, agent_settle, mutation_operation, durable_worker, policy)
 
     def deliver(self, entry: IngressEntry) -> object:
         try:
@@ -181,6 +226,30 @@ class V5Runtime:
             ):
                 raise RuntimeError("V5 ingress manifest conflicts with canonical History")
         return not missing
+
+    def fold_ingress(self, entry: IngressEntry) -> DriveOutcome | None:
+        """Apply the accepted row's pending lifecycle fold, if replay has not already done so."""
+        try:
+            mailbox, target = _INGRESS_FOLDS[entry.source]
+        except KeyError:
+            raise ValueError("V5 ingress source has no lifecycle fold") from None
+        token = Token(entry.color, entry.payload)
+        if token not in self.engine.marking.place(mailbox):
+            return None
+        self._policy.target = target
+        try:
+            outcome = self.engine.advance()
+        except Exception:
+            replacement = self._loader()
+            previous = self.engine
+            self.engine = replacement
+            previous.close()
+            raise
+        finally:
+            self._policy.target = None
+        if not any(firing.transition == target for firing in outcome.firings):
+            raise RuntimeError("V5 ingress row did not complete its lifecycle fold")
+        return outcome
 
     def drain(self, limit: int = 500) -> DriveOutcome:
         self._settle_agent_routes()

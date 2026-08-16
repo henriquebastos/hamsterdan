@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from petrus.impetus.history import ExternalEventDelivered
-from petrus.impetus.petrinet import NetPath
+from petrus.impetus.petrinet import NetPath, Token
 from petrus.motus.dispatch import LocalDispatch
 
 from hamsterdan.agents.protocol import ConversationResult, ReviewResult
@@ -947,6 +947,45 @@ def test_v5_application_restart_replays_committed_reconciliation_without_provide
     application.close()
 
 
+def test_reconciliation_folds_a_final_row_accepted_before_the_prior_host_crashed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+    committed = application.ingress.stage_reconciliation(
+        SUBJECT,
+        application.normalizer.project_reconciliation(),
+    )
+    assert committed is not None
+    runtime = application._runtime()
+    for entry in committed.entries[:-1]:
+        runtime.deliver(entry)
+        runtime.fold_ingress(entry)
+    final = committed.entries[-1]
+    runtime.deliver(final)  # the process died after acceptance, before its fold
+    assert runtime.manifest_accepted(committed.entries)
+    assert Token(final.color, final.payload) in runtime.engine.marking.place(NetPath("life.runs"))
+    project = V5IngressNormalizer.project_reconciliation
+
+    def observe_after_replay(normalizer):
+        assert Token(final.color, final.payload) not in runtime.engine.marking.place(NetPath("life.runs"))
+        return project(normalizer)
+
+    monkeypatch.setattr(V5IngressNormalizer, "project_reconciliation", observe_after_replay)
+
+    assert application.reconcile("restart")
+    application.close()
+
+
 def test_v5_application_fails_closed_when_manifest_identity_conflicts_with_canonical_history(tmp_path: Path) -> None:
     authority = Authority()
     application = PrReadinessV5Application(
@@ -1148,6 +1187,53 @@ def test_current_claim_fails_closed_until_fresh_provider_lifecycle_is_in_the_hos
         Observation(drafted, "pull_request", "converted_to_draft", 44, 23, 31, "owner/repo", 7)
     )
     assert application.current_claim().phase == "quiescent"
+    application.close()
+
+
+def test_v5_application_folds_draft_and_ready_in_the_host_grants_canonical_order(tmp_path: Path) -> None:
+    authority = Authority(draft=True)
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+
+    drafted = delivery()
+    application.process_observation(Observation(drafted, "pull_request", "opened", 44, 23, 31, "owner/repo", 7))
+    [life] = application._runtime().engine.marking.place(NetPath("life.state"))
+    claim = application.ingress.claim(SUBJECT)
+    assert (
+        (life.data["phase"], life.data["incarnation"], life.data["head"])
+        == (
+            claim.phase,
+            claim.incarnation,
+            claim.head,
+        )
+        == ("quiescent", 1, "a" * 40)
+    )
+    assert authority.transport.comments == []
+
+    authority.pull = PullRequestSnapshot(**(authority.pull.__dict__ | {"draft": False}))
+    readied = delivery()
+    application.process_observation(
+        Observation(readied, "pull_request", "ready_for_review", 44, 23, 31, "owner/repo", 7)
+    )
+    [life] = application._runtime().engine.marking.place(NetPath("life.state"))
+    claim = application.ingress.claim(SUBJECT)
+    assert (
+        (life.data["phase"], life.data["incarnation"], life.data["head"])
+        == (
+            claim.phase,
+            claim.incarnation,
+            claim.head,
+        )
+        == ("running", 2, "a" * 40)
+    )
     application.close()
 
 

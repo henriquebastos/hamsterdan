@@ -29,6 +29,7 @@ from hamsterdan.agents.protocol import (
 from hamsterdan.contracts.readiness_v5 import (
     AgentReview,
     ReviewUnableCategory,
+    RoundMoved,
     RoundOpen,
     RoundUnable,
 )
@@ -162,7 +163,7 @@ class V5ReviewGate:
     claim: ClaimReader
     requests: ReviewRequestCustody
 
-    def review_agent(self, work: RoundOpen) -> AgentReview | RoundUnable:
+    def review_agent(self, work: RoundOpen) -> AgentReview | RoundMoved | RoundUnable:
         expected = CurrentClaim(
             phase="running",
             incarnation=work.incarnation,
@@ -171,9 +172,23 @@ class V5ReviewGate:
             policy=work.policy,
         )
         request = self.requests.lookup(work.operation)
+        if request is not None:
+            self._validate_request(work, request)
+        observed = self.claim()
+        if observed != expected:
+            return RoundMoved(
+                head=work.head,
+                incarnation=work.incarnation,
+                observed=observed.head,
+                observed_base=observed.base,
+                observed_policy=observed.policy,
+                observed_incarnation=observed.incarnation,
+                observed_phase=observed.phase,
+                mem=work.mem,
+            )
         if request is None:
             request = self.requests.claim(work.operation, self._compose_request(work))
-        self._validate_request(work, request)
+            self._validate_request(work, request)
         try:
             result = self.runner.review(
                 self.public_clone_url,

@@ -10,6 +10,7 @@ V5 tokens fall into three families, mirroring the ES-007 discipline:
 
 from __future__ import annotations
 
+from dataclasses import field
 from typing import Any, Literal
 
 from pydantic import ConfigDict
@@ -574,6 +575,20 @@ class RoundUnable(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RoundMoved(WorkflowModel):
+    """The staged authority moved before agent custody, so no round was attempted."""
+
+    head: str
+    incarnation: int
+    observed: str
+    observed_base: str
+    observed_policy: str
+    observed_incarnation: int
+    observed_phase: Phase
+    mem: dict[str, Any]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class Publishable(WorkflowModel):
     """The publish gate's work token: live findings under one authority
     claim, with the stable effect identity `findings:{head}:i{inc}`."""
@@ -858,6 +873,9 @@ class DashReq(WorkflowModel):
     digest: str
     desired_entries: list[str]
     desired_digest: str
+    landed: str = ""
+    blocked: dict[str, Any] = field(default_factory=dict)
+    faulted: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -868,6 +886,19 @@ class DashLanded(WorkflowModel):
     digest: str
     desired_entries: list[str]
     desired_digest: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class DashDeferred(WorkflowModel):
+    """The PR is dormant, so desired state and prior effect custody wait unchanged."""
+
+    entries: list[str]
+    digest: str
+    desired_entries: list[str]
+    desired_digest: str
+    landed: str = ""
+    blocked: dict[str, Any] = field(default_factory=dict)
+    faulted: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))

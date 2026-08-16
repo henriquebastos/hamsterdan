@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: All seven content semantic oracles through hero review pass; lifecycle scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Eight semantic oracles through draft-ready pass; remaining lifecycle scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -216,17 +216,64 @@ The focused parity, production finding, and V5 gate checks pass with 64 tests.
 `scripts/check full` passes with 1,079 Python tests, nine Bun relay tests,
 formatting, Ruff, typing, and source/wheel builds.
 
+### DS4.7 — Draft-to-ready semantic oracle
+
+The eighth journey recovers the lifecycle admission behavior observed on
+historical live PR 32. A draft `pull_request.opened` delivery first enters the
+real host through signed durable custody and reaches its terminal disposition,
+but both topologies remain silent on GitHub: no dashboard, readiness advisory,
+finding, native review, agent operation, rerun, or Git/ref write. A separate
+signed `pull_request.ready_for_review` delivery must itself be pending in
+custody before admission. It then starts the normal exact-head workflow: one
+clear credential-free review, one current dashboard, and one ready advisory,
+with no mutation, conversation, rerun, or merge effect. Both worlds quiesce
+with both webhook deliveries terminal.
+
+The scenario exposed two V5 boundary gaps. First, the dashboard actor correctly
+folded draft facts but still requested a provider upsert. The host gate now
+returns typed `DashDeferred` while the staged host grant is quiescent. This is
+a successful no-effect terminal, not an effect fault: the dashboard retains
+its exact desired state, its known landed digest, and any blocked or faulted
+recovery custody unchanged. A later running-state request publishes the current
+board, while an explicitly retried recovery still reissues its exact retained
+provider effect. Closed and other non-draft behavior are unchanged.
+
+Second, Petrus identified delivery commits a fact but intentionally leaves
+candidate choice to the host's public policies. Delivering canonical manifest
+rows in sequence therefore did not itself guarantee that the lifecycle actor
+folded head before draft or ready. The V5 runtime now temporarily selects the
+exact pure lifecycle transition for each accepted row through Petrus's public
+selection and driving policy seams, then restores ordinary throughput. It
+refuses rather than selecting unrelated work when the expected fold is not
+enabled. A pending mailbox fact repairs the narrow accepted-delivery/fold crash
+cut even when every row in a synthetic reconciliation was already accepted; an
+exact replay whose fact was already folded adds no History and runs no effect.
+
+Finally, the journey's agent counter now records method entry before consulting
+the currentness callback. This exposed that a head round queued before draft
+could enter the routed agent boundary and only then cancel. The review gate now
+checks the staged grant before request custody or Agenticus entry. An authority
+change returns typed `RoundMoved`, restores the actor baton without mailing a
+false inability, and lets ready admission open the current round. Genuine agent
+inability remains `RoundUnable` and continues to fail closed.
+
+The focused V5 lifecycle, dashboard, gate, and full topology-parity checks pass.
+`scripts/check full` passes with 1,089 Python tests, nine Bun relay tests,
+formatting, Ruff, typing, and source/wheel builds.
+Fresh live selected-V5 acceptance remains the final user-visible proof; this
+deterministic reconstruction does not replace it.
+
 ## Remaining deterministic portfolio
 
-The delivered content scenarios are clean green, first-attempt flake,
+The delivered scenarios are clean green, first-attempt flake,
 persistent CI regression, seeded review finding, conversational change, agent
-repair, and hero review.
+repair, hero review, and draft to ready.
 Grow the semantic oracle in small slices over the remaining user journeys
 recovered from the prior live campaign:
 
-- lifecycle and authority: draft to ready, stale base, true conflict, and
-  collaboration approval including requested review, changes requested,
-  thread resolution, and final approval.
+- lifecycle and authority: stale base, true conflict, and collaboration
+  approval including requested review, changes requested, thread resolution,
+  and final approval.
 
 Scenario assertions own visible meaning and safety invariants. They do not
 require production and V5 to take the same transitions, mint the same internal

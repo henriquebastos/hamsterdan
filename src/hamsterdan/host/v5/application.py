@@ -95,7 +95,12 @@ class PrReadinessV5Application:
             self._publisher_fence,
             publication_fault,
         )
-        publications = V5PublicationGates(publisher, self.current_claim, self._recipients)
+        publications = V5PublicationGates(
+            publisher,
+            self.current_claim,
+            self._recipients,
+            lambda: self.ingress.claim(self.instance_id).phase,
+        )
         rerun = V5RerunGate(
             CommentRerunBroker(authority, publisher),
             lambda head: authority.workflow_runs(workflow_path, head),
@@ -231,8 +236,14 @@ class PrReadinessV5Application:
             # narrow manifest-commit/route-settle window.
             self.agent_settle({route_operation})
         runtime = self._runtime()
-        for entry in manifest.entries:
+        self._deliver_manifest(runtime, manifest.entries)
+
+    @staticmethod
+    def _deliver_manifest(runtime: V5Runtime, entries: tuple[IngressEntry, ...]) -> None:
+        """Preserve the host grant's canonical door order in the actor loop."""
+        for entry in entries:
             runtime.deliver(entry)
+            runtime.fold_ingress(entry)
 
     def _classify(self, conversation: AdmittedConversation, claim: CurrentClaim) -> CommentSeen:
         operation = self._conversation_operation(conversation.delivery_id)
@@ -346,21 +357,21 @@ class PrReadinessV5Application:
         del reason  # wake metadata never enters reconciliation identity
         runtime = self._runtime()
         frozen = self.ingress.latest_reconciliation(self.instance_id)
-        if frozen is not None and not runtime.manifest_accepted(frozen.entries):
+        if frozen is not None:
+            accepted = runtime.manifest_accepted(frozen.entries)
             if self.ingress.has_pending_custody(self.instance_id):
                 return False
-            for entry in frozen.entries:
-                runtime.deliver(entry)
-            return True
+            self._deliver_manifest(runtime, frozen.entries)
+            if not accepted:
+                return True
         if self.ingress.has_pending_custody(self.instance_id):
             return False
         projected = self.normalizer.project_reconciliation()
         manifest = self.ingress.stage_reconciliation(self.instance_id, projected)
         if manifest is None or self.ingress.has_pending_custody(self.instance_id):
             return False
-        if not runtime.manifest_accepted(manifest.entries):
-            for entry in manifest.entries:
-                runtime.deliver(entry)
+        runtime.manifest_accepted(manifest.entries)
+        self._deliver_manifest(runtime, manifest.entries)
         return True
 
     def settle(self):

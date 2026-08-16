@@ -24,6 +24,7 @@ from hamsterdan.contracts.readiness_v5 import (
     AMoved,
     AnnounceReq,
     DashBlocked,
+    DashDeferred,
     DashFault,
     DashLanded,
     DashReq,
@@ -49,6 +50,7 @@ from hamsterdan.contracts.readiness_v5 import (
     ReviewFault,
     ReviewLanded,
     ReviewMoved,
+    RoundMoved,
     RoundOpen,
     RoundUnable,
 )
@@ -160,8 +162,26 @@ def make_activities(world: dict):
         )
 
     @motus_activity(converter=converter)
-    def review_agent(work: RoundOpen) -> AgentReview | RoundUnable:
+    def review_agent(work: RoundOpen) -> AgentReview | RoundMoved | RoundUnable:
         # credential-less: sees only the work token, never the world
+        auth = world["authority"]
+        if (
+            auth["phase"] != "running"
+            or auth["incarnation"] != work.incarnation
+            or world["branch_head"] != work.head
+            or world["base_head"] != work.base
+            or world["policy"] != work.policy
+        ):
+            return RoundMoved(
+                head=work.head,
+                incarnation=work.incarnation,
+                observed=world["branch_head"],
+                observed_base=world["base_head"],
+                observed_policy=world["policy"],
+                observed_incarnation=auth["incarnation"],
+                observed_phase=auth["phase"],
+                mem=work.mem,
+            )
         world["agent_calls"] += 1
         if world["agent_mode"] == "unable":
             return RoundUnable(
@@ -458,12 +478,22 @@ def make_activities(world: dict):
         return ABlocked(incarnation=work.incarnation, head=work.head, base=work.base, policy=work.policy)
 
     @motus_activity(converter=converter)
-    def dash_gate(work: DashReq) -> DashLanded | DashBlocked | DashFault:
+    def dash_gate(work: DashReq) -> DashLanded | DashDeferred | DashBlocked | DashFault:
         # the dashboard is authority-orthogonal by design (A5): no
         # fence — a stale board row is corrected by the next upsert.
         # The upsert is an idempotent overwrite, so no lookup-first
         # ledger is needed either: reissuing a digest is harmless.
         world["dash_requests"].append({"entries": list(work.entries), "digest": work.digest})
+        if world["authority"]["phase"] == "quiescent":
+            return DashDeferred(
+                entries=work.entries,
+                digest=work.digest,
+                desired_entries=work.desired_entries,
+                desired_digest=work.desired_digest,
+                landed=work.landed,
+                blocked=work.blocked,
+                faulted=work.faulted,
+            )
         if world["dash_mode"] == "retryable":
             return DashBlocked(
                 entries=work.entries,

@@ -38,13 +38,14 @@ from hamsterdan.contracts.readiness_v5 import (
     ReviewMemory,
     ReviewMoved,
     ReviewStatus,
+    RoundMoved,
     RoundOpen,
     RoundUnable,
 )
 from hamsterdan.readiness.net_v5.folding import revive, route, values
 
 GATES = {
-    "review.agent": ("review_agent", ("AgentReview", "RoundUnable")),
+    "review.agent": ("review_agent", ("AgentReview", "RoundMoved", "RoundUnable")),
     "review.publish": (
         "publish_gate",
         ("ReviewLanded", "ReviewMoved", "ReviewBlocked", "ReviewFault"),
@@ -171,6 +172,14 @@ def _unable(binding, outputs):
         body={"head": out.head, "status": "unable", "category": out.category},
     )
     return route(outputs, {"review.memory": (mem,), "ready.facts": (fact,), "dash.facts": (fact,)})
+
+
+def _round_moved(binding, outputs):
+    (out,) = values(binding, RoundMoved)
+    # Authority moved before agent custody. Restore the held baton without
+    # claiming an agent round or mailing inability as current evidence; the
+    # lifecycle actor's queued current HeadWork opens the replacement round.
+    return route(outputs, {"review.memory": (revive(ReviewMemory, out.mem),)})
 
 
 def _findings_fact(head: str, incarnation: int, findings, dismissed) -> GateFact:
@@ -357,6 +366,7 @@ def declare(s) -> None:
     review.p.memory(ReviewMemory)
     review.p.round(RoundOpen)
     review.p.output(AgentReview)
+    review.p.round_moved(RoundMoved)
     review.p.unable(RoundUnable)
     review.p.publishable(Publishable)
     review.p.empty(EmptyReview)
@@ -386,9 +396,11 @@ def wire(net) -> None:
         >> review.t.agent(handler="review_agent")
         >> (
             review.p.output,
+            review.p.round_moved,
             review.p.unable,
         )
     )
+    (review.p.round_moved >> review.t.fold_round_moved(handler=petri_handler(_round_moved)) >> review.p.memory)
     (
         review.p.output
         >> review.t.judge(handler=petri_handler(_judge))

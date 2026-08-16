@@ -49,12 +49,14 @@ reconciliation, and selected-host restart convergence across publication,
 inline-effect, timer-wake, and webhook-acknowledgement crash cuts.
 [CV17.DS4 — Production-parity evidence](cv17-v5-actor-loop-production-parity/cv17-ds4-production-parity-harness.md)
 is active: clean-green, first-attempt-flake, persistent-CI, seeded review
-finding, conversational change, agent-repair, and hero-review semantic oracles
-pass through both real host compositions. They close V5 strict stale-base,
-actionable finding rendering, and authority-orthogonal dashboard gaps; prove
+finding, conversational change, agent-repair, hero-review, and draft-to-ready
+semantic oracles pass through both real host compositions. They close V5 strict
+stale-base, actionable finding rendering, draft dashboard-silence, lifecycle
+admission ordering, and authority-orthogonal dashboard gaps; prove
 one exact brokered rerun; prove bounded credential-free repair with and without
 a changed patch; prove one explicit request advances to one host-owned
 generation-2 head; prove a changed repair through real Git object creation,
 exact ref CAS, repaired-head admission, finding resolution, and terminal
-readiness; and preserve the hero's three actionable review shapes. Lifecycle
-journeys and fresh live selected-V5 GitHub demonstrations remain mandatory.
+readiness; preserve the hero's three actionable review shapes; and prove draft
+silence followed by ready-state admission. Remaining lifecycle journeys and
+fresh live selected-V5 GitHub demonstrations remain mandatory.
