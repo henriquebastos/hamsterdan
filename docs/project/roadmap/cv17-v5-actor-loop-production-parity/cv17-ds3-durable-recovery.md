@@ -2,7 +2,7 @@
 code: CV17.DS3
 level: Delivery Story
 status: Active
-status_reason: Durable publication claim expiry converges safely; the remaining V5 restart portfolio is next
+status_reason: Durable publication and inline-effect recovery converge safely; host-custody restart composition remains
 updated: 2026-08-16
 ---
 
@@ -39,14 +39,46 @@ recovery. `scripts/check full` passes with 1,015 Python tests, nine Bun relay
 tests, formatting, Ruff, typing, and package builds. Oracle boundary review
 returned `clear to commit`.
 
+### DS3.1 — Inline effect crash recovery
+
+Review-agent execution, findings publication, rerun issuance, and mutation now
+remain on `InlineDispatch` while their canonical `ActivityRequested` records
+freeze one provider operation and `ExecutionPolicy(attempts=1)`. Restart
+redispatches the unresolved occurrence from History. Each provider or Agenticus
+ledger reconciles the stable operation before repeating an effect; unexpected
+failures remain loud. Review execution and findings publication are separate
+crash boundaries, while mutation evidence covers both agent-before-push and
+post-push cuts.
+
+Operation identities are validated before dispatch against the grammar and
+bound of the ledger that must settle them. Comment-backed operations use the
+strict GitHub marker grammar; review and git operations permit bounded
+non-whitespace printable ASCII supported by Agenticus and commit trailers.
+The review fold also derives a deterministic marker-safe findings identity for
+non-provider-shaped test heads; ordinary production SHA identities are
+unchanged.
+
+`RoundOpen` remains provider-neutral and frozen in Petrus History. Before the
+first Agenticus submission, the host composes the credential-free
+`ReviewRequest` and commits its canonical JSON plus digest to an
+operation-keyed SQLite custody store. Restart looks up that snapshot before
+reading current comments or check evidence, validates it against the retained
+round, and submits the exact original request. Reusing the operation for a
+different round or loading a damaged snapshot fails loudly rather than
+becoming `RoundUnable`.
+
+The kill/restart suite covers pre-effect replay, landed effects with a lost
+Activity terminal, repeated restart convergence, exact Activity identity and
+policy payloads, provider movement, unreadable review context, Agenticus
+request conflict avoidance, and malformed identity rejection. `scripts/check
+full` passes with 1,046 Python tests, nine Bun relay tests, formatting, Ruff,
+typing, and package builds. Oracle boundary review traced both prior blockers
+and the complete replay path, then returned `clear to commit`.
+
 ## Remaining recovery portfolio
 
-- Prove unresolved inline review, rerun, and mutation Activities redispatch
-  from canonical History and converge lookup-first across pre-effect and
-  post-effect process death.
-- Prove Agenticus operation-route repair, reminder timer custody, custodied
-  webhook/reconciliation replay, and runnable-index wake reconstruction across
-  host restart.
+- Prove reminder timer custody, custodied webhook/reconciliation replay, and
+  runnable-index wake reconstruction across host restart.
 - Assemble the bounded kill/restart/converge portfolio through the selected V5
   HostService route. Torn JSONL repair remains an operator concern and is not a
   workflow recovery behavior.

@@ -25,7 +25,7 @@ from hamsterdan.host.v5.gates import V5PublicationGates
 from hamsterdan.host.v5.ingress import IngressEntry, V5IngressNormalizer, V5IngressStore
 from hamsterdan.host.v5.mutation import V5MutationGate
 from hamsterdan.host.v5.rerun import V5RerunGate
-from hamsterdan.host.v5.review import V5ReviewGate
+from hamsterdan.host.v5.review import V5ReviewGate, V5ReviewRequestStore
 from hamsterdan.host.v5.runtime import V5Runtime
 from hamsterdan.host.v5.timers import V5TimerStore
 from hamsterdan.readiness.net_v5.gating import VariantPayloadConverter
@@ -83,6 +83,7 @@ class PrReadinessV5Application:
         self.agent_settle = agent_settle
         self._bind_state_root()
         self.ingress = V5IngressStore(custody_path)
+        self.review_requests = V5ReviewRequestStore(root / "review-requests.sqlite3")
         self.normalizer = V5IngressNormalizer(authority, workflow_path)
         self.runtime: V5Runtime | None = None
 
@@ -108,6 +109,7 @@ class PrReadinessV5Application:
             public_clone_url,
             workflow_path,
             self.current_claim,
+            self.review_requests,
         )
         mutation = V5MutationGate(
             authority.repository,
@@ -409,7 +411,10 @@ class PrReadinessV5Application:
             try:
                 self.timers.close()
             finally:
-                self.ingress.close()
+                try:
+                    self.review_requests.close()
+                finally:
+                    self.ingress.close()
 
 
 __all__ = ["PrReadinessV5Application"]

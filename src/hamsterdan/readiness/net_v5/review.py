@@ -16,6 +16,9 @@ decision can race it.
 
 from __future__ import annotations
 
+import re
+from hashlib import sha256
+
 from petrus.impetus.dsl import petri_handler
 from petrus.impetus.petrinet import NetPath, Token
 
@@ -47,6 +50,7 @@ GATES = {
         ("ReviewLanded", "ReviewMoved", "ReviewBlocked", "ReviewFault"),
     ),
 }
+_MARKER_OPERATION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 
 # -- folds ---------------------------------------------------------------
 
@@ -79,6 +83,9 @@ def _publishable(head: str, base: str, policy: str, incarnation: int, findings, 
     MOVED terminal restores the complete attempted list to provisional.
     """
     op = f"findings:{head}:i{incarnation}"
+    if _MARKER_OPERATION.fullmatch(op) is None:
+        digest = sha256(f"{head}\0{incarnation}".encode()).hexdigest()
+        op = f"findings:sha256:{digest}:i{incarnation}"
     pending = {
         "phase": "pending",
         "effect": op,

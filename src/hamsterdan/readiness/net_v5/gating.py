@@ -17,6 +17,7 @@ Lifted first-class from the ES-003 AX5 spike, unchanged in semantics.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from collections.abc import Sequence as SequenceABC
 from dataclasses import asdict, dataclass, field, replace
@@ -41,14 +42,22 @@ from hamsterdan.contracts.readiness_v5 import (
     AnnounceReq,
     DashBlocked,
     DashReq,
+    MutWork,
+    Publishable,
     ReplyBlocked,
     ReplyReq,
+    RerunReq,
+    RoundOpen,
     WorkflowModel,
 )
 
 _JSON = JsonPayloadConverter()
 _DURABLE_PUBLICATION_GATES = frozenset({"reply_gate", "dash_gate", "announce_gate"})
 _DURABLE_PUBLICATION_POLICY = ExecutionPolicy(attempts=1)
+_IDENTIFIED_INLINE_GATES = frozenset({"review_agent", "publish_gate", "rerun_gate", "git_gate"})
+_IDENTIFIED_INLINE_POLICY = ExecutionPolicy(attempts=1)
+_MARKER_OPERATION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+_GRAPHIC_OPERATION = re.compile(r"[!-~]{1,1024}\Z")
 
 # transition path -> (activity name, declared variant colors)
 GateSpec = tuple[str, tuple[str, ...]]
@@ -139,6 +148,14 @@ class VariantRoutingActivityHandler:
             )
         return ActivityInvocation(self.definition.declaration.name, input={self._parameter: tokens[0].data})
 
+    def _decode_request(self, invocation: ActivityInvocation, label: str) -> WorkflowModel:
+        payload = cast(Mapping[str, object], invocation.input)
+        annotation = self.definition.parameters[self._parameter]
+        request = self.definition.converter.decode(payload[self._parameter], annotation)
+        if not isinstance(request, WorkflowModel):
+            raise TypeError(f"{label} decoded {type(request).__name__}, not a WorkflowModel")
+        return request
+
     def project(self, binding: Binding, result: object) -> Mapping[NetPath, SequenceABC[Token]]:
         del binding
         if not isinstance(result, Mapping) or "$variant" not in result:
@@ -163,18 +180,9 @@ class VariantRoutingActivityHandler:
 class DurablePublicationActivityHandler(VariantRoutingActivityHandler):
     """Pin provider identity and project only known durable claim expiry."""
 
-    def _request(self, binding: Binding) -> WorkflowModel:
-        invocation = super().prepare(binding)
-        payload = cast(Mapping[str, object], invocation.input)
-        annotation = self.definition.parameters[self._parameter]
-        request = self.definition.converter.decode(payload[self._parameter], annotation)
-        if not isinstance(request, WorkflowModel):
-            raise TypeError(f"Durable publication gate decoded {type(request).__name__}, not a WorkflowModel")
-        return request
-
     def prepare(self, binding: Binding) -> ActivityInvocation:
         invocation = super().prepare(binding)
-        request = self._request(binding)
+        request = self._decode_request(invocation, "Durable publication gate")
         if isinstance(request, ReplyReq):
             operation = f"reply:{request.id}"
         elif isinstance(request, DashReq):
@@ -196,7 +204,8 @@ class DurablePublicationActivityHandler(VariantRoutingActivityHandler):
                 f"{failure.kind} failure for durable V5 publication {self.definition.declaration.name!r} "
                 "cannot be projected"
             )
-        request = self._request(binding)
+        invocation = super().prepare(binding)
+        request = self._decode_request(invocation, "Durable publication gate")
         if isinstance(request, ReplyReq):
             blocked: WorkflowModel = ReplyBlocked(id=request.id, text=request.text)
         elif isinstance(request, DashReq):
@@ -219,6 +228,37 @@ class DurablePublicationActivityHandler(VariantRoutingActivityHandler):
         return self.project(binding, result)
 
 
+@dataclass(frozen=True)
+class IdentifiedInlineActivityHandler(VariantRoutingActivityHandler):
+    """Freeze the provider operation used to reconcile inline redispatch."""
+
+    def prepare(self, binding: Binding) -> ActivityInvocation:
+        invocation = super().prepare(binding)
+        request = self._decode_request(invocation, "Identified inline gate")
+        name = self.definition.declaration.name
+        if name == "review_agent" and isinstance(request, RoundOpen):
+            operation = request.operation
+        elif name == "publish_gate" and isinstance(request, Publishable):
+            if request.effect != request.op:
+                raise ValueError("V5 findings publication effect differs from its operation identity")
+            operation = request.op
+        elif name == "rerun_gate" and isinstance(request, RerunReq):
+            operation = request.op
+        elif name == "git_gate" and isinstance(request, MutWork):
+            operation = request.op_key
+        else:
+            raise TypeError(f"Identified inline gate {name!r} received unsupported request {type(request).__name__}")
+        grammar = _MARKER_OPERATION if name in {"publish_gate", "rerun_gate"} else _GRAPHIC_OPERATION
+        if grammar.fullmatch(operation) is None:
+            raise ValueError(f"V5 identified inline gate {name!r} operation identity is malformed")
+        return replace(
+            invocation,
+            policy=_IDENTIFIED_INLINE_POLICY,
+            correlation=operation,
+            idempotency=operation,
+        )
+
+
 def wire_gates(
     built: BuiltNet,
     gates: Mapping[str, GateSpec],
@@ -233,9 +273,12 @@ def wire_gates(
     handlers: dict = dict(built.handlers)
     for transition, (name, variants) in gates.items():
         uri = built.net.handler_uri(NetPath(transition))
-        handler = (
-            DurablePublicationActivityHandler if name in _DURABLE_PUBLICATION_GATES else VariantRoutingActivityHandler
-        )
+        if name in _DURABLE_PUBLICATION_GATES:
+            handler = DurablePublicationActivityHandler
+        elif name in _IDENTIFIED_INLINE_GATES:
+            handler = IdentifiedInlineActivityHandler
+        else:
+            handler = VariantRoutingActivityHandler
         handlers[uri] = handler(built.net, NetPath(transition), definitions[name], variants=variants)
     for transition, name in (derived or {}).items():
         uri = built.net.handler_uri(NetPath(transition))
