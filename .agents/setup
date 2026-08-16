@@ -12,9 +12,30 @@ demo_reviewer_hosts="${GITHUB_DEMO_REVIEWER_HOSTS:-}"
 github_app_key="${GITHUB_APP_PRIVATE_KEY_PEM:-}"
 github_webhook_secret="${GITHUB_APP_WEBHOOK_SECRET:-}"
 anthropic_key="${ANTHROPIC_AGENT_API_KEY:-${ANTHROPIC_API_KEY:-}}"
+openai_key="${OPENAI_AGENT_API_KEY:-${OPENAI_API_KEY:-}}"
+openrouter_key="${OPENROUTER_AGENT_API_KEY:-${OPENROUTER_API_KEY:-}}"
 unset GITHUB_DEMO_AUTHOR_HOSTS GITHUB_DEMO_REVIEWER_HOSTS
 unset GITHUB_APP_PRIVATE_KEY_PEM GITHUB_APP_WEBHOOK_SECRET
 unset ANTHROPIC_AGENT_API_KEY ANTHROPIC_API_KEY
+unset OPENAI_AGENT_API_KEY OPENAI_API_KEY OPENROUTER_AGENT_API_KEY OPENROUTER_API_KEY
+
+pi_provider=""
+pi_model=""
+pi_key=""
+if [[ -n "$anthropic_key" ]]; then
+    pi_provider=anthropic
+    pi_model=claude-sonnet-4-5
+    pi_key="$anthropic_key"
+elif [[ -n "$openai_key" ]]; then
+    pi_provider=openai
+    pi_model=gpt-5.6-sol
+    pi_key="$openai_key"
+elif [[ -n "$openrouter_key" ]]; then
+    pi_provider=openrouter
+    pi_model=anthropic/claude-sonnet-4.5
+    pi_key="$openrouter_key"
+fi
+unset anthropic_key openai_key openrouter_key
 
 fail() {
     echo "==> Hamsterdan setup refused unsafe runtime custody" >&2
@@ -119,8 +140,9 @@ install_identity "$RUNTIME/gh-demo-author" "$demo_author_hosts"
 install_identity "$RUNTIME/gh-demo-reviewer" "$demo_reviewer_hosts"
 install_private_file "$RUNTIME/github-app.pem" "$github_app_key"
 install_private_file "$RUNTIME/webhook-secret" "$github_webhook_secret"
-install_private_file "$RUNTIME/anthropic-api-key" "$anthropic_key"
-unset demo_author_hosts demo_reviewer_hosts github_app_key github_webhook_secret anthropic_key
+retire_managed_file "$RUNTIME/anthropic-api-key"
+install_private_file "$RUNTIME/agent-api-key" "$pi_key"
+unset demo_author_hosts demo_reviewer_hosts github_app_key github_webhook_secret pi_key
 
 echo "==> Installing uv"
 if ! command -v uv >/dev/null 2>&1; then
@@ -180,7 +202,7 @@ done
 for path in \
     "$RUNTIME/gh-demo-author/gh/hosts.yml" \
     "$RUNTIME/gh-demo-reviewer/gh/hosts.yml" \
-    "$RUNTIME/github-app.pem" "$RUNTIME/webhook-secret" "$RUNTIME/anthropic-api-key"; do
+    "$RUNTIME/github-app.pem" "$RUNTIME/webhook-secret" "$RUNTIME/agent-api-key"; do
     if [[ ! -f "$path" || -L "$path" ]]; then
         runtime_ready=false
     fi
@@ -208,7 +230,7 @@ retire_identity "$RUNTIME/gh-crisbastos"
 
 state_path="$PWD/$RUNTIME/state"
 assert_private_directory "$state_path"
-for path in "$RUNTIME/github-app.pem" "$RUNTIME/webhook-secret" "$RUNTIME/anthropic-api-key"; do
+for path in "$RUNTIME/github-app.pem" "$RUNTIME/webhook-secret" "$RUNTIME/agent-api-key"; do
     verify_private_file "$path"
 done
 
@@ -224,7 +246,9 @@ chmod 0600 "$temporary"
     printf 'HAMSTERDAN_STATE_PATH=%s\n' "$state_path"
     printf 'HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE=%s\n' "$PWD/$RUNTIME/github-app.pem"
     printf 'HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE=%s\n' "$PWD/$RUNTIME/webhook-secret"
-    printf 'HAMSTERDAN_ANTHROPIC_API_KEY_FILE=%s\n' "$PWD/$RUNTIME/anthropic-api-key"
+    printf 'HAMSTERDAN_PI_PROVIDER=%s\n' "$pi_provider"
+    printf 'HAMSTERDAN_PI_MODEL=%s\n' "$pi_model"
+    printf 'HAMSTERDAN_PI_API_KEY_FILE=%s\n' "$PWD/$RUNTIME/agent-api-key"
     printf 'HAMSTERDAN_PI_CLI_PATH=%s\n' "$pi_cli"
     printf 'HAMSTERDAN_PI_NODE_PATH=%s\n' "$pi_node"
     printf 'HAMSTERDAN_PI_PACKAGE_ROOT=%s\n' "$pi_package"
@@ -233,5 +257,6 @@ chmod 0600 "$temporary"
 } > "$temporary"
 mv -fT -- "$temporary" "$RUNTIME/hamsterdan.env"
 verify_private_file "$RUNTIME/hamsterdan.env"
+unset pi_provider pi_model
 
 echo "==> Hamsterdan orb setup complete"

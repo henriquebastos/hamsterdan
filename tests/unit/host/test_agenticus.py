@@ -35,6 +35,7 @@ from hamsterdan.host.agenticus import (
     compose_agent_runner,
     resolve_agenticus,
 )
+from hamsterdan.host.pi_a2 import PiA2InstallationConfig
 
 
 def test_exact_pi_native_a2_local_api_key_profile_resolves_immutable_snapshot() -> None:
@@ -53,6 +54,34 @@ def test_exact_pi_native_a2_local_api_key_profile_resolves_immutable_snapshot() 
         "hamsterdan.host-fenced",
     }
     assert composition.snapshot == type(composition.snapshot).from_data(composition.snapshot.to_data())
+
+
+@pytest.mark.parametrize(
+    ("provider", "model", "profile"),
+    [
+        ("anthropic", "claude-sonnet-4-5", "pi-native-a2-local-anthropic-claude-sonnet-4-5-api-key"),
+        ("openai", "gpt-5.6-sol", "pi-native-a2-local-openai-gpt-5.6-sol-api-key"),
+        (
+            "openrouter",
+            "anthropic/claude-sonnet-4.5",
+            "pi-native-a2-local-openrouter-anthropic/claude-sonnet-4.5-api-key",
+        ),
+    ],
+)
+def test_agent_route_profile_uses_the_exact_qualified_installation_selection(
+    provider: str, model: str, profile: str
+) -> None:
+    assert compose_agent(provider=provider, model=model).profile == profile
+
+
+def test_unqualified_agent_provider_model_pair_fails_closed() -> None:
+    with pytest.raises(AgentCompositionError, match="not qualified"):
+        compose_agent(provider="openai", model="claude-sonnet-4-5")
+
+
+def test_supplied_environment_cannot_trigger_an_implicit_provider_selection() -> None:
+    with pytest.raises(AgentCompositionError, match="explicit provider and model"):
+        compose_agent({})
 
 
 def test_missing_disabled_and_incompatible_profiles_refuse_deterministically() -> None:
@@ -143,11 +172,6 @@ def test_not_ready_probe_fails_closed(disposition: ProbeDisposition) -> None:
     assert runtime.probes == 1 and runtime.starts == 0
 
 
-def test_production_runtime_requires_explicit_installation(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="explicit direct-key and Pi runtime paths"):
-        _compose_agent_runtime(tmp_path / "agenticus", {})
-
-
 def test_production_runtime_constructs_workspace_before_owned_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -155,11 +179,14 @@ def test_production_runtime_constructs_workspace_before_owned_runtime(
     key.write_bytes(b"synthetic-direct-authority")
     key.chmod(0o600)
     environment = {
-        "HAMSTERDAN_ANTHROPIC_API_KEY_FILE": str(key),
+        "HAMSTERDAN_PI_PROVIDER": "anthropic",
+        "HAMSTERDAN_PI_MODEL": "claude-sonnet-4-5",
+        "HAMSTERDAN_PI_API_KEY_FILE": str(key),
         "HAMSTERDAN_PI_CLI_PATH": str(tmp_path / "cli"),
         "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
         "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),
     }
+    installation = PiA2InstallationConfig.from_environment(environment)
     runtimes = 0
 
     def compose(*args: object) -> object:
@@ -175,7 +202,7 @@ def test_production_runtime_constructs_workspace_before_owned_runtime(
     )
 
     with pytest.raises(ValueError, match="synthetic workspace failure"):
-        _compose_agent_runtime(tmp_path / "state", environment)
+        _compose_agent_runtime(tmp_path / "state", installation)
     assert runtimes == 0
 
 
@@ -209,7 +236,7 @@ def test_snapshot_persists_and_claim_reconstructs_same_route_after_restart(tmp_p
     assert reconstructed == claimed
     assert composition.snapshot is not None
     changed = ResolutionSnapshot(composition.snapshot.catalog_revision + 1, composition.snapshot.descriptors)
-    different = AgentComposition(composition.profile, changed)
+    different = AgentComposition(composition.provider, composition.model, composition.profile, changed)
     with pytest.raises(AgentCompositionError, match="route"):
         reopened.claim("review:one", different)
 
@@ -347,6 +374,8 @@ def test_routed_runner_claims_before_fault(tmp_path: Path) -> None:
 def test_old_process_cannot_claim_after_an_atomic_composition_change(tmp_path: Path) -> None:
     agenticus = compose_agent()
     changed = AgentComposition(
+        agenticus.provider,
+        agenticus.model,
         agenticus.profile,
         ResolutionSnapshot(agenticus.snapshot.catalog_revision + 1, agenticus.snapshot.descriptors),
     )

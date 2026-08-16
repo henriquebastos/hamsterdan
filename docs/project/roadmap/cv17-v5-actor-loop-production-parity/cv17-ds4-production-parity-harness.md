@@ -408,14 +408,25 @@ parent-directory symlink refusal, PATH-wrapper and Git-helper isolation, role
 isolation, selector reversal, and no secret disclosure under shell tracing.
 `scripts/check full` passes with 1,107 Python tests and nine Bun relay tests.
 
-Current provider observation stops safely before deployment: the two project
-role credentials authenticate as `henriquebastos` and `crisbastos`, while the
-public App inventory still lacks `pull_request_review_thread`. The accepted App
-private key and webhook secret remain in an archived historical orb and cannot
-be downloaded while archived; no project Anthropic authority exists. Therefore
-no launch environment, host writer, App update, or fresh PR was created. Live
-acceptance resumes only after those three authorities are placed in project
-secret custody and the App owner updates its event subscription and relay URL.
+Provider-portable bootstrap removes the fixed-Anthropic blocker without
+substituting provider behavior at runtime. Setup chooses the first available
+qualified direct route in the explicit Anthropic, OpenAI, OpenRouter order,
+materializes exactly one generic private key file, and publishes the exact
+provider/model pair. Startup parses that metadata once, derives the Agenticus
+route from it, activates the route fence, and only then constructs Petrus
+runtime and connection custody. A durable nonsecret installation marker binds
+fresh Pi state to that provider/model; restarts accept the same pair and reject
+a changed pair before authority is read or runtime custody is constructed. The
+marker uses fsynced private temporary custody and atomic no-replace publication,
+including competing-writer, crash-cut, and restrictive-umask proof.
+
+The accepted App private key, webhook secret, human-role sessions, and OpenAI
+authority are now project-scoped so future project orbs can reproduce setup.
+The public App inventory still lacks `pull_request_review_thread`; the App owner
+must enable that event before the collaboration journey can qualify live.
+`scripts/check full` passes with 1,121 Python tests, nine Bun relay tests,
+formatting, Ruff, typing, and source/wheel builds. No provider call or fresh PR
+was created in this slice.
 
 ## Done condition
 

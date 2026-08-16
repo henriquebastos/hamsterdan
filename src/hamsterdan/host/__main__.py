@@ -7,7 +7,6 @@ import json
 import math
 import os
 import stat
-from collections.abc import Mapping
 from pathlib import Path
 
 import uvicorn
@@ -30,9 +29,8 @@ MAX_IDENTIFIER_BYTES = 1024
 
 def _compose_agent_runtime(
     state_path: Path,
-    environment: Mapping[str, str],
+    installation: PiA2InstallationConfig,
 ) -> tuple[PiA2RuntimeHost | None, GitPiWorkspaceProvider | None]:
-    installation = PiA2InstallationConfig.from_environment(environment)
     workspaces = GitPiWorkspaceProvider(state_path / "pi-workspaces")
     return (
         compose_owned_pi_a2(state_path, installation),
@@ -229,10 +227,11 @@ def main() -> int:
             return 0
         readiness_composition = select_readiness_composition(os.getenv("HAMSTERDAN_READINESS_TOPOLOGY"))
         preflight_topology(config.state_path, readiness_composition.topology)
-        agent = compose_agent(os.environ)
+        installation = PiA2InstallationConfig.from_environment(os.environ, state_path=config.state_path)
+        agent = compose_agent(os.environ, provider=installation.provider, model=installation.model)
         route_store = AgentRouteStore(config.state_path / "agent-routes.sqlite3")
         route_store.activate(agent, config.state_path / "applications")
-        pi_runtime, pi_workspaces = _compose_agent_runtime(config.state_path, os.environ)
+        pi_runtime, pi_workspaces = _compose_agent_runtime(config.state_path, installation)
         service = HostService(
             config,
             runner=compose_agent_runner(pi_runtime=pi_runtime, pi_workspaces=pi_workspaces),

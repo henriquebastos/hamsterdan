@@ -122,7 +122,9 @@ def test_production_owned_composition_uses_explicit_installed_package_without_au
     direct_key = tmp_path / "direct-key"
     direct_key.write_bytes(b"synthetic-direct-authority")
     direct_key.chmod(0o600)
-    installation = PiA2InstallationConfig(direct_key, Path(cli), Path(node), Path(package))
+    installation = PiA2InstallationConfig(
+        "anthropic", "claude-sonnet-4-5", direct_key, Path(cli), Path(node), Path(package)
+    )
 
     host = compose_owned_pi_a2(tmp_path / "production", installation)
     try:

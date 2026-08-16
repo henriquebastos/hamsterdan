@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+import tempfile
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from petrus.agenticus.connection.custody import ConnectionIdentity
 from petrus.agenticus.connection.key import KeyContext, KeyErasureEvidence, KeyOperationError
 from petrus.agenticus.hands.contract import ToolMethod
+from petrus.agenticus.runtime.pi import PI_API_KEY_CATALOG
 from petrus.agenticus.runtime.pi_a2_host import (
     PiA2DirectAuthority,
     PiA2RuntimeHost,
@@ -37,28 +39,44 @@ _CAPABILITIES = frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARC
 class PiA2InstallationConfig:
     """Installation-owned runtime paths; parsing never reads authority material."""
 
+    provider: str
+    model: str
     direct_key_path: Path
     cli_path: Path
     node_path: Path
     package_root: Path
 
+    def __post_init__(self) -> None:
+        if (self.provider, self.model) not in PI_API_KEY_CATALOG:
+            raise ValueError("Agenticus requires an exact qualified Pi provider/model pair")
+
     @classmethod
-    def from_environment(cls, environment: Mapping[str, str]) -> PiA2InstallationConfig:
+    def from_environment(
+        cls, environment: Mapping[str, str], *, state_path: Path | None = None
+    ) -> PiA2InstallationConfig:
         names = (
-            "HAMSTERDAN_ANTHROPIC_API_KEY_FILE",
+            "HAMSTERDAN_PI_PROVIDER",
+            "HAMSTERDAN_PI_MODEL",
+            "HAMSTERDAN_PI_API_KEY_FILE",
             "HAMSTERDAN_PI_CLI_PATH",
             "HAMSTERDAN_PI_NODE_PATH",
             "HAMSTERDAN_PI_PACKAGE_ROOT",
         )
         if any(not environment.get(name) for name in names):
             raise ValueError("Agenticus requires explicit direct-key and Pi runtime paths")
-        config = cls(*(Path(environment[name]) for name in names))
+        config = cls(
+            environment[names[0]],
+            environment[names[1]],
+            *(Path(environment[name]) for name in names[2:]),
+        )
         if any(
             not path.is_absolute()
             for path in (config.direct_key_path, config.cli_path, config.node_path, config.package_root)
         ):
             raise ValueError("Agenticus installation paths must be absolute")
         _validate_direct_key_file(config.direct_key_path)
+        if state_path is not None:
+            _verify_installation_binding(Path(state_path) / "pi-a2", config.provider, config.model)
         return config
 
 
@@ -199,9 +217,12 @@ def compose_owned_pi_a2(state_path: Path, installation: PiA2InstallationConfig |
     """Compose the production A2 boundary without consulting ambient authority."""
 
     root = _private_directory(state_path / "pi-a2")
+    provider = PI_PROVIDER if installation is None else installation.provider
+    model = PI_MODEL if installation is None else installation.model
+    _bind_installation(root, provider, model)
     workspace = _private_directory(root / "workspace")
     authority = PiA2DirectAuthority(
-        ConnectionIdentity(_CONNECTION_ID, PI_PROVIDER, _ACCOUNT_FINGERPRINT, "api-key"),
+        ConnectionIdentity(_CONNECTION_ID, provider, _ACCOUNT_FINGERPRINT, "api-key"),
         PersistentKeyOperations(root / "keys"),
         OneShotApiKeySupplier(
             _authority_unavailable if installation is None else lambda: _load_direct_key(installation.direct_key_path)
@@ -210,8 +231,8 @@ def compose_owned_pi_a2(state_path: Path, installation: PiA2InstallationConfig |
     config = PiA2RuntimeHostConfig(
         state_root=root / "runtime-host",
         working_directory=workspace,
-        provider=PI_PROVIDER,
-        model=PI_MODEL,
+        provider=provider,
+        model=model,
         host_id="hamsterdan-pi-a2",
         capabilities=_CAPABILITIES,
         cli_path=None if installation is None else str(installation.cli_path),
@@ -229,7 +250,7 @@ def _validate_direct_key_file(path: Path) -> os.stat_result:
     try:
         metadata = path.lstat()
     except OSError:
-        raise ValueError("Anthropic API-key file cannot be inspected safely") from None
+        raise ValueError("Pi API-key file cannot be inspected safely") from None
     _validate_direct_key_metadata(metadata)
     return metadata
 
@@ -242,7 +263,7 @@ def _validate_direct_key_metadata(metadata: os.stat_result) -> None:
         or metadata.st_uid != os.geteuid()
         or not 16 <= metadata.st_size <= _MAX_API_KEY_BYTES
     ):
-        raise ValueError("Anthropic API-key file is not an owned, bounded 0600 regular file")
+        raise ValueError("Pi API-key file is not an owned, bounded 0600 regular file")
 
 
 def _direct_key_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
@@ -269,7 +290,7 @@ def _load_direct_key(path: Path) -> bytearray:
             _validate_direct_key_metadata(before)
             value = bytearray(before.st_size)
             if os.readv(descriptor, (value,)) != len(value) or os.read(descriptor, 1):
-                raise ValueError("Anthropic API-key file changed while reading")
+                raise ValueError("Pi API-key file changed while reading")
             after = os.fstat(descriptor)
         finally:
             os.close(descriptor)
@@ -277,7 +298,7 @@ def _load_direct_key(path: Path) -> bytearray:
         if _direct_key_identity(after) != _direct_key_identity(before) or any(
             byte < 0x21 or byte > 0x7E for byte in value
         ):
-            raise ValueError("Anthropic API-key material is malformed")
+            raise ValueError("Pi API-key material is malformed")
         return value
     except BaseException:
         _erase(value)
@@ -294,6 +315,96 @@ def _private_directory(path: Path) -> Path:
     if not stat.S_ISDIR(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o700 or metadata.st_uid != os.geteuid():
         raise ValueError("Pi A2 host directory must be owned and private")
     return selected.resolve()
+
+
+def _installation_value(provider: str, model: str) -> bytes:
+    return f"{provider}\n{model}\n".encode("ascii")
+
+
+def _read_installation_binding(path: Path) -> bytes:
+    try:
+        metadata = path.lstat()
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISREG(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+            or metadata.st_uid != os.geteuid()
+            or not 0 < metadata.st_size <= 256
+        ):
+            raise ValueError("Pi A2 installation binding is unsafe")
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            opened = os.fstat(descriptor)
+            value = os.read(descriptor, 257)
+            current = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+    except FileNotFoundError:
+        raise
+    except OSError:
+        raise ValueError("Pi A2 installation binding cannot be inspected safely") from None
+    if (
+        (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+        != (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
+        or (current.st_dev, current.st_ino, current.st_size, current.st_mtime_ns)
+        != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+        or len(value) != metadata.st_size
+    ):
+        raise ValueError("Pi A2 installation binding changed during inspection")
+    return value
+
+
+def _verify_installation_binding(root: Path, provider: str, model: str) -> None:
+    if root.is_symlink():
+        raise ValueError("Pi A2 host directory must not be a symlink")
+    if not root.exists():
+        return
+    metadata = root.lstat()
+    if not stat.S_ISDIR(metadata.st_mode) or stat.S_IMODE(metadata.st_mode) != 0o700 or metadata.st_uid != os.geteuid():
+        raise ValueError("Pi A2 host directory must be owned and private")
+    binding = root / "installation"
+    expected = _installation_value(provider, model)
+    try:
+        actual = _read_installation_binding(binding)
+    except FileNotFoundError:
+        retained = tuple(path for path in root.iterdir() if not path.name.startswith(".installation-"))
+        if retained and expected != _installation_value(PI_PROVIDER, PI_MODEL):
+            raise ValueError("existing Pi A2 state is bound to a different provider/model") from None
+        return
+    if actual != expected:
+        raise ValueError("existing Pi A2 state is bound to a different provider/model")
+
+
+def _bind_installation(root: Path, provider: str, model: str) -> None:
+    _verify_installation_binding(root, provider, model)
+    binding = root / "installation"
+    try:
+        actual = _read_installation_binding(binding)
+    except FileNotFoundError:
+        pass
+    else:
+        if actual != _installation_value(provider, model):
+            raise ValueError("existing Pi A2 state is bound to a different provider/model")
+        return
+    value = _installation_value(provider, model)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".installation-", dir=root)
+    temporary = Path(temporary_name)
+    try:
+        try:
+            os.fchmod(descriptor, 0o600)
+            if os.write(descriptor, value) != len(value):
+                raise OSError("short installation binding write")
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        try:
+            os.link(temporary, binding)
+        except FileExistsError:
+            _verify_installation_binding(root, provider, model)
+        else:
+            _sync_directory(root)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _erase(value: bytearray) -> None:

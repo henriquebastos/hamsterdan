@@ -42,7 +42,6 @@ from hamsterdan.agents.pi import PiWorkspaceProvider
 
 PI_PROVIDER = "anthropic"
 PI_MODEL = "claude-sonnet-4-5"
-PI_PROFILE = f"pi-native-a2-local-{PI_PROVIDER}-{PI_MODEL}-api-key"
 _REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
 HOST_FENCED_EFFECT = CapabilityDescriptor(
@@ -66,11 +65,14 @@ class AgentCompositionError(RuntimeError):
 
 @dataclass(frozen=True)
 class AgentComposition:
+    provider: str
+    model: str
     profile: str
     snapshot: ResolutionSnapshot
 
     def __post_init__(self) -> None:
-        if self.profile != PI_PROFILE:
+        expected = f"pi-native-a2-local-{self.provider}-{self.model}-api-key"
+        if (self.provider, self.model) not in PI_API_KEY_CATALOG or self.profile != expected:
             raise ValueError("Agenticus composition requires the exact qualified profile and snapshot")
 
 
@@ -100,7 +102,12 @@ def resolve_agenticus(
     return resolution.snapshot
 
 
-def compose_agent(environment: Mapping[str, str] | None = None) -> AgentComposition:
+def compose_agent(
+    environment: Mapping[str, str] | None = None,
+    *,
+    provider: str | None = None,
+    model: str | None = None,
+) -> AgentComposition:
     """Resolve Hamsterdan's sole isolated Pi composition."""
 
     removed = {"HAMSTERDAN_AGENT_MODE", "HAMSTERDAN_AGENT_ISOLATION_REQUIRED"}
@@ -109,9 +116,18 @@ def compose_agent(environment: Mapping[str, str] | None = None) -> AgentComposit
         raise AgentCompositionError(
             f"{', '.join(sorted(configured))} is no longer supported; isolated Agenticus Pi is the only agent route"
         )
-    if (PI_PROVIDER, PI_MODEL) not in PI_API_KEY_CATALOG:
+    if environment is None and provider is None and model is None:
+        provider, model = PI_PROVIDER, PI_MODEL
+    if provider is None or model is None:
+        raise AgentCompositionError("Agenticus requires an explicit provider and model")
+    if (provider, model) not in PI_API_KEY_CATALOG:
         raise AgentCompositionError("the exact Pi direct API-key provider and model are not qualified")
-    return AgentComposition(PI_PROFILE, resolve_agenticus())
+    return AgentComposition(
+        provider,
+        model,
+        f"pi-native-a2-local-{provider}-{model}-api-key",
+        resolve_agenticus(),
+    )
 
 
 def compose_agent_runner(

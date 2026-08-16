@@ -69,3 +69,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-16 — V5 true-conflict resolution parity oracle established](entries/2026-08-16T1611Z-v5-true-conflict-resolution-parity-oracle.md)
 - [2026-08-16 — V5 collaboration approval parity oracle established](entries/2026-08-16T1629Z-v5-collaboration-approval-parity-oracle.md)
 - [2026-08-16 — V5 live campaign bootstrap qualified locally](entries/2026-08-16T1807Z-v5-live-bootstrap-qualified-locally.md)
+- [2026-08-16 — V5 provider-portable bootstrap qualified locally](entries/2026-08-16T2106Z-v5-provider-portable-bootstrap-qualified.md)

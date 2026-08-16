@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; eleven DS4 semantic oracles complete deterministic parity while fresh live V5 evidence remains
+status_reason: DS2 and DS3 are complete; deterministic parity and portable live bootstrap are qualified while fresh live V5 evidence remains
 updated: 2026-08-16
 ---
 
@@ -58,11 +58,13 @@ making that ruling.
   The selected deterministic portfolio is complete. A project-wide live
   bootstrap now provisions role-based human identities, exact Pi runtime,
   bounded App/provider files, a checked host launcher, and an explicit private
-  V5 selector. Role verification bypasses injected CLI authority, runtime reads
+  V5 selector. Provider bootstrap now selects exactly one qualified Anthropic,
+  OpenAI, or OpenRouter route and immutably binds provider identity to fresh Pi
+  state. Role verification bypasses injected CLI authority, runtime reads
   reject symlinked ancestors, and Git publication cannot inherit a human
-  credential helper. The current App event inventory and missing project App,
-  webhook, and Anthropic authorities still block the fresh live selected-V5
-  GitHub campaign.
+  credential helper. App, webhook, human-role, and OpenAI authority now live in
+  project custody. The App event inventory still lacks the required native
+  review-thread event before the complete fresh selected-V5 GitHub campaign.
 
 ## Done condition
 
