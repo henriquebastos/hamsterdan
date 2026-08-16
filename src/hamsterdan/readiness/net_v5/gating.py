@@ -44,6 +44,7 @@ from hamsterdan.contracts.readiness_v5 import (
     DashReq,
     MutWork,
     Publishable,
+    RemReq,
     ReplyBlocked,
     ReplyReq,
     RerunReq,
@@ -54,7 +55,7 @@ from hamsterdan.contracts.readiness_v5 import (
 _JSON = JsonPayloadConverter()
 _DURABLE_PUBLICATION_GATES = frozenset({"reply_gate", "dash_gate", "announce_gate"})
 _DURABLE_PUBLICATION_POLICY = ExecutionPolicy(attempts=1)
-_IDENTIFIED_INLINE_GATES = frozenset({"review_agent", "publish_gate", "rerun_gate", "git_gate"})
+_IDENTIFIED_INLINE_GATES = frozenset({"review_agent", "publish_gate", "rerun_gate", "git_gate", "reminder_gate"})
 _IDENTIFIED_INLINE_POLICY = ExecutionPolicy(attempts=1)
 _MARKER_OPERATION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _GRAPHIC_OPERATION = re.compile(r"[!-~]{1,1024}\Z")
@@ -244,11 +245,15 @@ class IdentifiedInlineActivityHandler(VariantRoutingActivityHandler):
             operation = request.op
         elif name == "rerun_gate" and isinstance(request, RerunReq):
             operation = request.op
+        elif name == "reminder_gate" and isinstance(request, RemReq):
+            if _MARKER_OPERATION.fullmatch(request.timer_id) is None:
+                raise ValueError("V5 identified inline gate 'reminder_gate' operation identity is malformed")
+            operation = f"reminder:{request.timer_id}"
         elif name == "git_gate" and isinstance(request, MutWork):
             operation = request.op_key
         else:
             raise TypeError(f"Identified inline gate {name!r} received unsupported request {type(request).__name__}")
-        grammar = _MARKER_OPERATION if name in {"publish_gate", "rerun_gate"} else _GRAPHIC_OPERATION
+        grammar = _MARKER_OPERATION if name in {"publish_gate", "rerun_gate", "reminder_gate"} else _GRAPHIC_OPERATION
         if grammar.fullmatch(operation) is None:
             raise ValueError(f"V5 identified inline gate {name!r} operation identity is malformed")
         return replace(

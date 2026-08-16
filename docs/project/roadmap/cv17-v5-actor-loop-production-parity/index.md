@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 is complete; DS3 durable recovery has proven publication and inline-effect convergence
+status_reason: DS2 is complete; DS3 durable recovery has proven publication, inline-effect, reminder, and timer-wake convergence
 updated: 2026-08-16
 ---
 
@@ -33,7 +33,9 @@ making that ruling.
   exact typed blocked terminal after restart, without an automatic retry.
   Its second slice proves unresolved inline review, findings, rerun, and
   mutation Activities redispatch the exact operation, reconcile provider and
-  Agenticus ledgers, and converge without duplicate effects.
+  Agenticus ledgers, and converge without duplicate effects. Its third slice
+  proves reminders reconcile by stable timer identity and canonical History
+  rebuilds timer and runnable projections after a host crash.
 - CV17.DS4 — Parity harness: ES-005 chapter-17 boundary scenarios executed
   through the real host against both topologies, compared on selected
   outcomes.

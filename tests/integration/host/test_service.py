@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from petrus.engine import DriveOutcome
 from petrus.impetus.history import ExternalEventDelivered
 from petrus.motus.activity import ActivityError, ActivityInvocation, activity
 from petrus.motus.dispatch import LocalDispatch
@@ -105,9 +106,12 @@ class V5Provider:
     def __init__(self) -> None:
         self.head, self.base = "a" * 40, "b" * 40
         self.calls: list[tuple[str, str]] = []
+        self.comments: list[dict[str, object]] = []
 
     def pages(self, path: str):
         self.calls.append(("PAGES", path))
+        if path == "/repos/owner/one/issues/7/comments?per_page=100":
+            return tuple(self.comments)
         return ()
 
     def request(self, method: str, path: str, body: object | None = None):
@@ -153,6 +157,15 @@ class V5Provider:
                     }
                 },
             )
+        if method == "POST" and path == "/repos/owner/one/issues/7/comments" and isinstance(body, dict):
+            comment = {
+                "id": len(self.comments) + 1,
+                "html_url": f"https://example.test/comments/{len(self.comments) + 1}",
+                "body": body.get("body", ""),
+                "user": {"login": "hamsterdan-test[bot]"},
+            }
+            self.comments.append(comment)
+            return WireResponse(201, comment)
         raise AssertionError(f"unexpected provider request: {method} {path} {body!r}")
 
 
@@ -1223,6 +1236,93 @@ def test_selected_v5_sweep_reconciliation_reuses_unchanged_identity_and_advances
             "SELECT revision,source_kind FROM v5_authority_grants WHERE subject='github:44:31:pr:7'"
         ).fetchone() == (2, "host-reconcile")
     restarted.close()
+
+
+def test_selected_v5_restart_rebuilds_timer_after_crash_before_runnable_hint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class SimulatedProcessDeath(BaseException):
+        pass
+
+    provider = V5Provider()
+    monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
+    clock_us = [1_000_000]
+    monkeypatch.setattr("hamsterdan.host.v5.timers.time.time_ns", lambda: clock_us[0] * 1_000)
+    composition, routes = agent_custody(tmp_path)
+    first = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=V5Runner(),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=V5,
+        reminder_delay=10,
+    )
+    first.runnable._clock = lambda: clock_us[0] / 1_000_000
+    first.registry.reconcile(44, ((31, "owner/one"),))
+    first._application(44, 31, 7)
+    assert first.sweep("startup") == 1
+    assert first.runnable.count() == 1
+
+    def die_before_runnable_hint(instance: str, settled: DriveOutcome) -> None:
+        assert instance == "github:44:31:pr:7"
+        assert settled.next_maturation == 21.0
+        raise SimulatedProcessDeath
+
+    clock_us[0] = 11_000_000
+    record_posture = first._record_posture
+    monkeypatch.setattr(first, "_record_posture", die_before_runnable_hint)
+    with pytest.raises(SimulatedProcessDeath):
+        first.run_due()
+
+    history = tmp_path / "applications" / "44" / "31" / "7" / "history.jsonl"
+    assert len(provider.comments) == 1
+    assert (
+        sum(
+            value.get("record") == "ExternalEventDelivered" and value.get("source") == "on_timer"
+            for value in map(json.loads, history.read_text().splitlines())
+        )
+        == 1
+    )
+    monkeypatch.setattr(first, "_record_posture", record_posture)
+    first.close()
+
+    application_root = tmp_path / "applications" / "44" / "31" / "7"
+    for path in (application_root / "timers.sqlite3", tmp_path / "runnable.sqlite3"):
+        path.unlink()
+        path.with_name(path.name + "-wal").unlink(missing_ok=True)
+        path.with_name(path.name + "-shm").unlink(missing_ok=True)
+
+    composition, routes = agent_custody(tmp_path)
+    second = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=V5Runner(),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=V5,
+        reminder_delay=10,
+    )
+    second.runnable._clock = lambda: clock_us[0] / 1_000_000
+    second.registry.reconcile(44, ((31, "owner/one"),))
+    try:
+        assert second.sweep("startup") == 1
+        assert second.runnable.count() == 1
+        assert second.run_due() == 0
+        assert len(provider.comments) == 1
+
+        clock_us[0] = 21_000_000
+        assert second.run_due() == 1
+        assert len(provider.comments) == 2
+        assert (
+            sum(
+                value.get("record") == "ExternalEventDelivered" and value.get("source") == "on_timer"
+                for value in map(json.loads, history.read_text().splitlines())
+            )
+            == 2
+        )
+    finally:
+        second.close()
 
 
 def test_host_skips_post_reconciliation_settlement_when_application_reports_a_custody_fence(tmp_path: Path) -> None:

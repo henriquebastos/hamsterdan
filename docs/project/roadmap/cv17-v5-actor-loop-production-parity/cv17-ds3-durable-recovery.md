@@ -2,7 +2,7 @@
 code: CV17.DS3
 level: Delivery Story
 status: Active
-status_reason: Durable publication and inline-effect recovery converge safely; host-custody restart composition remains
+status_reason: Publication, inline-effect, reminder, and timer-wake recovery converge safely; remaining host-custody restart composition remains
 updated: 2026-08-16
 ---
 
@@ -75,10 +75,34 @@ full` passes with 1,046 Python tests, nine Bun relay tests, formatting, Ruff,
 typing, and package builds. Oracle boundary review traced both prior blockers
 and the complete replay path, then returned `clear to commit`.
 
+### DS3.2 — Reminder and timer-wake crash recovery
+
+Reminder publication now uses the same identified inline recovery boundary as
+the other provider effects. Petrus History freezes the immutable
+`reminder:{timer_id}` correlation and idempotency under a one-attempt policy.
+On redispatch after a lost Activity terminal, the publication gate reconciles
+that marker before reading the current authority claim or recipients, so an
+already-landed reminder is not posted again. Marker grammar and size are
+validated before dispatch.
+
+Canonical timer custody remains the typed `TimerCommandApplied` and `TimerDue`
+deliveries in Petrus History. The per-Instance `V5TimerStore` and host-wide
+`RunnableIndex` remain rebuildable projections. The selected-V5 host crash
+test cuts after timer maturity, reminder publication, rearm, and History
+settlement but before `RunnableIndex.replace_timer`. It then removes both
+projections, restarts the host, and proves startup reconstructs the next wake,
+does not repeat the landed reminder, and publishes exactly once at the rebuilt
+deadline.
+
+The focused recovery, timer, runnable, and host portfolio passes with 178
+tests. `scripts/check full` passes with 1,054 Python tests, nine Bun relay
+tests, formatting, Ruff, typing, and package builds. Oracle boundary review
+traced the inline replay and projection-rebuild paths, then returned `clear to
+commit`.
+
 ## Remaining recovery portfolio
 
-- Prove reminder timer custody, custodied webhook/reconciliation replay, and
-  runnable-index wake reconstruction across host restart.
+- Prove custodied webhook/reconciliation replay across host restart.
 - Assemble the bounded kill/restart/converge portfolio through the selected V5
   HostService route. Torn JSONL repair remains an operator concern and is not a
   workflow recovery behavior.

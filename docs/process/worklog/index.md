@@ -55,3 +55,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-16 — V5 host composition completed](entries/2026-08-16T0128Z-v5-host-composition-completed.md)
 - [2026-08-16 — V5 durable publication crash recovery completed](entries/2026-08-16T0200Z-v5-durable-publication-crash-recovery.md)
 - [2026-08-16 — V5 inline effect crash recovery completed](entries/2026-08-16T0241Z-v5-inline-effect-crash-recovery.md)
+- [2026-08-16 — V5 reminder and timer-wake crash recovery completed](entries/2026-08-16T0256Z-v5-reminder-timer-wake-crash-recovery.md)

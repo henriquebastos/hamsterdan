@@ -27,6 +27,7 @@ from hamsterdan.contracts.readiness_v5 import (
     AgentReview,
     MutWork,
     Publishable,
+    RemReq,
     RerunReq,
     RoundOpen,
     RoundUnable,
@@ -93,6 +94,7 @@ RERUN = RerunReq(
     attempt=2,
     mem={"reruns": {}, "repairs": {}, "rerun_faults": {}, "closing": None},
 )
+REMINDER = RemReq(timer_id="timer:github:12:34:pr:7:i3:s0")
 MUTATION = MutWork(
     op="change",
     op_key=f"push:comment:9:{HEAD}:i3",
@@ -230,6 +232,20 @@ class RerunLedger:
         self.posts += 1
         self.held_operations.add(operation)
         return RerunIssue(PublicationResult("requested"), run.id, run.attempt)
+
+
+class ReminderLedger:
+    def __init__(self) -> None:
+        self.held_operations: set[str] = set()
+        self.posts = 0
+
+    def reminder_operation(self, operation: str, *, context):
+        if operation in self.held_operations:
+            return PublicationResult("existing")
+        assert context() == (3, HEAD, None, "author")
+        self.posts += 1
+        self.held_operations.add(operation)
+        return PublicationResult("created")
 
 
 class RunsPort:
@@ -490,6 +506,27 @@ def test_rerun_reconciles_before_claim_and_runs_reads_after_two_lost_terminals(t
     assert ledger.posts == 1
 
 
+def test_reminder_reconciles_before_claim_and_recipient_reads_after_two_lost_terminals(tmp_path: Path) -> None:
+    claim, ledger = ClaimPort(), ReminderLedger()
+    gate = V5PublicationGates(ledger, claim, lambda: (None, "author"))
+    definitions = _definitions("reminder_gate", gate.reminder_gate)
+    requested = _request(tmp_path, definitions, "reminder_gate", "rem.pub_req", REMINDER)
+    operation = f"reminder:{REMINDER.timer_id}"
+    assert requested.correlation == requested.idempotency == operation
+    assert requested.policy == ExecutionPolicy(attempts=1)
+
+    first, _ = _restart(tmp_path, definitions, "discard", requested)
+    assert ledger.posts == 1 and ledger.held_operations == {operation}
+    first.close()
+    claim.readable = False
+    second, _ = _restart(tmp_path, definitions, "discard", requested)
+    assert ledger.posts == 1
+    second.close()
+
+    _finish_and_prove_stable(tmp_path, definitions, requested)
+    assert ledger.posts == 1
+
+
 def test_mutation_replays_one_agent_result_then_reconciles_one_ref_advance(tmp_path: Path) -> None:
     claim, runner, publisher = ClaimPort(), MutationLedgerRunner(), MutationLedgerPublisher()
     gate = V5MutationGate(
@@ -553,6 +590,7 @@ def test_unexpected_inline_failure_stays_a_loud_activity_failure(tmp_path: Path)
         ("review_agent", "review.round", replace(ROUND, operation="")),
         ("publish_gate", "review.publishable", replace(PUBLICATION, op="")),
         ("rerun_gate", "esc.rerun_req", replace(RERUN, op="")),
+        ("reminder_gate", "rem.pub_req", replace(REMINDER, timer_id="")),
         ("git_gate", "mut.work", replace(MUTATION, op_key="")),
         ("publish_gate", "review.publishable", replace(PUBLICATION, effect="findings:different:i3")),
     ],
@@ -581,6 +619,7 @@ def test_inline_recovery_identity_contract_rejects_malformed_work_before_dispatc
         ("review_agent", "review.round", ROUND),
         ("publish_gate", "review.publishable", PUBLICATION),
         ("rerun_gate", "esc.rerun_req", RERUN),
+        ("reminder_gate", "rem.pub_req", REMINDER),
         ("git_gate", "mut.work", MUTATION),
     ],
 )
@@ -597,6 +636,8 @@ def test_inline_recovery_identity_contract_rejects_noncanonical_provider_identit
         malformed = replace(work, effect=identity, op=identity)
     elif isinstance(work, RerunReq):
         malformed = replace(work, op=identity)
+    elif isinstance(work, RemReq):
+        malformed = replace(work, timer_id=identity)
     elif isinstance(work, MutWork):
         malformed = replace(work, op_key=identity)
     else:
@@ -617,6 +658,7 @@ def test_inline_recovery_identity_contract_rejects_noncanonical_provider_identit
     [
         ("publish_gate", "review.publishable", replace(PUBLICATION, effect="x" * 129, op="x" * 129)),
         ("rerun_gate", "esc.rerun_req", replace(RERUN, op="x" * 129)),
+        ("reminder_gate", "rem.pub_req", replace(REMINDER, timer_id="x" * 129)),
     ],
 )
 def test_comment_backed_inline_identity_honors_the_provider_marker_bound(
