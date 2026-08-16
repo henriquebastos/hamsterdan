@@ -19,6 +19,9 @@ these implementations must match:
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 import pytest
 
 from hamsterdan.contracts.readiness_v5 import (
@@ -45,6 +48,7 @@ from hamsterdan.contracts.readiness_v5 import (
     ReviewLanded,
     ReviewMoved,
 )
+from hamsterdan.github_app.effects import CommentPublisher
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.gates import V5PublicationGates
@@ -65,9 +69,11 @@ class FakePublisher:
     def __init__(self, mode: str | None = None, found: bool = False, collide: bool = False):
         self.mode, self.found, self.collide = mode, found, collide
         self.calls: list[tuple] = []
+        self.compatible_calls: list[tuple[str, tuple[str, ...]]] = []
 
     def find(self, kind, operation, head, body, *, compatible_bodies=()):
         self.calls.append(("find", kind, operation, head, body))
+        self.compatible_calls.append(("find", compatible_bodies))
         if self.collide:
             raise ValueError("stable publication operation collided with a different payload")
         if self.found:
@@ -91,6 +97,7 @@ class FakePublisher:
 
     def immutable(self, kind, operation, epoch, head, body, *, authority_operation=None, compatible_bodies=()):
         self.calls.append(("immutable", kind, operation, head, body))
+        self.compatible_calls.append(("immutable", compatible_bodies))
         return self._outcome()
 
     def immutable_operation(self, kind, operation, body, *, context, compatible_bodies=()):
@@ -409,6 +416,79 @@ class TestPublishGate:
         # CommentPublisher.marker() rejects kinds outside its frozen set.
         assert (kind, operation) == ("finding", "findings:h1:i1")
         assert "f1" in body
+        assert [name for name, _bodies in publisher.compatible_calls] == ["find", "immutable"]
+        [find_compatible, immutable_compatible] = [bodies for _name, bodies in publisher.compatible_calls]
+        assert find_compatible == immutable_compatible
+        expected_legacy = (
+            "## Hamsterdan review findings\n\n- `f1` (**blocking**): n1\n\n"
+            "<!-- hamsterdan:findings-digest "
+            f"{hashlib.sha256(json.dumps(self.WORK.findings, sort_keys=True, separators=(',', ':')).encode()).hexdigest()} -->"
+        )
+        assert find_compatible == (expected_legacy,)
+
+    def test_lookup_first_accepts_the_pre_rendering_upgrade_body_without_a_fence_or_post(self) -> None:
+        head = "a" * 40
+        operation = f"findings:{head}:i1"
+        work = Publishable(
+            head=head,
+            base="b" * 40,
+            policy="p1",
+            incarnation=1,
+            findings=self.WORK.findings,
+            effect=operation,
+            op=operation,
+            mem=self.WORK.mem,
+        )
+        digest = hashlib.sha256(json.dumps(work.findings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        legacy_body = (
+            "## Hamsterdan review findings\n\n- `f1` (**blocking**): n1\n\n"
+            f"<!-- hamsterdan:findings-digest {digest} -->"
+        )
+        marker = CommentPublisher.marker("finding", operation, head)
+
+        class HeldLegacyComment:
+            def __init__(self) -> None:
+                self.requests: list[tuple[str, str]] = []
+
+            def pages(self, path: str):
+                assert path == "/repos/owner/repo/issues/7/comments?per_page=100"
+                return (
+                    {
+                        "id": 7,
+                        "html_url": "https://github.com/owner/repo/pull/7#issuecomment-7",
+                        "body": f"{legacy_body}\n\n{marker}",
+                        "user": {"login": "hamsterdan[bot]"},
+                    },
+                )
+
+            def request(self, method: str, path: str, body=None):
+                self.requests.append((method, path))
+                raise AssertionError("a held compatible finding must not be posted again")
+
+        transport = HeldLegacyComment()
+        fences: list[tuple] = []
+        claims: list[str] = []
+        publisher = CommentPublisher(
+            transport,  # type: ignore[arg-type]
+            "owner/repo",
+            7,
+            "hamsterdan[bot]",
+            lambda *args: fences.append(args),
+        )
+        gate = V5PublicationGates(
+            publisher,
+            lambda: claims.append("read") or CurrentClaim("running", 1, head, "b" * 40, "p1"),
+            lambda: ("reviewer", "author"),
+        )
+
+        assert gate.publish_gate(work) == ReviewLanded(
+            head=head,
+            incarnation=1,
+            findings=work.findings,
+            effect=operation,
+            mem=work.mem,
+        )
+        assert claims == fences == transport.requests == []
 
     def test_lookup_first_reconciles_landed_even_after_the_claim_moved(self) -> None:
         publisher = FakePublisher(found=True)

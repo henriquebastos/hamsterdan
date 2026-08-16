@@ -124,6 +124,50 @@ def _findings_body(findings: list[dict[str, Any]]) -> str:
     field produce different bodies, so a stable-identity collision
     fails closed instead of reconciling as the same landed effect."""
     digest = hashlib.sha256(json.dumps(findings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    lines = ["## Hamsterdan review findings"]
+    for finding in findings:
+        badge = "**blocking**" if finding.get("blocking") else "advisory"
+        title = finding.get("title") or finding.get("note") or finding.get("id")
+        lines.extend(
+            [
+                "",
+                f"### `{finding.get('id')}` — {title}",
+                f"{badge} · severity: **{finding.get('severity', 'unspecified')}**",
+                "",
+                str(finding.get("body", "")),
+            ]
+        )
+        path, line = finding.get("path"), finding.get("line")
+        if path and line:
+            lines.extend(["", f"Primary location: `{path}:{line}`"])
+        evidence = finding.get("evidence")
+        if evidence:
+            lines.extend(["", f"Evidence: {evidence}"])
+        related = finding.get("related_locations", [])
+        if related:
+            lines.extend(
+                [
+                    "",
+                    "Related locations:",
+                    *(f"- `{item.get('path')}:{item.get('line')}`" for item in related),
+                ]
+            )
+        suggestion = finding.get("suggestion")
+        if suggestion:
+            lines.extend(["", "Suggested change:", "```suggestion", str(suggestion), "```"])
+    lines.extend(["", f"<!-- hamsterdan:findings-digest {digest} -->"])
+    return "\n".join(lines)
+
+
+def _legacy_findings_body(findings: list[dict[str, Any]]) -> str:
+    """The pre-DS4.3 rendering retained as an accepted held payload.
+
+    The complete canonical digest already bound these sparse comments to
+    the findings. An upgraded worker must reconcile one that GitHub holds
+    under the same stable operation instead of faulting on presentation
+    drift after a crash.
+    """
+    digest = hashlib.sha256(json.dumps(findings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     lines = ["## Hamsterdan review findings", ""]
     for finding in findings:
         badge = "**blocking**" if finding.get("blocking") else "advisory"
@@ -251,6 +295,7 @@ class V5PublicationGates:
 
     def publish_gate(self, work: Publishable) -> ReviewLanded | ReviewMoved | ReviewBlocked | ReviewFault:
         body = _findings_body(work.findings)
+        compatible_bodies = (_legacy_findings_body(work.findings),)
         expected = CurrentClaim(
             phase="running", incarnation=work.incarnation, head=work.head, base=work.base, policy=work.policy
         )
@@ -258,7 +303,7 @@ class V5PublicationGates:
             head=work.head, incarnation=work.incarnation, findings=work.findings, effect=work.effect, mem=work.mem
         )
         try:
-            held = self.publisher.find("finding", work.op, work.head, body)
+            held = self.publisher.find("finding", work.op, work.head, body, compatible_bodies=compatible_bodies)
             if held is not None:
                 return landed
             current = self.claim()
@@ -273,7 +318,14 @@ class V5PublicationGates:
                     findings=work.findings,
                     mem=work.mem,
                 )
-            result = self.publisher.immutable("finding", work.op, work.incarnation, work.head, body)
+            result = self.publisher.immutable(
+                "finding",
+                work.op,
+                work.incarnation,
+                work.head,
+                body,
+                compatible_bodies=compatible_bodies,
+            )
         except GitHubBoundaryError:
             return ReviewBlocked(
                 head=work.head,

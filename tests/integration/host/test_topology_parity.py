@@ -26,6 +26,21 @@ WEBHOOK_SECRET = "webhook-secret-parity-canary"
 CLIENT_SECRET = "client-secret-parity-canary"
 INSTALLATION_TOKEN = "ghs_installation-parity-canary"
 FAILURE_FINGERPRINT = hashlib.sha256(b'[["build","failure"]]').hexdigest()
+FINDING_ID = "F-mergeability-guard"
+BLOCKING_FINDING = {
+    "id": FINDING_ID,
+    "path": "src/readiness.py",
+    "line": 17,
+    "related_locations": [],
+    "title": "Keep the mergeability guard fail-closed",
+    "body": "This path can report ready while GitHub still reports the pull request as unmergeable.",
+    "severity": "high",
+    "confidence": 0.99,
+    "evidence": "The ready branch does not test the observed mergeability flag.",
+    "blocking": True,
+    "suggestion": "if mergeable and all_gates_clear:",
+}
+BLOCKING_LINEAGE = [{"finding_id": FINDING_ID, "state": "new", "supersedes": None}]
 
 
 class Clients:
@@ -189,6 +204,20 @@ class ScenarioProvider:
             if "<!-- hamsterdan-rerun " in str(comment["body"]):
                 self.rerun_requests += 1
             return WireResponse(201, comment)
+        if method == "POST" and path == "/repos/owner/repo/pulls/7/comments" and isinstance(body, dict):
+            comment = {
+                "id": 1_000 + len(self.review_comments) + 1,
+                "html_url": f"https://github.com/owner/repo/pull/7#discussion_r{len(self.review_comments) + 1}",
+                "body": body.get("body", ""),
+                "user": {"login": BOT},
+                "commit_id": body.get("commit_id"),
+                "path": body.get("path"),
+                "line": body.get("line"),
+                "side": body.get("side"),
+            }
+            self.review_comments.append(comment)
+            self.writes.append((method, path, int(comment["id"]), str(comment["body"])))
+            return WireResponse(201, comment)
         if method == "PATCH" and path.startswith("/repos/owner/repo/issues/comments/") and isinstance(body, dict):
             identifier = int(path.rsplit("/", 1)[1])
             comment = next(item for item in self.comments if item["id"] == identifier)
@@ -207,11 +236,12 @@ class ScenarioProvider:
 
 
 class ScenarioRunner:
-    def __init__(self, *, coding_status: str | None = None) -> None:
+    def __init__(self, *, coding_status: str | None = None, seeded_finding: bool = False) -> None:
         self.reviews: list[tuple[str, ReviewRequest, str, int]] = []
         self.review_results: list[ReviewResult] = []
         self.code_calls: list[tuple[str, CodingRequest, str, int]] = []
         self.coding_status = coding_status
+        self.seeded_finding = seeded_finding
         self.codes = 0
         self.conversations = 0
 
@@ -224,9 +254,9 @@ class ScenarioRunner:
             request.epoch,
             request.head,
             request.base,
-            "clear",
-            [],
-            [],
+            "blocking" if self.seeded_finding else "clear",
+            [BLOCKING_FINDING] if self.seeded_finding else [],
+            BLOCKING_LINEAGE if self.seeded_finding else [],
         )
         self.review_results.append(result)
         return result
@@ -344,9 +374,13 @@ def _run_journey(
     topology: ReadinessComposition,
     *,
     rerun_conclusion: str | None,
+    seeded_finding: bool = False,
 ) -> JourneyResult:
     provider = ScenarioProvider(rerun_conclusion=rerun_conclusion)
-    runner = ScenarioRunner(coding_status="unchanged" if rerun_conclusion == "failure" else None)
+    runner = ScenarioRunner(
+        coding_status="unchanged" if rerun_conclusion == "failure" else None,
+        seeded_finding=seeded_finding,
+    )
     monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
     if rerun_conclusion == "failure":
 
@@ -486,6 +520,14 @@ def run_persistent_ci_regression(
     topology: ReadinessComposition,
 ) -> JourneyResult:
     return _run_journey(root, monkeypatch, topology, rerun_conclusion="failure")
+
+
+def run_seeded_review_finding(
+    root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> JourneyResult:
+    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, seeded_finding=True)
 
 
 def assert_public_clone(repository_url: str) -> None:
@@ -710,6 +752,93 @@ def assert_persistent_ci_regression(result: JourneyResult) -> None:
     assert len(result.runner.reviews) == result.quiescent_review_count
 
 
+def assert_seeded_review_finding(result: JourneyResult) -> None:
+    assert result.custody_before == "pending"
+    assert result.custody_after == "terminal"
+    assert result.custody_counts == {"terminal": 1}
+    assert len(result.runner.reviews) == 1
+    repository_url, request, operation, attempt = result.runner.reviews[0]
+    assert (request.repository, request.pull_request, request.head, request.base) == ("owner/repo", 7, HEAD, BASE)
+    assert result.runner.review_results == [
+        ReviewResult(
+            "owner/repo",
+            7,
+            request.epoch,
+            HEAD,
+            BASE,
+            "blocking",
+            [BLOCKING_FINDING],
+            BLOCKING_LINEAGE,
+        )
+    ]
+    assert operation and attempt == 1
+    assert_public_clone(repository_url)
+    [actions] = request.actions_evidence
+    assert (actions["id"], actions["head"], actions["attempt"], actions["status"], actions["conclusion"]) == (
+        101,
+        HEAD,
+        1,
+        "completed",
+        "success",
+    )
+    encoded_request = json.dumps(asdict(request), sort_keys=True)
+    assert all(
+        canary not in repository_url + encoded_request
+        for canary in (PRIVATE_KEY, WEBHOOK_SECRET, CLIENT_SECRET, INSTALLATION_TOKEN)
+    )
+    assert result.runner.codes == result.runner.conversations == 0
+
+    dashboard = [item for item in result.comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
+    readiness = [item for item in result.comments if "<!-- hamsterdan:readiness " in str(item["body"])]
+    finding_comments = [
+        item for item in (*result.comments, *result.review_comments) if "<!-- hamsterdan:finding " in str(item["body"])
+    ]
+    assert len(dashboard) == len(finding_comments) == 1
+    assert readiness == []
+    finding_body = str(finding_comments[0]["body"])
+    assert all(
+        text in finding_body
+        for text in (
+            FINDING_ID,
+            str(BLOCKING_FINDING["title"]),
+            str(BLOCKING_FINDING["body"]),
+            str(BLOCKING_FINDING["evidence"]),
+        )
+    )
+    marker = re.search(
+        rf"<!-- hamsterdan:finding operation=([^ >]+) head={HEAD} -->",
+        finding_body,
+    )
+    assert marker is not None and marker.group(1)
+    dashboard_body = str(dashboard[0]["body"])
+    assert "blocking" in dashboard_body and (FINDING_ID in dashboard_body or "'count': 1" in dashboard_body)
+    assert all(item["user"] == {"login": BOT} for item in (*result.comments, *result.review_comments))
+    assert (result.run_attempt, result.run_conclusion, result.rerun_requests) == (1, "success", 0)
+    assert result.provider_state == ("open", False, False, True, "clean", HEAD, BASE)
+    assert result.git_reconciliations == result.git_publications == ()
+    assert (
+        "GET",
+        "/repos/owner/repo/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?event=pull_request&per_page=100",
+    ) in result.provider_calls
+    assert ("GET", "/repos/owner/repo/actions/runs/101/attempts/1/jobs?per_page=100") in result.provider_calls
+
+    finding_writes = [
+        body for _method, _path, _identifier, body in result.provider_writes if "<!-- hamsterdan:finding " in body
+    ]
+    readiness_writes = [
+        body for _method, _path, _identifier, body in result.provider_writes if "<!-- hamsterdan:readiness " in body
+    ]
+    assert finding_writes == [finding_body]
+    assert readiness_writes == []
+    forbidden = ("/git/blobs", "/git/trees", "/git/commits", "/git/refs", "/merge", "/rerun", "updateRefs")
+    assert not any(
+        any(fragment in path or fragment in body for fragment in forbidden)
+        for _method, path, body in result.provider_requests
+    )
+    assert result.comments == result.quiescent_comments
+    assert len(result.runner.reviews) == result.quiescent_review_count
+
+
 @pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_clean_green_user_journey(
     tmp_path: Path,
@@ -735,3 +864,12 @@ def test_persistent_ci_regression_user_journey(
     topology: ReadinessComposition,
 ) -> None:
     assert_persistent_ci_regression(run_persistent_ci_regression(tmp_path / topology.topology, monkeypatch, topology))
+
+
+@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
+def test_seeded_review_finding_user_journey(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    topology: ReadinessComposition,
+) -> None:
+    assert_seeded_review_finding(run_seeded_review_finding(tmp_path / topology.topology, monkeypatch, topology))

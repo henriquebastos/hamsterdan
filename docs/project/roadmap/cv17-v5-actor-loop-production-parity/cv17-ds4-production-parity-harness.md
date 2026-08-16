@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Clean-green, first-attempt-flake, and persistent-CI semantic oracles pass; broader scenarios and fresh live V5 GitHub acceptance remain
+status_reason: Four content semantic oracles through seeded review finding pass; broader scenarios and fresh live V5 GitHub acceptance remain
 updated: 2026-08-16
 ---
 
@@ -87,18 +87,39 @@ Git object creation and exact ref CAS. This oracle preserves historical PR
 cannot alter the branch or scenario controls—rather than its internal number
 of agent attempts.
 
-The focused escalation, mutation, and parity portfolio passes with 118 selected
-tests. `scripts/check full` passes with 1,069 Python tests, nine Bun relay
-tests, formatting, Ruff, typing, and source/wheel builds.
+### DS4.3 — Seeded-review-finding semantic oracle
+
+The fourth journey supplies green exact-head required CI and one validated
+high-severity blocking finding from the coordinating review agent. Production
+and V5 each publish exactly one App-owned finding tied to the admitted head and
+stable operation. Both expose the finding identity, title, explanation, and
+evidence to the GitHub user, retain one blocked dashboard, publish no readiness
+advisory, and quiesce without coding, conversation, rerun, Git/ref mutation, or
+merge work. The finding therefore remains visible for human disposition even
+though every non-review gate is clear, preserving historical PR 26's intended
+behavior without requiring inline-comment parity or byte-identical prose.
+
+The scenario exposed a user-visible V5 rendering gap: the V5 batch comment had
+bound the complete validated finding in its hidden digest but displayed only
+the identity and an absent legacy `note`. The provider gate now renders the
+validated title, body, severity, location, evidence, related locations, and
+suggestion while retaining its full-payload digest and stable batch identity.
+The old sparse body remains an explicit compatible payload at both lookup
+points, so an upgraded worker reconciles an already-held pre-DS4.3 comment
+without reading the authority fence or posting again.
+
+The focused finding/gate and parity checks pass with 53 selected tests.
+`scripts/check full` passes with 1,072 Python tests, nine Bun relay tests,
+formatting, Ruff, typing, and source/wheel builds.
 
 ## Remaining deterministic portfolio
 
-The delivered content scenarios are clean green, first-attempt flake, and
-persistent CI regression. Grow the semantic oracle in small slices over the
-remaining user journeys recovered from the prior live campaign:
+The delivered content scenarios are clean green, first-attempt flake,
+persistent CI regression, and seeded review finding. Grow the semantic oracle
+in small slices over the remaining user journeys recovered from the prior live
+campaign:
 
-- content: seeded review finding, conversational change, agent repair, and hero
-  review;
+- content: conversational change, agent repair, and hero review;
 - lifecycle and authority: draft to ready, stale base, true conflict, and
   collaboration approval including requested review, changes requested,
   thread resolution, and final approval.
