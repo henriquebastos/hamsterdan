@@ -1,8 +1,8 @@
 ---
 code: CV17.DS3
 level: Delivery Story
-status: Active
-status_reason: Publication, inline-effect, reminder, and timer-wake recovery converge safely; remaining host-custody restart composition remains
+status: Complete
+status_reason: Selected V5 converges across publication, inline-effect, timer-wake, and durable webhook host-restart cuts without duplicate effects
 updated: 2026-08-16
 ---
 
@@ -100,12 +100,32 @@ tests, formatting, Ruff, typing, and package builds. Oracle boundary review
 traced the inline replay and projection-rebuild paths, then returned `clear to
 commit`.
 
-## Remaining recovery portfolio
+### DS3.3 — Durable webhook host-restart composition
 
-- Prove custodied webhook/reconciliation replay across host restart.
-- Assemble the bounded kill/restart/converge portfolio through the selected V5
-  HostService route. Torn JSONL repair remains an operator concern and is not a
-  workflow recovery behavior.
+The final slice proves the outer host crash gap without changing production
+code. A real selected-V5 `HostService` accepts a webhook into durable pending
+custody, stages its immutable manifest and authority grant, executes one
+identified Agenticus review, commits its Petrus History and timer posture, and
+then dies before `WebhookCustody.acknowledge`.
+
+Restart uses the real startup sweep. Even after provider head truth changes,
+the host replays the frozen webhook manifest without another provider read,
+Agenticus call, History delivery, or synthetic reconciliation. It terminally
+acknowledges the original delivery with zero retries, retains the original
+webhook-sourced authority revision, and keeps one timer wake hint. Graceful
+resource cleanup between the simulated processes also leaves the retained
+state unchanged.
+
+The focused selected-host, ingress, and inline-recovery portfolio passes with
+147 tests. `scripts/check full` passes with 1,055 Python tests, nine Bun relay
+tests, formatting, Ruff, typing, and package builds. Oracle found one stale
+root-roadmap status, verified its correction, and returned `clear to commit`.
+
+The complete DS3 portfolio now spans durable publication claim expiry,
+identified inline effect replay, timer and runnable projection rebuild, frozen
+reconciliation replay, and durable webhook acknowledgement recovery through
+the selected host route. Torn JSONL repair remains an operator concern and is
+not a workflow recovery behavior.
 
 ## Done condition
 

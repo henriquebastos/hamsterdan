@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 is complete; DS3 durable recovery has proven publication, inline-effect, reminder, and timer-wake convergence
+status_reason: DS2 host composition and DS3 durable recovery are complete; DS4 parity evidence remains
 updated: 2026-08-16
 ---
 
@@ -28,14 +28,16 @@ making that ruling.
   V5 publication settlement; DS2.3b adds stable identified synthetic
   reconciliation and proves the selected V5 custodied webhook route. Production
   remains untouched and default.
-- [CV17.DS3 — Durable recovery](cv17-ds3-durable-recovery.md) is active. Its
+- [CV17.DS3 — Durable recovery](cv17-ds3-durable-recovery.md) is complete. Its
   first slice proves a killed durable publication worker converges to the
   exact typed blocked terminal after restart, without an automatic retry.
   Its second slice proves unresolved inline review, findings, rerun, and
   mutation Activities redispatch the exact operation, reconcile provider and
   Agenticus ledgers, and converge without duplicate effects. Its third slice
   proves reminders reconcile by stable timer identity and canonical History
-  rebuilds timer and runnable projections after a host crash.
+  rebuilds timer and runnable projections after a host crash. Its final slice
+  proves a settled but unacknowledged webhook replays from frozen custody on
+  startup without duplicate provider, agent, History, or reconciliation work.
 - CV17.DS4 — Parity harness: ES-005 chapter-17 boundary scenarios executed
   through the real host against both topologies, compared on selected
   outcomes.

@@ -1168,6 +1168,125 @@ def test_selected_v5_routes_custodied_webhook_into_identified_history_before_ack
     host.close()
 
 
+def test_selected_v5_restart_replays_settled_webhook_after_death_before_acknowledgement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SimulatedProcessDeath(BaseException):
+        pass
+
+    class CountingRunner(V5Runner):
+        def __init__(self, calls: list[tuple[str, int]]) -> None:
+            self.calls = calls
+
+        def review(self, repository_url, request, *, operation, attempt, is_current=None):
+            self.calls.append((operation, attempt))
+            return super().review(
+                repository_url,
+                request,
+                operation=operation,
+                attempt=attempt,
+                is_current=is_current,
+            )
+
+    provider = V5Provider()
+    monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
+    runner_calls: list[tuple[str, int]] = []
+    composition, routes = agent_custody(tmp_path)
+    first = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=CountingRunner(runner_calls),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=V5,
+    )
+    first.registry.reconcile(44, ((31, "owner/one"),))
+    delivery, body = str(uuid.uuid4()), envelope()
+    receipt = first.custody.receive(
+        signed(body, delivery).items() | {("content-length", str(len(body)))},
+        body,
+    )
+    assert receipt.disposition == "accepted" and first.custody.status(delivery) == "pending"
+
+    postures = 0
+    record_posture = first._record_posture
+    crash_observation: list[tuple[str, int, str | None, int]] = []
+
+    def observe_posture(instance: str, outcome: object | None) -> None:
+        nonlocal postures
+        record_posture(instance, outcome)
+        postures += 1
+
+    def die_before_acknowledgement(item: Observation, reason: str | None = None) -> None:
+        crash_observation.append(
+            (item.delivery_id, postures, first.custody.status(item.delivery_id), first.runnable.count())
+        )
+        raise SimulatedProcessDeath
+
+    monkeypatch.setattr(first, "_record_posture", observe_posture)
+    monkeypatch.setattr(first, "_acknowledge_observation", die_before_acknowledgement)
+    with pytest.raises(SimulatedProcessDeath):
+        first.process(first.custody.pending()[0])
+
+    history = tmp_path / "applications" / "44" / "31" / "7" / "history.jsonl"
+    before_restart = history.read_text()
+    expected = tuple(f"github-delivery:{delivery}:{door}" for door in ("on_head", "on_ready", "on_human"))
+    identities = tuple(
+        value["identity"]
+        for value in map(json.loads, before_restart.splitlines())
+        if value.get("record") == "ExternalEventDelivered"
+    )
+    assert crash_observation == [(delivery, 1, "pending", 1)]
+    assert runner_calls == [(f"review:github:44:31:pr:7:{provider.head}:i1", 1)]
+    assert all(identities.count(identity) == 1 for identity in expected)
+    assert not any(identity.startswith("host-reconcile:") for identity in identities)
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        assert database.execute(
+            "SELECT status,attempts,reason,error_class FROM inbox WHERE delivery_id=?", (delivery,)
+        ).fetchone() == ("pending", 0, None, None)
+        assert database.execute(
+            "SELECT revision,source_kind,source_id FROM v5_authority_grants WHERE subject='github:44:31:pr:7'"
+        ).fetchone() == (1, "github-delivery", delivery)
+    provider_calls = tuple(provider.calls)
+    first.close()
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        assert database.execute(
+            "SELECT status,attempts,reason,error_class FROM inbox WHERE delivery_id=?", (delivery,)
+        ).fetchone() == ("pending", 0, None, None)
+    assert runner_calls == [(f"review:github:44:31:pr:7:{provider.head}:i1", 1)]
+    assert tuple(provider.calls) == provider_calls
+    assert history.read_text() == before_restart
+
+    provider.head = "c" * 40
+    composition, routes = agent_custody(tmp_path)
+    second = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=CountingRunner(runner_calls),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=V5,
+    )
+    second.registry.reconcile(44, ((31, "owner/one"),))
+    try:
+        assert second.sweep("startup") == 1
+        assert second.custody.status(delivery) == "terminal"
+        assert runner_calls == [(f"review:github:44:31:pr:7:{'a' * 40}:i1", 1)]
+        assert tuple(provider.calls) == provider_calls
+        assert history.read_text() == before_restart
+        assert second.runnable.count() == 1
+        with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+            assert database.execute(
+                "SELECT status,attempts,reason,error_class FROM inbox WHERE delivery_id=?", (delivery,)
+            ).fetchone() == ("terminal", 0, "processed", None)
+            assert database.execute(
+                "SELECT revision,source_kind,source_id FROM v5_authority_grants WHERE subject='github:44:31:pr:7'"
+            ).fetchone() == (1, "github-delivery", delivery)
+    finally:
+        second.close()
+
+
 def test_selected_v5_sweep_reconciliation_reuses_unchanged_identity_and_advances_changed_truth(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

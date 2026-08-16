@@ -40,12 +40,11 @@ support remains unaccepted; no setup, provider, or cleanup authority survives.
 Active parity delivery: [CV17 — V5 actor-loop production parity](cv17-v5-actor-loop-production-parity/index.md).
 The ES-007 actor-loop workflow model is brought to production parity as a
 parallel, selectable implementation while production stays the untouched
-default. [CV17.DS1 — The V5 net as first-class code](cv17-v5-actor-loop-production-parity/cv17-ds1-v5-net-first-class.md)
-and [CV17.DS2 — Host composition](cv17-v5-actor-loop-production-parity/cv17-ds2-host-composition.md)
+default. [CV17.DS1 — The V5 net as first-class code](cv17-v5-actor-loop-production-parity/cv17-ds1-v5-net-first-class.md),
+[CV17.DS2 — Host composition](cv17-v5-actor-loop-production-parity/cv17-ds2-host-composition.md),
+and [CV17.DS3 — Durable recovery](cv17-v5-actor-loop-production-parity/cv17-ds3-durable-recovery.md)
 are complete. V5 now has provider gates, durable ingress, authority ordering,
 canonical timer custody, fail-closed topology selection, stable synthetic
-reconciliation, and a selected end-to-end custodied webhook route. Durable V5
-restart/recovery is active under
-[CV17.DS3](cv17-v5-actor-loop-production-parity/cv17-ds3-durable-recovery.md):
-durable publication claim expiry now converges to exact typed blocked custody,
-and the remaining inline-effect and host-custody restart portfolio is next.
+reconciliation, and selected-host restart convergence across publication,
+inline-effect, timer-wake, and webhook-acknowledgement crash cuts. The DS4
+production-parity harness remains.
