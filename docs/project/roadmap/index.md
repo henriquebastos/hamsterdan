@@ -45,4 +45,7 @@ and [CV17.DS2 — Host composition](cv17-v5-actor-loop-production-parity/cv17-ds
 are complete. V5 now has provider gates, durable ingress, authority ordering,
 canonical timer custody, fail-closed topology selection, stable synthetic
 reconciliation, and a selected end-to-end custodied webhook route. Durable V5
-restart/recovery is next under CV17.DS3.
+restart/recovery is active under
+[CV17.DS3](cv17-v5-actor-loop-production-parity/cv17-ds3-durable-recovery.md):
+durable publication claim expiry now converges to exact typed blocked custody,
+and the remaining inline-effect and host-custody restart portfolio is next.

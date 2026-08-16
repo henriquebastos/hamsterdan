@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from collections.abc import Sequence as SequenceABC
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from types import MappingProxyType, UnionType
 from typing import Any, cast, get_args
 
@@ -29,12 +29,26 @@ from petrus.impetus.petrinet import NetPath, Token
 from petrus.impetus.petrinet.schema import Net, NetUri
 from petrus.motus.activity import (
     ActivityDefinition,
+    ActivityFailure,
     ActivityInvocation,
     DataclassPayloadConverter,
+    ExecutionPolicy,
     JsonPayloadConverter,
 )
 
+from hamsterdan.contracts.readiness_v5 import (
+    ABlocked,
+    AnnounceReq,
+    DashBlocked,
+    DashReq,
+    ReplyBlocked,
+    ReplyReq,
+    WorkflowModel,
+)
+
 _JSON = JsonPayloadConverter()
+_DURABLE_PUBLICATION_GATES = frozenset({"reply_gate", "dash_gate", "announce_gate"})
+_DURABLE_PUBLICATION_POLICY = ExecutionPolicy(attempts=1)
 
 # transition path -> (activity name, declared variant colors)
 GateSpec = tuple[str, tuple[str, ...]]
@@ -145,6 +159,66 @@ class VariantRoutingActivityHandler:
         return {target: (Token(variant, payload),)}
 
 
+@dataclass(frozen=True)
+class DurablePublicationActivityHandler(VariantRoutingActivityHandler):
+    """Pin provider identity and project only known durable claim expiry."""
+
+    def _request(self, binding: Binding) -> WorkflowModel:
+        invocation = super().prepare(binding)
+        payload = cast(Mapping[str, object], invocation.input)
+        annotation = self.definition.parameters[self._parameter]
+        request = self.definition.converter.decode(payload[self._parameter], annotation)
+        if not isinstance(request, WorkflowModel):
+            raise TypeError(f"Durable publication gate decoded {type(request).__name__}, not a WorkflowModel")
+        return request
+
+    def prepare(self, binding: Binding) -> ActivityInvocation:
+        invocation = super().prepare(binding)
+        request = self._request(binding)
+        if isinstance(request, ReplyReq):
+            operation = f"reply:{request.id}"
+        elif isinstance(request, DashReq):
+            operation = f"dash:{request.digest}"
+        elif isinstance(request, AnnounceReq):
+            operation = request.op
+        else:
+            raise TypeError(f"Durable publication gate received unsupported request {type(request).__name__}")
+        return replace(
+            invocation,
+            policy=_DURABLE_PUBLICATION_POLICY,
+            correlation=operation,
+            idempotency=operation,
+        )
+
+    def project_failure(self, binding: Binding, failure: ActivityFailure):
+        if failure.kind != "DeadlineExceeded":
+            raise RuntimeError(
+                f"{failure.kind} failure for durable V5 publication {self.definition.declaration.name!r} "
+                "cannot be projected"
+            )
+        request = self._request(binding)
+        if isinstance(request, ReplyReq):
+            blocked: WorkflowModel = ReplyBlocked(id=request.id, text=request.text)
+        elif isinstance(request, DashReq):
+            blocked = DashBlocked(
+                entries=list(request.entries),
+                digest=request.digest,
+                desired_entries=list(request.desired_entries),
+                desired_digest=request.desired_digest,
+            )
+        elif isinstance(request, AnnounceReq):
+            blocked = ABlocked(
+                incarnation=request.incarnation,
+                head=request.head,
+                base=request.base,
+                policy=request.policy,
+            )
+        else:
+            raise TypeError(f"Durable publication gate received unsupported request {type(request).__name__}")
+        result = self.definition.converter.encode(blocked, self.definition.result)
+        return self.project(binding, result)
+
+
 def wire_gates(
     built: BuiltNet,
     gates: Mapping[str, GateSpec],
@@ -159,9 +233,10 @@ def wire_gates(
     handlers: dict = dict(built.handlers)
     for transition, (name, variants) in gates.items():
         uri = built.net.handler_uri(NetPath(transition))
-        handlers[uri] = VariantRoutingActivityHandler(
-            built.net, NetPath(transition), definitions[name], variants=variants
+        handler = (
+            DurablePublicationActivityHandler if name in _DURABLE_PUBLICATION_GATES else VariantRoutingActivityHandler
         )
+        handlers[uri] = handler(built.net, NetPath(transition), definitions[name], variants=variants)
     for transition, name in (derived or {}).items():
         uri = built.net.handler_uri(NetPath(transition))
         handlers[uri] = DerivedActivityHandler(built.net, NetPath(transition), definitions[name])

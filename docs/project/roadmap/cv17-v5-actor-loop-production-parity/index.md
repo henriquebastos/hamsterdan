@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 host composition is complete; DS3 durable V5 recovery is next
+status_reason: DS2 is complete; DS3 durable recovery is active with publication claim-expiry recovery proven
 updated: 2026-08-16
 ---
 
@@ -28,13 +28,15 @@ making that ruling.
   V5 publication settlement; DS2.3b adds stable identified synthetic
   reconciliation and proves the selected V5 custodied webhook route. Production
   remains untouched and default.
-- CV17.DS3 — Durable recovery: V5 on the durable history store with
-  kill/restart/converge scenarios.
+- [CV17.DS3 — Durable recovery](cv17-ds3-durable-recovery.md) is active. Its
+  first slice proves a killed durable publication worker converges to the
+  exact typed blocked terminal after restart, without an automatic retry;
+  explicit recovery reuses the provider identity and retained request.
 - CV17.DS4 — Parity harness: ES-005 chapter-17 boundary scenarios executed
   through the real host against both topologies, compared on selected
   outcomes.
 
-DS3–DS4 records are scaffolded when their slice begins.
+The DS4 record is scaffolded when its slice begins.
 
 ## Done condition
 
