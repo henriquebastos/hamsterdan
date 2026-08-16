@@ -58,17 +58,19 @@ account permissions):
 | Pull requests | Read and write — PR authority, reviews, requested reviewers, review threads, and PR-thread comments |
 
 Subscribe to exactly: **Issue comment**, **Pull request**, **Pull request
-review**, **Pull request review comment**, and **Workflow run**. Metadata read is
-implicit. The live provider denied PR-thread comment creation to an installation
-token carrying `issues=write` and `pull_requests=read`; its accepted-permissions
+review**, **Pull request review comment**, **Pull request review thread**, and
+**Workflow run**. The review-thread event is required to observe native thread
+resolution without inventing a review-comment edit. Metadata read is implicit.
+The live provider denied PR-thread comment creation to an installation token
+carrying `issues=write` and `pull_requests=read`; its accepted-permissions
 response required `pull_requests=write`. Host code still exposes no merge,
 formal-review, or PR-edit operation, and every admitted comment effect retains
-its current-head/operation fence. GitHub also sends App lifecycle **Ping**, **Installation**, and
-**Installation repositories** deliveries; they are verified and applied but do
-not appear in the selectable startup event set. These values are
-startup-validated against the provider. No Checks, statuses, formal-review
-writes, Actions writes, Workflows writes, merge, bypass, organization, or user
-permission belongs in this first App. Permission
+its current-head/operation fence. GitHub also sends App lifecycle **Ping**,
+**Installation**, and **Installation repositories** deliveries; they are
+verified and applied but do not appear in the selectable startup event set.
+These values are startup-validated against the provider. No Checks, statuses,
+formal-review writes, Actions writes, Workflows writes, merge, bypass,
+organization, or user permission belongs in this first App. Permission
 semantics: <https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps>;
 webhook events: <https://docs.github.com/en/webhooks/webhook-events-and-payloads>.
 
