@@ -17,9 +17,11 @@ from hamsterdan.github_app.config import ConfigurationError, HostConfig
 
 from .agenticus import AgentRouteStore, compose_agent, compose_agent_runner
 from .api import create_app
+from .binding import parse_instance_binding, preflight_topology
 from .pi_a2 import PiA2InstallationConfig, compose_owned_pi_a2
 from .pi_workspace import GitPiWorkspaceProvider
 from .service import HostService, QualificationFault
+from .topology import select_readiness_composition
 
 MAX_HISTORY_BYTES = 16 * 1024 * 1024
 MAX_BINDING_BYTES = 4096
@@ -116,20 +118,23 @@ def inspect_instance(
     binding = root / "binding.json"
     try:
         raw = _read_bounded_regular(history, MAX_HISTORY_BYTES)
-        bound = json.loads(_read_bounded_regular(binding, MAX_BINDING_BYTES).decode("utf-8"))
+        bound_value = json.loads(_read_bounded_regular(binding, MAX_BINDING_BYTES).decode("utf-8"))
         records = [json.loads(line) for line in raw.decode("utf-8").splitlines()]
     except OSError, UnicodeError, json.JSONDecodeError:
         raise ValueError("Instance state cannot be inspected safely") from None
+    try:
+        bound = parse_instance_binding(bound_value)
+    except ValueError:
+        raise ValueError("Instance state binding is malformed") from None
     if (
-        not isinstance(bound, dict)
-        or bound.get("pull_request") != pull_request
+        bound.pull_request != pull_request
         or not records
         or not all(isinstance(record, dict) and isinstance(record.get("record"), str) for record in records)
     ):
         raise ValueError("Instance state binding or History is malformed")
     expected_instance = f"github:{installation_id}:{repository_id}:pr:{pull_request}"
-    instance_id = _identifier(bound.get("instance_id"), "Instance identity is malformed")
-    repository = _identifier(bound.get("repository"), "Instance repository is malformed")
+    instance_id = _identifier(bound.instance_id, "Instance identity is malformed")
+    repository = _identifier(bound.repository, "Instance repository is malformed")
     if instance_id != expected_instance:
         raise ValueError("Instance state binding does not match its selected path")
     requested: dict[int, dict[str, object]] = {}
@@ -172,6 +177,7 @@ def inspect_instance(
         "instance_id": instance_id,
         "repository": repository,
         "pull_request": pull_request,
+        "topology": bound.topology,
         "record_count": len(records),
         "last_instant": last_instant,
         "activities": {
@@ -221,6 +227,8 @@ def main() -> int:
                 )
             )
             return 0
+        readiness_composition = select_readiness_composition(os.getenv("HAMSTERDAN_READINESS_TOPOLOGY"))
+        preflight_topology(config.state_path, readiness_composition.topology)
         agent = compose_agent(os.environ)
         route_store = AgentRouteStore(config.state_path / "agent-routes.sqlite3")
         route_store.activate(agent, config.state_path / "applications")
@@ -231,6 +239,7 @@ def main() -> int:
             agent_composition=agent,
             agent_routes=route_store,
             agent_runtime=pi_runtime,
+            readiness_composition=readiness_composition,
             workflow_path=os.getenv("HAMSTERDAN_WORKFLOW_PATH", ".github/workflows/ci.yml"),
             reminder_delay=float(os.getenv("HAMSTERDAN_REMINDER_SECONDS", "259200")),
             qualification_fault=QualificationFault.from_environment(),

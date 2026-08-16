@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Callable
 from dataclasses import replace
@@ -18,7 +17,9 @@ from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, 
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import GitHubBoundaryError
 from hamsterdan.github_app.webhooks import Observation
+from hamsterdan.host.binding import ensure_instance_binding
 from hamsterdan.host.git_publish import HostGitPublisher
+from hamsterdan.host.protocol import DurableActivityResolver
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.gates import V5PublicationGates
 from hamsterdan.host.v5.ingress import IngressEntry, V5IngressNormalizer, V5IngressStore
@@ -64,6 +65,7 @@ class PrReadinessV5Application:
         publication_fault: EffectFault | None = None,
         dispatch_path: Path | None = None,
         timer_clock_us: Callable[[], int] | None = None,
+        durable_activity_resolver: DurableActivityResolver | None = None,
     ) -> None:
         if (
             isinstance(reminder_delay, bool)
@@ -138,6 +140,7 @@ class PrReadinessV5Application:
             agent_settle=agent_settle,
             mutation_operation=lambda op_key: f"mutation:{authority.repository}:pr:{authority.pr_number}:{op_key}",
             reminder_delay_s=reminder_delay_s,
+            durable_activity_resolver=durable_activity_resolver,
         )
         timer_options = {} if timer_clock_us is None else {"clock_us": timer_clock_us}
         self.timers = V5TimerStore.open(
@@ -149,27 +152,16 @@ class PrReadinessV5Application:
         )
 
     def _bind_state_root(self) -> None:
-        expected = {
-            "instance_id": self.instance_id,
-            "repository": self.authority.repository,
-            "pull_request": self.authority.pr_number,
-        }
-        binding = self.root / "binding.json"
-        if binding.exists():
-            try:
-                observed = json.loads(binding.read_text(encoding="utf-8"))
-            except OSError, json.JSONDecodeError:
-                raise RuntimeError("V5 state binding is unreadable") from None
-            if observed != expected:
-                raise RuntimeError("V5 state root belongs to a different PR Instance")
-            return
-        if (self.root / "history.jsonl").exists():
-            raise RuntimeError("V5 History has no subject binding")
-        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        temporary = binding.with_suffix(".tmp")
-        temporary.write_text(json.dumps(expected, sort_keys=True, separators=(",", ":")), encoding="utf-8")
-        temporary.chmod(0o600)
-        temporary.replace(binding)
+        try:
+            ensure_instance_binding(
+                self.root,
+                "v5",
+                self.instance_id,
+                self.authority.repository,
+                self.authority.pr_number,
+            )
+        except RuntimeError as error:
+            raise RuntimeError(f"V5 {error}") from None
 
     def current_claim(self) -> CurrentClaim:
         if self.ingress.has_unstaged_custody(self.instance_id):
@@ -379,6 +371,9 @@ class PrReadinessV5Application:
 
     def run_durable_activities(self, limit: int) -> int:
         return self._runtime().run_durable_activities(limit)
+
+    def stop_durable_activities(self) -> None:
+        self._runtime().stop_durable_activities()
 
     def _runtime(self) -> V5Runtime:
         if self.runtime is None:

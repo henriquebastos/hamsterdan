@@ -9,25 +9,16 @@ import os
 import re
 import threading
 import time
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
 from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
-from petrus.motus.activity import ActivityError
+from petrus.motus.activity import Activity, ActivityDefinition, ActivityError
 from petrus.motus.dispatch import LocalDispatch
 from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, AgentRunner
-from hamsterdan.contracts.readiness import (
-    AdmittedConversation,
-    ConversationPublicationRequest,
-    ConversationPublicationResult,
-    DashboardPublicationRequest,
-    DashboardPublicationResult,
-    ReadinessCommand,
-    ReadinessPublicationResult,
-)
+from hamsterdan.contracts.readiness import AdmittedConversation
 from hamsterdan.github_app.auth import GitHubAppClients
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.gateway import GitHubAuthority
@@ -35,20 +26,17 @@ from hamsterdan.github_app.models import GitHubBoundaryError
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 from hamsterdan.github_app.webhooks import Observation, WebhookCustody, admit_conversation
-from hamsterdan.readiness.payloads import PydanticPayloadConverter
 
 from .agenticus import AgentComposition, AgentRouteStore, RoutedAgentRunner
-from .application import PrReadinessApplication
+from .binding import preflight_topology, read_instance_binding
 from .protocol import ReadinessApplication
 from .runnable import RunnableIndex
+from .topology import PRODUCTION, ReadinessComposition
 
 LOG = logging.getLogger("hamsterdan.host")
-ApplicationFactory = Callable[..., ReadinessApplication]
 _FAULT_BOUNDARIES = frozenset({"agent", "comment"})
 _FAULT_PHASES = frozenset({"timed_out", "malformed", "before_call", "after_call"})
 _INSTANCE_PATTERN = re.compile(r"github:([1-9][0-9]*):([1-9][0-9]*):pr:([1-9][0-9]*)\Z")
-_REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
-_DURABLE_PUBLICATIONS = frozenset({"conversation_publish", "dashboard_publish", "readiness_publish"})
 
 
 @dataclass
@@ -158,7 +146,7 @@ class HostService:
         agent_composition: AgentComposition,
         agent_routes: AgentRouteStore,
         agent_runtime: PiA2RuntimeHost | None = None,
-        application_factory: ApplicationFactory = PrReadinessApplication,
+        readiness_composition: ReadinessComposition = PRODUCTION,
         workflow_path: str = ".github/workflows/ci.yml",
         reminder_delay: float = 259200,
         poll_interval: float = 0.25,
@@ -167,6 +155,8 @@ class HostService:
     ) -> None:
         self.config = config
         self.root = config.state_path
+        self.readiness_composition = readiness_composition
+        preflight_topology(self.root, readiness_composition.topology)
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.clients = clients or GitHubAppClients(config, metadata_hook=self._request_metadata)
         self.registry = InstallationRegistry(
@@ -174,7 +164,7 @@ class HostService:
         )
         _, secret = config._credentials()
         self.custody = WebhookCustody(self.root / "webhooks.sqlite3", webhook_secret=secret, registry=self.registry)
-        self.runner, self.application_factory = runner, application_factory
+        self.runner = runner
         self.agent_composition, self.agent_routes, self.agent_runtime = agent_composition, agent_routes, agent_runtime
         self.workflow_path, self.reminder_delay, self.poll_interval = workflow_path, reminder_delay, poll_interval
         self.sweep_interval = sweep_interval
@@ -190,12 +180,14 @@ class HostService:
         self._scheduler_errors: dict[str, str] = {}
         self.runnable = RunnableIndex(self.root / "runnable.sqlite3")
         dispatch_path = self.root / "activity-dispatch.sqlite3"
-        provider = LocalDispatch(dispatch_path, instance="host-worker").worker(("publication",))
-        self.activity_worker = Worker(provider, {}, resolver=self._resolve_activity)
+        self.activity_worker: Worker | None = None
+        if readiness_composition.topology == "production":
+            provider = LocalDispatch(dispatch_path, instance="host-worker").worker(("publication",))
+            self.activity_worker = Worker(provider, {}, resolver=self._resolve_activity)
         self._dispatch_path = dispatch_path
 
     def _resolve_activity(self, instance: str, name: str):
-        if name not in _DURABLE_PUBLICATIONS:
+        if name not in self.readiness_composition.durable_activity_names:
             return None
         match = _INSTANCE_PATTERN.fullmatch(instance)
         if match is None:
@@ -209,22 +201,45 @@ class HostService:
             return self._invalid_publication_scope
         if implementation is None:
             return self._invalid_publication_scope
+        return self._guard_durable_activity(instance, name, implementation, acquire_lock=True)
+
+    def _guard_durable_activity(
+        self,
+        instance: str,
+        name: str,
+        implementation: ActivityDefinition,
+        *,
+        acquire_lock: bool = False,
+    ) -> Activity | None:
+        if name not in self.readiness_composition.durable_activity_names:
+            return None
+        match = _INSTANCE_PATTERN.fullmatch(instance)
+        if match is None:
+            return self._invalid_publication_scope
+        installation_id, repository_id, pull_request_number = (int(value) for value in match.groups())
+        key = installation_id, repository_id, pull_request_number
 
         def wake(invocation, *, context):
             try:
-                with self._locks[key]:
-                    try:
-                        if self.registry.route(key[0], key[1]) is None:
-                            return self._stale_publication_result(name, invocation)
-                        return implementation(invocation, context=context)
-                    except ActivityError:
-                        raise
-                    except Exception as error:
-                        raise ActivityError(
-                            "publication invariant failed",
-                            kind=type(error).__name__,
-                            retryable=False,
-                        ) from error
+
+                def invoke() -> object:
+                    if self.registry.route(key[0], key[1]) is None:
+                        return self.readiness_composition.inactive_result(name, invocation, implementation)
+                    return implementation(invocation, context=context)
+
+                try:
+                    if acquire_lock:
+                        with self._locks[key]:
+                            return invoke()
+                    return invoke()
+                except ActivityError:
+                    raise
+                except Exception as error:
+                    raise ActivityError(
+                        "publication invariant failed",
+                        kind=type(error).__name__,
+                        retryable=False,
+                    ) from error
             finally:
                 self.runnable.wake(instance, time.time(), "activity-terminal", name)
 
@@ -233,35 +248,6 @@ class HostService:
     @staticmethod
     def _invalid_publication_scope(invocation, *, context):
         raise ActivityError("publication scope is unavailable", kind="PublicationScopeError", retryable=False)
-
-    @staticmethod
-    def _stale_publication_result(name: str, invocation: object) -> object:
-        converter = PydanticPayloadConverter()
-        try:
-            payload = cast(Any, invocation).input
-            request_name = "command" if name == "readiness_publish" else "work"
-            request_type = {
-                "conversation_publish": ConversationPublicationRequest,
-                "dashboard_publish": DashboardPublicationRequest,
-                "readiness_publish": ReadinessCommand,
-            }[name]
-            result_type = {
-                "conversation_publish": ConversationPublicationResult,
-                "dashboard_publish": DashboardPublicationResult,
-                "readiness_publish": ReadinessPublicationResult,
-            }[name]
-            if not isinstance(payload, dict) or request_name not in payload:
-                raise TypeError("publication invocation has no request")
-            request = cast(
-                ConversationPublicationRequest | DashboardPublicationRequest | ReadinessCommand,
-                converter.decode(payload[request_name], request_type),
-            )
-            result = result_type(request.epoch, request.head, False, request.operation, True)
-            return converter.encode(result, result_type)
-        except Exception as error:
-            raise ActivityError(
-                "publication scope is unavailable", kind="PublicationScopeError", retryable=False
-            ) from error
 
     def _request_metadata(self, metadata: Any) -> None:
         LOG.info(
@@ -311,27 +297,21 @@ class HostService:
             instance = f"github:{installation_id}:{repository_id}:pr:{pull_request_number}"
             root = self.root / "applications" / str(installation_id) / str(repository_id) / str(pull_request_number)
             if route is None:
-                binding = root / "binding.json"
                 try:
-                    if binding.is_symlink() or not binding.is_file() or binding.stat().st_size > 4096:
+                    if root.is_symlink() or not root.is_dir():
                         raise ValueError
-                    persisted = json.loads(binding.read_text(encoding="utf-8"))
-                except OSError, ValueError, json.JSONDecodeError:
+                    binding = read_instance_binding(root / "binding.json")
+                except OSError, ValueError, RuntimeError:
                     raise RuntimeError("inactive route has no strict durable binding") from None
-                expected_names = {"instance_id", "repository", "pull_request"}
-                repository = persisted.get("repository") if isinstance(persisted, dict) else None
                 if (
-                    not isinstance(persisted, dict)
-                    or set(persisted) != expected_names
-                    or persisted.get("instance_id") != instance
-                    or type(persisted.get("pull_request")) is not int
-                    or persisted.get("pull_request") != pull_request_number
-                    or not isinstance(repository, str)
-                    or _REPOSITORY_PATTERN.fullmatch(repository) is None
+                    binding.topology != self.readiness_composition.topology
+                    or binding.instance_id != instance
+                    or binding.pull_request != pull_request_number
+                    or (root / "history.jsonl").is_symlink()
                     or not (root / "history.jsonl").is_file()
                 ):
                     raise RuntimeError("inactive route has no strict durable binding")
-                repository_full_name = repository
+                repository_full_name = binding.repository
             else:
                 assert route is not None
                 repository_full_name = route.repository_full_name
@@ -356,7 +336,7 @@ class HostService:
                     )
                 ),
             )
-            application = self.application_factory(
+            application = self.readiness_composition.application_factory(
                 root,
                 f"github:{installation_id}:{repository_id}:pr:{pull_request_number}",
                 authority,
@@ -369,6 +349,7 @@ class HostService:
                 agent_settle=self.agent_routes.settle,
                 dispatch_path=self._dispatch_path,
                 custody_path=self.root / "webhooks.sqlite3",
+                durable_activity_resolver=self._guard_durable_activity,
             )
             self._locks[key] = threading.Lock()
             self._apps[key] = application
@@ -540,11 +521,12 @@ class HostService:
                     processed += completed
                     if completed:
                         self._record_posture(instance, application.settle())
-            processed += self.activity_worker.run_available(limit=limit - processed)
+            if self.activity_worker is not None:
+                processed += self.activity_worker.run_available(limit=limit - processed)
             # Repair locally generated terminals which did not execute through
             # the resolver. The durable Dispatch/History remain authoritative.
             for instance, key in tuple(self._instances.items()):
-                if self._apps[key].has_unresolved_publication():
+                if self.readiness_composition.has_unresolved(self._apps[key]):
                     self.runnable.wake(instance, time.time(), "dispatch-repair", "unresolved-publication")
             return processed
 
@@ -670,7 +652,12 @@ class HostService:
 
     def stop(self) -> None:
         self._stop.set()
-        self.activity_worker.stop()
+        with self._application_lock:
+            applications = tuple(self._apps.values())
+        for application in applications:
+            application.stop_durable_activities()
+        if self.activity_worker is not None:
+            self.activity_worker.stop()
 
     def health(self) -> dict[str, object]:
         return {
@@ -714,7 +701,8 @@ class HostService:
             except Exception as error:  # noqa: BLE001 -- remaining resources still require closure
                 failure = error
             try:
-                self.activity_worker.close()
+                if self.activity_worker is not None:
+                    self.activity_worker.close()
             except Exception as error:  # noqa: BLE001 -- remaining resources still require closure
                 if failure is None:
                     failure = error

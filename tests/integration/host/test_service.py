@@ -4,24 +4,48 @@ import hashlib
 import hmac
 import json
 import sqlite3
+import sys
 import threading
 import time
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from petrus.motus.activity import ActivityError, ActivityInvocation
+from petrus.motus.activity import ActivityError, ActivityInvocation, activity
+from petrus.motus.dispatch import LocalDispatch
+from petrus.motus.worker import Worker
 
 from hamsterdan.contracts.readiness import AdmittedConversation, ConversationPublicationRequest, Intent
+from hamsterdan.contracts.readiness_v5 import (
+    ABlocked,
+    AFault,
+    ALanded,
+    AMoved,
+    AnnounceReq,
+    DashBlocked,
+    DashFault,
+    DashLanded,
+    DashReq,
+    Replied,
+    ReplyBlocked,
+    ReplyFault,
+    ReplyReq,
+)
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.models import RegistrationInventory
 from hamsterdan.github_app.webhooks import Observation
+from hamsterdan.host import __main__ as host_main
 from hamsterdan.host.__main__ import inspect_instance
 from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
+from hamsterdan.host.binding import ensure_instance_binding, read_instance_binding
 from hamsterdan.host.service import HostService, QualificationFault
+from hamsterdan.host.topology import PRODUCTION, V5, ReadinessComposition
+from hamsterdan.host.v5.application import PrReadinessV5Application
+from hamsterdan.readiness.net_v5.gating import VariantPayloadConverter
 
 
 class Response:
@@ -113,6 +137,9 @@ class Application:
         self.durable_runs += 1
         return 0
 
+    def stop_durable_activities(self) -> None:
+        pass
+
     def close(self) -> None:
         self.closed += 1
 
@@ -131,15 +158,21 @@ def config(root: Path) -> HostConfig:
     )
 
 
-def service(root: Path, *, clients: Clients | None = None, factory: Any = Application) -> HostService:
-    composition, routes = agent_custody(root)
+def service(
+    root: Path,
+    *,
+    clients: Clients | None = None,
+    factory: Any = Application,
+    readiness_composition: ReadinessComposition = PRODUCTION,
+) -> HostService:
+    agent_composition, routes = agent_custody(root)
     result = HostService(
         config(root),
         clients=clients or Clients(),
         runner=object(),
-        agent_composition=composition,
+        agent_composition=agent_composition,
         agent_routes=routes,
-        application_factory=factory,
+        readiness_composition=replace(readiness_composition, application_factory=factory),
     )
     result.registry.reconcile(44, ((31, "owner/one"), (32, "owner/two")))
     return result
@@ -152,9 +185,36 @@ def agent_custody(root: Path):
     return composition, routes
 
 
+def bind_application(root: Path, repository: str = "owner/one") -> None:
+    installation_id, repository_id, pull_request = (int(part) for part in root.parts[-3:])
+    ensure_instance_binding(
+        root,
+        "production",
+        f"github:{installation_id}:{repository_id}:pr:{pull_request}",
+        repository,
+        pull_request,
+    )
+
+
 def test_host_service_requires_agent_route_custody(tmp_path: Path) -> None:
     with pytest.raises(TypeError, match="agent_composition"):
         HostService(config(tmp_path), runner=object())  # type: ignore[call-arg, arg-type]
+
+
+def test_unknown_startup_selector_stops_before_agent_or_provider_composition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    composed: list[str] = []
+    monkeypatch.setattr(HostConfig, "from_environment", classmethod(lambda cls: config(tmp_path)))
+    monkeypatch.setattr(host_main, "compose_agent", lambda environment: composed.append("agent"))
+    monkeypatch.setattr(sys, "argv", ["hamsterdan.host", "serve"])
+    monkeypatch.setenv("HAMSTERDAN_READINESS_TOPOLOGY", "V5")
+
+    with pytest.raises(SystemExit) as raised:
+        host_main.main()
+
+    assert raised.value.code == 2
+    assert composed == []
 
 
 def test_agent_route_is_claimed_from_explicit_execution_identity_before_start(tmp_path: Path) -> None:
@@ -179,7 +239,7 @@ def test_agent_route_is_claimed_from_explicit_execution_identity_before_start(tm
         runner=runner,  # type: ignore[arg-type]
         agent_composition=composition,
         agent_routes=routes,
-        application_factory=Application,
+        readiness_composition=replace(PRODUCTION, application_factory=Application),
     )
     host.registry.reconcile(44, ((31, "owner/one"),))
     app = host._application(44, 31, 7)
@@ -662,24 +722,32 @@ def test_same_subject_delivery_waits_behind_an_earlier_deferred_failure(tmp_path
     host.close()
 
 
-def test_periodic_sweep_reopens_active_instances_and_skips_unbound_inactive_roots(tmp_path: Path) -> None:
+def test_periodic_sweep_reopens_active_and_inactive_bound_instances(tmp_path: Path) -> None:
     for repository, pr in ((31, 7), (31, 8), (999, 9)):
         root = tmp_path / "applications" / "44" / str(repository) / str(pr)
-        root.mkdir(parents=True)
+        bind_application(root, "owner/inactive" if repository == 999 else "owner/one")
         (root / "history.jsonl").write_text("", encoding="utf-8")
     made: list[Application] = []
     host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
 
-    assert host.sweep("startup") == 2
-    assert [item.args[1] for item in made] == ["github:44:31:pr:7", "github:44:31:pr:8"]
-    assert [item.reconciles for item in made] == [["startup:44:31:7"], ["startup:44:31:8"]]
-    assert host.sweep() == 2
-    assert [item.reconciles[-1] for item in made] == ["periodic:44:31:7", "periodic:44:31:8"]
+    assert host.sweep("startup") == 3
+    assert [item.args[1] for item in made] == [
+        "github:44:31:pr:7",
+        "github:44:31:pr:8",
+        "github:44:999:pr:9",
+    ]
+    assert [item.reconciles for item in made] == [["startup:44:31:7"], ["startup:44:31:8"], []]
+    assert host.sweep() == 3
+    assert [item.reconciles for item in made] == [
+        ["startup:44:31:7", "periodic:44:31:7"],
+        ["startup:44:31:8", "periodic:44:31:8"],
+        [],
+    ]
 
 
 def test_startup_sweep_applies_pending_comment_without_duplicate_provider_reconciliation(tmp_path: Path) -> None:
     root = tmp_path / "applications/44/31/7"
-    root.mkdir(parents=True)
+    bind_application(root)
     (root / "history.jsonl").write_text("", encoding="utf-8")
     made: list[Application] = []
     host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
@@ -710,7 +778,7 @@ def test_startup_sweep_applies_pending_comment_without_duplicate_provider_reconc
 
 def test_startup_sweep_finds_instance_comment_beyond_global_pending_batch(tmp_path: Path) -> None:
     root = tmp_path / "applications/44/31/7"
-    root.mkdir(parents=True)
+    bind_application(root)
     (root / "history.jsonl").write_text("", encoding="utf-8")
     made: list[Application] = []
     host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
@@ -752,7 +820,7 @@ def test_startup_sweep_finds_instance_comment_beyond_global_pending_batch(tmp_pa
 
 def test_sweep_does_not_reconcile_while_addressed_comment_retry_is_deferred(tmp_path: Path) -> None:
     root = tmp_path / "applications/44/31/7"
-    root.mkdir(parents=True)
+    bind_application(root)
     (root / "history.jsonl").write_text("", encoding="utf-8")
     made: list[Application] = []
     host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
@@ -783,7 +851,7 @@ def test_sweep_does_not_reconcile_while_addressed_comment_retry_is_deferred(tmp_
 
 def test_sweep_waits_for_actionable_comment_beyond_same_instance_batch(tmp_path: Path) -> None:
     root = tmp_path / "applications/44/31/7"
-    root.mkdir(parents=True)
+    bind_application(root)
     (root / "history.jsonl").write_text("", encoding="utf-8")
     made: list[Application] = []
     host = service(tmp_path, factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1])
@@ -826,7 +894,7 @@ def test_sweep_waits_for_actionable_comment_beyond_same_instance_batch(tmp_path:
 
 def test_scoped_resolver_reconstructs_persisted_application_and_rejects_non_publication_names(tmp_path: Path) -> None:
     root = tmp_path / "applications/44/31/7"
-    root.mkdir(parents=True)
+    bind_application(root)
     (root / "history.jsonl").write_text("", encoding="utf-8")
     calls: list[str] = []
 
@@ -844,6 +912,122 @@ def test_scoped_resolver_reconstructs_persisted_application_and_rejects_non_publ
     assert calls == ["dashboard_publish"]
     assert host._resolve_activity("github:44:31:pr:7", "review") is None
     assert host._resolve_activity("not-a-pr-instance", "dashboard_publish") is not None
+    host.close()
+
+
+def test_v5_revoked_route_settles_instance_queue_as_typed_blocked_without_provider_calls(tmp_path: Path) -> None:
+    provider_calls: list[str] = []
+
+    @activity(name="reply_gate", converter=VariantPayloadConverter())
+    def reply(work: ReplyReq) -> Replied | ReplyBlocked | ReplyFault:
+        provider_calls.append(f"reply:{work.id}")
+        raise AssertionError("revoked reply reached provider")
+
+    @activity(name="dash_gate", converter=VariantPayloadConverter())
+    def dash(work: DashReq) -> DashLanded | DashBlocked | DashFault:
+        provider_calls.append(f"dash:{work.digest}")
+        raise AssertionError("revoked dashboard reached provider")
+
+    @activity(name="announce_gate", converter=VariantPayloadConverter())
+    def announce(work: AnnounceReq) -> ALanded | AMoved | ABlocked | AFault:
+        provider_calls.append(f"announce:{work.op}")
+        raise AssertionError("revoked announcement reached provider")
+
+    definitions = {item.declaration.name: item for item in (reply, dash, announce)}
+    works = {
+        "reply_gate": ReplyReq(id="comment-7", text="safe reply"),
+        "dash_gate": DashReq(entries=["one"], digest="d1", desired_entries=["one", "two"], desired_digest="d2"),
+        "announce_gate": AnnounceReq(op="ready:h1:i3", incarnation=3, head="h1", base="b1", policy="p1"),
+    }
+    blocked = {
+        "reply_gate": ReplyBlocked(id="comment-7", text="safe reply"),
+        "dash_gate": DashBlocked(entries=["one"], digest="d1", desired_entries=["one", "two"], desired_digest="d2"),
+        "announce_gate": ABlocked(incarnation=3, head="h1", base="b1", policy="p1"),
+    }
+    host = service(tmp_path, readiness_composition=V5)
+    application = host._application(44, 31, 7)
+    assert host.readiness_composition.topology == "v5"
+    assert host.activity_worker is None
+    assert application.kwargs["durable_activity_resolver"].__self__ is host
+
+    instance = "github:44:31:pr:7"
+    queue = f"v5-publication:{instance}"
+    dispatch_path = tmp_path / "activity-dispatch.sqlite3"
+    sender = LocalDispatch(
+        dispatch_path,
+        instance=instance,
+        activity_queues={name: queue for name in definitions},
+    )
+    for occurrence, (name, work) in enumerate(works.items(), start=1):
+        sender.dispatch(occurrence, ActivityInvocation(name, input={"work": work.dump()}))
+    production = LocalDispatch(dispatch_path, instance="production-inspector").worker(("publication",))
+    assert production.claim() is None
+    production.close()
+    host.registry.installation("suspend", 44, 23)
+    worker = Worker(
+        LocalDispatch(dispatch_path, instance="v5-worker").worker((queue,)),
+        definitions,
+        resolver=lambda attempt_instance, name: host._guard_durable_activity(attempt_instance, name, definitions[name]),
+    )
+
+    assert worker.run_available(limit=10) == 3
+    results = dict(sender.collect())
+
+    assert provider_calls == []
+    for occurrence, name in enumerate(works, start=1):
+        definition = definitions[name]
+        assert results[occurrence] == definition.converter.encode(blocked[name], definition.result)
+        assert results[occurrence]["$variant"].endswith("Blocked")
+    worker.close()
+    host.close()
+
+
+def test_v5_shutdown_during_first_attempt_prevents_a_second_instance_queue_claim(tmp_path: Path) -> None:
+    started, release = threading.Event(), threading.Event()
+
+    class StoppableApplication(Application):
+        def __init__(self, *args: Any, **kwargs: Any):
+            super().__init__(*args, **kwargs)
+            self.claims = 0
+            self.stopped = False
+
+        def run_durable_activities(self, limit: int) -> int:
+            assert limit >= 2
+            self.claims += 1
+            started.set()
+            assert release.wait(1)
+            if not self.stopped:
+                self.claims += 1
+            return self.claims
+
+        def stop_durable_activities(self) -> None:
+            self.stopped = True
+
+    host = service(tmp_path, factory=StoppableApplication, readiness_composition=V5)
+    application = host._application(44, 31, 7)
+    pumping = threading.Thread(target=host.pump)
+    pumping.start()
+    assert started.wait(1)
+
+    host.stop()
+    release.set()
+    pumping.join(1)
+
+    assert not pumping.is_alive()
+    assert application.claims == 1
+    host.close()
+
+
+def test_explicit_v5_composition_opens_the_real_v5_application_and_labeled_history(tmp_path: Path) -> None:
+    host = service(tmp_path, factory=PrReadinessV5Application, readiness_composition=V5)
+
+    application = host._application(44, 31, 7)
+
+    assert isinstance(application, PrReadinessV5Application)
+    assert host.activity_worker is None
+    binding = read_instance_binding(tmp_path / "applications/44/31/7/binding.json")
+    assert binding.topology == "v5" and not binding.legacy
+    assert (tmp_path / "applications/44/31/7/history.jsonl").is_file()
     host.close()
 
 
@@ -889,6 +1073,25 @@ def test_publication_resolver_fails_closed_for_malformed_scope_and_request(tmp_p
         resolved(ActivityInvocation("dashboard_publish", input={}), context=object())
     assert request_error.value.failure.kind == "PublicationScopeError"
     assert not request_error.value.failure.retryable
+    host.close()
+
+
+def test_revoked_production_publication_preserves_malformed_scope_classification(tmp_path: Path) -> None:
+    class ResolvableApplication(Application):
+        def activity(self, name: str):
+            return lambda invocation, *, context: {"ok": True}
+
+    host = service(tmp_path, factory=ResolvableApplication)
+    host._application(44, 31, 7)
+    resolved = host._resolve_activity("github:44:31:pr:7", "dashboard_publish")
+    assert resolved is not None
+    host.registry.installation("suspend", 44, 23)
+
+    with pytest.raises(ActivityError) as raised:
+        resolved(ActivityInvocation("dashboard_publish", input={}), context=object())
+
+    assert raised.value.failure.kind == "PublicationScopeError"
+    assert not raised.value.failure.retryable
     host.close()
 
 
@@ -1049,7 +1252,7 @@ def test_restart_reconstructs_revoked_route_and_settles_exact_stale_publication(
 
 
 @pytest.mark.parametrize("pull_request", [True, 7.0])
-def test_restart_rejects_noninteger_pull_request_in_inactive_binding(tmp_path: Path, pull_request: object) -> None:
+def test_startup_preflight_rejects_noninteger_pull_request_binding(tmp_path: Path, pull_request: object) -> None:
     root = tmp_path / "applications/44/31/7"
     root.mkdir(parents=True)
     (root / "binding.json").write_text(
@@ -1057,19 +1260,19 @@ def test_restart_rejects_noninteger_pull_request_in_inactive_binding(tmp_path: P
     )
     (root / "history.jsonl").write_text("", encoding="utf-8")
     clients = Clients()
-    host = service(tmp_path, clients=clients)
-    host.registry.installation("suspend", 44, 23)
-
-    resolved = host._resolve_activity("github:44:31:pr:7", "dashboard_publish")
-
-    assert resolved is not None
-    with pytest.raises(ActivityError) as raised:
-        resolved(ActivityInvocation("dashboard_publish", input={}), context=object())
-    assert raised.value.failure.kind == "PublicationScopeError"
-    assert not raised.value.failure.retryable
-    assert host._apps == {}
-    assert clients.operation_client.calls == []
-    host.close()
+    composition, routes = agent_custody(tmp_path)
+    try:
+        with pytest.raises(RuntimeError, match="binding is unreadable or malformed"):
+            HostService(
+                config(tmp_path),
+                clients=clients,
+                runner=object(),
+                agent_composition=composition,
+                agent_routes=routes,
+            )
+    finally:
+        routes.close()
+    assert clients.operation_calls == []
 
 
 def test_run_due_contains_instance_failure_rewakes_and_recovers_scheduler_health(
@@ -1125,7 +1328,7 @@ def test_worker_failure_remains_primary_and_lifespan_closes_resources_once(
 
 def test_startup_sweep_settles_frozen_terminal_before_provider_reconciliation(tmp_path: Path) -> None:
     root = tmp_path / "applications/44/31/7"
-    root.mkdir(parents=True)
+    bind_application(root)
     (root / "history.jsonl").write_text("", encoding="utf-8")
     events: list[str] = []
 
@@ -1151,7 +1354,7 @@ def test_startup_sweep_settles_frozen_terminal_before_provider_reconciliation(tm
 
 def test_sweep_route_deactivation_during_pre_settlement_skips_reconciliation_and_second_settle(tmp_path: Path) -> None:
     root = tmp_path / "applications/44/31/7"
-    root.mkdir(parents=True)
+    bind_application(root)
     (root / "history.jsonl").write_text("", encoding="utf-8")
     host = service(tmp_path)
     application = host._application(44, 31, 7)
@@ -1188,7 +1391,7 @@ def test_activity_terminal_wake_only_settles_once_without_provider_reconciliatio
 
 def test_due_wake_reconstructs_uncached_persisted_instance_and_settles_once(tmp_path: Path) -> None:
     root = tmp_path / "applications/44/31/7"
-    root.mkdir(parents=True)
+    bind_application(root)
     (root / "history.jsonl").write_text("", encoding="utf-8")
     events: list[str] = []
 
@@ -1414,7 +1617,7 @@ def test_instance_inspection_rejects_a_symlinked_instance_directory(tmp_path: Pa
 def test_sweep_failure_on_one_pr_does_not_block_another(tmp_path: Path) -> None:
     for pr in (7, 8):
         root = tmp_path / "applications" / "44" / "31" / str(pr)
-        root.mkdir(parents=True)
+        bind_application(root)
         (root / "history.jsonl").write_text("", encoding="utf-8")
     made: list[Application] = []
 
@@ -1440,7 +1643,7 @@ def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_
         runner=object(),
         agent_composition=composition,
         agent_routes=routes,
-        application_factory=Application,
+        readiness_composition=replace(PRODUCTION, application_factory=Application),
     )
     assert host.reconcile_registration()["admitted_repositories"] == 2
     assert host.registry.route(44, 32) is not None
@@ -1457,7 +1660,7 @@ def test_registration_failure_preserves_the_current_registry_and_host_identity(t
         runner=object(),
         agent_composition=composition,
         agent_routes=routes,
-        application_factory=Application,
+        readiness_composition=replace(PRODUCTION, application_factory=Application),
     )
     host.reconcile_registration()
     host.clients = Clients(registration=RuntimeError("selected repository inventory is malformed"))

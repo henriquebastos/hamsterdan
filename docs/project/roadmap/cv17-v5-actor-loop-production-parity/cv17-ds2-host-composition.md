@@ -2,8 +2,8 @@
 code: CV17.DS2
 level: Delivery Story
 status: Active
-status_reason: DS2.2b host timer protocol and custody complete; DS2.3 fail-closed selector is next
-updated: 2026-08-15
+status_reason: DS2.3a safe topology composition complete; DS2.3b synthetic reconciliation and selected-V5 webhook route are next
+updated: 2026-08-16
 ---
 
 # CV17.DS2 — Host composition for the V5 topology
@@ -102,13 +102,27 @@ contract gap and two host-boundary hazards; the slicing reflects them:
   sole deadline, while exact pending operations and both delivery crash
   windows replay. `RunnableIndex` receives only the final deadline as a
   disposable, reconstructible wake hint and is never timer authority.
-- **DS2.3 — The fail-closed switch.** A composition descriptor
-  (topology identity, application factory, durable activity names,
-  unresolved predicate, inactive-route result adapter) instead of the
-  production-only module constants; topology-labeled state binding so a
-  History can never silently reopen under the other net; unknown
-  selection fails startup. Integration test drives a webhook through
-  custody into the V5 doors.
+- **DS2.3a — Safe topology composition.** **Done.** One immutable
+  descriptor owns topology identity, application factory, durable
+  activity names, unresolved-work detection, and inactive-route result
+  adaptation. Omitted selection keeps production and its shared
+  `publication` worker; exact `v5` opens the V5 application with its
+  per-instance workers; every other value fails before agent or provider
+  composition. Atomic, durable topology labels prevent cross-topology
+  History reuse and migrate only exact legacy production bindings.
+  Startup and direct application binding reject malformed, unbound,
+  symlinked, or non-regular state paths before History opens. The host
+  injects the route-authority guard into each V5 worker, so revoked reply,
+  dashboard, and announcement attempts settle as converter-preserved
+  typed blocked terminals without provider calls or unresolved queue
+  entries. Shutdown stops those workers before they can claim another
+  attempt. Production's shared worker and stale-publication classification
+  remain unchanged.
+- **DS2.3b — Selectable reconciliation and webhook route.** Next. Replace
+  V5's deliberate synthetic-reconciliation refusal with durable,
+  identified reconciliation, then drive a real custodied webhook through
+  the selected V5 application into its ingress doors. DS2.3a does not
+  claim this end-to-end selection boundary.
 
 ## Ruled hazards to pin in tests
 

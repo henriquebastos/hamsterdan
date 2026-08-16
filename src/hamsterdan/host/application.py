@@ -26,7 +26,9 @@ from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.webhooks import Observation
 
 from .activities import PrReadinessActivities
+from .binding import ensure_instance_binding
 from .git_publish import HostGitPublisher
+from .protocol import DurableActivityResolver
 from .runtime import AuthorityLease, PrReadinessHost
 
 
@@ -53,8 +55,9 @@ class PrReadinessApplication:
         publication_fault: EffectFault | None = None,
         dispatch_path: Path | None = None,
         custody_path: Path | None = None,
+        durable_activity_resolver: DurableActivityResolver | None = None,
     ):
-        del custody_path  # topology-neutral HostService factory contract
+        del custody_path, durable_activity_resolver  # topology-neutral HostService factory contract
         self.root, self.instance_id, self.authority, self.runner = root, instance_id, authority, runner
         normalized_login = bot_login.strip().casefold()
         if not normalized_login or not normalized_login.endswith("[bot]"):
@@ -108,27 +111,16 @@ class PrReadinessApplication:
         )
 
     def _bind_state_root(self) -> None:
-        expected = {
-            "instance_id": self.instance_id,
-            "repository": self.authority.repository,
-            "pull_request": self.authority.pr_number,
-        }
-        binding = self.root / "binding.json"
-        if binding.exists():
-            try:
-                observed = json.loads(binding.read_text(encoding="utf-8"))
-            except OSError, json.JSONDecodeError:
-                raise RuntimeError("replacement state binding is unreadable") from None
-            if observed != expected:
-                raise RuntimeError("replacement state root belongs to a different PR Instance")
-            return
-        if (self.root / "history.jsonl").exists():
-            raise RuntimeError("replacement History has no subject binding")
-        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        temporary = binding.with_suffix(".tmp")
-        temporary.write_text(json.dumps(expected, sort_keys=True, separators=(",", ":")), encoding="utf-8")
-        temporary.chmod(0o600)
-        temporary.replace(binding)
+        try:
+            ensure_instance_binding(
+                self.root,
+                "production",
+                self.instance_id,
+                self.authority.repository,
+                self.authority.pr_number,
+            )
+        except RuntimeError as error:
+            raise RuntimeError(f"replacement {error}") from None
 
     def _reconcile(self, trigger: str) -> None:
         self._repair_generation_boundary()
@@ -476,6 +468,9 @@ class PrReadinessApplication:
         """Production publications remain owned by HostService's shared worker."""
         del limit
         return 0
+
+    def stop_durable_activities(self) -> None:
+        """Production publications remain owned by HostService's shared worker."""
 
 
 __all__ = ["PrReadinessApplication"]

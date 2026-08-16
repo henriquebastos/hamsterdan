@@ -17,12 +17,13 @@ from petrus.impetus.history import (
 )
 from petrus.impetus.history_store import JsonlHistoryStore
 from petrus.impetus.petrinet import NetPath, Token
-from petrus.motus.activity import ActivityDefinition
+from petrus.motus.activity import Activity, ActivityDefinition
 from petrus.motus.dispatch import InlineDispatch, LocalDispatch
 from petrus.motus.worker import Worker
 from pydantic import TypeAdapter, ValidationError
 
 from hamsterdan.contracts.readiness_v5 import TimerCommand, TimerCommandApplied, TimerDue
+from hamsterdan.host.protocol import DurableActivityResolver
 from hamsterdan.host.runtime import CompositeDispatch
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.ingress import IngressEntry
@@ -76,6 +77,7 @@ class V5Runtime:
         agent_settle: Callable[[set[str]], None] | None = None,
         mutation_operation: Callable[[str], str] | None = None,
         reminder_delay_s: int = 3 * 24 * 60 * 60,
+        durable_activity_resolver: DurableActivityResolver | None = None,
     ) -> V5Runtime:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         built = build_net_v5()
@@ -125,7 +127,18 @@ class V5Runtime:
         durable_worker = None
         if dispatch_path is not None:
             provider = LocalDispatch(dispatch_path, instance=instance).worker((_durable_queue(instance),))
-            durable_worker = Worker(provider, {name: definitions[name] for name in _DURABLE_ACTIVITIES})
+            activities = {name: definitions[name] for name in _DURABLE_ACTIVITIES}
+            resolver = None
+            if durable_activity_resolver is not None:
+
+                def resolve(attempt_instance: str, activity: str) -> Activity | None:
+                    definition = activities.get(activity)
+                    if definition is None:
+                        return None
+                    return durable_activity_resolver(attempt_instance, activity, definition)
+
+                resolver = resolve
+            durable_worker = Worker(provider, activities, resolver=resolver)
         return cls(engine, load, definitions, agent_settle, mutation_operation, durable_worker)
 
     def deliver(self, entry: IngressEntry) -> object:
@@ -292,6 +305,10 @@ class V5Runtime:
         if self._durable_worker is None:
             return 0
         return self._durable_worker.run_available(limit=limit)
+
+    def stop_durable_activities(self) -> None:
+        if self._durable_worker is not None:
+            self._durable_worker.stop()
 
     def close(self) -> None:
         try:

@@ -2,8 +2,8 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 host composition active; DS2.3 fail-closed selector is next
-updated: 2026-08-15
+status_reason: DS2.3a safe topology composition complete; DS2.3b synthetic reconciliation and selected-V5 webhook route are next
+updated: 2026-08-16
 ---
 
 # CV17 — V5 actor-loop production parity
@@ -23,8 +23,10 @@ making that ruling.
   is complete.
 - [CV17.DS2 — Host composition](cv17-ds2-host-composition.md) is active:
   provider-backed gates, durable webhook ingress, authority ordering, and
-  canonical host timer custody are complete; the fail-closed topology
-  switch is next.
+  canonical host timer custody are complete. DS2.3a adds the fail-closed
+  topology descriptor, topology-owned state roots, and safe revoked-route
+  V5 publication settlement; DS2.3b synthetic reconciliation and the
+  selected-V5 webhook route are next.
   Its scope includes webhook
   custody into ingress doors, activity binding to the existing dispatcher
   stack, one fail-closed topology switch.
