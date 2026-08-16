@@ -117,6 +117,73 @@ def test_replay_uses_frozen_manifest_even_when_fresh_projection_differs(tmp_path
     store.close()
 
 
+def test_legacy_webhook_manifest_replays_then_fresh_reconciliation_adds_base_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    identity = delivery()
+    values = [entry.dump() for entry in projection(identity, "on_ready")]
+    values[0]["payload"].pop("strict_base")
+    values[0]["payload"].pop("base_current")
+    store = V5IngressStore(path)
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "INSERT INTO v5_ingress_manifests"
+            "(delivery_id,subject,revision,topology,schema_version,entries) VALUES(?,?,?,?,?,?)",
+            (identity, SUBJECT, 1, "v5", 1, json.dumps(values, sort_keys=True, separators=(",", ":"))),
+        )
+        database.execute(
+            "INSERT INTO v5_authority_grants"
+            "(subject,phase,incarnation,head,base,policy,revision,source_kind,source_id) VALUES(?,?,?,?,?,?,?,?,?)",
+            (SUBJECT, "running", 1, "a" * 40, "b" * 40, "policy-1", 1, "github-delivery", identity),
+        )
+
+    legacy = store.manifest(identity, SUBJECT)
+    refreshed = store.stage_reconciliation(SUBJECT, reconciliation_projection("on_ready"))
+
+    assert legacy is not None and set(legacy.entries[0].payload) == {"head", "base", "mergeable", "policy"}
+    assert refreshed is not None and refreshed.revision == 2
+    assert refreshed.entries[0].payload["strict_base"] is True
+    assert refreshed.entries[0].payload["base_current"] is False
+    store.close()
+
+
+def test_legacy_reconciliation_manifest_keeps_its_digest_then_refreshes_base_evidence(tmp_path: Path) -> None:
+    path = tmp_path / "webhooks.sqlite3"
+    projected = [entry.dump() for entry in reconciliation_projection("on_ready")]
+    projected[0]["payload"].pop("strict_base")
+    projected[0]["payload"].pop("base_current")
+    digest = sha256(
+        json.dumps(
+            {"topology": "v5", "schema_version": 1, "entries": projected},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    source_id = f"host-reconcile:{SUBJECT}:1:{digest}"
+    entries = [{**entry, "identity": f"{source_id}:{entry['source']}"} for entry in projected]
+    store = V5IngressStore(path)
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "INSERT INTO v5_reconciliation_manifests"
+            "(source_id,subject,revision,digest,topology,schema_version,entries) VALUES(?,?,?,?,?,?,?)",
+            (source_id, SUBJECT, 1, digest, "v5", 1, json.dumps(entries, sort_keys=True, separators=(",", ":"))),
+        )
+        database.execute(
+            "INSERT INTO v5_authority_grants"
+            "(subject,phase,incarnation,head,base,policy,revision,source_kind,source_id) VALUES(?,?,?,?,?,?,?,?,?)",
+            (SUBJECT, "running", 1, "a" * 40, "b" * 40, "policy-1", 1, "host-reconcile", source_id),
+        )
+
+    legacy = store.latest_reconciliation(SUBJECT)
+    refreshed = store.stage_reconciliation(SUBJECT, reconciliation_projection("on_ready"))
+
+    assert legacy is not None and legacy.source_id == source_id
+    assert set(legacy.entries[0].payload) == {"head", "base", "mergeable", "policy"}
+    assert refreshed is not None and refreshed.revision == 2 and refreshed.source_id != source_id
+    assert refreshed.entries[0].payload["strict_base"] is True
+    assert refreshed.entries[0].payload["base_current"] is False
+    store.close()
+
+
 def test_unchanged_reconciliation_reuses_one_lineaged_manifest_and_grant_revision(tmp_path: Path) -> None:
     path = tmp_path / "webhooks.sqlite3"
     store = V5IngressStore(path)
@@ -571,6 +638,7 @@ class Authority:
             ActionsRunSnapshot(10, "a" * 40, ".github/workflows/ci.yml", 1, "completed", "success"),
         )
         self.evidence_calls: list[tuple[int, int]] = []
+        self.base_current_calls: list[PullRequestSnapshot] = []
         self.pull_calls = 0
         self.repository = "owner/repo"
         self.pr_number = 7
@@ -583,6 +651,10 @@ class Authority:
     def policy(self, base_ref: str):
         assert base_ref == "main"
         return self.repo_policy
+
+    def base_current(self, pull: PullRequestSnapshot):
+        self.base_current_calls.append(pull)
+        return True
 
     def human_review(self):
         return self.review
@@ -673,6 +745,9 @@ def test_normalizer_freezes_fixed_door_order_and_newest_run_by_v5_identity() -> 
         "on_comment",
     ]
     assert authority.evidence_calls == [(10, 1)]
+    assert authority.base_current_calls == [authority.pull]
+    assert entries[0].payload["strict_base"] is True
+    assert entries[0].payload["base_current"] is True
     assert entries[3].payload == {
         "head": "a" * 40,
         "run_id": 10,

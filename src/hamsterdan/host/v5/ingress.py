@@ -144,6 +144,8 @@ class IngressAuthority(Protocol):
 
     def policy(self, base_ref: str) -> RepositoryPolicy: ...
 
+    def base_current(self, pull: PullRequestSnapshot) -> bool: ...
+
     def human_review(self) -> HumanReviewSnapshot: ...
 
     def workflow_runs(self, workflow: str, head: str) -> tuple[ActionsRunSnapshot, ...]: ...
@@ -189,6 +191,7 @@ class V5IngressNormalizer:
             return (entry("on_close", CloseSeen(reason=reason)),)
 
         policy = self.authority.policy(pull.base_ref)
+        base_current = self.authority.base_current(pull)
         lifecycle = "on_draft" if pull.draft else "on_ready"
         if event == "pull_request" and action == "converted_to_draft":
             lifecycle = "on_draft"
@@ -202,6 +205,8 @@ class V5IngressNormalizer:
                     base=pull.base,
                     mergeable=pull.mergeable is True,
                     policy=policy.digest,
+                    strict_base=policy.strict or policy.update_required,
+                    base_current=base_current,
                 ),
             ),
             entry("on_draft", DraftSeen()) if lifecycle == "on_draft" else entry("on_ready", ReadySeen()),
@@ -675,7 +680,13 @@ class V5IngressStore:
         return current
 
     @staticmethod
-    def _validate(delivery_id: str, subject: str, entries: tuple[IngressEntry, ...]) -> str:
+    def _validate(
+        delivery_id: str,
+        subject: str,
+        entries: tuple[IngressEntry, ...],
+        *,
+        allow_legacy_head: bool = False,
+    ) -> str:
         try:
             canonical = str(uuid.UUID(delivery_id))
         except AttributeError, ValueError:
@@ -683,7 +694,7 @@ class V5IngressStore:
         V5IngressStore._validate_subject(subject)
         if canonical != delivery_id:
             raise ValueError("V5 ingress subject is malformed")
-        V5IngressStore._validate_values(entries, allow_comment=True)
+        V5IngressStore._validate_values(entries, allow_comment=True, allow_legacy_head=allow_legacy_head)
         if any(entry.identity != f"github-delivery:{canonical}:{entry.source}" for entry in entries):
             raise ValueError("V5 ingress door order or identity is malformed")
         return canonical
@@ -698,6 +709,7 @@ class V5IngressStore:
         entries: tuple[ProjectedEntry, ...] | tuple[IngressEntry, ...],
         *,
         allow_comment: bool,
+        allow_legacy_head: bool = False,
     ) -> None:
         sources = [entry.source for entry in entries]
         order = [_DOOR_ORDER.get(source, -1) for source in sources]
@@ -728,14 +740,31 @@ class V5IngressStore:
                 value = TypeAdapter(_DOOR_TYPES[entry.source]).validate_json(json.dumps(entry.payload))
             except TypeError, ValueError, ValidationError:
                 raise ValueError("V5 ingress door payload is malformed") from None
-            if value.dump() != entry.payload:
+            dumped = value.dump()
+            legacy_head = (
+                allow_legacy_head
+                and entry.source == "on_head"
+                and set(entry.payload) == {"head", "base", "mergeable", "policy"}
+                and {key: dumped[key] for key in entry.payload} == entry.payload
+                and dumped["strict_base"] is True
+                and dumped["base_current"] is False
+            )
+            if dumped != entry.payload and not legacy_head:
                 raise ValueError("V5 ingress door payload is not canonical")
 
     @staticmethod
-    def _projection_digest(projected: tuple[ProjectedEntry, ...]) -> str:
+    def _projection_digest(
+        projected: tuple[ProjectedEntry, ...],
+        *,
+        allow_legacy_head: bool = False,
+    ) -> str:
         if not isinstance(projected, tuple) or any(not isinstance(entry, ProjectedEntry) for entry in projected):
             raise ValueError("V5 reconciliation projection is malformed")
-        V5IngressStore._validate_values(projected, allow_comment=False)
+        V5IngressStore._validate_values(
+            projected,
+            allow_comment=False,
+            allow_legacy_head=allow_legacy_head,
+        )
         encoded = json.dumps(
             {
                 "topology": _TOPOLOGY,
@@ -754,6 +783,8 @@ class V5IngressStore:
         revision: int,
         digest: str,
         entries: tuple[IngressEntry, ...],
+        *,
+        allow_legacy_head: bool = False,
     ) -> None:
         V5IngressStore._validate_subject(subject)
         if (
@@ -766,7 +797,7 @@ class V5IngressStore:
             raise RuntimeError("V5 reconciliation manifest is malformed")
         try:
             projected = tuple(ProjectedEntry(entry.source, entry.color, entry.payload) for entry in entries)
-            if V5IngressStore._projection_digest(projected) != digest:
+            if V5IngressStore._projection_digest(projected, allow_legacy_head=allow_legacy_head) != digest:
                 raise ValueError
         except ValueError:
             raise RuntimeError("V5 reconciliation manifest is malformed") from None
@@ -796,7 +827,14 @@ class V5IngressStore:
         if not isinstance(raw, list):
             raise TypeError("V5 reconciliation manifest is malformed")
         entries = tuple(IngressEntry.load(value) for value in raw)
-        self._validate_reconciliation(source_id, subject, revision, digest, entries)
+        self._validate_reconciliation(
+            source_id,
+            subject,
+            revision,
+            digest,
+            entries,
+            allow_legacy_head=True,
+        )
         return IngressManifest(source_id, subject, revision, entries)
 
     @staticmethod
@@ -818,7 +856,7 @@ class V5IngressStore:
         if not isinstance(raw, list):
             raise TypeError("V5 ingress manifest is malformed")
         entries = tuple(IngressEntry.load(value) for value in raw)
-        V5IngressStore._validate(delivery_id, subject, entries)
+        V5IngressStore._validate(delivery_id, subject, entries, allow_legacy_head=True)
         return IngressManifest(delivery_id, subject, revision, entries)
 
     def close(self) -> None:

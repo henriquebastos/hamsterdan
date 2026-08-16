@@ -219,7 +219,7 @@ class V5PublicationGates:
             if held is not None:
                 return ALanded(incarnation=work.incarnation, head=work.head)
             current = self.claim()
-            if current != expected:
+            if (work.strict_base and not work.base_current) or current != expected:
                 return AMoved(
                     incarnation=work.incarnation,
                     observed_head=current.head,

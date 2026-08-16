@@ -61,6 +61,7 @@ def _ready(snap: Snapshot) -> bool:
         and not snap.changes_requested
         and snap.unresolved == 0
         and snap.mergeable
+        and (not snap.strict_base or snap.base_current)
         and not snap.pending
         and not snap.faults
     )
@@ -109,6 +110,8 @@ def _authorize(binding, outputs):
         head=snap.head,
         base=snap.base,
         policy=snap.policy,
+        strict_base=snap.strict_base,
+        base_current=snap.base_current,
     )
     # A2: `announcing` retains the EXACT in-flight request
     held = snap.validated_update(announcing=req.dump())
@@ -145,6 +148,10 @@ def _apply(snap: Snapshot, fact: GateFact) -> Snapshot | None:
             base=body["base"],
             mergeable=body["mergeable"],
             policy=body["policy"],
+            # A pre-DS4 retained state fact has no base-policy evidence;
+            # keep it readable but fail closed until host reconciliation.
+            strict_base=body.get("strict_base", True),
+            base_current=body.get("base_current", False),
         )
     elif fact.incarnation not in (0, snap.incarnation):
         return None  # A1.4: mismatched facts are inert
@@ -430,6 +437,8 @@ def seed() -> dict:
         candidate=False,
         announcing={},
         blocked={},
+        strict_base=True,
+        base_current=False,
         closing=None,
     )
     return {NetPath("ready.snap"): (Token("Snapshot", baton.dump()),)}

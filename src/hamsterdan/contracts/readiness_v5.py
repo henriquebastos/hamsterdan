@@ -44,6 +44,10 @@ class HeadSeen(WorkflowModel):
     base: str
     mergeable: bool
     policy: str
+    # Defaults keep pre-DS4 durable tokens readable but fail closed until
+    # the host refreshes them with explicit base-policy evidence.
+    strict_base: bool = True
+    base_current: bool = False
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -129,6 +133,8 @@ class LifeState(WorkflowModel):
     expected_op: str
     lineage: str
     reminder_delay_s: int
+    strict_base: bool = True
+    base_current: bool = False
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -1109,6 +1115,8 @@ class Snapshot(WorkflowModel):
     candidate: bool
     announcing: dict[str, Any]
     blocked: dict[str, Any]
+    strict_base: bool = True
+    base_current: bool = False
     closing: str | None = None
 
 
@@ -1143,6 +1151,10 @@ class AnnounceReq(WorkflowModel):
     head: str
     base: str
     policy: str
+    # Missing evidence identifies a pre-DS4 request. It remains readable
+    # but cannot publish unless lookup-first proves it already landed.
+    strict_base: bool = True
+    base_current: bool = False
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))

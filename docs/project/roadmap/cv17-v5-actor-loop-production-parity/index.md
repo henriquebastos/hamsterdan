@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 host composition and DS3 durable recovery are complete; DS4 parity evidence remains
+status_reason: DS2 and DS3 are complete; DS4 has begun with the clean-green semantic oracle while broader deterministic and fresh live V5 evidence remain
 updated: 2026-08-16
 ---
 
@@ -38,18 +38,21 @@ making that ruling.
   rebuilds timer and runnable projections after a host crash. Its final slice
   proves a settled but unacknowledged webhook replays from frozen custody on
   startup without duplicate provider, agent, History, or reconciliation work.
-- CV17.DS4 — Parity harness: ES-005 chapter-17 boundary scenarios executed
-  through the real host against both topologies, compared on selected
-  outcomes.
-
-The DS4 record is scaffolded when its slice begins.
+- [CV17.DS4 — Production-parity evidence](cv17-ds4-production-parity-harness.md)
+  is active. DS4.0 runs a strict clean-green fake GitHub journey independently
+  through the real host against both topologies and judges user-visible
+  semantics rather than traces. It also closes the V5 strict stale-base gap
+  this first oracle exposed. Broader deterministic scenarios and a fresh live
+  selected-V5 GitHub campaign remain.
 
 ## Done condition
 
-CV17 is complete when every boundary scenario in the parity harness runs
-green through real host composition on both topologies, restart recovery is
-demonstrated for V5, and the evidence is captured for a future replacement
-decision — which stays outside this Value.
+CV17 is complete when every selected semantic scenario runs green through real
+host composition on both topologies, restart recovery is demonstrated for V5,
+and the Navigator accepts fresh GitHub-visible V5 journeys recorded from real
+PRs, Actions, App comments/reviews, and human interaction. Historical
+production PRs are reference evidence only. A future replacement decision
+stays outside this Value.
 
 ## Boundaries
 
@@ -57,4 +60,5 @@ decision — which stays outside this Value.
 - `readiness/net_v5` knows no GitHub or agent provider; the host remains the
   only composition root.
 - Sharding, the courier, and Petrus promotion are out of scope.
-- Live GitHub qualification stays under CV16 custody discipline.
+- Live GitHub qualification stays under existing operator and custody
+  discipline.

@@ -247,7 +247,15 @@ class TestAnnounceGate:
     only the grant incarnation exposes a stale announce whose
     head/base/policy tuple is identical (draft -> resume)."""
 
-    WORK = AnnounceReq(op="ready:h1:i1", incarnation=1, head="h1", base="b1", policy="p1")
+    WORK = AnnounceReq(
+        op="ready:h1:i1",
+        incarnation=1,
+        head="h1",
+        base="b1",
+        policy="p1",
+        strict_base=True,
+        base_current=True,
+    )
 
     def test_an_announcement_lands_under_a_standing_claim(self) -> None:
         publisher = FakePublisher()
@@ -286,6 +294,21 @@ class TestAnnounceGate:
         publisher = FakePublisher(found=True)
         result = gates(publisher, claim=moved(incarnation=2)).announce_gate(self.WORK)
         assert result == ALanded(incarnation=1, head="h1")
+
+    def test_a_legacy_unlanded_announcement_fails_closed_as_moved(self) -> None:
+        publisher = FakePublisher()
+        legacy = AnnounceReq(op="ready:h1:i1", incarnation=1, head="h1", base="b1", policy="p1")
+
+        result = gates(publisher).announce_gate(legacy)
+
+        assert isinstance(result, AMoved)
+        assert not [call for call in publisher.calls if call[0] == "immutable"]
+
+    def test_a_legacy_announcement_still_reconciles_when_it_already_landed(self) -> None:
+        publisher = FakePublisher(found=True)
+        legacy = AnnounceReq(op="ready:h1:i1", incarnation=1, head="h1", base="b1", policy="p1")
+
+        assert gates(publisher).announce_gate(legacy) == ALanded(incarnation=1, head="h1")
 
     def test_retryable_exhaustion_retains_the_exact_request(self) -> None:
         publisher = FakePublisher(mode="boundary")

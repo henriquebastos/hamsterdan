@@ -129,6 +129,49 @@ class TestAnnounce:
         see_head(engine, "h1", mergeable=True)
         assert announcements(world) == ["ready:h1:i1"]
 
+    def test_strict_stale_base_holds_readiness_until_current(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        world["agent_findings"]["h1"] = []
+        see_head(engine, "h1", strict_base=True, base_current=False)
+        see_run(engine, head="h1")
+        see_human(engine)
+        assert announcements(world) == []
+        assert snap(engine)["base_current"] is False
+
+        see_head(engine, "h1", strict_base=True, base_current=True)
+
+        assert announcements(world) == ["ready:h1:i1"]
+        assert world["agent_calls"] == 1
+
+    def test_non_strict_policy_does_not_require_current_base(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        world["agent_findings"]["h1"] = []
+        see_head(engine, "h1", strict_base=False, base_current=False)
+        see_run(engine, head="h1")
+        see_human(engine)
+        assert announcements(world) == ["ready:h1:i1"]
+
+    def test_retained_state_without_base_evidence_fails_closed(self) -> None:
+        retained = GateFact(
+            kind="state",
+            incarnation=1,
+            body={
+                "phase": "running",
+                "head": "h1",
+                "base": "b1",
+                "mergeable": True,
+                "policy": "p1",
+            },
+        )
+
+        applied = _apply(TestSettlementIdentity._snap(), retained)
+
+        assert applied is not None
+        assert applied.strict_base is True
+        assert applied.base_current is False
+
     def test_repeated_ready_preserving_facts_never_reannounce(self) -> None:
         engine, _ = spawn()
         world = world_of(engine)
@@ -304,6 +347,8 @@ class TestSettlementIdentity:
             candidate=False,
             announcing={},
             blocked={},
+            strict_base=True,
+            base_current=True,
             closing=None,
         )
 

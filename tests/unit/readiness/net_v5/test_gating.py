@@ -278,3 +278,69 @@ def test_unknown_publication_failure_stays_projection_pending_and_fails_loudly(t
         == 1
     )
     assert not any(isinstance(record, FiringFailed) and record.occurrence == requested.occurrence for record in history)
+
+
+def test_restart_settles_a_legacy_unlanded_announcement_moved_without_posting(tmp_path: Path) -> None:
+    legacy = {
+        "op": "ready:h1:i1",
+        "incarnation": 1,
+        "head": "h1",
+        "base": "b1",
+        "policy": "p1",
+    }
+    marking = seed_marking(INSTANCE)
+    [snapshot] = marking.place(NetPath("ready.snap"))
+    retained = {
+        **snapshot.data,
+        "incarnation": 1,
+        "phase": "running",
+        "head": "h1",
+        "base": "b1",
+        "policy": "p1",
+        "mergeable": True,
+        "checks": "success",
+        "review": "clear",
+        "approval": True,
+        "announcing": legacy,
+    }
+    retained.pop("strict_base")
+    retained.pop("base_current")
+    marking = _replace(marking, "ready.snap", "Snapshot", retained)
+    marking = marking.deposit(NetPath("ready.announce_req"), Token("AnnounceReq", legacy))
+    first = _open(tmp_path, create=True, marking=marking)
+    _advance_until(
+        first,
+        lambda: any(
+            isinstance(record, ActivityRequested) and record.activity == "announce_gate" for record in first.records
+        ),
+    )
+    [requested] = [
+        record
+        for record in first.records
+        if isinstance(record, ActivityRequested) and record.activity == "announce_gate"
+    ]
+    assert requested.input == {"work": legacy}
+    first.close()
+
+    world = fresh_world()
+    world.update({"branch_head": "h1", "base_head": "b1", "policy": "p1"})
+    world["authority"] = {"incarnation": 1, "phase": "running", "head": "h1", "base": "b1", "policy": "p1"}
+    definitions = {definition.declaration.name: definition for definition in make_activities(world)}
+    restarted = _open(tmp_path, create=False)
+    worker = LocalDispatch(tmp_path / "dispatch.sqlite3", instance="worker").worker((QUEUE,))
+    attempt = worker.claim()
+    assert attempt is not None and attempt.invocation.input == {"work": legacy}
+    worker.complete(attempt, definitions["announce_gate"](attempt.invocation, context=None))
+    worker.close()
+    _advance_until(
+        restarted,
+        lambda: (
+            bool(restarted.marking.place(NetPath("ready.snap")))
+            and restarted.marking.place(NetPath("ready.snap"))[0].data["announcing"] == {}
+        ),
+    )
+    [settled] = restarted.marking.place(NetPath("ready.snap"))
+    assert world["comments"] == []
+    assert settled.data["base_current"] is False
+    assert settled.data["candidate"] is False
+    restarted.close()

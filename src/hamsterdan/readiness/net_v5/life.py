@@ -45,6 +45,8 @@ def _state_fact(state: LifeState) -> GateFact:
             "base": state.base,
             "mergeable": state.mergeable,
             "policy": state.policy,
+            "strict_base": state.strict_base,
+            "base_current": state.base_current,
         },
     )
 
@@ -76,16 +78,35 @@ def _admit_head(binding, outputs):
     if state.phase == "quiescent":
         # dormancy absorbs every head observation with no work emission;
         # resume re-admits under a fresh incarnation
-        recorded = state.validated_update(head=seen.head, base=seen.base, mergeable=seen.mergeable, policy=seen.policy)
+        recorded = state.validated_update(
+            head=seen.head,
+            base=seen.base,
+            mergeable=seen.mergeable,
+            policy=seen.policy,
+            strict_base=seen.strict_base,
+            base_current=seen.base_current,
+        )
         return route(outputs, {"life.state": (recorded,)})
     if seen.head == state.head:
-        refreshed = seen.base != state.base or seen.mergeable != state.mergeable or seen.policy != state.policy
+        refreshed = (
+            seen.base != state.base
+            or seen.mergeable != state.mergeable
+            or seen.policy != state.policy
+            or seen.strict_base != state.strict_base
+            or seen.base_current != state.base_current
+        )
         if not refreshed:
             return route(outputs, {"life.state": (state,)})
         # base/policy refresh: same lifetime, no incarnation bump, no new
         # agent round — review republishes provisionals under the fresh
         # authority through the `refreshed` relation
-        current = state.validated_update(base=seen.base, mergeable=seen.mergeable, policy=seen.policy)
+        current = state.validated_update(
+            base=seen.base,
+            mergeable=seen.mergeable,
+            policy=seen.policy,
+            strict_base=seen.strict_base,
+            base_current=seen.base_current,
+        )
         work = HeadWork(
             incarnation=current.incarnation,
             head=current.head,
@@ -109,6 +130,8 @@ def _admit_head(binding, outputs):
         expected_op="",
         lineage=lineage,
         reminder_delay_s=state.reminder_delay_s,
+        strict_base=seen.strict_base,
+        base_current=seen.base_current,
     )
     work = HeadWork(
         incarnation=admitted.incarnation,
@@ -380,5 +403,7 @@ def seed(reminder_delay_s: int = 3 * 24 * 60 * 60) -> dict:
         expected_op="",
         lineage="",
         reminder_delay_s=reminder_delay_s,
+        strict_base=True,
+        base_current=False,
     )
     return {NetPath("life.state"): (Token("LifeState", baton.dump()),)}

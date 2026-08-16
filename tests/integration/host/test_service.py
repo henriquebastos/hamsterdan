@@ -137,6 +137,8 @@ class V5Provider:
             return WireResponse(404, {})
         if method == "GET" and path == "/repos/owner/one/branches/main/protection":
             return WireResponse(404, {})
+        if method == "GET" and path == f"/repos/owner/one/compare/{self.base}...{self.head}":
+            return WireResponse(200, {"status": "ahead", "behind_by": 0})
         if method == "GET" and path == "/repos/owner/one/pulls/7/requested_reviewers":
             return WireResponse(200, {"users": []})
         if method == "GET" and path.startswith("/repos/owner/one/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?"):

@@ -437,7 +437,8 @@ def make_activities(world: dict):
             # provider state is "ready" again, but the grant moved on.
             auth = world["authority"]
             if (
-                auth["phase"] != "running"
+                (work.strict_base and not work.base_current)
+                or auth["phase"] != "running"
                 or auth["incarnation"] != work.incarnation
                 or world["branch_head"] != work.head
                 or world["base_head"] != work.base
@@ -642,6 +643,8 @@ _SEQ = {"n": 0}
 
 def deliver(engine: Engine, door: str, color: str, data: dict) -> None:
     _SEQ["n"] += 1
+    if color == "HeadSeen":
+        data = {"strict_base": True, "base_current": True, **data}
     _move_world(_HOST[id(engine)], door, data)  # the world moves FIRST
     engine.deliver(door, Token(color, data), identity=f"{door}-{_SEQ['n']}")
     drive(engine)
@@ -649,6 +652,8 @@ def deliver(engine: Engine, door: str, color: str, data: dict) -> None:
 
 def deliver_held(engine, dispatch, definitions, door: str, color: str, data: dict, *, hold=frozenset()):
     _SEQ["n"] += 1
+    if color == "HeadSeen":
+        data = {"strict_base": True, "base_current": True, **data}
     _move_world(_HOST[id(engine)], door, data)  # the world moves FIRST
     engine.deliver(door, Token(color, data), identity=f"{door}-{_SEQ['n']}")
     pump(engine, dispatch, definitions, hold=hold)
@@ -683,12 +688,27 @@ def projection(engine: Engine) -> list[dict]:
 # -- observation shorthand ----------------------------------------------------
 
 
-def see_head(engine, head: str, base: str = "b1", mergeable: bool = True, policy: str = "p1"):
+def see_head(
+    engine,
+    head: str,
+    base: str = "b1",
+    mergeable: bool = True,
+    policy: str = "p1",
+    strict_base: bool = True,
+    base_current: bool = True,
+):
     deliver(
         engine,
         "on_head",
         "HeadSeen",
-        {"head": head, "base": base, "mergeable": mergeable, "policy": policy},
+        {
+            "head": head,
+            "base": base,
+            "mergeable": mergeable,
+            "policy": policy,
+            "strict_base": strict_base,
+            "base_current": base_current,
+        },
     )
 
 

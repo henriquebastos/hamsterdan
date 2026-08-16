@@ -46,5 +46,8 @@ and [CV17.DS3 — Durable recovery](cv17-v5-actor-loop-production-parity/cv17-ds
 are complete. V5 now has provider gates, durable ingress, authority ordering,
 canonical timer custody, fail-closed topology selection, stable synthetic
 reconciliation, and selected-host restart convergence across publication,
-inline-effect, timer-wake, and webhook-acknowledgement crash cuts. The DS4
-production-parity harness remains.
+inline-effect, timer-wake, and webhook-acknowledgement crash cuts.
+[CV17.DS4 — Production-parity evidence](cv17-v5-actor-loop-production-parity/cv17-ds4-production-parity-harness.md)
+is active: the clean-green semantic oracle passes through both real host
+compositions and closed a V5 strict stale-base gap. Broader deterministic
+journeys and fresh live selected-V5 GitHub demonstrations remain mandatory.
