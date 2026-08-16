@@ -390,6 +390,33 @@ and App attribution, final custody/Activity posture, and cleanup disposition.
 Record short GitHub-site demonstrations at the meaningful checkpoints. Keep
 the production topology default and do not reuse historical PRs as acceptance.
 
+The live-bootstrap slice now makes that campaign reproducible from the Amp
+project rather than one historical orb. Role-based project secrets provision
+and verify distinct author and reviewer sessions; project variables own public
+App and installation identity; and setup atomically materializes bounded private
+App, webhook, and direct-agent files only when all authority is present. It
+installs the exact Pi `0.83.0`/Node `22.19.0` runtime and emits a non-secret host
+environment. The checked launcher strips ambient credentials, refuses unsafe
+environment files, defaults to production, and uses one private explicit local
+selector for V5. It opens and verifies the complete runtime ancestor chain
+through held non-symlink directory descriptors, and setup verifies role identity
+through the fixed system GitHub CLI in an empty environment. The host's Git
+publisher also runs every Git command in a closed environment, so an ambient
+human credential helper cannot satisfy a clone or fetch. Tests prove
+stale-authority retirement, pre-installer launch invalidation, final-file and
+parent-directory symlink refusal, PATH-wrapper and Git-helper isolation, role
+isolation, selector reversal, and no secret disclosure under shell tracing.
+`scripts/check full` passes with 1,107 Python tests and nine Bun relay tests.
+
+Current provider observation stops safely before deployment: the two project
+role credentials authenticate as `henriquebastos` and `crisbastos`, while the
+public App inventory still lacks `pull_request_review_thread`. The accepted App
+private key and webhook secret remain in an archived historical orb and cannot
+be downloaded while archived; no project Anthropic authority exists. Therefore
+no launch environment, host writer, App update, or fresh PR was created. Live
+acceptance resumes only after those three authorities are placed in project
+secret custody and the App owner updates its event subscription and relay URL.
+
 ## Done condition
 
 Every selected deterministic semantic scenario passes independently through

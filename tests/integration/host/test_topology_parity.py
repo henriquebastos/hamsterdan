@@ -26,7 +26,7 @@ from hamsterdan.agents.protocol import (
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.models import WireResponse
 from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
-from hamsterdan.host.git_publish import GitPublishResult, GitReconciliation, HostGitPublisher
+from hamsterdan.host.git_publish import GitPublishResult, GitReconciliation, HostGitPublisher, _git_environment
 from hamsterdan.host.service import HostService
 from hamsterdan.host.topology import PRODUCTION, V5, ReadinessComposition
 
@@ -914,9 +914,12 @@ def _run_journey(
     monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
     if agent_repair or base_mutation:
         assert git_remote is not None
-        monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
-        monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{git_remote.as_uri()}.insteadOf")
-        monkeypatch.setenv("GIT_CONFIG_VALUE_0", "https://github.com/owner/repo.git")
+        git_environment = _git_environment() | {
+            "GIT_CONFIG_COUNT": "3",
+            "GIT_CONFIG_KEY_2": f"url.{git_remote.as_uri()}.insteadOf",
+            "GIT_CONFIG_VALUE_2": "https://github.com/owner/repo.git",
+        }
+        monkeypatch.setattr("hamsterdan.host.git_publish._git_environment", lambda: dict(git_environment))
         original_reconcile = HostGitPublisher.reconcile
         original_publish = HostGitPublisher.publish
 

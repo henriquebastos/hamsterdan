@@ -256,6 +256,32 @@ def test_local_publication_io_failure_has_closed_sanitized_category(monkeypatch:
     assert caught.value.category is PublicationCategory.GIT_OPERATION
 
 
+def test_git_publication_never_consults_ambient_credential_helpers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker = tmp_path / "ambient-helper-called"
+    helper = tmp_path / "credential-helper"
+    helper.write_text(f"#!/bin/sh\nprintf 'username=ambient\\npassword=human-authority\\n'\ntouch {marker}\n")
+    helper.chmod(0o755)
+    config = tmp_path / "ambient-git-config"
+    config.write_text(f"[credential]\n\thelper = !{helper}\n")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    monkeypatch.setenv("GIT_ASKPASS", str(helper))
+    monkeypatch.setenv("SSH_ASKPASS", str(helper))
+    monkeypatch.setenv("SSH_AUTH_SOCK", str(tmp_path / "ambient-agent"))
+
+    with pytest.raises(GitPublishError) as caught:
+        HostGitPublisher._git(
+            "credential",
+            "fill",
+            capture=True,
+            input_text="protocol=https\nhost=github.com\n\n",
+        )
+
+    assert caught.value.category is PublicationCategory.GIT_OPERATION
+    assert not marker.exists()
+
+
 def test_same_repository_identity_is_case_insensitive_but_still_rejects_forks() -> None:
     assert _same_repository("HBNetwork/demo-pr-readiness", "hbnetwork/demo-pr-readiness")
     assert not _same_repository("fork/demo-pr-readiness", "hbnetwork/demo-pr-readiness")

@@ -55,8 +55,14 @@ making that ruling.
   through real two-parent Git commits and exact ref CAS. The collaboration
   oracle proves requested review, changes requested, open-thread blocking,
   distinct approval, native thread-resolution custody, and final readiness.
-  The selected deterministic portfolio is complete; a fresh live selected-V5
-  GitHub campaign remains.
+  The selected deterministic portfolio is complete. A project-wide live
+  bootstrap now provisions role-based human identities, exact Pi runtime,
+  bounded App/provider files, a checked host launcher, and an explicit private
+  V5 selector. Role verification bypasses injected CLI authority, runtime reads
+  reject symlinked ancestors, and Git publication cannot inherit a human
+  credential helper. The current App event inventory and missing project App,
+  webhook, and Anthropic authorities still block the fresh live selected-V5
+  GitHub campaign.
 
 ## Done condition
 

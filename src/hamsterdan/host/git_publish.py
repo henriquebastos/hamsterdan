@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import subprocess
 import tempfile
@@ -349,12 +350,16 @@ class HostGitPublisher:
             ) from None
 
     @staticmethod
-    def _git(
-        *arguments: str, capture: bool = False, input_text: str | None = None, env: dict[str, str] | None = None
-    ) -> str:
+    def _git(*arguments: str, capture: bool = False, input_text: str | None = None) -> str:
         try:
             completed = subprocess.run(
-                ("git", *arguments), input=input_text, text=True, capture_output=True, env=env, check=True, timeout=60
+                ("git", *arguments),
+                input=input_text,
+                text=True,
+                capture_output=True,
+                env=_git_environment(),
+                check=True,
+                timeout=60,
             )
         except OSError, subprocess.SubprocessError:
             raise GitPublishError(PublicationCategory.GIT_OPERATION, "Git operation failed") from None
@@ -363,6 +368,22 @@ class HostGitPublisher:
 
 def _safe_branch(value: str) -> bool:
     return bool(_SAFE_REF.fullmatch(value)) and ".." not in value and "@{" not in value and not value.startswith("-")
+
+
+def _git_environment() -> dict[str, str]:
+    return {
+        "PATH": os.defpath,
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "HOME": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_TERMINAL_PROMPT": "0",
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "credential.helper",
+        "GIT_CONFIG_VALUE_0": "",
+        "GIT_CONFIG_KEY_1": "core.hooksPath",
+        "GIT_CONFIG_VALUE_1": os.devnull,
+    }
 
 
 @contextmanager

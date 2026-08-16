@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""Launch the host only from one stable, private, generated environment."""
+
+from __future__ import annotations
+
+import os
+import re
+import stat
+import sys
+
+
+AMP_DIRECTORY = ".amp"
+RUNTIME_DIRECTORY = "runtime"
+ENVIRONMENT = "hamsterdan.env"
+SELECTOR = "readiness-topology"
+MAX_BYTES = 64 * 1024
+REQUIRED = {
+    "HAMSTERDAN_ALLOWED_REPOSITORIES",
+    "HAMSTERDAN_ANTHROPIC_API_KEY_FILE",
+    "HAMSTERDAN_GITHUB_ACCOUNT_ID",
+    "HAMSTERDAN_GITHUB_ACCOUNT_LOGIN",
+    "HAMSTERDAN_GITHUB_APP_ID",
+    "HAMSTERDAN_GITHUB_APP_SLUG",
+    "HAMSTERDAN_GITHUB_CLIENT_ID",
+    "HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE",
+    "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE",
+    "HAMSTERDAN_PI_CLI_PATH",
+    "HAMSTERDAN_PI_NODE_PATH",
+    "HAMSTERDAN_PI_PACKAGE_ROOT",
+    "HAMSTERDAN_REMINDER_SECONDS",
+    "HAMSTERDAN_STATE_PATH",
+    "HAMSTERDAN_WORKFLOW_PATH",
+}
+LINE = re.compile(r"([A-Z][A-Z0-9_]*)=([^\x00-\x20\x7f]+)\Z")
+
+
+def _fail() -> None:
+    raise SystemExit("Hamsterdan runtime environment is unavailable")
+
+
+def _open_runtime() -> int:
+    try:
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        amp = os.open(AMP_DIRECTORY, flags)
+        try:
+            amp_metadata = os.fstat(amp)
+            if (
+                not stat.S_ISDIR(amp_metadata.st_mode)
+                or stat.S_IMODE(amp_metadata.st_mode) != 0o700
+                or amp_metadata.st_uid != os.geteuid()
+            ):
+                _fail()
+            runtime = os.open(RUNTIME_DIRECTORY, flags, dir_fd=amp)
+        finally:
+            os.close(amp)
+        runtime_metadata = os.fstat(runtime)
+        if (
+            not stat.S_ISDIR(runtime_metadata.st_mode)
+            or stat.S_IMODE(runtime_metadata.st_mode) != 0o700
+            or runtime_metadata.st_uid != os.geteuid()
+        ):
+            os.close(runtime)
+            _fail()
+        return runtime
+    except OSError:
+        _fail()
+
+
+def _read(runtime: int, name: str, maximum: int = MAX_BYTES) -> bytes:
+    try:
+        before = os.stat(name, dir_fd=runtime, follow_symlinks=False)
+        if (
+            stat.S_ISLNK(before.st_mode)
+            or not stat.S_ISREG(before.st_mode)
+            or stat.S_IMODE(before.st_mode) != 0o600
+            or before.st_uid != os.geteuid()
+            or not 0 < before.st_size <= maximum
+        ):
+            _fail()
+        descriptor = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=runtime)
+        try:
+            opened = os.fstat(descriptor)
+            if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+                _fail()
+            value = os.read(descriptor, maximum + 1)
+            if os.read(descriptor, 1):
+                _fail()
+            after = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        _fail()
+    if len(value) != before.st_size or (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns) != (
+        opened.st_dev,
+        opened.st_ino,
+        opened.st_size,
+        opened.st_mtime_ns,
+    ):
+        _fail()
+    return value
+
+
+def _parse(value: bytes) -> dict[str, str]:
+    try:
+        lines = value.decode("ascii").splitlines()
+    except UnicodeDecodeError:
+        _fail()
+    parsed: dict[str, str] = {}
+    for line in lines:
+        matched = LINE.fullmatch(line)
+        if matched is None or matched[1] in parsed:
+            _fail()
+        parsed[matched[1]] = matched[2]
+    if set(parsed) != REQUIRED:
+        _fail()
+    return parsed
+
+
+def _topology(runtime: int) -> str | None:
+    try:
+        exists = os.stat(SELECTOR, dir_fd=runtime, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(exists.st_mode) or _read(runtime, SELECTOR, 3) != b"v5\n":
+        _fail()
+    return "v5"
+
+
+def _select_topology(runtime: int, value: str) -> None:
+    _parse(_read(runtime, ENVIRONMENT))
+    selected = _topology(runtime)
+    if value == "production":
+        if selected is not None:
+            os.unlink(SELECTOR, dir_fd=runtime)
+            os.fsync(runtime)
+        return
+    if value != "v5":
+        _fail()
+    temporary = f".readiness-topology-{os.getpid()}"
+    try:
+        descriptor = os.open(
+            temporary,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=runtime,
+        )
+        try:
+            if os.write(descriptor, b"v5\n") != 3:
+                _fail()
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, SELECTOR, src_dir_fd=runtime, dst_dir_fd=runtime)
+        os.fsync(runtime)
+    finally:
+        try:
+            os.unlink(temporary, dir_fd=runtime)
+        except FileNotFoundError:
+            pass
+
+
+def main() -> None:
+    arguments = tuple(sys.argv[1:])
+    runtime = _open_runtime()
+    if arguments[:1] == ("topology",):
+        try:
+            if len(arguments) != 2:
+                _fail()
+            _select_topology(runtime, arguments[1])
+        finally:
+            os.close(runtime)
+        return
+    try:
+        port = os.getenv("PORT", "8000")
+        if not port.isascii() or not port.isdecimal() or not 1 <= int(port) <= 65535:
+            _fail()
+        stripped_prefixes = (
+            "AMP_",
+            "ANTHROPIC_",
+            "GH_",
+            "GITHUB_",
+            "HAMSTERDAN_",
+            "OPENAI_",
+            "OPENROUTER_",
+        )
+        environment = {name: value for name, value in os.environ.items() if not name.startswith(stripped_prefixes)}
+        qualification_fault = os.getenv("HAMSTERDAN_QUALIFICATION_FAULT")
+        if qualification_fault:
+            environment["HAMSTERDAN_QUALIFICATION_FAULT"] = qualification_fault
+        environment.update(_parse(_read(runtime, ENVIRONMENT)))
+        topology = _topology(runtime)
+        if topology is not None:
+            environment["HAMSTERDAN_READINESS_TOPOLOGY"] = topology
+    finally:
+        os.close(runtime)
+    host_arguments = arguments or ("serve", "--host", "0.0.0.0", "--port", port)
+    command = (
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "-m",
+        "hamsterdan.host",
+        *host_arguments,
+    )
+    os.execvpe(command[0], command, environment)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except OSError:
+        _fail()
+    except ValueError:
+        _fail()

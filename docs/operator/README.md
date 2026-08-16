@@ -76,41 +76,64 @@ webhook events: <https://docs.github.com/en/webhooks/webhook-events-and-payloads
 
 Record the App ID, client ID, and slug shown by GitHub. Generate one private key
 from the App settings. Generate a high-entropy webhook secret locally without
-putting it in shell history, for example:
+putting it in shell history. Store both as **project** secrets so every new orb
+for the canonical Amp project can reproduce the same bounded runtime:
 
 ```sh
-install -d -m 700 .amp/runtime
-install -m 600 ~/Downloads/hamsterdan.private-key.pem .amp/runtime/github-app.pem
+amp secrets set GITHUB_APP_PRIVATE_KEY_PEM --project --secret \
+  --data-file ~/Downloads/hamsterdan.private-key.pem
 python - <<'PY'
 import secrets
 from pathlib import Path
-p = Path('.amp/runtime/webhook-secret')
+p = Path('/tmp/hamsterdan-webhook-secret')
 p.write_text(secrets.token_urlsafe(48) + '\n')
 p.chmod(0o600)
 PY
+amp secrets set GITHUB_APP_WEBHOOK_SECRET --project --secret \
+  --data-file /tmp/hamsterdan-webhook-secret
 ```
 
-Paste the webhook-secret file's value into GitHub's App webhook secret field
-without logging it. Never commit either file. GitHub key guidance:
+Paste the same temporary webhook-secret value into GitHub's App webhook secret
+field without logging it, then delete the temporary file and downloaded key
+after project-secret custody is verified. Never commit either file. GitHub key guidance:
 <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps>;
 webhook security: <https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries>.
 
 ## 2. Configure and install
 
-Create mode `0600` `.amp/runtime/hamsterdan.env`. It contains IDs and paths,
-not secret values:
+Configure the public registration and policy values as Amp project environment
+variables. These current HBNetwork values are not credentials:
 
 ```sh
-HAMSTERDAN_GITHUB_APP_ID=<app-id>
-HAMSTERDAN_GITHUB_APP_SLUG=hamster-dan
-HAMSTERDAN_GITHUB_CLIENT_ID=<client-id>
-HAMSTERDAN_GITHUB_ACCOUNT_ID=108842540
-HAMSTERDAN_GITHUB_ACCOUNT_LOGIN=HBNetwork
-HAMSTERDAN_ALLOWED_REPOSITORIES=1316665126:HBNetwork/demo-pr-readiness
-HAMSTERDAN_STATE_PATH=.amp/runtime/state
-HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE=.amp/runtime/github-app.pem
-HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE=.amp/runtime/webhook-secret
+printf %s 4452953 | amp secrets set GITHUB_APP_ID --project --env --data-file -
+printf %s hamster-dan | amp secrets set GITHUB_APP_SLUG --project --env --data-file -
+printf %s Iv23liKF36r9YtMkGf0m | amp secrets set GITHUB_APP_CLIENT_ID --project --env --data-file -
+printf %s 108842540 | amp secrets set GITHUB_INSTALLATION_ACCOUNT_ID --project --env --data-file -
+printf %s HBNetwork | amp secrets set GITHUB_INSTALLATION_ACCOUNT_LOGIN --project --env --data-file -
+printf %s 1316665126:HBNetwork/demo-pr-readiness | \
+  amp secrets set GITHUB_INSTALLATION_REPOSITORIES --project --env --data-file -
+printf %s henriquebastos | amp secrets set GITHUB_DEMO_AUTHOR_LOGIN --project --env --data-file -
+printf %s crisbastos | amp secrets set GITHUB_DEMO_REVIEWER_LOGIN --project --env --data-file -
+printf %s .github/workflows/ci.yml | \
+  amp secrets set READINESS_WORKFLOW_PATH --project --env --data-file -
+printf %s 259200 | amp secrets set READINESS_REMINDER_SECONDS --project --env --data-file -
 ```
+
+Store the author and reviewer `gh` `hosts.yml` documents as project secrets
+`GITHUB_DEMO_AUTHOR_HOSTS` and `GITHUB_DEMO_REVIEWER_HOSTS`. Store the direct
+agent-provider key as project secret `ANTHROPIC_AGENT_API_KEY`; a personal
+`ANTHROPIC_API_KEY` is only a fallback. Role names are deliberate: changing the
+people later changes project settings, not source code.
+
+On each new orb, `.agents/setup` consumes and removes those secret variables
+from installer environments, verifies the two exact distinct GitHub logins
+through `/usr/bin/gh` in an otherwise empty environment, installs the pinned Pi
+runtime, and creates ignored owned `0600` files plus
+`.amp/runtime/hamsterdan.env`. That generated file contains paths and public
+configuration, never secret values. Missing or unsafe authority removes stale
+launch configuration and leaves the source workspace usable but the host
+unstartable. Secret-setting changes apply to new orbs; do not copy values
+through chat to retrofit an existing orb.
 
 GitHub assigned this registration the slug `hamster-dan`, so its bot login is
 `hamster-dan[bot]` and its exact public mention is `@hamster-dan`. Trusted PR
@@ -118,21 +141,39 @@ participants interact through natural comments beginning with that mention,
 for example `@hamster-dan explain the current blockers`. The lookalike
 `@hamsterdan` is not a GitHub alias and is intentionally not accepted.
 
-Run `chmod 600 .amp/runtime/hamsterdan.env`. From the App settings choose
-**Install App**, select HBNetwork, choose **Only select repositories**, and
-select only `demo-pr-readiness`. Installation docs:
+From the App settings choose **Install App**, select HBNetwork, choose **Only
+select repositories**, and select only `demo-pr-readiness`. Installation docs:
 <https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app>.
 
 ## 3. Validate, serve, and prove ingress
 
-Source the ID/path file only into the trusted host process, then validate the
-App registration and selected-repository installation:
+The checked launcher opens `.amp/runtime` through held, non-symlink directory
+descriptors, reads the generated environment without shell evaluation, strips
+ambient Amp, GitHub, and provider credentials, and accepts only its exact
+generated key set. The host's Git publication boundary separately runs every
+Git command with global/system config, prompts, hooks, askpass, SSH-agent, and
+ambient credential helpers unavailable. Validate the App registration and
+selected-repository installation through that boundary:
 
 ```sh
-set -a; . .amp/runtime/hamsterdan.env; set +a
-uv run --frozen python -m hamsterdan.host validate
+scripts/hamsterdan-host validate
 amp orb services ensure
 ```
+
+Production remains the default after every setup. To run one fresh V5 campaign,
+stop any existing writer, select V5 explicitly, validate, and then start the
+supervised service:
+
+```sh
+amp orb service stop hamsterdan-host  # harmless if already stopped
+scripts/hamsterdan-host topology v5
+scripts/hamsterdan-host validate
+amp orb services ensure
+```
+
+`scripts/hamsterdan-host topology production` removes the private local V5
+selector and restores the default. Unknown values fail closed. Existing state
+bindings still prevent either topology from opening the other's state.
 
 The supervised service listens only for the local durable relay; it does not
 need a browser portal. Ensure the App's webhook URL is the exact capability from
@@ -192,21 +233,19 @@ scripts/hamsterdan-demo inspect --pr <number>
 scripts/hamsterdan-demo inspect --pr <hero-number> --expect-hero-review
 ```
 
-Qualification orbs receive the two human operator sessions from Amp project
-secrets `HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS` and
-`HAMSTERDAN_GITHUB_CRISBASTOS_HOSTS`. `.agents/setup` writes them only to ignored,
-mode-`0700` identity roots under `.amp/runtime/`, with mode-`0600` files. Human
-commands must bypass Amp's injected `gh` wrapper and select one identity
-explicitly:
+Qualification orbs receive the two human operator sessions from the role-based
+Amp project secrets. `.agents/setup` writes them only to ignored, mode-`0700`
+identity roots under `.amp/runtime/`, with mode-`0600` files. Human commands
+must bypass Amp's injected `gh` wrapper and select one identity explicitly:
 
 ```sh
 # Author/operator
-env -i HOME="$HOME" PATH="/usr/bin:/bin" \
-  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-henriquebastos" /usr/bin/gh api user
+/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" \
+  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-demo-author" /usr/bin/gh api user
 
 # Distinct reviewer
-env -i HOME="$HOME" PATH="/usr/bin:/bin" \
-  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-crisbastos" /usr/bin/gh api user
+/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" \
+  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-demo-reviewer" /usr/bin/gh api user
 ```
 
 Never print, copy into source, or pass either session into the host or agent
@@ -395,9 +434,8 @@ then explicitly requeue it after correcting the provider or configuration
 failure:
 
 ```sh
-set -a; . .amp/runtime/hamsterdan.env; set +a
-uv run --frozen python -m hamsterdan.host inbox
-uv run --frozen python -m hamsterdan.host requeue --delivery <canonical-delivery-uuid>
+scripts/hamsterdan-host inbox
+scripts/hamsterdan-host requeue --delivery <canonical-delivery-uuid>
 ```
 
 Requeue resets the retry schedule for the already verified, sanitized durable
@@ -414,8 +452,7 @@ never start a competing writer.
 Inspect a persisted Instance without replaying or editing it:
 
 ```sh
-set -a; . .amp/runtime/hamsterdan.env; set +a
-uv run --frozen python -m hamsterdan.host inspect-instance \
+scripts/hamsterdan-host inspect-instance \
   --installation <installation-id> --repository <repository-id> --pr <number>
 ```
 

@@ -1,5 +1,126 @@
 #!/usr/bin/env bash
+set +x
 set -euo pipefail
+export LC_ALL=C
+
+MAX_PRIVATE_BYTES=65536
+RUNTIME=.amp/runtime
+SYSTEM_GH=/usr/bin/gh
+
+demo_author_hosts="${GITHUB_DEMO_AUTHOR_HOSTS:-}"
+demo_reviewer_hosts="${GITHUB_DEMO_REVIEWER_HOSTS:-}"
+github_app_key="${GITHUB_APP_PRIVATE_KEY_PEM:-}"
+github_webhook_secret="${GITHUB_APP_WEBHOOK_SECRET:-}"
+anthropic_key="${ANTHROPIC_AGENT_API_KEY:-${ANTHROPIC_API_KEY:-}}"
+unset GITHUB_DEMO_AUTHOR_HOSTS GITHUB_DEMO_REVIEWER_HOSTS
+unset GITHUB_APP_PRIVATE_KEY_PEM GITHUB_APP_WEBHOOK_SECRET
+unset ANTHROPIC_AGENT_API_KEY ANTHROPIC_API_KEY
+
+fail() {
+    echo "==> Hamsterdan setup refused unsafe runtime custody" >&2
+    exit 1
+}
+
+assert_private_directory() {
+    local path="$1"
+    [[ ! -L "$path" ]] || fail
+    if [[ ! -e "$path" ]]; then
+        install -d -m 0700 "$path"
+    fi
+    [[ -d "$path" && ! -L "$path" ]] || fail
+    [[ "$(stat -c '%u' "$path")" = "$(id -u)" ]] || fail
+    chmod 0700 "$path"
+    [[ "$(stat -c '%a' "$path")" = 700 ]] || fail
+}
+
+retire_managed_file() {
+    local path="$1"
+    [[ ! -L "$path" ]] || fail
+    if [[ -e "$path" ]]; then
+        [[ -f "$path" ]] || fail
+        rm -- "$path"
+    fi
+}
+
+verify_private_file() {
+    local path="$1"
+    [[ -f "$path" && ! -L "$path" ]] || fail
+    [[ "$(stat -c '%u' "$path")" = "$(id -u)" ]] || fail
+    [[ "$(stat -c '%a' "$path")" = 600 ]] || fail
+    local size
+    size="$(stat -c '%s' "$path")"
+    (( size > 0 && size <= MAX_PRIVATE_BYTES )) || fail
+}
+
+install_private_file() {
+    local path="$1"
+    local value="$2"
+    local parent temporary
+    parent="$(dirname "$path")"
+    assert_private_directory "$parent"
+    [[ ! -L "$path" ]] || fail
+    [[ ! -e "$path" || -f "$path" ]] || fail
+    if [[ -z "$value" ]]; then
+        retire_managed_file "$path"
+        return
+    fi
+    (( ${#value} <= MAX_PRIVATE_BYTES )) || fail
+    temporary="$(mktemp "$parent/.hamsterdan-private.XXXXXX")"
+    chmod 0600 "$temporary"
+    printf '%s' "$value" > "$temporary"
+    mv -fT -- "$temporary" "$path"
+    verify_private_file "$path"
+}
+
+retire_identity() {
+    local root="$1"
+    [[ ! -L "$root" ]] || fail
+    if [[ ! -e "$root" ]]; then
+        return
+    fi
+    [[ -d "$root" ]] || fail
+    [[ ! -L "$root/gh" ]] || fail
+    if [[ -d "$root/gh" ]]; then
+        retire_managed_file "$root/gh/hosts.yml"
+        rmdir -- "$root/gh" 2>/dev/null || fail
+    fi
+    rmdir -- "$root" 2>/dev/null || fail
+}
+
+install_identity() {
+    local root="$1"
+    local value="$2"
+    if [[ -z "$value" ]]; then
+        retire_identity "$root"
+        return
+    fi
+    assert_private_directory "$root"
+    assert_private_directory "$root/gh"
+    install_private_file "$root/gh/hosts.yml" "$value"
+}
+
+verify_identity() {
+    local root="$1"
+    local expected="$2"
+    local observed
+    [[ "$expected" =~ ^[A-Za-z0-9-]{1,39}$ ]] || fail
+    verify_private_file "$root/gh/hosts.yml"
+    [[ -x "$SYSTEM_GH" && ! -L "$SYSTEM_GH" ]] || fail
+    observed="$(/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" XDG_CONFIG_HOME="$PWD/$root" "$SYSTEM_GH" api user --jq .login)"
+    [[ "$observed" = "$expected" ]] || fail
+}
+
+assert_private_directory .amp
+assert_private_directory "$RUNTIME"
+retire_managed_file "$RUNTIME/hamsterdan.env"
+retire_managed_file "$RUNTIME/readiness-topology"
+
+install_identity "$RUNTIME/gh-demo-author" "$demo_author_hosts"
+install_identity "$RUNTIME/gh-demo-reviewer" "$demo_reviewer_hosts"
+install_private_file "$RUNTIME/github-app.pem" "$github_app_key"
+install_private_file "$RUNTIME/webhook-secret" "$github_webhook_secret"
+install_private_file "$RUNTIME/anthropic-api-key" "$anthropic_key"
+unset demo_author_hosts demo_reviewer_hosts github_app_key github_webhook_secret anthropic_key
 
 echo "==> Installing uv"
 if ! command -v uv >/dev/null 2>&1; then
@@ -37,23 +158,80 @@ echo "==> Syncing the locked demo-video environment"
     bunx remotion browser ensure
 )
 
-install_gh_identity() {
-    local variable="$1"
-    local config_root="$2"
-    local value="${!variable:-}"
-    if [[ -z "$value" ]]; then
-        echo "==> Optional GitHub identity $variable is not configured"
-        return
-    fi
-    install -d -m 0700 "$config_root" "$config_root/gh"
-    umask 077
-    printf '%s' "$value" > "$config_root/gh/hosts.yml"
-    chmod 0600 "$config_root/gh/hosts.yml"
-}
+echo "==> Installing the qualified Pi runtime"
+pi_prefix="$PWD/$RUNTIME/pi-install"
+npm install --silent --no-audit --no-fund --prefix "$pi_prefix" \
+    node@22.19.0 @earendil-works/pi-coding-agent@0.83.0
+pi_package="$pi_prefix/node_modules/@earendil-works/pi-coding-agent"
+pi_cli="$pi_package/dist/cli.js"
+pi_node="$pi_prefix/node_modules/node/bin/node"
+[[ -f "$pi_cli" && -f "$pi_package/dist/index.js" && -x "$pi_node" ]] || fail
 
-echo "==> Installing project-scoped human GitHub operator identities"
-install_gh_identity HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS .amp/runtime/gh-henriquebastos
-install_gh_identity HAMSTERDAN_GITHUB_CRISBASTOS_HOSTS .amp/runtime/gh-crisbastos
-unset HAMSTERDAN_GITHUB_HENRIQUEBASTOS_HOSTS HAMSTERDAN_GITHUB_CRISBASTOS_HOSTS
+runtime_ready=true
+for name in \
+    GITHUB_DEMO_AUTHOR_LOGIN GITHUB_DEMO_REVIEWER_LOGIN \
+    GITHUB_APP_ID GITHUB_APP_SLUG GITHUB_APP_CLIENT_ID \
+    GITHUB_INSTALLATION_ACCOUNT_ID GITHUB_INSTALLATION_ACCOUNT_LOGIN \
+    GITHUB_INSTALLATION_REPOSITORIES READINESS_WORKFLOW_PATH READINESS_REMINDER_SECONDS; do
+    if [[ -z "${!name:-}" ]]; then
+        runtime_ready=false
+    fi
+done
+for path in \
+    "$RUNTIME/gh-demo-author/gh/hosts.yml" \
+    "$RUNTIME/gh-demo-reviewer/gh/hosts.yml" \
+    "$RUNTIME/github-app.pem" "$RUNTIME/webhook-secret" "$RUNTIME/anthropic-api-key"; do
+    if [[ ! -f "$path" || -L "$path" ]]; then
+        runtime_ready=false
+    fi
+done
+
+if [[ "$runtime_ready" != true ]]; then
+    echo "==> Optional Hamsterdan live runtime is not fully configured"
+    exit 0
+fi
+
+verify_identity "$RUNTIME/gh-demo-author" "$GITHUB_DEMO_AUTHOR_LOGIN"
+verify_identity "$RUNTIME/gh-demo-reviewer" "$GITHUB_DEMO_REVIEWER_LOGIN"
+[[ "$GITHUB_DEMO_AUTHOR_LOGIN" != "$GITHUB_DEMO_REVIEWER_LOGIN" ]] || fail
+retire_identity "$RUNTIME/gh-henriquebastos"
+retire_identity "$RUNTIME/gh-crisbastos"
+
+[[ "$GITHUB_APP_ID" =~ ^[1-9][0-9]*$ ]] || fail
+[[ "$GITHUB_APP_SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || fail
+[[ "$GITHUB_APP_CLIENT_ID" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || fail
+[[ "$GITHUB_INSTALLATION_ACCOUNT_ID" =~ ^[1-9][0-9]*$ ]] || fail
+[[ "$GITHUB_INSTALLATION_ACCOUNT_LOGIN" =~ ^[A-Za-z0-9-]{1,39}$ ]] || fail
+[[ "$GITHUB_INSTALLATION_REPOSITORIES" =~ ^[1-9][0-9]*:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(,[1-9][0-9]*:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)*$ ]] || fail
+[[ "$READINESS_WORKFLOW_PATH" =~ ^[A-Za-z0-9_./-]+$ ]] || fail
+[[ "$READINESS_REMINDER_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail
+
+state_path="$PWD/$RUNTIME/state"
+assert_private_directory "$state_path"
+for path in "$RUNTIME/github-app.pem" "$RUNTIME/webhook-secret" "$RUNTIME/anthropic-api-key"; do
+    verify_private_file "$path"
+done
+
+temporary="$(mktemp "$RUNTIME/.hamsterdan-env.XXXXXX")"
+chmod 0600 "$temporary"
+{
+    printf 'HAMSTERDAN_GITHUB_APP_ID=%s\n' "$GITHUB_APP_ID"
+    printf 'HAMSTERDAN_GITHUB_APP_SLUG=%s\n' "$GITHUB_APP_SLUG"
+    printf 'HAMSTERDAN_GITHUB_CLIENT_ID=%s\n' "$GITHUB_APP_CLIENT_ID"
+    printf 'HAMSTERDAN_GITHUB_ACCOUNT_ID=%s\n' "$GITHUB_INSTALLATION_ACCOUNT_ID"
+    printf 'HAMSTERDAN_GITHUB_ACCOUNT_LOGIN=%s\n' "$GITHUB_INSTALLATION_ACCOUNT_LOGIN"
+    printf 'HAMSTERDAN_ALLOWED_REPOSITORIES=%s\n' "$GITHUB_INSTALLATION_REPOSITORIES"
+    printf 'HAMSTERDAN_STATE_PATH=%s\n' "$state_path"
+    printf 'HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE=%s\n' "$PWD/$RUNTIME/github-app.pem"
+    printf 'HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE=%s\n' "$PWD/$RUNTIME/webhook-secret"
+    printf 'HAMSTERDAN_ANTHROPIC_API_KEY_FILE=%s\n' "$PWD/$RUNTIME/anthropic-api-key"
+    printf 'HAMSTERDAN_PI_CLI_PATH=%s\n' "$pi_cli"
+    printf 'HAMSTERDAN_PI_NODE_PATH=%s\n' "$pi_node"
+    printf 'HAMSTERDAN_PI_PACKAGE_ROOT=%s\n' "$pi_package"
+    printf 'HAMSTERDAN_WORKFLOW_PATH=%s\n' "$READINESS_WORKFLOW_PATH"
+    printf 'HAMSTERDAN_REMINDER_SECONDS=%s\n' "$READINESS_REMINDER_SECONDS"
+} > "$temporary"
+mv -fT -- "$temporary" "$RUNTIME/hamsterdan.env"
+verify_private_file "$RUNTIME/hamsterdan.env"
 
 echo "==> Hamsterdan orb setup complete"
