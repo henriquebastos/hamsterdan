@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: Clean-green, transient CI, and the complete hero are qualified live; its public checkpoint-capture lane is qualified locally; committed-source recording and additional journeys remain
+status_reason: Clean-green, transient CI, and the complete hero plus its durable real-GitHub checkpoint montage are accepted; additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -124,9 +124,11 @@ making that ruling.
   assertion-checks fourteen surviving PR 61 checkpoints and renders only
   hash-verified screenshots into a silent direct-cut montage. Its deterministic
   suite, anonymous development probe, complete media inspection, and Oracle
-  review pass. Clean committed-source recording and durable artifact
-  publication still precede the remaining live journey portfolio and CV17
-  acceptance.
+  review pass. The canonical clean-commit run then passed all checksums and
+  complete media inspection; its montage, report, checksums, PNG archive, and
+  contact sheet are published in the source-bound
+  [`cv17-pr61-v5-hero-d2bd11c` prerelease](https://github.com/henriquebastos/hamsterdan/releases/tag/cv17-pr61-v5-hero-d2bd11c).
+  The remaining live journey portfolio still precedes CV17 acceptance.
 
 ## Done condition
 

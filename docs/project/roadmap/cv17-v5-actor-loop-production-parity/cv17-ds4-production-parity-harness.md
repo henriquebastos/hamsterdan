@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 qualifies the complete hero; its public checkpoint-capture lane is qualified locally; committed-source recording and additional journeys remain
+status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 qualifies the complete hero and its durable real-GitHub checkpoint montage; additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -891,6 +891,31 @@ Oracle's trust-boundary review returned `clear to commit`. Because canonical
 capture deliberately requires a clean committed worktree, the committed-source
 recording, final inspection, and durable artifact publication follow this
 implementation slice and are not inferred from the development probe.
+
+### DS4.26 — PR 61 checkpoint montage accepted and published
+
+The canonical lane ran from clean committed revision `d2bd11c` without GitHub
+credentials or mutation authority. It revalidated all fourteen surviving PR 61
+checkpoints, emitted `github-live-checkpoint-capture` provenance bound to
+manifest digest
+`81514a9152488d98c8af71235845ce98103548612560f5bd2bf388a4524d40c6`,
+and rendered a 76-second 1440×900 H.264 montage at 30 fps with no audio. Every
+PNG, the video, and the completed report passed `SHA256SUMS`; the video digest
+is `ad5dfafac6f917c7204c5a0dd5a0cba8fa16e33a8e0996b7675dfa4cd43c73c5`.
+
+Complete inspection of the canonical contact sheet and encoded video accepted
+all checkpoints as genuine GitHub UI with clean direct cuts and no blank,
+challenge, error, corrupt, clipped-essential, synthetic, overlay, or transition
+frame. The normal logged-out GitHub invitation remained provider UI rather
+than an authentication fallback. PR 61 stayed open and unmerged, and the
+capture made no provider write.
+
+The immutable source-bound bundle is published as the
+[`cv17-pr61-v5-hero-d2bd11c` prerelease](https://github.com/henriquebastos/hamsterdan/releases/tag/cv17-pr61-v5-hero-d2bd11c).
+It contains the montage, bounded report, checksum file, fourteen-PNG archive,
+and review contact sheet. This closes the real-site recording for the complete
+three-actor hero; the remaining live journey portfolio still precedes CV17
+acceptance.
 
 ## Done condition
 
