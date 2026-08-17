@@ -480,7 +480,14 @@ def test_v5_mutation_known_terminal_repairs_the_global_agent_route(tmp_path: Pat
     root = tmp_path / "applications/1/2/3"
     root.mkdir(parents=True)
     (root / "binding.json").write_text(
-        json.dumps({"instance_id": "github:1:2:pr:3", "repository": "owner/repo", "pull_request": 3})
+        json.dumps(
+            {
+                "instance_id": "github:1:2:pr:3",
+                "repository": "owner/repo",
+                "pull_request": 3,
+                "topology": "v5",
+            }
+        )
     )
     request = ActivityRequested(
         NetPath("mut.git_gate"),

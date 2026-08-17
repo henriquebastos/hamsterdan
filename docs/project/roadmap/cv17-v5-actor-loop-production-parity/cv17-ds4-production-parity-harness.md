@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; PR 59 qualifies hero findings and a typed coding inability; fresh repair proof remains
+status_reason: PRs 56–57 qualify clean-green and transient CI; PR 59 qualifies hero findings and a typed coding inability; coding and restart corrections are local; fresh repair proof remains
 updated: 2026-08-17
 ---
 
@@ -749,6 +749,26 @@ focused workspace/runtime/mutation tests, quick checks, 1,171 Python tests,
 and nine Bun relay tests. A fresh selected-V5 hero PR is required to prove the
 corrected coding boundary can produce, publish, and admit the real repair; PR
 59 remains immutable evidence of the prior inability.
+
+### DS4.22 — V5 mutation-route restart repair
+
+The first host restart against DS4.21 failed closed before serving traffic.
+Startup scanned PR 59's retained terminal `mut.git_gate` to settle its global
+agent route, but the route-repair helper rejected the valid durable binding.
+The canonical V5 binding contains `topology="v5"`; the helper independently
+required the exact older three-field binding shape. The failure did not alter
+History, replay the provider operation, or publish Git state.
+
+Route repair now consumes the host's canonical bounded binding reader instead
+of duplicating its schema. It accepts both topology-labeled V5 bindings and
+legacy production bindings while still requiring the path installation,
+repository ID, and pull request to agree with the bound instance identity and
+validating the bound repository before reconstructing the global mutation
+operation. The terminal-route test now uses the real V5 binding shape, and the
+fault-route test retains legacy-binding coverage. Fifty focused agent, binding,
+startup, and restart tests pass. Quick checks, 1,171 Python tests, and nine Bun
+relay tests also pass. The Oracle commit ruling and a restart against retained
+PR 59 state remain required.
 
 ## Done condition
 

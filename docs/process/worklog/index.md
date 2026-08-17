@@ -79,3 +79,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-17 — Marker-safe provider finding identity contract qualified locally](entries/2026-08-17T0346Z-marker-safe-provider-finding-identity-qualified.md)
 - [2026-08-17 — Selected-V5 hero findings qualified live](entries/2026-08-17T0419Z-selected-v5-hero-findings-qualified-live.md)
 - [2026-08-17 — Pi coding boundary corrected locally](entries/2026-08-17T0528Z-pi-coding-boundary-corrected.md)
+- [2026-08-17 — V5 mutation-route restart corrected locally](entries/2026-08-17T0548Z-v5-mutation-route-restart-corrected.md)

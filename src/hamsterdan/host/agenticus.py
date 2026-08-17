@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import sqlite3
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -39,10 +38,10 @@ from hamsterdan.agents import (
     UnavailablePiRunner,
 )
 from hamsterdan.agents.pi import PiWorkspaceProvider
+from hamsterdan.host.binding import read_instance_binding
 
 PI_PROVIDER = "anthropic"
 PI_MODEL = "claude-sonnet-4-5"
-_REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
 HOST_FENCED_EFFECT = CapabilityDescriptor(
     DescriptorIdentity(DescriptorKind.EFFECT, "hamsterdan.host-fenced", 1),
@@ -469,22 +468,14 @@ def _mutation_agent_operation(history: Path, op_key: object) -> str:
 
     if not isinstance(op_key, str):
         raise TypeError("mutation operation key is malformed")
-    binding = history.with_name("binding.json")
-    if binding.is_symlink() or not binding.is_file() or binding.stat().st_size > 4096:
-        raise ValueError("mutation History binding is unavailable")
-    payload = json.loads(binding.read_text(encoding="utf-8"))
+    try:
+        binding = read_instance_binding(history.with_name("binding.json"))
+    except RuntimeError:
+        raise ValueError("mutation History binding is unavailable") from None
     installation, repository_id, path_pull = (int(value) for value in history.parts[-4:-1])
     if min(installation, repository_id, path_pull) <= 0:
         raise ValueError("mutation History path is malformed")
     expected_instance = f"github:{installation}:{repository_id}:pr:{path_pull}"
-    if (
-        not isinstance(payload, dict)
-        or set(payload) != {"instance_id", "repository", "pull_request"}
-        or payload.get("instance_id") != expected_instance
-        or type(payload.get("pull_request")) is not int
-        or payload.get("pull_request") != path_pull
-        or not isinstance(payload.get("repository"), str)
-        or _REPOSITORY.fullmatch(payload["repository"]) is None
-    ):
+    if binding.instance_id != expected_instance or binding.pull_request != path_pull:
         raise ValueError("mutation History binding is malformed")
-    return _identifier(f"mutation:{payload['repository']}:pr:{path_pull}:{op_key}", "operation")
+    return _identifier(f"mutation:{binding.repository}:pr:{path_pull}:{op_key}", "operation")
