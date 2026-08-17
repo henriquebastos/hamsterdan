@@ -90,6 +90,11 @@ produced a two-file App-authored repair commit with six green repaired-head
 jobs. Immediate verification found the remote ref ahead of GitHub's PR
 projection and retained a mutation fault rather than forging success. V5's
 existing low-level recovery door is now exposed as one exact operation-scoped
-intent without changing production's target-scoped contract. Exact recovery,
-later hero interactions, and additional user-visible V5 journeys remain
-mandatory before CV17 closes.
+intent without changing production's target-scoped contract. One exact
+recovery then found the existing commit lookup-first without another coding or
+Git write; the later status reply, distinct repaired-head approval, refreshed
+dashboard, and readiness advisory completed the three-actor story. The final
+hero inspection passes all ten checks, all 18 PR-specific webhook manifests are
+terminal, and History has no Activity or firing failure. PR 61 therefore
+qualifies the complete selected-V5 hero. GitHub-site recordings and additional
+user-visible V5 journeys remain mandatory before CV17 closes.

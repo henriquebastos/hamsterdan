@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 proves a real App repair commit; exact publication recovery and later hero interactions remain
+status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 qualifies the complete three-actor hero live; recordings and additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -822,8 +822,43 @@ Positive ingress coverage spans `push`, `findings`, `rerun`, `reminder`,
 operations fail closed. One hundred eighty-eight focused protocol, ingress,
 mutation-gate, and actor-loop tests pass, followed by quick checks, 1,183
 Python tests, and nine Bun relay tests. Oracle returned `clear to commit`.
-Redeployment and one explicit lookup-first recovery of the retained PR 61
-operation remain.
+After commit `6a640e4`, the selected-V5 host restarted healthy. Henrique named
+the exact retained operation in one
+[recovery request](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312866939).
+The classifier preserved that operation verbatim; `git_gate` found `e3d11a8`
+lookup-first and folded `Pushed(old=02e0842,new=e3d11a8)`. The global mutation
+route settled, the branch retained exactly two commits, and no second coding Pi
+operation, object write, or ref update occurred. The App posted the visible
+[recovery acknowledgement](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312912318).
+
+### DS4.24 — Complete selected-V5 hero accepted live
+
+After exact recovery, Henrique posted
+[`@hamster-dan status`](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312934795)
+and the App returned a
+[current-gate reply](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312983555)
+without changing Git state. Cris then submitted a distinct-human
+[`APPROVED` review](https://github.com/HBNetwork/demo-pr-readiness/pull/61#pullrequestreview-4949248566)
+on repaired head `e3d11a8171dbbb4af910b7c199a5f240dfb2441e`. The App refreshed the
+[dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312507328)
+and published the final
+[readiness advisory](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312999972)
+under operation `ready:e3d11a8171dbbb4af910b7c199a5f240dfb2441e:i2`.
+
+The final topology-neutral hero inspection passes all ten assertions at the
+repaired head: App ownership, dashboard and readiness presence, no legacy
+marker, exact workflow head, and all three original finding shapes. GitHub
+reports exactly two commits and all six repaired-head jobs green. All 18
+PR-specific webhook manifests are terminal. Canonical History contains 2,387
+records with the original `FaultM` retained append-only, one later `Pushed`,
+two `AgentReview`, one `ReviewLanded`, one `ALanded`, two `Replied`, and no
+Activity or firing failure. The host remains healthy with no degraded Instance.
+
+This qualifies the complete real three-actor journey: human author, distinct
+human reviewer, and App findings, repair, exact recovery, conversation,
+approval, dashboard, and readiness. GitHub-site checkpoint recordings and the
+remaining selected live journey portfolio are still required before CV17
+acceptance; PR 61 remains open and unmerged as durable demo evidence.
 
 ## Done condition
 

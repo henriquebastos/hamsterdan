@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: Clean-green and transient CI are qualified; PR 61 reached a real App repair commit; exact recovery and later hero interactions remain
+status_reason: Clean-green, transient CI, and the complete three-actor hero are qualified live; recordings and additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -112,9 +112,16 @@ making that ruling.
   saw the remote ref ahead of GitHub's PR projection and correctly retained a
   mutation fault instead of forging success. V5 now exposes its existing
   low-level recovery door as one exact operation-scoped intent, while
-  production's target-scoped contract remains unchanged. Exact lookup-first
-  recovery, later conversation, distinct approval, readiness, and recorded V5
-  journeys remain before CV17 acceptance.
+  production's target-scoped contract remains unchanged. After deployment, one
+  explicit exact-operation recovery found the existing App commit lookup-first,
+  settled `Pushed`, and produced no second coding operation, commit, object
+  write, or ref update. Henrique's later status question received an App reply;
+  Cris approved the repaired head; and the refreshed dashboard and readiness
+  advisory landed. The final hero inspection passes all ten checks, all 18
+  PR-specific webhook manifests are terminal, and canonical History has no
+  Activity or firing failure. PR 61 therefore qualifies the complete
+  selected-V5 three-actor hero. GitHub-site recordings and the remaining live
+  journey portfolio remain before CV17 acceptance.
 
 ## Done condition
 
