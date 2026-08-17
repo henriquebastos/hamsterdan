@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Fresh V5 clean-green is qualified through PR 56; additional GitHub-visible journeys and recordings remain
+status_reason: Fresh V5 clean-green and first-attempt-flake are qualified through PRs 56–57; additional GitHub-visible journeys and recordings remain
 updated: 2026-08-17
 ---
 
@@ -604,6 +604,42 @@ Python tests, nine Bun relay tests, Ruff, formatting, typing, and source/wheel
 builds. Oracle review returned `clear to commit`. The fresh selected-V5
 clean-green journey is qualified live; further user-visible scenarios and
 GitHub-site recordings remain before CV17 closes.
+
+### DS4.18 — Live first-attempt-flake qualification
+
+Fresh selected-V5
+[`HBNetwork/demo-pr-readiness` PR 57](https://github.com/HBNetwork/demo-pr-readiness/pull/57),
+head `4db1e173ed22aa0d314cfd5bac0be889eff6e9c8`, exercised the controlled
+transient-CI route on
+[Actions run 31990573431](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31990573431).
+Attempt 1 failed in `scenario-control` and skipped the remaining jobs. One
+[App-owned exact rerun marker](https://github.com/HBNetwork/demo-pr-readiness/pull/57#issuecomment-5311358830)
+named that run and head under
+`rerun:L1:e09bd0a7017f59322fae5b6b081863c0c0704ed0fef37dddc6ae7b37133a4c63`.
+The strict broker accepted it once, and attempt 2 completed all six jobs
+successfully on the same run and unchanged head.
+
+V5 admitted one clear canonical provider review after five authority-safe
+`RoundDeferred` outcomes, maintained the
+[App dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/57#issuecomment-5311368890),
+and landed one
+[App readiness advisory](https://github.com/HBNetwork/demo-pr-readiness/pull/57#issuecomment-5311372351)
+under `ready:4db1e173ed22aa0d314cfd5bac0be889eff6e9c8:i1`. The real dashboard
+webhooks again exercised exact custody deferral: twelve `ADeferred` terminals
+preceded the final `ALanded`, while all thirteen announcement requests remained
+byte-for-byte identical under that one operation.
+
+Canonical History retained 1,368 records with 35 Activity requests and 35
+completions: one `RerunLanded`, one `AgentReview`, fifteen `DashLanded`, twelve
+`ADeferred`, and one final `ALanded`, plus the five review deferrals. No
+Activity, firing, or quarantine failure occurred. Exactly one rerun gate ran;
+no coding/repair agent or Git/ref mutation entered the journey. All 23
+PR-specific webhook rows reached terminal custody, the host remained healthy,
+and the operator `inspect` command passed App ownership, exact-head workflow,
+dashboard, readiness, and legacy-marker checks. PR 57 remains open and unchanged
+as the live transient-CI recovery evidence. `scripts/check full` passes 1,168
+Python tests, nine Bun relay tests, Ruff, formatting, typing, and source/wheel
+builds.
 
 ## Done condition
 

@@ -70,5 +70,9 @@ contract. PR 55 preserved a temporary same-PR webhook-custody fence that had
 been consumed as a permanent readiness block. PR 56 then completed the fresh
 selected-V5 clean-green journey through the real provider: ten exact
 custody-bound deferrals woke under one retained readiness operation before the
-App-owned advisory landed. Additional fresh user-visible V5 journeys remain
+App-owned advisory landed. PR 57 then qualified the live first-attempt-flake
+journey: one App-owned exact rerun marker under its stable operation was
+accepted once by the strict broker; the same run then moved from failed attempt
+1 to successful attempt 2 at the unchanged head before readiness landed,
+without repair or mutation. Additional fresh user-visible V5 journeys remain
 mandatory before CV17 closes.

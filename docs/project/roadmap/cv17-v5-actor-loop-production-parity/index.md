@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 plus the deterministic portfolio are complete; fresh V5 clean-green is qualified live while additional user-visible journeys remain
+status_reason: DS2 and DS3 plus the deterministic portfolio are complete; fresh V5 clean-green and first-attempt-flake are qualified live while additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -89,8 +89,13 @@ making that ruling.
   settlement under the same operation. Fresh PR 56 qualified that correction:
   all six checks and the provider review completed, ten exact custody deferrals
   converged, and the App-owned readiness advisory landed without History
-  failure. Clean-green is therefore qualified live; additional fresh V5 user
-  journeys and recordings remain before CV17 acceptance.
+  failure. Fresh PR 57 then qualified first-attempt-flake: one App-owned exact
+  rerun marker under its stable operation was accepted once by the strict
+  broker; the same run then moved from failed attempt 1 to successful attempt 2
+  at the unchanged head, followed by a clear provider review and readiness
+  advisory with no repair or Git mutation. Clean-green and transient-CI
+  recovery are therefore qualified live; additional fresh V5 user journeys and
+  recordings remain before CV17 acceptance.
 
 ## Done condition
 
