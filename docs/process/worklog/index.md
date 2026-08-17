@@ -87,3 +87,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-17 — PR 56 clean-green capture qualified locally](entries/2026-08-17T0927Z-pr56-clean-green-capture-qualified-locally.md)
 - [2026-08-17 — PR 56 real-GitHub clean-green montage accepted](entries/2026-08-17T0933Z-pr56-real-github-clean-green-montage-accepted.md)
 - [2026-08-17 — PR 57 transient-CI capture qualified locally](entries/2026-08-17T0943Z-pr57-transient-ci-capture-qualified-locally.md)
+- [2026-08-17 — PR 57 real-GitHub transient-CI montage accepted](entries/2026-08-17T0948Z-pr57-real-github-transient-ci-montage-accepted.md)

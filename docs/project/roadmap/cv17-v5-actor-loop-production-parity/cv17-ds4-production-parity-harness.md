@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56 and 61 have durable montages; PR 57 transient-CI capture is qualified locally; committed-source recording and additional journeys remain
+status_reason: Clean-green, transient-CI recovery, and complete hero now have durable real-GitHub montages; the recorded campaign awaits Navigator acceptance and portfolio ruling
 updated: 2026-08-17
 ---
 
@@ -994,6 +994,33 @@ failure, attempt-2 rerun success, dashboard progression, and readiness sequence
 as understandable native provider UI with no blank, error, challenge, corrupt,
 synthetic, overlay, or transition segment. Canonical capture and publication
 follow the clean committed source slice.
+
+### DS4.30 — PR 57 transient-CI montage accepted and published
+
+The canonical PR 57 capture ran anonymously from clean committed revision
+`aa3bde5`. It revalidated all four checkpoints and emitted live provenance
+bound to manifest digest
+`285f093604b5cb8afd65e09e4f60f03e3d8f63953f6abb741d57a46d3ad07b36`.
+Every PNG, the completed report, and the 27-second 1440×900 H.264 video passed
+`SHA256SUMS`; the montage contains one 30 fps video stream, no audio, and digest
+`88e11e87ab4b4879f16e8866e5bf697679d823967bc5e8c89d1145b71dc999ba`.
+
+Complete canonical media inspection accepted the older failed attempt, visible
+re-run success, dashboard failure-to-success progression with zero findings and
+clear review, and readiness advisory as genuine GitHub UI with direct cuts and
+no blank, error, challenge, corrupt, synthetic, overlay, or transition segment.
+This is a later checkpoint montage, not contemporaneous filming. It does not
+infer trigger attribution from the hidden App marker; the separately accepted
+broker/runtime evidence owns Hamsterdan attribution. PR 57 stayed open and
+unchanged.
+
+The source-bound
+[`cv17-pr57-v5-transient-ci-aa3bde5` prerelease](https://github.com/henriquebastos/hamsterdan/releases/tag/cv17-pr57-v5-transient-ci-aa3bde5)
+contains the montage, bounded report, checksum file, four-PNG archive, and
+contact sheet. Clean-green, transient-CI recovery, and the complete three-actor
+hero now each have durable real-GitHub recordings. CV17 remains Active pending
+the Navigator's acceptance of that campaign and ruling on whether another live
+journey adds necessary user-visible evidence.
 
 ## Done condition
 

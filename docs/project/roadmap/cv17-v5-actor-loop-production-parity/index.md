@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: Clean-green and hero have durable montages; transient-CI capture is qualified locally; committed-source recording and additional journeys remain
+status_reason: Clean-green, transient-CI recovery, and complete hero have durable real-GitHub montages; the campaign awaits Navigator acceptance and portfolio ruling
 updated: 2026-08-17
 ---
 
@@ -140,8 +140,13 @@ making that ruling.
   57's failed attempt 1, explicitly triggered successful rerun, dashboard
   recovery progression, and readiness. Its forty-four focused tests, full
   project checks, anonymous four-checkpoint probe, and complete 27-second media
-  inspection pass. Clean committed-source PR 57 recording and the remaining
-  live journey portfolio still precede CV17 acceptance.
+  inspection pass. Its canonical clean-commit checksums and media inspection
+  also pass, and the montage, report, checksums, four-PNG archive, and contact
+  sheet are published in the source-bound
+  [`cv17-pr57-v5-transient-ci-aa3bde5` prerelease](https://github.com/henriquebastos/hamsterdan/releases/tag/cv17-pr57-v5-transient-ci-aa3bde5).
+  The three accepted live journeys now have durable recordings. CV17 remains
+  Active pending Navigator campaign acceptance and a ruling on whether another
+  live journey adds necessary user-visible evidence.
 
 ## Done condition
 
