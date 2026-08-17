@@ -10,3 +10,4 @@ dist/
 !.env.example
 .amp/portals/
 .amp/runtime/
+.zed
