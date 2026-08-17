@@ -82,3 +82,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-17 — V5 mutation-route restart corrected locally](entries/2026-08-17T0548Z-v5-mutation-route-restart-corrected.md)
 - [2026-08-17 — V5 operation-scoped recovery qualified locally](entries/2026-08-17T0644Z-v5-operation-scoped-recovery-qualified-locally.md)
 - [2026-08-17 — Complete selected-V5 hero accepted live](entries/2026-08-17T0717Z-selected-v5-hero-accepted-live.md)
+- [2026-08-17 — Public GitHub checkpoint capture qualified locally](entries/2026-08-17T0852Z-public-github-checkpoint-capture-qualified-locally.md)

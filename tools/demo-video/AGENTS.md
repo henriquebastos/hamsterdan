@@ -1,9 +1,10 @@
 # Demo-video agent instructions
 
-This directory is a reproducible Remotion studio for guided Hamsterdan scenario
-videos. Before changing a scenario or rendering an artifact, read `README.md`
-in full. Its creative contract, cadence contract, artifact policy, and QA
-checklist are requirements unless the Navigator explicitly changes them.
+This directory contains a reproducible Remotion studio and a separate public
+GitHub live-capture lane. Before changing either lane or rendering an artifact,
+read `README.md` in full. Its artifact policy is shared. The creative and
+cadence contracts apply to synthetic Remotion work under `src/`; they do not
+authorize overlays or reconstruction in `live/`.
 
 ## Starting a scenario
 
@@ -31,3 +32,15 @@ checklist are requirements unless the Navigator explicitly changes them.
 Do not commit `output/`, checkpoint images, MP4 files, `node_modules/`, or
 temporary media. Approved videos belong in a GitHub Release or durable media
 store; their reproducible source belongs here.
+
+## Live GitHub capture
+
+- Keep `live/` anonymous, public-only, nonpersistent, and read-only.
+- Validate all declared provider-visible evidence before publishing media.
+- Never add an authenticated fallback, storage state, profile directory,
+  cookies, tokens, arbitrary selectors, page scripts, or mutation-capable UI
+  actions.
+- Render only hash-verified browser screenshots in manifest order. Do not use
+  Remotion, overlays, captions, transitions, or synthetic browser chrome.
+- Run acceptance capture from a clean committed revision, inspect every PNG,
+  and watch the complete encoded montage once.

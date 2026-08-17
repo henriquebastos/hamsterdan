@@ -1,0 +1,217 @@
+{
+  "schema": 1,
+  "slug": "pr61-v5-hero",
+  "repository": "HBNetwork/demo-pr-readiness",
+  "pullRequest": 61,
+  "expectedState": "open",
+  "expectedHead": "e3d11a8171dbbb4af910b7c199a5f240dfb2441e",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "actors": [
+    {
+      "login": "henriquebastos",
+      "href": "/henriquebastos"
+    },
+    {
+      "login": "crisbastos",
+      "href": "/crisbastos"
+    },
+    {
+      "login": "hamster-dan",
+      "href": "/apps/hamster-dan"
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "changes-requested",
+      "kind": "review",
+      "target": "4948851022",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#pullrequestreview-4948851022",
+      "actor": "crisbastos",
+      "expectedText": [
+        "Please address the review findings before approval."
+      ],
+      "focusText": "Please address the review findings before approval.",
+      "holdSeconds": 4
+    },
+    {
+      "id": "finding-lease",
+      "kind": "issue-comment",
+      "target": "5312507139",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312507139",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "Hamsterdan review findings",
+        "hero-review.f01",
+        "Calculate lease duration in seconds",
+        "return issued_at + timedelta(seconds=ttl_seconds)"
+      ],
+      "focusText": "hero-review.f01",
+      "holdSeconds": 7
+    },
+    {
+      "id": "finding-approval-policy",
+      "kind": "issue-comment",
+      "target": "5312507139",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312507139",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "hero-review.f02",
+        "Exclude rejected approvals from the release threshold",
+        "return sum(request.approvals.values()) >= required"
+      ],
+      "focusText": "hero-review.f02",
+      "holdSeconds": 7
+    },
+    {
+      "id": "finding-cache-key",
+      "kind": "issue-comment",
+      "target": "5312507139",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312507139",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "hero-review.f03",
+        "Use consistent repository normalization for cache lookup",
+        "return f\"{repository.casefold()}#{request_number}\""
+      ],
+      "focusText": "hero-review.f03",
+      "holdSeconds": 7
+    },
+    {
+      "id": "author-repair-request",
+      "kind": "issue-comment",
+      "target": "5312521927",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312521927",
+      "actor": "henriquebastos",
+      "expectedText": [
+        "@hamster-dan please repair all three findings from your review batch and push the changes to this PR."
+      ],
+      "focusText": "@hamster-dan please repair all three findings from your review batch and push the changes to this PR.",
+      "holdSeconds": 5
+    },
+    {
+      "id": "app-repair-commit",
+      "kind": "commit",
+      "target": "e3d11a8171dbbb4af910b7c199a5f240dfb2441e",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/commit/e3d11a8171dbbb4af910b7c199a5f240dfb2441e",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "Repair all hero-review findings",
+        "2 files changed",
+        "return sum(request.approvals.values()) >= required"
+      ],
+      "focusText": "Repair all hero-review findings",
+      "holdSeconds": 7
+    },
+    {
+      "id": "repaired-head-checks",
+      "kind": "pr-checks",
+      "target": "32001768005",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61/checks",
+      "actor": "henriquebastos",
+      "expectedText": [
+        "Repair all hero-review findings",
+        "e3d11a8",
+        "scenario-control",
+        "lint",
+        "type",
+        "unit",
+        "build",
+        "integration"
+      ],
+      "focusText": "Repair all hero-review findings",
+      "holdSeconds": 6
+    },
+    {
+      "id": "repaired-actions-green",
+      "kind": "actions-run",
+      "target": "32001768005",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/actions/runs/32001768005",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "Hamsterdan demo: hero-review #89",
+        "Status",
+        "Success",
+        "scenario-control",
+        "integration"
+      ],
+      "focusText": "Success",
+      "holdSeconds": 6
+    },
+    {
+      "id": "publication-recovery-request",
+      "kind": "issue-comment",
+      "target": "5312866939",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312866939",
+      "actor": "henriquebastos",
+      "expectedText": [
+        "@hamster-dan recover publication for operation push:comment:5312521927:02e084286c2324220d7b25164b685655ec87a07d:i1."
+      ],
+      "focusText": "@hamster-dan recover publication for operation push:comment:5312521927:02e084286c2324220d7b25164b685655ec87a07d:i1.",
+      "holdSeconds": 6
+    },
+    {
+      "id": "publication-recovered",
+      "kind": "issue-comment",
+      "target": "5312912318",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312912318",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "noted:recover_publication"
+      ],
+      "focusText": "noted:recover_publication",
+      "holdSeconds": 4
+    },
+    {
+      "id": "author-status-question",
+      "kind": "issue-comment",
+      "target": "5312934795",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312934795",
+      "actor": "henriquebastos",
+      "expectedText": [
+        "@hamster-dan status"
+      ],
+      "focusText": "@hamster-dan status",
+      "holdSeconds": 3
+    },
+    {
+      "id": "app-status-answer",
+      "kind": "issue-comment",
+      "target": "5312983555",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312983555",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "answer:status"
+      ],
+      "focusText": "answer:status",
+      "holdSeconds": 3
+    },
+    {
+      "id": "repaired-head-approved",
+      "kind": "review",
+      "target": "4949248566",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#pullrequestreview-4949248566",
+      "actor": "crisbastos",
+      "expectedText": [
+        "The repaired head addresses the requested changes."
+      ],
+      "focusText": "The repaired head addresses the requested changes.",
+      "holdSeconds": 4
+    },
+    {
+      "id": "final-readiness",
+      "kind": "issue-comment",
+      "target": "5312999972",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312999972",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "Hamsterdan readiness advisory",
+        "All observed gates are ready. Clean. Humans keep merge authority; Dan never merges PRs."
+      ],
+      "focusText": "Hamsterdan readiness advisory",
+      "holdSeconds": 7
+    }
+  ]
+}

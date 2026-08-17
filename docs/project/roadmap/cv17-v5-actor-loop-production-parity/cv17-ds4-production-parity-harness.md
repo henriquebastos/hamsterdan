@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 qualifies the complete three-actor hero live; recordings and additional journeys remain
+status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 qualifies the complete hero; its public checkpoint-capture lane is qualified locally; committed-source recording and additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -859,6 +859,38 @@ human reviewer, and App findings, repair, exact recovery, conversation,
 approval, dashboard, and readiness. GitHub-site checkpoint recordings and the
 remaining selected live journey portfolio are still required before CV17
 acceptance; PR 61 remains open and unmerged as durable demo evidence.
+
+### DS4.25 — Public GitHub checkpoint capture qualified locally
+
+A new lane under `tools/demo-video/live` captures surviving evidence directly
+from the anonymous public GitHub UI rather than reconstructing it in Remotion.
+The checked-in PR 61 manifest closes fourteen exact checkpoints over Cris's
+requested changes and approval, the three App findings, Henrique's repair,
+recovery, and status requests, the App-authored repair commit, paired PR and
+Actions checks, App replies, and final readiness. Each checkpoint validates
+the repository, open PR, repaired head, actor link, target identity, and
+bounded expected text in the rendered DOM before its PNG can be published.
+
+Capture runs in a fresh nonpersistent browser context with no credentials,
+cookies, profile, storage state, or authenticated fallback. Non-GET/HEAD
+requests are blocked; the browser is closed before the final unsafe-request
+classification and atomic report publication. Fixture capture has a distinct
+provenance kind that the live renderer rejects. Capture and rendering both bind
+the exact manifest bytes. The renderer rejects symlinked, non-regular,
+escaping, missing, changed, reordered, or unreported inputs, then supplies
+`ffmpeg` only private copies of the bytes it already hash-verified. The output
+is a silent direct-cut H.264 checkpoint montage with no overlays, cards,
+transitions, or synthetic browser chrome.
+
+The focused TypeScript suite passes 38 tests. Quick and full project checks
+pass with 1,183 Python tests and nine webhook-relay tests. A fresh anonymous
+development probe validated all fourteen current PR 61 checkpoints and
+rendered a 76-second 1440×900 H.264 file with no audio; complete contact-sheet
+and video inspection found no blank, challenge, error, or synthetic frame.
+Oracle's trust-boundary review returned `clear to commit`. Because canonical
+capture deliberately requires a clean committed worktree, the committed-source
+recording, final inspection, and durable artifact publication follow this
+implementation slice and are not inferred from the development probe.
 
 ## Done condition
 

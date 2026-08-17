@@ -1,12 +1,65 @@
 # Hamsterdan demo-video studio
 
-This Remotion project turns a completed GitHub scenario into a guided,
-presentation-style product video. It preserves the approved PR47 hero journey
-and the production rules needed to reproduce it or create another scenario
-without reconstructing the creative brief from conversation history.
+This directory has two independent media lanes:
+
+- the Remotion studio turns a completed GitHub scenario into a guided,
+  presentation-style product video; and
+- the live-capture lane records assertion-checked screenshots of the real,
+  public GitHub site and makes an unembellished checkpoint montage from only
+  those screenshots.
+
+The first lane preserves the approved PR47 hero journey and the production
+rules needed to reproduce it or create another scenario without reconstructing
+the creative brief from conversation history. The second supplies provider-
+visible acceptance evidence; it is not a recreation and does not use Remotion.
 
 The rendered MP4 is a generated release asset. Source, scenario copy, timing
 rules, avatars, and render commands live here in Git.
+
+## Capture the real PR61 GitHub evidence
+
+The PR61 manifest identifies fourteen surviving checkpoints in the public
+GitHub UI: Cris's requested-changes review, three App findings, Henrique's
+repair request, the App commit, the successful repaired-head Actions run,
+operation-scoped recovery, status conversation, Cris's approval, and the final
+readiness advisory. The browser context is anonymous, nonpersistent, and read
+only. It accepts no login, cookie file, token, storage state, user profile, or
+arbitrary selector from the manifest.
+
+Run capture only from a clean committed worktree. The capture validates the
+repository, PR state, exact head identity, actor identity, and checkpoint text
+in the rendered DOM before atomically publishing any output:
+
+```sh
+cd tools/demo-video
+bun install --frozen-lockfile
+bunx playwright install --with-deps chromium
+capture_dir="$(bun run --silent capture:pr61)"
+bun run render:pr61 "$capture_dir"
+```
+
+The output is written under:
+
+```text
+output/live/pr61-v5-hero/<utc>-<manifest-digest>/
+  checkpoints/*.png
+  report.json
+  hamsterdan-pr61-v5-hero-live-checkpoints.mp4
+  SHA256SUMS
+```
+
+The report records bounded provenance, assertion hashes, final URLs, browser
+version, screenshot hashes and dimensions, and `ffprobe` video metadata. It
+does not retain page HTML, headers, cookies, HAR files, traces, arbitrary page
+text, or credentials. The renderer rejects missing, changed, reordered, or
+unreported PNGs and adds no cards, captions, overlays, interpolation, or
+simulated browser chrome.
+
+This deliverable is a **checkpoint montage captured later from surviving public
+evidence**, not contemporaneous footage of the original interactions. Inspect
+every PNG and watch the complete MP4 once before approval. Routine output stays
+ignored; publish an approved MP4, checkpoint archive, report, and checksum file
+together as immutable versioned release assets or in durable media storage.
 
 ## Reproduce PR47
 

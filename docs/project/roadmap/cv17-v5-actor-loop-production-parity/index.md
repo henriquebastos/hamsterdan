@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: Clean-green, transient CI, and the complete three-actor hero are qualified live; recordings and additional journeys remain
+status_reason: Clean-green, transient CI, and the complete hero are qualified live; its public checkpoint-capture lane is qualified locally; committed-source recording and additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -120,8 +120,13 @@ making that ruling.
   advisory landed. The final hero inspection passes all ten checks, all 18
   PR-specific webhook manifests are terminal, and canonical History has no
   Activity or firing failure. PR 61 therefore qualifies the complete
-  selected-V5 three-actor hero. GitHub-site recordings and the remaining live
-  journey portfolio remain before CV17 acceptance.
+  selected-V5 three-actor hero. A separate anonymous public-GitHub lane now
+  assertion-checks fourteen surviving PR 61 checkpoints and renders only
+  hash-verified screenshots into a silent direct-cut montage. Its deterministic
+  suite, anonymous development probe, complete media inspection, and Oracle
+  review pass. Clean committed-source recording and durable artifact
+  publication still precede the remaining live journey portfolio and CV17
+  acceptance.
 
 ## Done condition
 

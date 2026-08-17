@@ -11,6 +11,7 @@ case "$profile" in
     full)
         "$0" quick
         bun test ./tests/amp_webhook_relay.test.ts
+        (cd tools/demo-video && bun run check)
         rm -rf dist
         uv build
         uv run --frozen pytest -q -m "not real_provider_acceptance"

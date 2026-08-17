@@ -178,6 +178,7 @@ echo "==> Syncing the locked demo-video environment"
     cd tools/demo-video
     bun install --frozen-lockfile
     bunx remotion browser ensure
+    bunx playwright install --with-deps chromium
 )
 
 echo "==> Installing the qualified Pi runtime"
