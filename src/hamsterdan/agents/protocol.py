@@ -22,6 +22,45 @@ _FINDING_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,47}")
 _LOGIN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
 _MAX_ITEMS, _MAX_TEXT, _MAX_PATH, _MAX_FILE = 100, 20_000, 1024, 2_000_000
 _SECRET_WORDS = ("TOKEN", "PASSWORD", "PASSWD", "SECRET", "CREDENTIAL", "PRIVATE_KEY", "API_KEY")
+_COMMON_RESULT_FIELDS = ("repository", "pull_request", "epoch", "head", "base")
+_REVIEW_RESULT_FIELDS = frozenset((*_COMMON_RESULT_FIELDS, "status", "findings", "lineage"))
+_CONVERSATION_RESULT_FIELDS = frozenset((*_COMMON_RESULT_FIELDS, "intents"))
+_CODING_RESULT_FIELDS = frozenset(
+    (
+        *_COMMON_RESULT_FIELDS,
+        "kind",
+        "ref",
+        "status",
+        "reproduction_status",
+        "diff",
+        "changed_files",
+        "validation_evidence",
+        "proposed_commit_message",
+    )
+)
+_FINDING_FIELDS = frozenset(
+    {
+        "id",
+        "path",
+        "line",
+        "related_locations",
+        "title",
+        "body",
+        "severity",
+        "confidence",
+        "evidence",
+        "blocking",
+        "suggestion",
+    }
+)
+_RELATED_LOCATION_FIELDS = frozenset({"path", "line"})
+_LINEAGE_FIELDS = frozenset({"finding_id", "state", "supersedes"})
+_INTENT_FIELDS = frozenset({"type", "arguments", "mutation", "explicit", "confidence"})
+_REVIEW_STATUSES = frozenset({"clear", "blocking", "unable"})
+_FINDING_SEVERITIES = frozenset({"low", "medium", "high", "critical"})
+_LINEAGE_STATES = frozenset({"new", "still_open", "resolved", "superseded", "withdrawn"})
+_CODING_STATUSES = frozenset({"changed", "unchanged", "unable"})
+_REPRODUCTION_STATUSES = frozenset({"unknown", "confirmed", "not_reproduced", "not_attempted"})
 
 
 class AgentResultCategory(StrEnum):
@@ -222,7 +261,7 @@ def _list(value: object, name: str) -> list[object]:
     return cast(list[object], value)
 
 
-def _exact(data: JSONDict, names: set[str]) -> None:
+def _exact(data: JSONDict, names: set[str] | frozenset[str]) -> None:
     if set(data) != names:
         _fail(f"result fields differ: expected {sorted(names)}, got {sorted(data)}")
 
@@ -278,28 +317,15 @@ def _validate_request(request: AgentRequest) -> None:
 
 
 def _validate_review(data: JSONDict) -> ReviewResult:
-    if data["status"] not in {"clear", "blocking", "unable"}:
+    if data["status"] not in _REVIEW_STATUSES:
         _fail("invalid review status")
     findings = cast(list[JSONDict], _list(data["findings"], "findings"))
     lineage = cast(list[JSONDict], _list(data["lineage"], "lineage"))
     ids: set[str] = set()
-    fields = {
-        "id",
-        "path",
-        "line",
-        "related_locations",
-        "title",
-        "body",
-        "severity",
-        "confidence",
-        "evidence",
-        "blocking",
-        "suggestion",
-    }
     for finding in findings:
         if not isinstance(finding, dict):
             _fail("finding must be an object")
-        _exact(finding, fields)
+        _exact(finding, _FINDING_FIELDS)
         finding_id = _text(finding["id"], "finding id", limit=200)
         if not _FINDING_ID.fullmatch(finding_id) or finding_id in ids:
             _fail("invalid or duplicate finding id")
@@ -309,7 +335,7 @@ def _validate_review(data: JSONDict) -> ReviewResult:
             not _safe_path(finding["path"])
             or type(finding["line"]) is not int
             or finding["line"] < 1
-            or severity not in {"low", "medium", "high", "critical"}
+            or severity not in _FINDING_SEVERITIES
             or not _confidence(finding["confidence"])
             or type(finding["blocking"]) is not bool
         ):
@@ -320,7 +346,7 @@ def _validate_review(data: JSONDict) -> ReviewResult:
         for location in locations:
             if not isinstance(location, dict):
                 _fail("related location must be an object")
-            _exact(location, {"path", "line"})
+            _exact(location, _RELATED_LOCATION_FIELDS)
             key = (location["path"], location["line"])
             if (
                 not _safe_path(location["path"])
@@ -338,16 +364,10 @@ def _validate_review(data: JSONDict) -> ReviewResult:
     for item in lineage:
         if not isinstance(item, dict):
             _fail("lineage must be an object")
-        _exact(item, {"finding_id", "state", "supersedes"})
+        _exact(item, _LINEAGE_FIELDS)
         finding_id = _text(item["finding_id"], "lineage finding id", limit=200)
         supersedes = item["supersedes"]
-        if finding_id in seen_lineage or item["state"] not in {
-            "new",
-            "still_open",
-            "resolved",
-            "superseded",
-            "withdrawn",
-        }:
+        if finding_id in seen_lineage or item["state"] not in _LINEAGE_STATES:
             _fail("invalid lineage")
         seen_lineage.add(finding_id)
         if supersedes is not None:
@@ -428,7 +448,7 @@ def _validate_conversation(data: JSONDict, request: ConversationRequest) -> Conv
         if not isinstance(intent, dict):
             _fail("intent must be an object")
         intent = cast(JSONDict, intent)
-        _exact(intent, {"type", "arguments", "mutation", "explicit", "confidence"})
+        _exact(intent, _INTENT_FIELDS)
         declared = allowed.get(intent["type"])
         if declared is None or not isinstance(intent["arguments"], dict) or len(intent["arguments"]) > _MAX_ITEMS:
             _fail("unauthorized intent or arguments")
@@ -459,12 +479,7 @@ def _validate_conversation(data: JSONDict, request: ConversationRequest) -> Conv
 
 
 def _validate_coding(data: JSONDict, request: CodingRequest, changed: list[str]) -> CodingResult:
-    if data["status"] not in {"changed", "unchanged", "unable"} or data["reproduction_status"] not in {
-        "unknown",
-        "confirmed",
-        "not_reproduced",
-        "not_attempted",
-    }:
+    if data["status"] not in _CODING_STATUSES or data["reproduction_status"] not in _REPRODUCTION_STATUSES:
         _fail("invalid coding status/reproduction status")
     if (data["status"] == "changed") != bool(changed) or data["status"] == "unchanged" and changed:
         raise AgentProtocolError(
@@ -511,29 +526,18 @@ def _validate_result(kind: str, data: object, request: AgentRequest, changed: li
     if not isinstance(data, dict):
         _fail("result must be a JSON object")
     data = cast(JSONDict, data)
-    common = ("repository", "pull_request", "epoch", "head", "base")
-    _correlate(data, request, common)
+    _correlate(data, request, _COMMON_RESULT_FIELDS)
     if kind == "review":
-        _exact(data, set(common) | {"status", "findings", "lineage"})
+        _exact(data, _REVIEW_RESULT_FIELDS)
         return _validate_review(data)
     if kind == "conversation":
-        _exact(data, set(common) | {"intents"})
+        _exact(data, _CONVERSATION_RESULT_FIELDS)
         if not isinstance(request, ConversationRequest):
             raise AgentProtocolError(
                 "request kind differs from result kind", result_category=AgentResultCategory.CORRELATION
             )
         return _validate_conversation(data, request)
-    fields = set(common) | {
-        "kind",
-        "ref",
-        "status",
-        "reproduction_status",
-        "diff",
-        "changed_files",
-        "validation_evidence",
-        "proposed_commit_message",
-    }
-    _exact(data, fields)
+    _exact(data, _CODING_RESULT_FIELDS)
     _correlate(data, request, ("kind", "ref"))
     if not isinstance(request, CodingRequest):
         raise AgentProtocolError(

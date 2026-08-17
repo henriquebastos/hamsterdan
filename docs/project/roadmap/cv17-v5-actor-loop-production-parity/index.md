@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; fresh live V5 exposed qualified authority-race, bounded Actions-inventory, and agent-deadline corrections while completion remains
+status_reason: DS2 and DS3 are complete; fresh live V5 exposed qualified host and agent response-contract corrections while completion remains
 updated: 2026-08-17
 ---
 
@@ -76,8 +76,13 @@ making that ruling.
   independent 300-second Hamsterdan timeout below Petrus A2's finite 900-second
   runtime policy. Deadline ownership now remains with Petrus while Hamsterdan
   retains bounded stale-authority polling and a final post-settlement authority
-  check. PR 53 remains visible fail-closed evidence; a fresh live PR must prove
-  review completion.
+  check. Fresh PR 54 proved that correction with a cleanly settled 329-second
+  provider operation, then exposed that the prompt named but did not supply the
+  strict result schema. Pi prompts now include an exact compact canonical
+  response contract without weakening or normalizing strict result admission,
+  and retained legacy-prompt operations cannot replay as current results. PR 54
+  remains visible fail-closed output-schema evidence; a fresh live PR must
+  prove review completion.
 
 ## Done condition
 

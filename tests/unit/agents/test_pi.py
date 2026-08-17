@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from hashlib import sha256
 
 import pytest
@@ -22,12 +22,25 @@ from hamsterdan.agents import (
     AgentProtocolError,
     AgentResultCategory,
     CodingRequest,
+    CodingResult,
     ConversationRequest,
+    ConversationResult,
     PiNativeRunner,
     ReviewRequest,
+    ReviewResult,
     encode_prompt,
 )
 from hamsterdan.agents.pi import PiWorkspaceCleanupError
+from hamsterdan.agents.protocol import (
+    _CODING_RESULT_FIELDS,
+    _COMMON_RESULT_FIELDS,
+    _FINDING_FIELDS,
+    _INTENT_FIELDS,
+    _LINEAGE_FIELDS,
+    _RELATED_LOCATION_FIELDS,
+    _REVIEW_RESULT_FIELDS,
+    _validate_result,
+)
 from hamsterdan.contracts.readiness import ChangeRequest, Intent
 from hamsterdan.host.activities import PrReadinessActivities
 from hamsterdan.host.git_publish import GitPublishResult
@@ -137,22 +150,102 @@ def run_coding_activity(subject: PiNativeRunner, runtime: Runtime, operation: st
 
 
 @pytest.mark.parametrize(
-    ("kind", "agent_request"),
-    [("review", review_request()), ("conversation", conversation_request()), ("coding", coding_request())],
+    ("kind", "agent_request", "result_type"),
+    [
+        ("review", review_request(), ReviewResult),
+        ("conversation", conversation_request(), ConversationResult),
+        ("coding", coding_request(), CodingResult),
+    ],
 )
-def test_prompts_are_exact_canonical_and_bounded(kind: str, agent_request: object) -> None:
+def test_prompts_supply_exact_canonical_bounded_result_contract(
+    kind: str, agent_request: object, result_type: type[object]
+) -> None:
     prompt = encode_prompt(kind, URL, agent_request)  # type: ignore[arg-type]
     assert prompt == encode_prompt(kind, URL, agent_request)  # type: ignore[arg-type]
     assert prompt == json.dumps(json.loads(prompt), sort_keys=True, separators=(",", ":"))
-    assert json.loads(prompt) == {
-        "instructions": json.loads(prompt)["instructions"],
+    payload = json.loads(prompt)
+    assert payload == {
+        "instructions": payload["instructions"],
         "kind": kind,
+        "prompt_version": 2,
         "repository_url": URL,
         "request": asdict(agent_request),  # type: ignore[arg-type]
-        "response": "one JSON object matching the unchanged Hamsterdan result schema; no Markdown or prose",
-        "schema_version": 1,
+        "response_contract": payload["response_contract"],
     }
+    contract = payload["response_contract"]
+    assert set(contract["exact_fields"]) == {item.name for item in fields(result_type)}
+    assert set(contract["exact_fields"]).isdisjoint(contract["forbidden_envelope_fields"])
+    assert set(contract["forbidden_envelope_fields"]) == set(payload) - set(contract["exact_fields"])
     assert len(prompt.encode()) <= 64 * 1024
+
+
+def test_prompt_nested_contracts_share_validator_field_sets() -> None:
+    review = json.loads(encode_prompt("review", URL, review_request()))["response_contract"]["nested"]
+    conversation = json.loads(encode_prompt("conversation", URL, conversation_request()))["response_contract"]["nested"]
+
+    assert set(review["finding_exact_fields"]) == _FINDING_FIELDS
+    assert set(review["related_location_exact_fields"]) == _RELATED_LOCATION_FIELDS
+    assert set(review["lineage_exact_fields"]) == _LINEAGE_FIELDS
+    assert set(conversation["intent_exact_fields"]) == _INTENT_FIELDS
+    assert set(_REVIEW_RESULT_FIELDS) == {item.name for item in fields(ReviewResult)}
+    assert set(_COMMON_RESULT_FIELDS) < _REVIEW_RESULT_FIELDS
+    assert set(_CODING_RESULT_FIELDS) == {item.name for item in fields(CodingResult)}
+
+
+def test_supplied_review_contract_describes_outputs_the_validator_accepts() -> None:
+    request = review_request()
+    common = {name: getattr(request, name) for name in _COMMON_RESULT_FIELDS}
+    assert (
+        _validate_result("review", {**common, "status": "clear", "findings": [], "lineage": []}, request).status
+        == "clear"
+    )
+
+    finding = {
+        "id": "finding-one",
+        "path": "src/example.py",
+        "line": 7,
+        "related_locations": [{"path": "tests/test_example.py", "line": 11}],
+        "title": "Guard the exact state",
+        "body": "The current branch accepts stale state.",
+        "severity": "high",
+        "confidence": 0.9,
+        "evidence": "The comparison uses the prior value.",
+        "blocking": True,
+        "suggestion": "return current == expected",
+    }
+    result = _validate_result(
+        "review",
+        {
+            **common,
+            "status": "blocking",
+            "findings": [finding],
+            "lineage": [{"finding_id": "finding-one", "state": "new", "supersedes": None}],
+        },
+        request,
+    )
+    assert result.status == "blocking"
+
+
+def test_prompt_envelope_fields_remain_invalid_result_fields() -> None:
+    request = review_request()
+    data = {
+        **{name: getattr(request, name) for name in _COMMON_RESULT_FIELDS},
+        "status": "clear",
+        "findings": [],
+        "lineage": [],
+        "prompt_version": 2,
+    }
+
+    with pytest.raises(AgentProtocolError, match="result fields differ"):
+        _validate_result("review", data, request)
+
+
+def test_explicit_response_contract_still_fails_closed_when_prompt_exceeds_limit() -> None:
+    request = review_request()
+    request.context_paths.extend(f"context/{index:03d}-{'x' * 700}.txt" for index in range(100))
+
+    with pytest.raises(AgentProtocolError, match="prompt exceeded limit"):
+        encode_prompt("review", URL, request)
 
 
 class Operation:

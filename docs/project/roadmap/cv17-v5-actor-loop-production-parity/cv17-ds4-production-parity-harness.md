@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Fresh V5 PRs exposed and qualified authority-race, bounded Actions-inventory, and agent-deadline corrections while live completion remains
+status_reason: Fresh V5 PRs exposed and qualified authority-race, Actions-inventory, agent-deadline, and response-contract corrections while live completion remains
 updated: 2026-08-17
 ---
 
@@ -519,6 +519,40 @@ relay tests, Ruff, formatting, typing, and source/wheel builds. Oracle review
 returned `clear to commit`. PR 53 remains preserved as the typed provider-runtime
 failure; no hidden retry or provider substitution was performed. A fresh live
 PR must prove clean-green review completion under the corrected boundary.
+
+### DS4.16 — Prompt-supplied canonical agent response contract
+
+Fresh selected-V5
+[`HBNetwork/demo-pr-readiness` PR 54](https://github.com/HBNetwork/demo-pr-readiness/pull/54),
+head `6df327fc0f7d1340671a82227f13a106d8cbae04`, passed all six jobs in
+[Actions run 31984786963](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31984786963)
+and published the
+[App dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/54#issuecomment-5310788618).
+Three review attempts safely deferred while newly custodied Actions events
+changed authority. The final Pi helper crossed the former 300-second boundary,
+settled after approximately 329 seconds with one accepted append, and closed
+cleanly. This proves the DS4.15 deadline correction on the real route.
+
+Strict result admission then rejected the provider response as `output_schema`
+before any review fact could enter the Net. V5 correctly emitted typed
+`RoundUnable(output_schema)`, kept readiness fail-closed, and published no
+readiness advisory. Structural investigation showed that the provider had not
+returned the required correlation and review fields. The prior prompt referred
+to an unchanged Hamsterdan schema without supplying it, and the pinned Petrus
+Pi A2 runtime has no separate structured-output schema channel.
+
+Every Pi prompt now carries a compact canonical response contract with exact
+closed top-level and nested fields, request-relative correlation and allowed
+intent rules, closed status vocabularies, and cross-field invariants. Prompt
+version 2 distinguishes this contract from retained version-1 operations; an
+old settled operation with the same identity fails closed as a runtime
+conflict rather than being silently reused or re-executed. Existing strict
+result, correlation, lineage, and workspace validation remains unchanged; no
+partial response is normalized or filled. Focused agent and host checks pass
+129 tests. `scripts/check full` passes 1,156 Python tests, nine Bun relay tests,
+Ruff, formatting, typing, and source/wheel builds. Oracle review returned
+`clear to commit`. PR 54 remains preserved output-schema evidence. A fresh
+selected-V5 PR must prove provider-produced clean-green review completion.
 
 ## Done condition
 

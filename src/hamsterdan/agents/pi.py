@@ -18,6 +18,18 @@ from petrus.agenticus.thread.identity import EpisodeId, TurnId
 from petrus.agenticus.thread.lifecycle import TurnOutcome
 
 from .protocol import (
+    _CODING_RESULT_FIELDS,
+    _CODING_STATUSES,
+    _CONVERSATION_RESULT_FIELDS,
+    _FINDING_FIELDS,
+    _FINDING_SEVERITIES,
+    _INTENT_FIELDS,
+    _LINEAGE_FIELDS,
+    _LINEAGE_STATES,
+    _RELATED_LOCATION_FIELDS,
+    _REPRODUCTION_STATUSES,
+    _REVIEW_RESULT_FIELDS,
+    _REVIEW_STATUSES,
     CURRENT,
     AgentCleanupCategory,
     AgentProtocolError,
@@ -85,6 +97,114 @@ _SEMANTICS = {
         "Never claim a changed repair without confirmed reproduction."
     ),
 }
+_PROMPT_FIELDS = frozenset({"instructions", "kind", "prompt_version", "repository_url", "request", "response_contract"})
+
+
+def _contract_fields(names: frozenset[str] | tuple[str, ...], descriptions: dict[str, str]) -> JSONDict:
+    if set(names) != set(descriptions):
+        raise RuntimeError("Pi response contract differs from the result validator")
+    return {name: descriptions[name] for name in sorted(names)}
+
+
+def _response_contract(kind: str) -> JSONDict:
+    exact = {
+        "repository": "string; copy request.repository exactly",
+        "pull_request": "integer; copy request.pull_request exactly",
+        "epoch": "integer; copy request.epoch exactly",
+        "head": "string; copy request.head exactly",
+        "base": "string; copy request.base exactly",
+    }
+    nested: JSONDict = {}
+    invariants: list[str]
+    if kind == "review":
+        exact.update(
+            {
+                "status": f"one of {sorted(_REVIEW_STATUSES)}",
+                "findings": "array of finding objects; use [] when none",
+                "lineage": "array of lineage objects; use [] when none",
+            }
+        )
+        nested = {
+            "finding_exact_fields": _contract_fields(
+                _FINDING_FIELDS,
+                {
+                    "id": "unique string identifier",
+                    "path": "repository-relative path",
+                    "line": "positive integer line number",
+                    "related_locations": "array of related-location objects; primary location must not repeat",
+                    "title": "non-empty string",
+                    "body": "non-empty actionable explanation",
+                    "severity": f"one of {sorted(_FINDING_SEVERITIES)}",
+                    "confidence": "number from 0 through 1",
+                    "evidence": "non-empty evidenced observation",
+                    "blocking": "boolean",
+                    "suggestion": "string; empty when absent; no Markdown code fence",
+                },
+            ),
+            "related_location_exact_fields": _contract_fields(
+                _RELATED_LOCATION_FIELDS,
+                {"path": "repository-relative path", "line": "positive integer line number"},
+            ),
+            "lineage_exact_fields": _contract_fields(
+                _LINEAGE_FIELDS,
+                {
+                    "finding_id": "unique finding identifier for this result",
+                    "state": f"one of {sorted(_LINEAGE_STATES)}",
+                    "supersedes": "prior finding identifier or null",
+                },
+            ),
+        }
+        invariants = [
+            "status clear has no blocking finding; status blocking has at least one blocking finding",
+            "new and still_open lineage references a returned finding",
+            "new lineage has null supersedes; superseded lineage has a non-null predecessor",
+        ]
+        result_fields = _REVIEW_RESULT_FIELDS
+    elif kind == "conversation":
+        exact["intents"] = "array containing exactly one intent object"
+        nested = {
+            "intent_exact_fields": _contract_fields(
+                _INTENT_FIELDS,
+                {
+                    "type": "copy one type declared in request.allowed_intents",
+                    "arguments": "object with exactly the argument keys declared for that type",
+                    "mutation": "boolean equal to that declaration's mutation value",
+                    "explicit": "boolean; true for mutations and declarations requiring explicit intent",
+                    "confidence": "number from 0 through 1",
+                },
+            )
+        }
+        invariants = [
+            "return exactly one declared intent and never invent an intent or argument key",
+            "mutation intents require concrete non-empty arguments",
+        ]
+        result_fields = _CONVERSATION_RESULT_FIELDS
+    else:
+        exact.update(
+            {
+                "kind": "string; copy request.kind exactly",
+                "ref": "string; copy request.ref exactly",
+                "status": f"one of {sorted(_CODING_STATUSES)}",
+                "reproduction_status": f"one of {sorted(_REPRODUCTION_STATUSES)}",
+                "diff": "string; empty unless status is changed",
+                "changed_files": "sorted unique array of repository-relative paths changed in the workspace",
+                "validation_evidence": "array of non-empty bounded JSON objects; non-empty when status is changed",
+                "proposed_commit_message": "string; non-empty when changed, with a first line of at most 72 characters",
+            }
+        )
+        invariants = [
+            "status changed only when the workspace changed; otherwise use unchanged or unable",
+            "a changed repair requires reproduction_status confirmed",
+            "report only validation actually performed",
+        ]
+        result_fields = _CODING_RESULT_FIELDS
+    return {
+        "return_format": "Return exactly one JSON object and nothing else; no Markdown or prose.",
+        "exact_fields": _contract_fields(result_fields, exact),
+        "nested": nested,
+        "invariants": invariants,
+        "forbidden_envelope_fields": sorted(_PROMPT_FIELDS - result_fields),
+    }
 
 
 def encode_prompt(kind: str, repository_url: str, request: AgentRequest) -> str:
@@ -99,10 +219,10 @@ def encode_prompt(kind: str, repository_url: str, request: AgentRequest) -> str:
     payload = {
         "instructions": _SEMANTICS[kind],
         "kind": kind,
+        "prompt_version": 2,
         "repository_url": urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", "")),
         "request": asdict(request),
-        "response": "one JSON object matching the unchanged Hamsterdan result schema; no Markdown or prose",
-        "schema_version": 1,
+        "response_contract": _response_contract(kind),
     }
     prompt = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     if len(prompt.encode()) > 64 * 1024:

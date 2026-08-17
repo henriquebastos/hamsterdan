@@ -28,7 +28,7 @@ from petrus.agenticus.thread.identity import ContinuationId, EpisodeId, ThreadId
 from petrus.agenticus.thread.lifecycle import CancellationDisposition, TurnOutcome
 from petrus.motus.execution.archive import workspace_archive
 
-from hamsterdan.agents import AgentProtocolError, AgentResultCategory, PiNativeRunner, ReviewRequest
+from hamsterdan.agents import AgentProtocolError, AgentResultCategory, PiNativeRunner, ReviewRequest, encode_prompt
 from hamsterdan.host.pi_a2 import (
     OneShotApiKeySupplier,
     PersistentKeyOperations,
@@ -329,6 +329,84 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
     )
     assert calls == 0
     assert replay.close()
+
+
+def test_agent_runner_refuses_legacy_prompt_reuse_without_new_authority_or_execution(tmp_path: Path) -> None:
+    request = ReviewRequest(
+        "owner/repo",
+        7,
+        2,
+        "a" * 40,
+        "b" * 40,
+        "diff.patch",
+        review_lenses=["correctness"],
+    )
+    output = json.dumps(
+        {
+            "repository": request.repository,
+            "pull_request": request.pull_request,
+            "epoch": request.epoch,
+            "head": request.head,
+            "base": request.base,
+            "status": "clear",
+            "findings": [],
+            "lineage": [],
+        }
+    )
+    calls = 0
+
+    def supply() -> bytearray:
+        nonlocal calls
+        calls += 1
+        return bytearray(b"fixture")
+
+    host = _host(
+        tmp_path,
+        (PiA2ScriptedTurn(output), PiA2ScriptedTurn("must-not-run")),
+        OneShotApiKeySupplier(supply),
+    )
+    archive = workspace_archive(_config(tmp_path).working_directory)
+    logical_operation = "review:legacy-prompt"
+    operation_id = f"pi:{sha256(f'{logical_operation}\0{1}'.encode()).hexdigest()}"
+    identity = sha256(operation_id.encode()).hexdigest()
+    current_payload = json.loads(encode_prompt("review", "https://example.invalid/owner/repo.git", request))
+    legacy_payload = {
+        key: value for key, value in current_payload.items() if key not in {"prompt_version", "response_contract"}
+    }
+    legacy_payload.update(
+        {
+            "response": "one JSON object matching the unchanged Hamsterdan result schema; no Markdown or prose",
+            "schema_version": 1,
+        }
+    )
+    legacy_prompt = json.dumps(legacy_payload, sort_keys=True, separators=(",", ":"))
+    seeded = host.start(
+        PiA2RuntimeStart(
+            operation_id,
+            EpisodeId(f"episode-{identity}"),
+            TurnId(f"turn-{identity}"),
+            legacy_prompt,
+            archive,
+            sha256(archive).hexdigest(),
+            "synthetic:runner",
+            _READ_POLICY,
+        )
+    )
+    assert seeded.wait(1).outcome is TurnOutcome.COMPLETED
+    assert seeded.close().verified and calls == 1
+
+    runner = PiNativeRunner(host, RunnerWorkspaces(archive))
+    with pytest.raises(AgentProtocolError) as caught:
+        runner.review(
+            "https://example.invalid/owner/repo.git",
+            request,
+            operation=logical_operation,
+            attempt=1,
+        )
+
+    assert caught.value.result_category is AgentResultCategory.RUNTIME_LIFECYCLE
+    assert calls == 1
+    assert host.close()
 
 
 def test_agent_runner_defers_its_default_deadline_to_the_finite_a2_runtime(tmp_path: Path) -> None:
