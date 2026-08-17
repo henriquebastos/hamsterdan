@@ -8,6 +8,7 @@ from typing import assert_type
 
 import pytest
 from petrus.agenticus.connection.key import KeyContext, KeyOperationError
+from petrus.agenticus.hands.contract import ToolMethod
 from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
 
 from hamsterdan.host import pi_a2
@@ -85,6 +86,10 @@ def test_owned_composition_retains_a_finite_runtime_deadline(tmp_path: Path) -> 
             host.config.cancellation_grace,
         ) == (900, 960, 5)
         assert host.config.attachment_timeout > host.config.wall_timeout + host.config.cancellation_grace
+        assert host.config.max_tool_calls == 32
+        assert host.config.capabilities == frozenset(
+            {ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH, ToolMethod.WORKSPACE_WRITE}
+        )
     finally:
         host.close()
 

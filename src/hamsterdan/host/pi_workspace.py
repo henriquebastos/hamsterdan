@@ -32,6 +32,7 @@ _DENIED_ROOTS = frozenset({".git", ".gitmodules", ".impetus", ".petrus-hands-sta
 _READ_POLICY = PiA2RuntimePolicy(frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH}))
 _CODE_POLICY = PiA2RuntimePolicy(
     frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH, ToolMethod.WORKSPACE_WRITE}),
+    max_tool_calls=32,
     writable_roots=frozenset({"."}),
 )
 

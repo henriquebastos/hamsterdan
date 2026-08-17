@@ -54,6 +54,7 @@ def test_unchanged_workspace_is_exact_and_private_stages_are_removed(
         assert prepared.digest == sha256(prepared.archive).hexdigest()
         assert prepared.correlation.startswith("hamsterdan-pr-v1:")
         assert prepared.policy.writable_roots == frozenset({"."})
+        assert prepared.policy.max_tool_calls == 32
         assert ToolMethod.WORKSPACE_SHELL not in prepared.policy.capabilities
         assert prepared.reconcile(prepared.archive) == ("", [])
 
@@ -67,6 +68,7 @@ def test_non_coding_workspace_policy_has_no_mutation_authority(tmp_path: Path, r
     with receiver.open("review", str(source), request(head), "pi:review") as prepared:
         assert prepared.policy.writable_paths == prepared.policy.writable_roots == frozenset()
         assert prepared.policy.capabilities == frozenset({ToolMethod.WORKSPACE_READ, ToolMethod.WORKSPACE_SEARCH})
+        assert prepared.policy.max_tool_calls == 16
 
     assert list(receiver.root.iterdir()) == []
 

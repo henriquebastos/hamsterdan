@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; PR 59 qualifies the V5 hero finding checkpoint semantically
+status_reason: PRs 56–57 qualify clean-green and transient CI; PR 59 qualifies hero findings and a typed coding inability; fresh repair proof remains
 updated: 2026-08-17
 ---
 
@@ -713,6 +713,42 @@ suggestion/conceptual/related-location meaning, and accepts an explicit
 and provider URLs. The live PR 59 command passes all ten checks. This qualifies
 the finding checkpoint, not the later repair, status conversation, distinct
 approval, or final readiness journey.
+
+### DS4.21 — Pi coding workspace boundary correction
+
+After the finding checkpoint, the author posted one explicit
+[`@hamster-dan` repair request](https://github.com/HBNetwork/demo-pr-readiness/pull/59#issuecomment-5311803608)
+covering the three visible defects. V5 classified it as a change and ran one
+globally identified coding operation. The retained Pi operation completed
+cleanly with one accepted append, but returned `status="unable"`; V5 recorded
+`DeclinedM(category="unable")`, published no Git object or ref change, and
+left the branch at `493a99512a92aa0a21c02880319d7a2d32d1816f`. PR 59 is
+preserved as typed fail-closed evidence and is not retried.
+
+Inspection of the retained operation established a provider-runtime boundary
+defect rather than an ambiguous author request: the coding turn spent all 16
+admitted calls reading and locating the fixture before reaching a write;
+Petrus advertised shell and test tools the operation did not hold; and the
+only whole-file write tool rejected content above 256 characters while the
+target files were larger. No provider substitution, hidden retry, History
+rewrite, or publication bypass occurred.
+
+Petrus correction
+[`9bc68d8`](https://github.com/henriquebastos/petrus/commit/9bc68d8a5cddb7111c8e5dceae8251c9401df11a)
+raises the version-1 whole-file ceiling to 1,024 characters and advertises
+only the exact current operation grant while retaining the full closed tool
+vocabulary and Hands gateway authority. Hamsterdan pins that direct child of
+its prior dependency commit and raises only coding turns and the containing
+host ceiling to 32 calls. Review and conversation remain read/search-only at
+16 calls; credentials, archive proof, patch admission, current-authority
+fences, host-owned exact ref CAS, and typed `unable` settlement are unchanged.
+
+Petrus passed 214 focused tests, quick checks, and 2,180 tests on the minimal
+correction commit; its merged main passed 2,181 tests. Hamsterdan passed 90
+focused workspace/runtime/mutation tests, quick checks, 1,171 Python tests,
+and nine Bun relay tests. A fresh selected-V5 hero PR is required to prove the
+corrected coding boundary can produce, publish, and admit the real repair; PR
+59 remains immutable evidence of the prior inability.
 
 ## Done condition
 

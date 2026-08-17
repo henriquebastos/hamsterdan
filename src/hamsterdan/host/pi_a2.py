@@ -235,6 +235,7 @@ def compose_owned_pi_a2(state_path: Path, installation: PiA2InstallationConfig |
         model=model,
         host_id="hamsterdan-pi-a2",
         capabilities=_CAPABILITIES,
+        max_tool_calls=32,
         cli_path=None if installation is None else str(installation.cli_path),
         node_path=None if installation is None else str(installation.node_path),
         package_root=None if installation is None else str(installation.package_root),

@@ -78,3 +78,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-17 — Selected-V5 first-attempt flake qualified live](entries/2026-08-17T0319Z-selected-v5-first-attempt-flake-qualified-live.md)
 - [2026-08-17 — Marker-safe provider finding identity contract qualified locally](entries/2026-08-17T0346Z-marker-safe-provider-finding-identity-qualified.md)
 - [2026-08-17 — Selected-V5 hero findings qualified live](entries/2026-08-17T0419Z-selected-v5-hero-findings-qualified-live.md)
+- [2026-08-17 — Pi coding boundary corrected locally](entries/2026-08-17T0528Z-pi-coding-boundary-corrected.md)
