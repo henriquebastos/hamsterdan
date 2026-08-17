@@ -189,6 +189,20 @@ class Operation:
         )
 
 
+class TimeoutThenCompleteOperation(Operation):
+    def __init__(self, operation: str, elapsed: list[float]) -> None:
+        super().__init__(operation)
+        self.elapsed = elapsed
+        self.wait_timeouts: list[float | None] = []
+
+    def wait(self, timeout=None):
+        self.wait_timeouts.append(timeout)
+        if len(self.wait_timeouts) == 1:
+            self.elapsed[0] = 301
+            raise TimeoutError
+        return super().wait(timeout)
+
+
 class BrokenIdentityOperation(Operation):
     def __init__(self, operation: str) -> None:
         self._operation_id = operation
@@ -429,6 +443,82 @@ def test_stale_timeout_failure_and_unverified_cleanup_fail_safe() -> None:
         subject.review(URL, request, operation="review:unclean", attempt=1)
 
 
+def test_default_runner_admits_completion_after_the_retired_outer_timeout() -> None:
+    request = review_request()
+    result = {
+        **{name: getattr(request, name) for name in ("repository", "pull_request", "epoch", "head", "base")},
+        "status": "clear",
+        "findings": [],
+        "lineage": [],
+    }
+    elapsed = [0.0]
+    operation = TimeoutThenCompleteOperation(pi_operation("review:long-running"), elapsed)
+    runtime = Runtime(operation, json.dumps(result))
+    subject = PiNativeRunner(runtime, runtime.workspaces, clock=lambda: elapsed[0])  # type: ignore[arg-type]
+
+    assert subject.review(URL, request, operation="review:long-running", attempt=1).status == "clear"
+    assert operation.wait_timeouts == [0.1, 0.1]
+    assert operation.cancellations == []
+    assert operation.closed == 1
+
+
+def test_stale_authority_is_polled_between_bounded_waits() -> None:
+    operation = Operation(pi_operation("review:stale-wait"))
+    wait_timeouts: list[float | None] = []
+
+    def wait(timeout=None):
+        wait_timeouts.append(timeout)
+        raise TimeoutError
+
+    operation.wait = wait  # type: ignore[method-assign]
+    runtime = Runtime(operation)
+    subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
+    current = iter((True, True, True, False))
+
+    with pytest.raises(AgentProtocolError) as caught:
+        subject.review(
+            URL, review_request(), operation="review:stale-wait", attempt=1, is_current=lambda: next(current)
+        )
+
+    assert caught.value.canceled
+    assert wait_timeouts == [0.1]
+    assert operation.cancellations == ["stale-authority"]
+    assert runtime.loaded_outputs == []
+    assert operation.closed == 1
+
+
+def test_authority_lost_during_settlement_is_not_admitted() -> None:
+    request = review_request()
+    operation = Operation(pi_operation("review:stale-settlement"))
+    runtime = Runtime(
+        operation,
+        json.dumps(
+            {
+                **{name: getattr(request, name) for name in ("repository", "pull_request", "epoch", "head", "base")},
+                "status": "clear",
+                "findings": [],
+                "lineage": [],
+            }
+        ),
+    )
+    subject = PiNativeRunner(runtime, runtime.workspaces)  # type: ignore[arg-type]
+    current = iter((True, True, True, False))
+
+    with pytest.raises(AgentProtocolError) as caught:
+        subject.review(
+            URL,
+            request,
+            operation="review:stale-settlement",
+            attempt=1,
+            is_current=lambda: next(current),
+        )
+
+    assert caught.value.canceled
+    assert operation.cancellations == ["stale-authority"]
+    assert runtime.loaded_outputs == []
+    assert operation.closed == 1
+
+
 def test_timeout_cancels_before_verified_close() -> None:
     operation = Operation(pi_operation("review:timeout"))
     operation.wait = lambda timeout=None: (_ for _ in ()).throw(TimeoutError())  # type: ignore[method-assign]
@@ -441,6 +531,31 @@ def test_timeout_cancels_before_verified_close() -> None:
     assert caught.value.timed_out
     assert operation.cancellations == ["host-timeout"]
     assert operation.closed == 1
+
+
+@pytest.mark.parametrize(
+    ("timeout", "poll_interval"),
+    [
+        (0, 0.1),
+        (-1, 0.1),
+        (float("nan"), 0.1),
+        (float("inf"), 0.1),
+        (True, 0.1),
+        ("1", 0.1),
+        (0.05, 0.1),
+        (None, 0),
+        (None, -1),
+        (None, float("nan")),
+        (None, float("inf")),
+        (None, True),
+        (None, "0.1"),
+    ],
+)
+def test_runner_rejects_nonfinite_or_unordered_wait_policy(timeout: object, poll_interval: object) -> None:
+    runtime = Runtime(Operation("unused"))
+
+    with pytest.raises(ValueError, match="timeout and poll interval"):
+        PiNativeRunner(runtime, runtime.workspaces, timeout=timeout, poll_interval=poll_interval)  # type: ignore[arg-type]
 
 
 def test_coding_archive_policy_derives_unchanged_and_changed_or_rejects_missing_archive() -> None:

@@ -8,6 +8,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import asdict
 from hashlib import sha256
+from math import isfinite
 from typing import Protocol, cast
 from urllib.parse import urlsplit, urlunsplit
 
@@ -117,11 +118,24 @@ class PiNativeRunner:
         runtime: PiA2RuntimeHost,
         workspaces: PiWorkspaceProvider,
         *,
-        timeout: float = 300,
+        timeout: float | None = None,
         poll_interval: float = 0.1,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        if timeout <= 0 or poll_interval <= 0 or poll_interval > timeout:
+        if (
+            isinstance(poll_interval, bool)
+            or not isinstance(poll_interval, int | float)
+            or not isfinite(poll_interval)
+            or poll_interval <= 0
+            or timeout is not None
+            and (
+                isinstance(timeout, bool)
+                or not isinstance(timeout, int | float)
+                or not isfinite(timeout)
+                or timeout <= 0
+                or poll_interval > timeout
+            )
+        ):
             raise ValueError("Pi runner timeout and poll interval must be positive and ordered")
         self._runtime, self._workspaces = runtime, workspaces
         self._timeout, self._poll_interval, self._clock = timeout, poll_interval, clock
@@ -351,23 +365,30 @@ class PiNativeRunner:
         return result
 
     def _wait(self, operation: RuntimeOperation, is_current: CURRENT | None):
-        deadline = self._clock() + self._timeout
+        deadline = None if self._timeout is None else self._clock() + self._timeout
         while True:
             if is_current is not None and not is_current():
                 self._cancel(operation, "stale-authority")
                 raise AgentProtocolError("agent attempt superseded", canceled=True)
-            remaining = deadline - self._clock()
-            if remaining <= 0:
-                self._cancel(operation, "host-timeout")
-                raise AgentProtocolError(
-                    "agent execution timed out",
-                    timed_out=True,
-                    result_category=AgentResultCategory.RUNTIME_LIFECYCLE,
-                )
+            wait_timeout = self._poll_interval
+            if deadline is not None:
+                remaining = deadline - self._clock()
+                if remaining <= 0:
+                    self._cancel(operation, "host-timeout")
+                    raise AgentProtocolError(
+                        "agent execution timed out",
+                        timed_out=True,
+                        result_category=AgentResultCategory.RUNTIME_LIFECYCLE,
+                    )
+                wait_timeout = min(wait_timeout, remaining)
             try:
-                return operation.wait(min(self._poll_interval, remaining))
+                settlement = operation.wait(wait_timeout)
             except TimeoutError:
                 continue
+            if is_current is not None and not is_current():
+                self._cancel(operation, "stale-authority")
+                raise AgentProtocolError("agent attempt superseded", canceled=True)
+            return settlement
 
     @staticmethod
     def _cancel(operation: RuntimeOperation, reason: str) -> None:

@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Fresh V5 PRs exposed and qualified authority-race and bounded Actions-inventory corrections while live completion remains
+status_reason: Fresh V5 PRs exposed and qualified authority-race, bounded Actions-inventory, and agent-deadline corrections while live completion remains
 updated: 2026-08-17
 ---
 
@@ -490,6 +490,35 @@ remain unchanged. Focused GitHub and topology-parity suites pass 94 tests, and
 formatting, typing, and source/wheel builds. PR 53 remains custodied failure
 evidence until the qualified correction is deployed and its exact opening
 delivery resumes through the normal retry/requeue route.
+
+### DS4.15 — Runtime-owned agent deadline
+
+After DS4.14 deployment, PR 53 resumed from its existing durable custody. All
+seven webhook rows became terminal, canonical History completed without an
+Activity or firing failure, and the
+[App dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/53#issuecomment-5310594150)
+became visible. The real review operation then ran for approximately five
+minutes and settled as `RoundUnable(category="runtime_lifecycle")`, correctly
+keeping readiness fail-closed and publishing no readiness advisory.
+
+The retained Pi A2 ledger proved the operation was cancelled with zero accepted
+appends and clean client-close evidence. Hamsterdan's `PiNativeRunner` still
+imposed an independent 300-second deadline even though the exact qualified
+Petrus A2 runtime owns a finite 900-second wall deadline inside a 960-second
+attachment. The outer deadline could therefore cancel valid work before the
+runtime's admitted policy completed.
+
+The default runner now leaves deadline ownership to that finite Petrus runtime
+while continuing bounded polling for current PR authority. An explicit caller
+deadline remains available for controlled tests. A final current-authority
+check after Petrus settlement prevents output admission if authority changes
+during synchronous runtime finalization, and timing configuration now rejects
+boolean, nonnumeric, nonfinite, nonpositive, or unordered values. Focused Pi A2
+tests pass 72 cases. `scripts/check full` passes 1,151 Python tests, nine Bun
+relay tests, Ruff, formatting, typing, and source/wheel builds. Oracle review
+returned `clear to commit`. PR 53 remains preserved as the typed provider-runtime
+failure; no hidden retry or provider substitution was performed. A fresh live
+PR must prove clean-green review completion under the corrected boundary.
 
 ## Done condition
 

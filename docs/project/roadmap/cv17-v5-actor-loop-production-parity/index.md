@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; fresh live V5 exposed qualified authority-race and bounded Actions-inventory corrections while completion remains
+status_reason: DS2 and DS3 are complete; fresh live V5 exposed qualified authority-race, bounded Actions-inventory, and agent-deadline corrections while completion remains
 updated: 2026-08-17
 ---
 
@@ -72,7 +72,12 @@ making that ruling.
   prove distinct author and reviewer identities. The next clean-green PR
   crossed the 1 MiB unfiltered Actions-history boundary; provider reads now
   request the exact head and 20 runs per page while retaining complete bounded
-  pagination and strict run validation.
+  pagination and strict run validation. Its resumed review then exposed an
+  independent 300-second Hamsterdan timeout below Petrus A2's finite 900-second
+  runtime policy. Deadline ownership now remains with Petrus while Hamsterdan
+  retains bounded stale-authority polling and a final post-settlement authority
+  check. PR 53 remains visible fail-closed evidence; a fresh live PR must prove
+  review completion.
 
 ## Done condition
 

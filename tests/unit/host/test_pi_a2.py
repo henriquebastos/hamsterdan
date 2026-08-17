@@ -76,6 +76,19 @@ def test_owned_composition_and_probe_do_not_request_authority(tmp_path: Path) ->
         host.close()
 
 
+def test_owned_composition_retains_a_finite_runtime_deadline(tmp_path: Path) -> None:
+    host = compose_owned_pi_a2(tmp_path)
+    try:
+        assert (
+            host.config.wall_timeout,
+            host.config.attachment_timeout,
+            host.config.cancellation_grace,
+        ) == (900, 960, 5)
+        assert host.config.attachment_timeout > host.config.wall_timeout + host.config.cancellation_grace
+    finally:
+        host.close()
+
+
 def test_direct_key_config_and_probe_validate_path_without_reading_authority(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

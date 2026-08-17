@@ -63,5 +63,7 @@ silence followed by ready-state admission; and prove strict-base update and
 genuine same-line conflict resolution through real two-parent Git commits and
 exact ref CAS; and prove requested review, changes requested, open-thread
 blocking, distinct approval, native thread-resolution custody, and final
-readiness. The selected deterministic portfolio is complete. Fresh live
-selected-V5 GitHub demonstrations remain mandatory.
+readiness. The selected deterministic portfolio is complete. Fresh live PRs
+have also qualified same-PR authority-race recovery, exact-head bounded Actions
+inventory, and Petrus-owned finite agent deadlines. Fresh live selected-V5
+completion demonstrations remain mandatory.

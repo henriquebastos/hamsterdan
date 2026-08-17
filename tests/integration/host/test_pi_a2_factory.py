@@ -28,7 +28,7 @@ from petrus.agenticus.thread.identity import ContinuationId, EpisodeId, ThreadId
 from petrus.agenticus.thread.lifecycle import CancellationDisposition, TurnOutcome
 from petrus.motus.execution.archive import workspace_archive
 
-from hamsterdan.agents import PiNativeRunner, ReviewRequest
+from hamsterdan.agents import AgentProtocolError, AgentResultCategory, PiNativeRunner, ReviewRequest
 from hamsterdan.host.pi_a2 import (
     OneShotApiKeySupplier,
     PersistentKeyOperations,
@@ -329,6 +329,32 @@ def test_agent_runner_replays_closed_operation_without_probe_or_authority(tmp_pa
     )
     assert calls == 0
     assert replay.close()
+
+
+def test_agent_runner_defers_its_default_deadline_to_the_finite_a2_runtime(tmp_path: Path) -> None:
+    request = ReviewRequest(
+        "owner/repo",
+        7,
+        2,
+        "a" * 40,
+        "b" * 40,
+        "diff.patch",
+        review_lenses=["correctness"],
+    )
+    host = _host(
+        tmp_path,
+        (PiA2ScriptedTurn("unused", delay_seconds=1),),
+        OneShotApiKeySupplier(lambda: bytearray(b"fixture")),
+    )
+    archive = workspace_archive(_config(tmp_path).working_directory)
+    runner = PiNativeRunner(host, RunnerWorkspaces(archive))
+
+    with pytest.raises(AgentProtocolError) as caught:
+        runner.review("https://example.invalid/owner/repo.git", request, operation="review:runtime-timeout", attempt=1)
+
+    assert caught.value.result_category is AgentResultCategory.RUNTIME_LIFECYCLE
+    assert not caught.value.timed_out
+    assert host.close()
 
 
 def test_cancellation_and_public_script_failure_fail_closed_with_cleanup_evidence(tmp_path: Path) -> None:
