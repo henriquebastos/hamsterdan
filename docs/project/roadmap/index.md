@@ -98,3 +98,11 @@ hero inspection passes all ten checks, all 18 PR-specific webhook manifests are
 terminal, and History has no Activity or firing failure. PR 61 therefore
 qualifies the complete selected-V5 hero. GitHub-site recordings and additional
 user-visible V5 journeys remain mandatory before CV17 closes.
+
+Planned reliability work: [CV18 — Deterministic readiness simulation](cv18-deterministic-readiness-simulation/index.md).
+CV18 turns the existing semantic oracles, fake provider world, injected clocks,
+and hand-authored crash cuts into generated, replayable readiness campaigns over
+the real host composition. It owns Hamsterdan's independent domain model and
+provider/authority fault world while consuming, rather than duplicating, the
+reusable deterministic event-and-fault substrate planned by Petrus CV19. CV18
+does not replace CV17 parity or make V5 the production default.
