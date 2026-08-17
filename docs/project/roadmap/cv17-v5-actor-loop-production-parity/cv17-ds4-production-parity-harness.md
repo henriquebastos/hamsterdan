@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 hero montage is durable; the PR 56 clean-green capture spec is qualified locally; committed-source recording and additional journeys remain
+status_reason: PRs 56 and 61 now have durable real-GitHub checkpoint montages; PR 57 transient CI is qualified live but unrecorded; additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -943,6 +943,28 @@ workflow, clear dashboard, and readiness sequence with no blank, error,
 challenge, or synthetic segment. Canonical capture still requires the clean
 committed manifest revision, so recording and publication follow this source
 slice rather than borrowing development-probe provenance.
+
+### DS4.28 — PR 56 clean-green montage accepted and published
+
+The canonical PR 56 capture ran anonymously from clean committed revision
+`2c02b3e`. It revalidated the four exact-head checkpoints and emitted live
+provenance bound to manifest digest
+`bad509c1f1887875297e7654e0153558c1c6fe4ad55e67d17cd487694464f21c`.
+Every PNG, the completed report, and the 22-second 1440×900 H.264 video passed
+`SHA256SUMS`; the montage contains one 30 fps video stream, no audio, and digest
+`5fd6e3b37dff23e8a03e5e66e6d5c7e0c510f1d814fe5ef7cf2a2d9344908fda`.
+
+Complete canonical media inspection accepted the six green checks, successful
+Actions graph, clear zero-finding dashboard, and readiness advisory as genuine
+GitHub UI with direct cuts and no blank, error, challenge, corrupt, synthetic,
+overlay, or transition segment. Normal anonymous log-view sign-in copy remained
+provider UI, not an authentication fallback. PR 56 stayed open and unchanged.
+
+The source-bound
+[`cv17-pr56-v5-clean-green-2c02b3e` prerelease](https://github.com/henriquebastos/hamsterdan/releases/tag/cv17-pr56-v5-clean-green-2c02b3e)
+contains the montage, bounded report, checksum file, four-PNG archive, and
+contact sheet. This closes the real-site recording for the clean-green journey;
+PR 57's transient-CI recording and additional live journeys remain.
 
 ## Done condition
 
