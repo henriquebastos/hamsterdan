@@ -33,11 +33,13 @@ from petrus.impetus.petrinet import NetPath, Token
 
 from hamsterdan.contracts.readiness_v5 import (
     ABlocked,
+    ADeferred,
     AFault,
     ALanded,
     AMoved,
     AnnounceCandidate,
     AnnounceReq,
+    AWake,
     CloseFact,
     GateFact,
     ReadyEnded,
@@ -46,7 +48,7 @@ from hamsterdan.contracts.readiness_v5 import (
 )
 from hamsterdan.readiness.net_v5.folding import revive, route, values
 
-GATES = {"ready.gate": ("announce_gate", ("ALanded", "ABlocked", "AMoved", "AFault"))}
+GATES = {"ready.gate": ("announce_gate", ("ALanded", "ADeferred", "ABlocked", "AMoved", "AFault"))}
 
 # -- folds ---------------------------------------------------------------
 
@@ -218,6 +220,47 @@ def _fold_alanded(binding, outputs):
     return _settle(snap, outputs, {"dash.facts": (fact,)})
 
 
+def _announce_request(value: ADeferred | AWake) -> AnnounceReq:
+    return AnnounceReq(
+        op=value.op,
+        incarnation=value.incarnation,
+        head=value.head,
+        base=value.base,
+        policy=value.policy,
+        strict_base=value.strict_base,
+        base_current=value.base_current,
+    )
+
+
+def _fold_adeferred(binding, outputs):
+    out, snap = values(binding, ADeferred, Snapshot)
+    if snap.announcing != _announce_request(out).dump():
+        raise ValueError("V5 deferred announcement differs from its in-flight request")
+    return route(outputs, {"ready.snap": (snap,), "ready.deferred": (out,)})
+
+
+def _wake_deferred(binding, outputs):
+    deferred, wake, snap = values(binding, ADeferred, AWake, Snapshot)
+    if deferred.dump() != wake.dump() or snap.announcing != _announce_request(deferred).dump():
+        raise ValueError("V5 announcement wake differs from its deferred request")
+    # The inhibitors below make every already-mailed fact (and close)
+    # fold before the wake. A revocation drops the request; an authority
+    # refresh that stays ready must retry the EXACT retained request so
+    # the gate first settles its old claim MOVED. Only that typed terminal
+    # may open a fresh-authority request from the current snapshot.
+    snap = snap.validated_update(announcing={})
+    if not _announce_viable(snap):
+        return _settle(snap, outputs, {})
+    req = _announce_request(deferred)
+    return route(
+        outputs,
+        {
+            "ready.snap": (snap.validated_update(announcing=req.dump()),),
+            "ready.announce_req": (req,),
+        },
+    )
+
+
 def _fold_ablocked(binding, outputs):
     _, snap = values(binding, ABlocked, Snapshot)
     # custody moves from in-flight to blocked, retaining the EXACT request
@@ -302,6 +345,11 @@ def _drain_candidate(binding, outputs):
     return route(outputs, {"ready.done": (ended,)})
 
 
+def _drain_wake(binding, outputs):
+    _, ended = values(binding, AWake, ReadyEnded)
+    return route(outputs, {"ready.done": (ended,)})
+
+
 # -- topology ------------------------------------------------------------
 
 
@@ -311,10 +359,13 @@ def declare(s) -> None:
     ready.p.facts(GateFact)
     ready.p.closed(CloseFact)
     ready.p.recover(RecoverFact)
+    ready.p.wakes(AWake)
     ready.p.snap(Snapshot)
     ready.p.candidate(AnnounceCandidate)
     ready.p.announce_req(AnnounceReq)
     ready.p.alanded(ALanded)
+    ready.p.adeferred(ADeferred)
+    ready.p.deferred(ADeferred)
     ready.p.ablocked(ABlocked)
     ready.p.amoved(AMoved)
     ready.p.afault(AFault)
@@ -324,6 +375,7 @@ def declare(s) -> None:
 def wire(net) -> None:
     """Wire this loop's transitions (sibling places must exist)."""
     ready, dash = net.s.ready, net.s.dash
+    net.t.on_announce_wake >> ready.p.wakes
 
     (
         (ready.p.facts, ready.p.snap)
@@ -352,11 +404,28 @@ def wire(net) -> None:
         >> ready.t.gate(handler="announce_gate")
         >> (
             ready.p.alanded,
+            ready.p.adeferred,
             ready.p.ablocked,
             ready.p.amoved,
             ready.p.afault,
         )
     )
+    (
+        (ready.p.adeferred, ready.p.snap)
+        >> ready.t.fold_adeferred(handler=petri_handler(_fold_adeferred))
+        >> (ready.p.deferred, ready.p.snap)
+    )
+    (
+        (ready.p.deferred, ready.p.wakes, ready.p.snap)
+        >> ready.t.wake_deferred(handler=petri_handler(_wake_deferred))
+        >> (
+            ready.p.snap,
+            ready.p.done,
+            ready.p.announce_req,
+        )
+    )
+    ready.p.facts >> arc.inhibit() >> ready.t.wake_deferred
+    ready.p.closed >> arc.inhibit() >> ready.t.wake_deferred
     (
         (ready.p.alanded, ready.p.snap)
         >> ready.t.fold_alanded(handler=petri_handler(_fold_alanded))
@@ -414,6 +483,7 @@ def wire(net) -> None:
         >> ready.t.drain_candidate(handler=petri_handler(_drain_candidate))
         >> ready.p.done
     )
+    ((ready.p.wakes, ready.p.done) >> ready.t.drain_wake(handler=petri_handler(_drain_wake)) >> ready.p.done)
 
 
 def seed() -> dict:

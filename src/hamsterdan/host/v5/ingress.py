@@ -524,6 +524,33 @@ class V5IngressStore:
             raise RuntimeError("V5 unstaged custody identity is malformed")
         return canonical
 
+    def custody_terminal(self, subject: str, delivery_id: str) -> bool:
+        """Whether one exact same-subject row was terminally disposed without a manifest."""
+        match = _SUBJECT.fullmatch(subject)
+        if match is None:
+            raise ValueError("V5 ingress subject is malformed")
+        try:
+            canonical = str(uuid.UUID(delivery_id))
+        except AttributeError, ValueError:
+            raise ValueError("V5 ingress delivery identity is malformed") from None
+        if canonical != delivery_id:
+            raise ValueError("V5 ingress delivery identity is malformed")
+        with self._lock:
+            inbox = self._db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inbox'").fetchone()
+            if inbox is None:
+                raise RuntimeError("V5 deferred custody row is unavailable")
+            row = self._db.execute(
+                "SELECT status,json_extract(observation,'$.installation_id'),"
+                "json_extract(observation,'$.repository_id'),json_extract(observation,'$.pull_request_number')"
+                " FROM inbox WHERE delivery_id=?",
+                (canonical,),
+            ).fetchone()
+        if row is None or row[1:] != tuple(int(value) for value in match.groups()):
+            raise RuntimeError("V5 deferred custody row differs from its subject")
+        if row[0] not in {"pending", "terminal"}:
+            raise RuntimeError("V5 deferred custody status is malformed")
+        return row[0] == "terminal"
+
     def preview(self, subject: str, entries: tuple[IngressEntry, ...]) -> CurrentClaim:
         """Project the grant which staging these exact entries will commit."""
         with self._lock:

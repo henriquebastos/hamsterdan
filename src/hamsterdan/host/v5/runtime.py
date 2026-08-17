@@ -24,7 +24,16 @@ from petrus.motus.dispatch import InlineDispatch, LocalDispatch
 from petrus.motus.worker import Worker
 from pydantic import TypeAdapter, ValidationError
 
-from hamsterdan.contracts.readiness_v5 import RoundDeferred, RoundWake, TimerCommand, TimerCommandApplied, TimerDue
+from hamsterdan.contracts.readiness_v5 import (
+    ADeferred,
+    AnnounceReq,
+    AWake,
+    RoundDeferred,
+    RoundWake,
+    TimerCommand,
+    TimerCommandApplied,
+    TimerDue,
+)
 from hamsterdan.host.protocol import DurableActivityResolver
 from hamsterdan.host.runtime import CompositeDispatch
 from hamsterdan.host.v5.claim import CurrentClaim
@@ -187,6 +196,7 @@ class V5Runtime:
             durable_worker = Worker(provider, activities, resolver=resolver)
         runtime = cls(engine, load, definitions, agent_settle, mutation_operation, durable_worker, policy)
         runtime._validate_review_wake_history()
+        runtime._validate_announce_wake_history()
         return runtime
 
     def deliver(self, entry: IngressEntry) -> object:
@@ -229,6 +239,19 @@ class V5Runtime:
             ):
                 raise RuntimeError("V5 ingress manifest conflicts with canonical History")
         return not missing
+
+    def manifest_folded(self, entries: tuple[IngressEntry, ...]) -> bool:
+        """Whether every accepted manifest row completed its lifecycle fold."""
+        if not self.manifest_accepted(entries):
+            return False
+        for entry in entries:
+            try:
+                mailbox, _ = _INGRESS_FOLDS[entry.source]
+            except KeyError:
+                raise ValueError("V5 ingress source has no lifecycle fold") from None
+            if Token(entry.color, entry.payload) in self.engine.marking.place(mailbox):
+                return False
+        return True
 
     def fold_ingress(self, entry: IngressEntry) -> DriveOutcome | None:
         """Apply the accepted row's pending lifecycle fold, if replay has not already done so."""
@@ -461,6 +484,90 @@ class V5Runtime:
 
     def deliver_review_wake(self, value: RoundWake, identity: str) -> object:
         return self.deliver(IngressEntry.from_value("on_review_round_wake", value, identity))
+
+    def announce_deferred(self) -> ADeferred | None:
+        self._validate_announce_wake_history()
+        tokens = tuple(self.engine.marking.place(NetPath("ready.deferred")))
+        if not tokens:
+            return None
+        if len(tokens) != 1 or tokens[0].color != "ADeferred":
+            raise RuntimeError("V5 deferred announcement has invalid cardinality or color")
+        return self._announce_value(ADeferred, tokens[0].data, "deferred announcement")
+
+    @staticmethod
+    def _announce_value(model, data: object, label: str):
+        try:
+            return TypeAdapter(model).validate_json(json.dumps(data, sort_keys=True, separators=(",", ":")))
+        except TypeError, ValidationError:
+            raise RuntimeError(f"V5 {label} is malformed") from None
+
+    @staticmethod
+    def _deferred_request(value: ADeferred) -> AnnounceReq:
+        return AnnounceReq(
+            op=value.op,
+            incarnation=value.incarnation,
+            head=value.head,
+            base=value.base,
+            policy=value.policy,
+            strict_base=value.strict_base,
+            base_current=value.base_current,
+        )
+
+    def _validate_announce_wake_history(self) -> None:
+        requested: dict[int, AnnounceReq] = {}
+        deferred: set[str] = set()
+        seen: set[str] = set()
+        for record in self.engine.records:
+            if (
+                isinstance(record, ActivityRequested)
+                and record.transition == NetPath("ready.gate")
+                and record.activity == "announce_gate"
+                and isinstance(record.input, dict)
+                and isinstance(record.input.get("work"), dict)
+            ):
+                payload = cast(dict[str, Any], record.input)
+                requested[record.occurrence] = self._announce_value(
+                    AnnounceReq, payload["work"], "announcement History request"
+                )
+                continue
+            if (
+                isinstance(record, ActivityCompleted)
+                and record.transition == NetPath("ready.gate")
+                and isinstance(record.result, dict)
+                and record.result.get("$variant") == "ADeferred"
+            ):
+                value = self._announce_value(
+                    ADeferred,
+                    {key: item for key, item in record.result.items() if key != "$variant"},
+                    "deferred announcement History terminal",
+                )
+                if requested.get(record.occurrence) != self._deferred_request(value):
+                    raise RuntimeError("V5 deferred announcement differs from its History request")
+                wake = AWake(**value.dump())
+                identity = self.announce_wake_identity(wake)
+                if identity in deferred:
+                    raise RuntimeError("V5 deferred announcement History terminal occurs more than once")
+                deferred.add(identity)
+                continue
+            if not isinstance(record, ExternalEventDelivered) or record.source != NetPath("on_announce_wake"):
+                continue
+            if len(record.tokens) != 1 or record.tokens[0].color != "AWake":
+                raise RuntimeError("V5 announcement wake History delivery is malformed")
+            wake = self._announce_value(AWake, record.tokens[0].data, "announcement wake History delivery")
+            expected = self.announce_wake_identity(wake)
+            if record.identity != expected or record.identity in seen:
+                raise RuntimeError("V5 announcement wake History identity is malformed")
+            if expected not in deferred:
+                raise RuntimeError("V5 announcement wake History has no deferred request")
+            seen.add(record.identity)
+
+    @staticmethod
+    def announce_wake_identity(value: AWake) -> str:
+        encoded = json.dumps(value.dump(), sort_keys=True, separators=(",", ":"))
+        return f"v5-announce-wake:{sha256(encoded.encode()).hexdigest()}"
+
+    def deliver_announce_wake(self, value: AWake, identity: str) -> object:
+        return self.deliver(IngressEntry.from_value("on_announce_wake", value, identity))
 
     def run_durable_activities(self, limit: int) -> int:
         if self._durable_worker is None:

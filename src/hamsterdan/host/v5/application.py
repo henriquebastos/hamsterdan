@@ -12,7 +12,7 @@ from petrus.motus.activity import ActivityDefinition, activity
 
 from hamsterdan.agents.protocol import AgentProtocolError, AgentRunner, ConversationRequest
 from hamsterdan.contracts.readiness import AdmittedConversation
-from hamsterdan.contracts.readiness_v5 import CommentSeen, RoundWake
+from hamsterdan.contracts.readiness_v5 import AWake, CommentSeen, RoundWake
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import GitHubBoundaryError
@@ -21,7 +21,7 @@ from hamsterdan.host.binding import ensure_instance_binding
 from hamsterdan.host.git_publish import HostGitPublisher
 from hamsterdan.host.protocol import DurableActivityResolver
 from hamsterdan.host.v5.claim import CurrentClaim
-from hamsterdan.host.v5.gates import V5PublicationGates
+from hamsterdan.host.v5.gates import UnstagedCustodyError, V5PublicationGates
 from hamsterdan.host.v5.ingress import IngressEntry, V5IngressNormalizer, V5IngressStore
 from hamsterdan.host.v5.mutation import V5MutationGate
 from hamsterdan.host.v5.rerun import V5RerunGate
@@ -172,13 +172,13 @@ class PrReadinessV5Application:
             raise RuntimeError(f"V5 {error}") from None
 
     def current_claim(self) -> CurrentClaim:
-        if self.ingress.has_unstaged_custody(self.instance_id):
-            raise GitHubBoundaryError("custodied authority is not staged in the V5 host grant")
+        if (blocker := self.ingress.unstaged_custody_id(self.instance_id)) is not None:
+            raise UnstagedCustodyError(blocker)
         grant = self.ingress.claim(self.instance_id)
         pull = self.authority.pull_request()
         policy = self.authority.policy(pull.base_ref)
-        if self.ingress.has_unstaged_custody(self.instance_id):
-            raise GitHubBoundaryError("custodied authority is not staged in the V5 host grant")
+        if (blocker := self.ingress.unstaged_custody_id(self.instance_id)) is not None:
+            raise UnstagedCustodyError(blocker)
         phase = "terminal" if pull.closed or pull.merged else ("quiescent" if pull.draft else "running")
         if (phase, pull.head, pull.base, policy.digest) != (grant.phase, grant.head, grant.base, grant.policy):
             raise GitHubBoundaryError("fresh provider authority is not staged in the V5 host grant")
@@ -377,17 +377,10 @@ class PrReadinessV5Application:
 
     def settle(self):
         runtime = self._runtime()
-        if (deferred := runtime.review_deferred()) is not None and self.ingress.unstaged_custody_id(
-            self.instance_id
-        ) is None:
-            wake = RoundWake(
-                operation=deferred.operation,
-                attempt=deferred.attempt,
-                blocker=deferred.blocker,
-            )
-            runtime.deliver_review_wake(wake, runtime.review_wake_identity(wake))
         for _ in range(500):
             outcome = runtime.drain()
+            if self._wake_deferred(runtime):
+                continue
             if (ack := self.timers.pending_ack()) is not None:
                 runtime.deliver_timer_ack(ack, self.timers.ack_identity(ack.operation))
                 self.timers.mark_ack_delivered(ack.operation)
@@ -405,6 +398,32 @@ class PrReadinessV5Application:
                 continue
             return replace(outcome, next_maturation=self.timers.next_due())
         raise RuntimeError("V5 timer settlement did not reach an external wait")
+
+    def _wake_deferred(self, runtime: V5Runtime) -> bool:
+        delivered = False
+        if (deferred := runtime.review_deferred()) is not None and self.ingress.unstaged_custody_id(
+            self.instance_id
+        ) is None:
+            wake = RoundWake(
+                operation=deferred.operation,
+                attempt=deferred.attempt,
+                blocker=deferred.blocker,
+            )
+            runtime.deliver_review_wake(wake, runtime.review_wake_identity(wake))
+            delivered = True
+        if (deferred_announce := runtime.announce_deferred()) is not None and self._barrier_cleared(
+            runtime, deferred_announce.blocker
+        ):
+            wake = AWake(**deferred_announce.dump())
+            runtime.deliver_announce_wake(wake, runtime.announce_wake_identity(wake))
+            delivered = True
+        return delivered
+
+    def _barrier_cleared(self, runtime: V5Runtime, blocker: str) -> bool:
+        manifest = self.ingress.manifest(blocker, self.instance_id)
+        if manifest is not None:
+            return runtime.manifest_folded(manifest.entries)
+        return self.ingress.custody_terminal(self.instance_id, blocker)
 
     def activity(self, name: str):
         return self._runtime().activity(name)

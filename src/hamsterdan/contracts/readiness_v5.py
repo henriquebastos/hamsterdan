@@ -1229,6 +1229,34 @@ class ALanded(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ADeferred(WorkflowModel):
+    """The exact announcement waiting behind one unstaged custody row."""
+
+    op: str
+    incarnation: int
+    head: str
+    base: str
+    policy: str
+    strict_base: bool
+    base_current: bool
+    blocker: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class AWake(WorkflowModel):
+    """Host proof that one exact deferred announcement barrier cleared."""
+
+    op: str
+    incarnation: int
+    head: str
+    base: str
+    policy: str
+    strict_base: bool
+    base_current: bool
+    blocker: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class ABlocked(WorkflowModel):
     """Bounded classified retry exhausted; the exact request is
     retained for the `ready.recover` door under the SAME identity."""

@@ -18,6 +18,7 @@ from petrus.motus.dispatch import InlineDispatch, InMemoryDispatch
 
 from hamsterdan.contracts.readiness_v5 import (
     ABlocked,
+    ADeferred,
     AFault,
     AgentReview,
     ALanded,
@@ -82,6 +83,7 @@ def fresh_world() -> dict:
         "agent_mode": None,  # None | "unable"
         "comments": [],
         "comments_mode": None,  # None | "retryable" | "unknown"
+        "announce_blocker": None,
         "comment_attempts": 0,
         # mutation: the provider's push ledger, keyed by operation identity
         "pushes": [],  # {"key", "op", "from", "to"}
@@ -453,10 +455,21 @@ def make_activities(world: dict):
         return RemBlocked(timer_id=work.timer_id)
 
     @motus_activity(converter=converter)
-    def announce_gate(work: AnnounceReq) -> ALanded | ABlocked | AMoved | AFault:
+    def announce_gate(work: AnnounceReq) -> ALanded | ADeferred | ABlocked | AMoved | AFault:
         key = work.op  # stable operation identity: "ready:{head}:i{n}"
         if any(c["key"] == key for c in world["comments"]):  # lookup-first (A2)
             return ALanded(incarnation=work.incarnation, head=work.head)
+        if world["announce_blocker"] is not None:
+            return ADeferred(
+                op=work.op,
+                incarnation=work.incarnation,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                strict_base=work.strict_base,
+                base_current=work.base_current,
+                blocker=world["announce_blocker"],
+            )
         for _attempt in range(3):  # bounded classified retry, ONE occurrence
             mode = world["comments_mode"]
             if mode == "retryable":

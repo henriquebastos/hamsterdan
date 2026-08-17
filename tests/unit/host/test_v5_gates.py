@@ -26,6 +26,7 @@ import pytest
 
 from hamsterdan.contracts.readiness_v5 import (
     ABlocked,
+    ADeferred,
     AFault,
     ALanded,
     AMoved,
@@ -52,7 +53,7 @@ from hamsterdan.contracts.readiness_v5 import (
 from hamsterdan.github_app.effects import CommentPublisher
 from hamsterdan.github_app.models import CommentReference, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.v5.claim import CurrentClaim
-from hamsterdan.host.v5.gates import V5PublicationGates
+from hamsterdan.host.v5.gates import UnstagedCustodyError, V5PublicationGates
 
 CLAIM = CurrentClaim(phase="running", incarnation=1, head="h1", base="b1", policy="p1")
 REFERENCE = CommentReference(1, "https://example.test/c/1")
@@ -322,6 +323,32 @@ class TestAnnounceGate:
     def test_retryable_exhaustion_retains_the_exact_request(self) -> None:
         publisher = FakePublisher(mode="boundary")
         assert gates(publisher).announce_gate(self.WORK) == ABlocked(incarnation=1, head="h1", base="b1", policy="p1")
+
+    def test_unstaged_custody_defers_the_exact_request_without_a_provider_call(self) -> None:
+        blocker = "2c60edc8-6ba8-4cd7-bd89-e1638d70329d"
+
+        def unstaged() -> CurrentClaim:
+            raise UnstagedCustodyError(blocker)
+
+        publisher = FakePublisher()
+        result = V5PublicationGates(
+            publisher=publisher,
+            claim=unstaged,
+            recipients=lambda: ("the-reviewer", "the-author"),
+            dashboard_phase=lambda: "running",
+        ).announce_gate(self.WORK)
+
+        assert result == ADeferred(
+            op=self.WORK.op,
+            incarnation=self.WORK.incarnation,
+            head=self.WORK.head,
+            base=self.WORK.base,
+            policy=self.WORK.policy,
+            strict_base=self.WORK.strict_base,
+            base_current=self.WORK.base_current,
+            blocker=blocker,
+        )
+        assert not [call for call in publisher.calls if call[0] == "immutable"]
 
     def test_an_identity_collision_fails_closed(self) -> None:
         publisher = FakePublisher(mode="collision")

@@ -28,7 +28,7 @@ from harness import (
     world_of,
 )
 
-from hamsterdan.contracts.readiness_v5 import GateFact, Snapshot
+from hamsterdan.contracts.readiness_v5 import AWake, GateFact, Snapshot
 from hamsterdan.readiness.net_v5.readiness import _apply
 
 
@@ -103,6 +103,53 @@ class TestAnnounce:
         see_human(engine)
         assert snap(engine)["review"] == "unable"
         assert announcements(world) == []
+
+    def test_unstaged_custody_wakes_the_exact_announcement_without_human_recovery(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        blocker = "2c60edc8-6ba8-4cd7-bd89-e1638d70329d"
+        world["announce_blocker"] = blocker
+
+        go_ready(engine, world)
+
+        [deferred] = tokens(engine, "ready.deferred")
+        assert deferred == {
+            "op": "ready:h1:i1",
+            "incarnation": 1,
+            "head": "h1",
+            "base": "b1",
+            "policy": "p1",
+            "strict_base": True,
+            "base_current": True,
+            "blocker": blocker,
+        }
+        assert snap(engine)["announcing"] == {key: value for key, value in deferred.items() if key != "blocker"}
+        assert announcements(world) == []
+
+        world["announce_blocker"] = None
+        deliver(engine, "on_announce_wake", "AWake", AWake(**deferred).dump())
+
+        assert tokens(engine, "ready.deferred") == []
+        assert announcements(world) == ["ready:h1:i1"]
+        assert snap(engine)["announced"] == [1]
+
+    def test_mutation_pending_fact_wins_before_a_deferred_announcement_wakes(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        blocker = "2c60edc8-6ba8-4cd7-bd89-e1638d70329d"
+        world["announce_blocker"] = blocker
+        go_ready(engine, world)
+        [deferred] = tokens(engine, "ready.deferred")
+        world["git_mode"] = "fault"
+        comment(engine, "c1", "change")
+        assert snap(engine)["pending"] == ["push:comment:c1:h1:i1"]
+
+        world["announce_blocker"] = None
+        deliver(engine, "on_announce_wake", "AWake", AWake(**deferred).dump())
+
+        assert announcements(world) == []
+        assert snap(engine)["announcing"] == {}
+        assert tokens(engine, "ready.deferred") == []
 
     def test_changes_requested_and_unresolved_hold_readiness(self) -> None:
         engine, _ = spawn()
@@ -507,6 +554,30 @@ class TestBlockedRecovery:
 
 
 class TestMovedAuthority:
+    def test_deferred_retry_settles_moved_when_provider_authority_changed_before_its_wake(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        blocker = "2c60edc8-6ba8-4cd7-bd89-e1638d70329d"
+        world["announce_blocker"] = blocker
+        go_ready(engine, world)
+        [deferred] = tokens(engine, "ready.deferred")
+
+        world["announce_blocker"] = None
+        world["branch_head"] = "h2"
+        world["authority"] = {
+            "phase": "running",
+            "incarnation": 2,
+            "head": "h2",
+            "base": "b1",
+            "policy": "p1",
+        }
+        deliver(engine, "on_announce_wake", "AWake", AWake(**deferred).dump())
+
+        assert announcements(world) == []
+        assert tokens(engine, "ready.deferred") == []
+        assert snap(engine)["announcing"] == {}
+        assert snap(engine)["blocked"] == {}
+
     def test_moved_with_the_displacing_observation_unfolded_parks(self) -> None:
         engine, _, dispatch, definitions = spawn_held()
         world = world_of(engine)
@@ -747,6 +818,26 @@ class TestClose:
         pump(engine, dispatch, definitions)
         assert tokens(engine, "ready.snap") == []
         assert one(engine, "ready.done")["reason"] == "merged"
+
+    def test_close_waits_through_deferred_announcement_then_retires_without_posting(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        blocker = "2c60edc8-6ba8-4cd7-bd89-e1638d70329d"
+        world["announce_blocker"] = blocker
+        go_ready(engine, world)
+        [deferred] = tokens(engine, "ready.deferred")
+
+        deliver(engine, "on_close", "CloseSeen", {"reason": "closed"})
+
+        assert snap(engine)["closing"] == "closed"
+        assert tokens(engine, "ready.done") == []
+        world["announce_blocker"] = None
+        deliver(engine, "on_announce_wake", "AWake", AWake(**deferred).dump())
+
+        assert tokens(engine, "ready.snap") == []
+        assert tokens(engine, "ready.deferred") == []
+        assert one(engine, "ready.done")["reason"] == "closed"
+        assert announcements(world) == []
 
     def test_post_close_mail_drains_and_never_strands(self) -> None:
         engine, _ = spawn()

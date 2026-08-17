@@ -10,13 +10,19 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
-from petrus.impetus.history import ActivityFailed, ExternalEventDelivered, FiringFailed
+from petrus.impetus.history import (
+    ActivityCompleted,
+    ActivityFailed,
+    ActivityRequested,
+    ExternalEventDelivered,
+    FiringFailed,
+)
 from petrus.impetus.petrinet import NetPath, Token
 from petrus.motus.dispatch import LocalDispatch
 
 from hamsterdan.agents.protocol import ConversationResult, ReviewResult
 from hamsterdan.contracts.readiness import AdmittedConversation
-from hamsterdan.contracts.readiness_v5 import CommentSeen, DraftSeen, HeadSeen, HumanSeen, ReadySeen, RoundWake
+from hamsterdan.contracts.readiness_v5 import AWake, CommentSeen, DraftSeen, HeadSeen, HumanSeen, ReadySeen, RoundWake
 from hamsterdan.github_app.models import (
     ActionsEvidence,
     ActionsRunSnapshot,
@@ -1266,6 +1272,237 @@ def test_v5_application_drains_the_real_topology_against_provider_backed_gates(t
     application.close()
 
 
+def _application_after_dashboard_custody_race(
+    tmp_path: Path,
+    *,
+    terminalize_during_claim: bool = False,
+) -> tuple[PrReadinessV5Application, Authority, Path, str]:
+    identity = delivery()
+    blocker = delivery()
+    path = tmp_path / "webhooks.sqlite3"
+    authority = Authority()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        Runner(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=path,
+    )
+    original_request = authority.transport.request
+    inserted = False
+
+    def dashboard_callback(method: str, endpoint: str, body: object | None = None):
+        nonlocal inserted
+        result = original_request(method, endpoint, body)
+        text = str(body.get("body", "")) if isinstance(body, dict) else ""
+        if not inserted and method == "PATCH" and "hamsterdan:dashboard" in text and "human:" in text:
+            inserted = True
+            with sqlite3.connect(path) as database:
+                database.execute(
+                    "CREATE TABLE IF NOT EXISTS inbox"
+                    " (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, observation TEXT NOT NULL)"
+                )
+                database.execute(
+                    "INSERT INTO inbox VALUES (?, 'pending', ?)",
+                    (
+                        blocker,
+                        json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7}),
+                    ),
+                )
+        return result
+
+    authority.transport.request = dashboard_callback  # type: ignore[method-assign]
+    if terminalize_during_claim:
+        unstaged_custody_id = application.ingress.unstaged_custody_id
+        terminalized = False
+
+        def terminalize_after_read(subject: str) -> str | None:
+            nonlocal terminalized
+            pending = unstaged_custody_id(subject)
+            if pending is not None and not terminalized:
+                terminalized = True
+                with sqlite3.connect(path) as database:
+                    database.execute("UPDATE inbox SET status='terminal' WHERE delivery_id=?", (pending,))
+            return pending
+
+        application.ingress.unstaged_custody_id = terminalize_after_read  # type: ignore[method-assign]
+    application.process_observation(Observation(identity, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    application.settle()
+    assert inserted
+    return application, authority, path, blocker
+
+
+def test_v5_readiness_announcement_defers_behind_dashboard_webhook_custody_then_wakes(tmp_path: Path) -> None:
+    application, authority, path, blocker = _application_after_dashboard_custody_race(tmp_path)
+
+    records = tuple(application._runtime().engine.records)
+    [deferred] = application._runtime().engine.marking.place(NetPath("ready.deferred"))
+    assert deferred.data["blocker"] == blocker
+    assert any(
+        isinstance(record, ActivityCompleted)
+        and str(record.transition) == "ready.gate"
+        and record.result.get("$variant") == "ADeferred"
+        for record in records
+    )
+    assert not any(
+        isinstance(record, ActivityCompleted)
+        and str(record.transition) == "ready.gate"
+        and record.result.get("$variant") == "ABlocked"
+        for record in records
+    )
+    assert not any("hamsterdan:readiness" in str(item["body"]) for item in authority.transport.comments)
+
+    unrelated = delivery()
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "INSERT INTO inbox VALUES (?, 'terminal', ?)",
+            (
+                unrelated,
+                json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7}),
+            ),
+        )
+    application.settle()
+    assert application._runtime().engine.marking.place(NetPath("ready.deferred"))
+    assert not any("hamsterdan:readiness" in str(item["body"]) for item in authority.transport.comments)
+
+    with sqlite3.connect(path) as database:
+        database.execute("UPDATE inbox SET status='terminal' WHERE delivery_id=?", (blocker,))
+    application.settle()
+
+    assert application._runtime().engine.marking.place(NetPath("ready.deferred")) == ()
+    assert len([item for item in authority.transport.comments if "hamsterdan:readiness" in str(item["body"])]) == 1
+    wakes = [
+        record
+        for record in application._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and str(record.source) == "on_announce_wake"
+    ]
+    assert len(wakes) == 1 and wakes[0].identity.startswith("v5-announce-wake:")
+    requests = [
+        record.input["work"]
+        for record in application._runtime().engine.records
+        if isinstance(record, ActivityRequested) and str(record.transition) == "ready.gate"
+    ]
+    assert len(requests) == 2 and requests[0] == requests[1]
+    application.close()
+
+
+def test_v5_readiness_wakes_after_the_exact_blocker_manifest_folds_before_inbox_ack(tmp_path: Path) -> None:
+    application, authority, _path, blocker = _application_after_dashboard_custody_race(tmp_path)
+
+    application.process_observation(Observation(blocker, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    application.settle()
+
+    assert application._runtime().engine.marking.place(NetPath("ready.deferred")) == ()
+    assert len([item for item in authority.transport.comments if "hamsterdan:readiness" in str(item["body"])]) == 1
+    wakes = [
+        record
+        for record in application._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and str(record.source) == "on_announce_wake"
+    ]
+    assert len(wakes) == 1
+    application.close()
+
+
+def test_v5_deferred_announcement_settles_old_authority_moved_before_fresh_request(tmp_path: Path) -> None:
+    application, authority, _path, blocker = _application_after_dashboard_custody_race(tmp_path)
+    authority.pull = replace(authority.pull, base="c" * 40)
+    authority.repo_policy = replace(authority.repo_policy, digest="policy-2")
+
+    application.process_observation(Observation(blocker, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    application.settle()
+
+    records = tuple(application._runtime().engine.records)
+    requests = [
+        record.input["work"]
+        for record in records
+        if isinstance(record, ActivityRequested) and str(record.transition) == "ready.gate"
+    ]
+    terminals = [
+        record.result["$variant"]
+        for record in records
+        if isinstance(record, ActivityCompleted) and str(record.transition) == "ready.gate"
+    ]
+    assert len(requests) == 3
+    assert requests[0] == requests[1]
+    assert (requests[2]["base"], requests[2]["policy"]) == ("c" * 40, "policy-2")
+    assert terminals == ["ADeferred", "AMoved", "ALanded"]
+    assert len([item for item in authority.transport.comments if "hamsterdan:readiness" in str(item["body"])]) == 1
+    application.close()
+
+
+def test_v5_readiness_wakes_when_custody_terminalizes_during_the_deferral_fold(tmp_path: Path) -> None:
+    application, authority, _path, blocker = _application_after_dashboard_custody_race(
+        tmp_path,
+        terminalize_during_claim=True,
+    )
+
+    records = tuple(application._runtime().engine.records)
+    assert application._runtime().engine.marking.place(NetPath("ready.deferred")) == ()
+    deferred = [
+        record
+        for record in records
+        if isinstance(record, ActivityCompleted)
+        and str(record.transition) == "ready.gate"
+        and record.result.get("$variant") == "ADeferred"
+    ]
+    assert len(deferred) == 1 and deferred[0].result["blocker"] == blocker
+    assert len([item for item in authority.transport.comments if "hamsterdan:readiness" in str(item["body"])]) == 1
+    wakes = [
+        record
+        for record in records
+        if isinstance(record, ExternalEventDelivered) and str(record.source) == "on_announce_wake"
+    ]
+    assert len(wakes) == 1
+    application.close()
+
+
+def test_v5_announcement_wake_replays_after_restart_when_delivery_ack_is_lost(tmp_path: Path) -> None:
+    first, authority, path, blocker = _application_after_dashboard_custody_race(tmp_path)
+    first.close()
+    with sqlite3.connect(path) as database:
+        database.execute("UPDATE inbox SET status='terminal' WHERE delivery_id=?", (blocker,))
+
+    def opened() -> PrReadinessV5Application:
+        return PrReadinessV5Application(
+            tmp_path / "application",
+            SUBJECT,
+            authority,  # type: ignore[arg-type]
+            Runner(),  # type: ignore[arg-type]
+            agent_settle=lambda operations: None,
+            bot_login="hamsterdan-test[bot]",
+            public_clone_url="https://github.com/owner/repo.git",
+            custody_path=path,
+        )
+
+    second = opened()
+    runtime = second._runtime()
+    deliver_wake = runtime.deliver_announce_wake
+
+    def commit_then_lose_ack(value, identity):
+        deliver_wake(value, identity)
+        raise RuntimeError("announcement wake acknowledgement lost")
+
+    runtime.deliver_announce_wake = commit_then_lose_ack  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="acknowledgement lost"):
+        second.settle()
+    second.close()
+
+    third = opened()
+    third.settle()
+
+    assert len([item for item in authority.transport.comments if "hamsterdan:readiness" in str(item["body"])]) == 1
+    wake_deliveries = [
+        record.identity
+        for record in third._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and str(record.source) == "on_announce_wake"
+    ]
+    assert len(wake_deliveries) == 1 and wake_deliveries[0].startswith("v5-announce-wake:")
+    third.close()
+
+
 def test_v5_review_waits_for_custodied_authority_then_retries_without_losing_its_baton(tmp_path: Path) -> None:
     class AttemptRunner(Runner):
         def __init__(self) -> None:
@@ -1444,6 +1681,54 @@ def test_v5_restart_fails_closed_on_malformed_review_wake_history(
     )
     identity = runtime.review_wake_identity(wake) if derived_identity else "malformed-review-wake-identity"
     runtime.deliver_review_wake(wake, identity)
+    first.close()
+
+    with pytest.raises(RuntimeError, match=message):
+        PrReadinessV5Application(
+            root,
+            SUBJECT,
+            Authority(),  # type: ignore[arg-type]
+            Runner(),  # type: ignore[arg-type]
+            **options,
+        )
+
+
+@pytest.mark.parametrize(
+    ("derived_identity", "message"),
+    [(False, "identity is malformed"), (True, "has no deferred request")],
+)
+def test_v5_restart_fails_closed_on_malformed_announcement_wake_history(
+    tmp_path: Path,
+    derived_identity: bool,
+    message: str,
+) -> None:
+    root = tmp_path / "application"
+    options = {
+        "agent_settle": lambda operations: None,
+        "bot_login": "hamsterdan-test[bot]",
+        "public_clone_url": "https://github.com/owner/repo.git",
+        "custody_path": tmp_path / "webhooks.sqlite3",
+    }
+    first = PrReadinessV5Application(
+        root,
+        SUBJECT,
+        Authority(),  # type: ignore[arg-type]
+        Runner(),  # type: ignore[arg-type]
+        **options,
+    )
+    runtime = first._runtime()
+    wake = AWake(
+        op=f"ready:{'a' * 40}:i1",
+        incarnation=1,
+        head="a" * 40,
+        base="b" * 40,
+        policy="policy-1",
+        strict_base=True,
+        base_current=True,
+        blocker=delivery(),
+    )
+    identity = runtime.announce_wake_identity(wake) if derived_identity else "malformed-announce-wake-identity"
+    runtime.deliver_announce_wake(wake, identity)
     first.close()
 
     with pytest.raises(RuntimeError, match=message):

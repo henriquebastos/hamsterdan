@@ -285,14 +285,16 @@ class TestCensus:
     def test_no_guards_no_reads_no_filters_every_place_owned(self) -> None:
         built = build_net_v5()
         assert built.guards == {}
-        # the ONE deliberate exception to all-consume: readiness's
-        # authorize gates on ITS OWN mailbox quiescence through
-        # loop-internal inhibit arcs — an announce is only authorized
-        # from a snapshot that folded every fact already mailed to it
+        # The deliberate exceptions to all-consume are readiness's two
+        # authorization points. Both gate on ITS OWN fact/close mailbox
+        # quiescence through loop-internal inhibit arcs: neither a fresh
+        # request nor a deferred retry can race already-mailed revocation.
         exceptional = {(str(a.source), str(a.mode), str(a.target)) for a in built.net.arcs if str(a.mode) != "consume"}
         assert exceptional == {
             ("ready.facts", "inhibit", "ready.authorize"),
             ("ready.closed", "inhibit", "ready.authorize"),
+            ("ready.facts", "inhibit", "ready.wake_deferred"),
+            ("ready.closed", "inhibit", "ready.wake_deferred"),
         }
         assert all(getattr(a, "filter", None) is None for a in built.net.arcs)
         for place in built.net.places:
@@ -310,6 +312,7 @@ class TestCensus:
             "on_comment",
             "on_human",
             "on_runs",
+            "on_announce_wake",
             "on_review_round_wake",
             "on_timer",
             "on_timer_command_applied",

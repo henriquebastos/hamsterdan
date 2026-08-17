@@ -41,6 +41,7 @@ from typing import Any, Protocol
 
 from hamsterdan.contracts.readiness_v5 import (
     ABlocked,
+    ADeferred,
     AFault,
     ALanded,
     AMoved,
@@ -71,6 +72,15 @@ Recipients = Callable[[], tuple[str | None, str]]
 """A zero-argument port yielding the current (reviewer, author)."""
 DashboardPhase = Callable[[], str]
 """A host-grant-only port yielding the staged lifecycle phase."""
+
+
+class UnstagedCustodyError(GitHubBoundaryError):
+    """One exact same-PR custody row has not entered canonical History."""
+
+    def __init__(self, blocker: str) -> None:
+        self.blocker = blocker
+        super().__init__("custodied authority is not staged in the V5 host grant")
+
 
 _ANNOUNCE_BODY = (
     "## Hamsterdan readiness advisory\n\n"
@@ -256,7 +266,7 @@ class V5PublicationGates:
 
     # -- announce: FULL claim fence, immutable, identity in work.op ----
 
-    def announce_gate(self, work: AnnounceReq) -> ALanded | AMoved | ABlocked | AFault:
+    def announce_gate(self, work: AnnounceReq) -> ALanded | ADeferred | AMoved | ABlocked | AFault:
         expected = CurrentClaim(
             phase="running", incarnation=work.incarnation, head=work.head, base=work.base, policy=work.policy
         )
@@ -283,6 +293,17 @@ class V5PublicationGates:
                 work.head,
                 _ANNOUNCE_BODY,
                 compatible_bodies=_ANNOUNCE_COMPATIBLE,
+            )
+        except UnstagedCustodyError as error:
+            return ADeferred(
+                op=work.op,
+                incarnation=work.incarnation,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                strict_base=work.strict_base,
+                base_current=work.base_current,
+                blocker=error.blocker,
             )
         except GitHubBoundaryError:
             return ABlocked(incarnation=work.incarnation, head=work.head, base=work.base, policy=work.policy)
