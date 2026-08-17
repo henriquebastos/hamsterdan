@@ -124,6 +124,7 @@ const checkpointScope = (page: Page, checkpoint: Checkpoint): Locator => {
     case "commit":
     case "pr-checks":
     case "actions-run":
+    case "actions-attempt":
       return page.locator("main");
   }
 };
@@ -176,10 +177,11 @@ const validatePage = async (
     }
     assertions.push(assertion("head", manifest.expectedHead));
     assertions.push(assertion("run", checkpoint.target));
-  } else if (checkpoint.kind === "actions-run") {
-    if (!bodyText.includes(`#${manifest.pullRequest}`)) {
-      throw new Error(`checkpoint ${checkpoint.id} does not identify the expected pull request`);
+  } else if (checkpoint.kind === "actions-run" || checkpoint.kind === "actions-attempt") {
+    if (!bodyText.includes(`#${manifest.pullRequest}`) || !title.includes(manifest.expectedHead.slice(0, 7))) {
+      throw new Error(`checkpoint ${checkpoint.id} does not identify the expected pull request and head`);
     }
+    assertions.push(assertion("head", manifest.expectedHead));
     assertions.push(assertion("run", checkpoint.target));
   } else {
     const head = page.locator(

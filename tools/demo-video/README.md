@@ -23,10 +23,12 @@ Checked-in manifests identify surviving checkpoints in the public GitHub UI.
 Henrique's repair request, the App commit, the successful repaired-head Actions
 run, operation-scoped recovery, status conversation, Cris's approval, and final
 readiness. `pr56-v5-clean-green.json` covers exact-head green checks, the
-successful Actions run, App dashboard, and readiness advisory. The browser
-context is anonymous, nonpersistent, and read only. It accepts no login, cookie
-file, token, storage state, user profile, or arbitrary selector from the
-manifest.
+successful Actions run, App dashboard, and readiness advisory.
+`pr57-v5-transient-ci.json` covers the failed first Actions attempt, successful
+rerun of that exact run and head, dashboard progression, and readiness. The
+browser context is anonymous, nonpersistent, and read only. It accepts no
+login, cookie file, token, storage state, user profile, or arbitrary selector
+from the manifest.
 
 Run capture only from a clean committed worktree. The capture validates the
 repository, PR state, exact head identity, actor identity, and checkpoint text

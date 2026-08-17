@@ -137,6 +137,36 @@ describe("public GitHub checkpoint capture", () => {
     expect(await readdir(result.directory)).toContain("report.json");
   });
 
+  test("validates one explicit GitHub Actions run attempt", async () => {
+    const rawManifest = JSON.parse(JSON.stringify(manifest()));
+    rawManifest.actors.push({login: "github-actions", href: "/apps/github-actions"});
+    rawManifest.checkpoints[0] = {
+      id: "failed-attempt",
+      kind: "actions-attempt",
+      target: "31990573431/attempts/1",
+      url: "https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31990573431/attempts/1",
+      actor: "github-actions",
+      expectedText: ["You are viewing an older attempt", "Status", "Failure", "scenario-control"],
+      focusText: "Failure",
+      holdSeconds: 2,
+    };
+    const html = `<!doctype html><html><head><title>Demo · HBNetwork/demo-pr-readiness@e3d11a8 · GitHub</title></head>
+      <body><main>
+        <a href="/HBNetwork/demo-pr-readiness">HBNetwork / demo-pr-readiness</a>
+        <a href="/apps/github-actions">github-actions[bot]</a>
+        <p>#61</p><p>You are viewing an older attempt</p><p>Status</p><p>Failure</p><p>scenario-control</p>
+      </main></body></html>`;
+    const outputRoot = await mkdtemp(join(tmpdir(), "hamsterdan-live-capture-attempt-"));
+    const result = await captureFixtureEvidence(Buffer.from(JSON.stringify(rawManifest)), {
+      browser,
+      outputRoot,
+      source,
+      now: new Date("2026-08-17T08:00:00Z"),
+      fixture: () => ({status: 200, body: html}),
+    });
+    expect(result.report.checkpoints[0].target).toBe("31990573431/attempts/1");
+  });
+
   test.each([
     ["missing text", pageHtml().replace("Calculate lease duration in seconds", "Different finding")],
     ["hidden target", pageHtml({hidden: true})],

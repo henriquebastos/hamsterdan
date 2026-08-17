@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56 and 61 now have durable real-GitHub checkpoint montages; PR 57 transient CI is qualified live but unrecorded; additional journeys remain
+status_reason: PRs 56 and 61 have durable montages; PR 57 transient-CI capture is qualified locally; committed-source recording and additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -965,6 +965,35 @@ The source-bound
 contains the montage, bounded report, checksum file, four-PNG archive, and
 contact sheet. This closes the real-site recording for the clean-green journey;
 PR 57's transient-CI recording and additional live journeys remain.
+
+### DS4.29 — PR 57 transient-CI capture qualified locally
+
+The third closed manifest binds accepted selected-V5 PR 57, exact head
+`4db1e173ed22aa0d314cfd5bac0be889eff6e9c8`, and both attempts of Actions run
+`31990573431`. A new low-level `actions-attempt` checkpoint treats
+`<run>/attempts/<number>` as one closed provider identity. Capture requires the
+exact attempt URL, expected PR, expected head in the page title, declared actor,
+and bounded rendered text; report admission accepts that composite target only
+for this kind.
+
+The four checkpoints show failed attempt 1 with its older-attempt banner and
+scenario-control error, successful attempt 2 explicitly labeled `Re-run
+triggered`, the App dashboard's failure-to-in-progress-to-success history with
+zero findings and clear review, and final readiness. The retained App rerun
+comment contains only a hidden identity marker and renders `No description
+provided`, so the recording does not misrepresent it as visible explanatory
+copy. The native Actions attempts and dashboard carry the user-visible recovery
+story; the already qualified strict broker/History evidence owns attribution to
+exactly one Hamsterdan rerun request.
+
+Forty-four focused live tests pass. Quick and full checks pass with 1,183 Python
+tests and nine webhook-relay tests. A fresh anonymous development probe
+validated all four real pages and rendered a 27-second 1440×900 silent H.264
+montage. Complete contact-sheet and video inspection accepted the attempt-1
+failure, attempt-2 rerun success, dashboard progression, and readiness sequence
+as understandable native provider UI with no blank, error, challenge, corrupt,
+synthetic, overlay, or transition segment. Canonical capture and publication
+follow the clean committed source slice.
 
 ## Done condition
 

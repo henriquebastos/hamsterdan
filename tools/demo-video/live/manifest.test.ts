@@ -52,8 +52,42 @@ describe("live capture manifest", () => {
     expect(parsed.checkpoints).toHaveLength(4);
   });
 
+  test("admits the committed PR57 transient-CI manifest", async () => {
+    const raw = JSON.parse(await readFile(new URL("./manifests/pr57-v5-transient-ci.json", import.meta.url), "utf8"));
+    const parsed = parseManifest(raw);
+    expect(parsed.slug).toBe("pr57-v5-transient-ci");
+    expect(parsed.checkpoints.map(({kind}) => kind)).toEqual([
+      "actions-attempt",
+      "actions-attempt",
+      "issue-comment",
+      "issue-comment",
+    ]);
+  });
+
   test("accepts the closed public GitHub contract", () => {
     expect(parseManifest(validManifest()).slug).toBe("pr61-v5-hero");
+  });
+
+  test("accepts one exact GitHub Actions run attempt identity", () => {
+    const value = validManifest();
+    value.checkpoints[0] = {
+      ...value.checkpoints[0],
+      kind: "actions-attempt",
+      target: "31990573431/attempts/1",
+      url: "https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31990573431/attempts/1",
+    };
+    expect(parseManifest(value).checkpoints[0].target).toBe("31990573431/attempts/1");
+  });
+
+  test("rejects a malformed GitHub Actions attempt identity", () => {
+    const value = validManifest();
+    value.checkpoints[0] = {
+      ...value.checkpoints[0],
+      kind: "actions-attempt",
+      target: "31990573431/attempts/latest",
+      url: "https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31990573431/attempts/latest",
+    };
+    expect(() => parseManifest(value)).toThrow(/target/);
   });
 
   test.each([

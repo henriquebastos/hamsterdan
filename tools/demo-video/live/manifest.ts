@@ -1,4 +1,4 @@
-export type CheckpointKind = "issue-comment" | "review" | "commit" | "pr-checks" | "actions-run";
+export type CheckpointKind = "issue-comment" | "review" | "commit" | "pr-checks" | "actions-run" | "actions-attempt";
 
 export type Actor = Readonly<{
   login: string;
@@ -119,6 +119,8 @@ const expectedCheckpointUrl = (
       return `${root}/pull/${pullRequest}/checks`;
     case "actions-run":
       return `${root}/actions/runs/${target}`;
+    case "actions-attempt":
+      return `${root}/actions/runs/${target}`;
   }
 };
 
@@ -171,12 +173,24 @@ export const parseManifest = (raw: unknown): CaptureManifest => {
     const checkpoint = requireRecord(rawCheckpoint, `checkpoints[${index}]`);
     requireExactKeys(checkpoint, EXACT_KEYS.checkpoint, `checkpoints[${index}]`);
     const id = requireString(checkpoint.id, `checkpoints[${index}].id`, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, 64);
-    const kinds: readonly CheckpointKind[] = ["issue-comment", "review", "commit", "pr-checks", "actions-run"];
+    const kinds: readonly CheckpointKind[] = [
+      "issue-comment",
+      "review",
+      "commit",
+      "pr-checks",
+      "actions-run",
+      "actions-attempt",
+    ];
     if (typeof checkpoint.kind !== "string" || !kinds.includes(checkpoint.kind as CheckpointKind)) {
       throw new Error(`checkpoints[${index}].kind is invalid`);
     }
     const kind = checkpoint.kind as CheckpointKind;
-    const targetPattern = kind === "commit" ? /^[0-9a-f]{40}$/ : /^[1-9][0-9]{0,19}$/;
+    const targetPattern =
+      kind === "commit"
+        ? /^[0-9a-f]{40}$/
+        : kind === "actions-attempt"
+          ? /^[1-9][0-9]{0,19}\/attempts\/[1-9][0-9]{0,4}$/
+          : /^[1-9][0-9]{0,19}$/;
     const target = requireString(checkpoint.target, `checkpoints[${index}].target`, targetPattern, 40);
     const url = publicGitHubUrl(checkpoint.url, `checkpoints[${index}].url`).toString();
     if (url !== expectedCheckpointUrl(repository, pullRequest, expectedHead, kind, target)) {

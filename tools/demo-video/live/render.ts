@@ -135,10 +135,19 @@ const parsePendingReport = <Kind extends CaptureReportKind>(raw: unknown, expect
     if (dimensions.width !== width || dimensions.height !== height) {
       throw new Error(`report checkpoint ${index} dimensions differ from the viewport`);
     }
+    const kind = string(
+      checkpoint.kind,
+      /^(?:issue-comment|review|commit|pr-checks|actions-run|actions-attempt)$/,
+      "checkpoint kind",
+    );
     return {
       id: string(checkpoint.id, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, "checkpoint id"),
-      kind: string(checkpoint.kind, /^(?:issue-comment|review|commit|pr-checks|actions-run)$/, "checkpoint kind"),
-      target: string(checkpoint.target, /^[0-9a-f]+$/, "checkpoint target"),
+      kind,
+      target: string(
+        checkpoint.target,
+        kind === "actions-attempt" ? /^[1-9][0-9]{0,19}\/attempts\/[1-9][0-9]{0,4}$/ : /^[0-9a-f]+$/,
+        "checkpoint target",
+      ),
       requestedUrl: string(checkpoint.requestedUrl, /^https:\/\/github\.com\//, "requested URL"),
       finalUrl: string(checkpoint.finalUrl, /^https:\/\/github\.com\//, "final URL"),
       capturedAt: string(checkpoint.capturedAt, /^\d{4}-\d{2}-\d{2}T/, "checkpoint instant"),
