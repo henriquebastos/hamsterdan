@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; fresh live V5 exposed qualified host and agent response-contract corrections while completion remains
+status_reason: DS2 and DS3 plus the deterministic portfolio are complete; fresh V5 clean-green is qualified live while additional user-visible journeys remain
 updated: 2026-08-17
 ---
 
@@ -81,8 +81,16 @@ making that ruling.
   strict result schema. Pi prompts now include an exact compact canonical
   response contract without weakening or normalizing strict result admission,
   and retained legacy-prompt operations cannot replay as current results. PR 54
-  remains visible fail-closed output-schema evidence; a fresh live PR must
-  prove review completion.
+  remains visible fail-closed output-schema evidence. Fresh PR 55 then admitted
+  the canonical provider review but exposed the dashboard comment's own webhook
+  as a temporary same-PR custody barrier during readiness publication. A typed
+  deferred announcement now retains the exact request and blocker, wakes only
+  after that exact delivery is staged or terminal, and re-enters lookup-first
+  settlement under the same operation. Fresh PR 56 qualified that correction:
+  all six checks and the provider review completed, ten exact custody deferrals
+  converged, and the App-owned readiness advisory landed without History
+  failure. Clean-green is therefore qualified live; additional fresh V5 user
+  journeys and recordings remain before CV17 acceptance.
 
 ## Done condition
 

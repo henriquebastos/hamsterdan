@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Fresh V5 PRs exposed and qualified authority-race, Actions-inventory, agent-deadline, and response-contract corrections while live completion remains
+status_reason: Fresh V5 clean-green is qualified through PR 56; additional GitHub-visible journeys and recordings remain
 updated: 2026-08-17
 ---
 
@@ -553,6 +553,57 @@ partial response is normalized or filled. Focused agent and host checks pass
 Ruff, formatting, typing, and source/wheel builds. Oracle review returned
 `clear to commit`. PR 54 remains preserved output-schema evidence. A fresh
 selected-V5 PR must prove provider-produced clean-green review completion.
+
+### DS4.17 — Readiness deferral behind exact webhook custody
+
+Fresh selected-V5
+[`HBNetwork/demo-pr-readiness` PR 55](https://github.com/HBNetwork/demo-pr-readiness/pull/55),
+head `fbc547ea80cc42d724fbf350f830e8ed194721ee`, passed all six jobs in
+[Actions run 31986387912](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31986387912),
+admitted one canonical provider review, and published the
+[App dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/55#issuecomment-5310949837).
+Readiness did not land. The dashboard update's own App-authored webhook had
+entered same-PR durable custody but had not yet crossed V5 manifest staging when
+the readiness gate ran. The gate correctly refused to publish beyond host
+authority, but represented that temporary custody barrier as permanent
+`ABlocked`; the Net therefore required human recovery for a blocker that normal
+custody progression could resolve. PR 55 remains unchanged as the live race
+evidence.
+
+The readiness loop now distinguishes temporary custody from provider failure.
+Typed `ADeferred` retains the complete original `AnnounceReq` and exact blocker
+delivery ID. Host-owned reconciliation emits a deterministic identified
+`AWake` only after that exact delivery is staged or terminal, and the Net
+retries the byte-for-byte request under its original operation. Lookup-first
+settlement remains ahead of current-authority fencing; changed authority
+settles `AMoved` before any fresh-authority request. Pending mutation facts and
+close fold before the wake can retry, unrelated terminal rows cannot wake it,
+and malformed or mismatched wake History fails closed. This remains an ordinary
+actor baton plus mailed fact, not a global control place.
+
+After deployment, fresh selected-V5
+[`HBNetwork/demo-pr-readiness` PR 56](https://github.com/HBNetwork/demo-pr-readiness/pull/56),
+head `7e3266a5eb87f921485295358af9745016b4ee15`, passed all six jobs in
+[Actions run 31989355776](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31989355776),
+remained mergeable, completed one canonical provider review after three
+authority-safe `RoundDeferred` outcomes, updated the
+[App dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/56#issuecomment-5311272876),
+and landed the
+[App readiness advisory](https://github.com/HBNetwork/demo-pr-readiness/pull/56#issuecomment-5311276734)
+under `ready:7e3266a5eb87f921485295358af9745016b4ee15:i1`.
+
+The real App updates generated a stress sequence of same-PR custodied webhook
+rows. Canonical History retained 1,065 records with 26 Activity requests and 26
+completions, including eleven dashboard landings, ten `ADeferred` terminals,
+ten exact wakes, and the final `ALanded`. All eleven announcement requests were
+byte-for-byte identical under the one operation. No Activity, firing, or
+quarantine failure occurred; all 18 PR-specific webhook rows reached terminal
+custody. Production inspection found the exact-head successful run, App-owned
+dashboard and advisory, and no legacy marker. `scripts/check full` passes 1,168
+Python tests, nine Bun relay tests, Ruff, formatting, typing, and source/wheel
+builds. Oracle review returned `clear to commit`. The fresh selected-V5
+clean-green journey is qualified live; further user-visible scenarios and
+GitHub-site recordings remain before CV17 closes.
 
 ## Done condition
 

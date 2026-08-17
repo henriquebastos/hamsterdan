@@ -74,3 +74,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-17 — Exact-head bounded Actions inventory qualified locally](entries/2026-08-17T0042Z-exact-head-actions-inventory-qualified.md)
 - [2026-08-17 — Runtime-owned agent deadline qualified locally](entries/2026-08-17T0113Z-runtime-owned-agent-deadline-qualified.md)
 - [2026-08-17 — Canonical agent response contract qualified locally](entries/2026-08-17T0152Z-canonical-agent-response-contract-qualified.md)
+- [2026-08-17 — Selected-V5 clean-green completion qualified live](entries/2026-08-17T0304Z-selected-v5-clean-green-qualified-live.md)

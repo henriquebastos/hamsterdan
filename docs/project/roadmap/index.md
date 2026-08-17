@@ -65,5 +65,10 @@ exact ref CAS; and prove requested review, changes requested, open-thread
 blocking, distinct approval, native thread-resolution custody, and final
 readiness. The selected deterministic portfolio is complete. Fresh live PRs
 have also qualified same-PR authority-race recovery, exact-head bounded Actions
-inventory, and Petrus-owned finite agent deadlines. Fresh live selected-V5
-completion demonstrations remain mandatory.
+inventory, Petrus-owned finite agent deadlines, and the provider response
+contract. PR 55 preserved a temporary same-PR webhook-custody fence that had
+been consumed as a permanent readiness block. PR 56 then completed the fresh
+selected-V5 clean-green journey through the real provider: ten exact
+custody-bound deferrals woke under one retained readiness operation before the
+App-owned advisory landed. Additional fresh user-visible V5 journeys remain
+mandatory before CV17 closes.
