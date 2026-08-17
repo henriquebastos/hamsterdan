@@ -42,6 +42,7 @@ class ReadinessComposition:
     durable_activity_names: frozenset[str]
     has_unresolved: Callable[[ReadinessApplication], bool]
     inactive_result: InactiveResultAdapter
+    drain_pending_before_settle: bool
 
 
 def _has_unresolved(application: ReadinessApplication) -> bool:
@@ -127,6 +128,7 @@ PRODUCTION = ReadinessComposition(
     durable_activity_names=frozenset({"conversation_publish", "dashboard_publish", "readiness_publish"}),
     has_unresolved=_has_unresolved,
     inactive_result=_production_inactive_result,
+    drain_pending_before_settle=False,
 )
 
 V5 = ReadinessComposition(
@@ -135,6 +137,7 @@ V5 = ReadinessComposition(
     durable_activity_names=frozenset({"reply_gate", "dash_gate", "announce_gate"}),
     has_unresolved=_has_unresolved,
     inactive_result=_v5_inactive_result,
+    drain_pending_before_settle=True,
 )
 
 

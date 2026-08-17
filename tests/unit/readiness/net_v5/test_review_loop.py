@@ -130,8 +130,10 @@ class TestAgentRound:
             "prior_findings",
             "prior_lineage",
             "mem",
+            "attempt",
         }
         assert invocation.input["work"]["operation"] == "review:test:pr-v5:h1:i1"
+        assert invocation.input["work"]["attempt"] == 1
         assert invocation.input["work"]["prior_findings"] == []
         assert invocation.input["work"]["prior_lineage"] == []
         release_one(engine, dispatch, definitions, "review_agent")
@@ -153,6 +155,35 @@ class TestAgentRound:
         }
         assert [fact for fact in projection(engine) if fact["kind"] == "fault"] == []
         assert one(engine, "ready.snap")["review"] == "unable"
+
+    def test_custody_deferral_holds_the_round_silently_until_its_identified_wake(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        world["agent_mode"] = "deferred"
+
+        see_head(engine, "h1")
+
+        [deferred] = tokens(engine, "review.deferred")
+        assert deferred["attempt"] == 1
+        assert review_facts(engine) == []
+        assert one(engine, "ready.snap")["review"] == "pending"
+        assert not any(entry.startswith("review:") for entry in world["dashboard"])
+
+        world["agent_mode"] = None
+        deliver(
+            engine,
+            "on_review_round_wake",
+            "RoundWake",
+            {
+                "operation": deferred["operation"],
+                "attempt": deferred["attempt"],
+                "blocker": deferred["blocker"],
+            },
+        )
+
+        assert world["agent_calls"] == 2
+        assert tokens(engine, "review.deferred") == []
+        assert review_facts(engine)[-1]["body"] == {"head": "h1", "status": "blocking"}
 
     def test_draft_movement_before_agent_custody_is_inert_until_ready_opens_the_current_round(self) -> None:
         engine, _, dispatch, definitions = spawn_held()

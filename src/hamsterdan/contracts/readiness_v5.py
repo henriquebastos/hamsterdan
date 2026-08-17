@@ -549,6 +549,36 @@ class RoundOpen(WorkflowModel):
     prior_findings: list[dict[str, Any]]
     prior_lineage: list[dict[str, Any]]
     mem: dict[str, Any]
+    attempt: int = 1
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RoundDeferred(WorkflowModel):
+    """A review round waiting for one custodied authority row to be staged.
+
+    The review baton remains held in ``mem``. A later identified host wake
+    resumes the same logical operation as a fresh agent Attempt.
+    """
+
+    operation: str
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+    prior_findings: list[dict[str, Any]]
+    prior_lineage: list[dict[str, Any]]
+    mem: dict[str, Any]
+    attempt: int
+    blocker: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class RoundWake(WorkflowModel):
+    """Host proof that the exact deferred custody barrier has cleared."""
+
+    operation: str
+    attempt: int
+    blocker: str
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))

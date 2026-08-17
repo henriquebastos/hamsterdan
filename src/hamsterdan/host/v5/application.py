@@ -12,7 +12,7 @@ from petrus.motus.activity import ActivityDefinition, activity
 
 from hamsterdan.agents.protocol import AgentProtocolError, AgentRunner, ConversationRequest
 from hamsterdan.contracts.readiness import AdmittedConversation
-from hamsterdan.contracts.readiness_v5 import CommentSeen
+from hamsterdan.contracts.readiness_v5 import CommentSeen, RoundWake
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import GitHubBoundaryError
@@ -115,6 +115,7 @@ class PrReadinessV5Application:
             workflow_path,
             self.current_claim,
             self.review_requests,
+            lambda: self.ingress.unstaged_custody_id(self.instance_id),
         )
         mutation = V5MutationGate(
             authority.repository,
@@ -376,6 +377,15 @@ class PrReadinessV5Application:
 
     def settle(self):
         runtime = self._runtime()
+        if (deferred := runtime.review_deferred()) is not None and self.ingress.unstaged_custody_id(
+            self.instance_id
+        ) is None:
+            wake = RoundWake(
+                operation=deferred.operation,
+                attempt=deferred.attempt,
+                blocker=deferred.blocker,
+            )
+            runtime.deliver_review_wake(wake, runtime.review_wake_identity(wake))
         for _ in range(500):
             outcome = runtime.drain()
             if (ack := self.timers.pending_ack()) is not None:

@@ -21,7 +21,7 @@ from hamsterdan.agents.protocol import (
     AgentResultCategory,
     ReviewResult,
 )
-from hamsterdan.contracts.readiness_v5 import AgentReview, RoundMoved, RoundOpen, RoundUnable
+from hamsterdan.contracts.readiness_v5 import AgentReview, RoundDeferred, RoundMoved, RoundOpen, RoundUnable
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.review import V5ReviewGate, V5ReviewRequestStore
 
@@ -108,16 +108,16 @@ class PassthroughRequests:
     def __init__(self) -> None:
         self.claims = 0
 
-    def lookup(self, operation):
-        del operation
+    def lookup(self, operation, attempt=1):
+        del operation, attempt
 
-    def claim(self, operation, request):
-        del operation
+    def claim(self, operation, request, attempt=1):
+        del operation, attempt
         self.claims += 1
         return request
 
 
-def gate(runner: Runner, claim=CLAIM, *, authority=None, requests=None) -> V5ReviewGate:
+def gate(runner: Runner, claim=CLAIM, *, authority=None, requests=None, unstaged=lambda: None) -> V5ReviewGate:
     return V5ReviewGate(
         repository="owner/repo",
         pull_request=7,
@@ -127,6 +127,7 @@ def gate(runner: Runner, claim=CLAIM, *, authority=None, requests=None) -> V5Rev
         workflow_path="ci.yml",
         claim=lambda: claim,
         requests=PassthroughRequests() if requests is None else requests,
+        unstaged_custody=unstaged,
     )
 
 
@@ -160,6 +161,59 @@ class TestReviewAgentGate:
             }
         ]
         assert is_current is not None and is_current() is True
+
+    def test_unstaged_custody_defers_before_claim_request_or_agent_entry(self) -> None:
+        blocker = "9adff0dc-4784-4eed-9c78-047d6952efed"
+        runner = Runner(result())
+        authority = FakeAuthority()
+        requests = PassthroughRequests()
+
+        out = gate(runner, authority=authority, requests=requests, unstaged=lambda: blocker).review_agent(WORK)
+
+        assert out == RoundDeferred(
+            operation=OPERATION,
+            head=HEAD,
+            base=BASE,
+            policy="policy-1",
+            incarnation=3,
+            prior_findings=WORK.prior_findings,
+            prior_lineage=WORK.prior_lineage,
+            mem=MEM,
+            attempt=1,
+            blocker=blocker,
+        )
+        assert runner.calls == []
+        assert authority.reads == 0
+        assert requests.claims == 0
+
+    def test_cleanup_verified_cancellation_defers_when_custody_arrives_in_flight(self) -> None:
+        blocker = [None]
+
+        class CancelingRunner(Runner):
+            def review(self, repository_url, request, *, operation, attempt, is_current=None):
+                blocker[0] = "9adff0dc-4784-4eed-9c78-047d6952efed"
+                raise AgentProtocolError("superseded", canceled=True)
+
+        out = gate(CancelingRunner(result()), unstaged=lambda: blocker[0]).review_agent(WORK)
+
+        assert isinstance(out, RoundDeferred)
+        assert out.attempt == 1 and out.blocker == blocker[0]
+
+    def test_cleanup_uncertainty_remains_unable_even_when_custody_arrives(self) -> None:
+        blocker = [None]
+
+        class CancelingRunner(Runner):
+            def review(self, repository_url, request, *, operation, attempt, is_current=None):
+                blocker[0] = "9adff0dc-4784-4eed-9c78-047d6952efed"
+                raise AgentProtocolError(
+                    "superseded",
+                    canceled=True,
+                    cleanup_category=AgentCleanupCategory.UNVERIFIED,
+                )
+
+        out = gate(CancelingRunner(result()), unstaged=lambda: blocker[0]).review_agent(WORK)
+
+        assert isinstance(out, RoundUnable) and out.category == "canceled"
 
     def test_moved_claim_cancels_before_request_custody_provider_reads_or_agent_entry(self) -> None:
         runner = Runner(result())
@@ -251,6 +305,54 @@ class TestReviewRequestRecovery:
         with pytest.raises(RuntimeError, match="operation.*different review request"):
             gate(Runner(result()), requests=store).review_agent(conflicting)
         store.close()
+
+    def test_fresh_attempt_gets_fresh_request_custody_under_the_same_operation(self, tmp_path: Path) -> None:
+        path = tmp_path / "review-requests.sqlite3"
+        authority = FakeAuthority()
+        store = V5ReviewRequestStore(path)
+        first = Runner(result())
+        gate(first, authority=authority, requests=store).review_agent(WORK)
+
+        authority.comment_body = "context after deferred custody cleared"
+        second = Runner(result())
+        gate(second, authority=authority, requests=store).review_agent(replace(WORK, attempt=2))
+
+        assert first.calls[0][1].prior_comments[0]["body"] == "context"
+        assert second.calls[0][1].prior_comments[0]["body"] == "context after deferred custody cleared"
+        assert [first.calls[0][3], second.calls[0][3]] == [1, 2]
+        with sqlite3.connect(path) as database:
+            assert database.execute(
+                "SELECT attempt FROM v5_review_requests WHERE operation=? ORDER BY attempt", (OPERATION,)
+            ).fetchall() == [(1,), (2,)]
+        store.close()
+
+    def test_legacy_operation_keyed_request_migrates_as_attempt_one(self, tmp_path: Path) -> None:
+        path = tmp_path / "review-requests.sqlite3"
+        store = V5ReviewRequestStore(path)
+        gate(Runner(result()), requests=store).review_agent(WORK)
+        store.close()
+        with sqlite3.connect(path) as database:
+            database.execute("ALTER TABLE v5_review_requests RENAME TO v5_review_requests_v2")
+            database.execute(
+                "CREATE TABLE v5_review_requests ("
+                "operation TEXT PRIMARY KEY,request_json TEXT NOT NULL,digest TEXT NOT NULL)"
+            )
+            database.execute(
+                "INSERT INTO v5_review_requests SELECT operation,request_json,digest FROM v5_review_requests_v2"
+            )
+            database.execute("DROP TABLE v5_review_requests_v2")
+
+        reopened = V5ReviewRequestStore(path)
+
+        assert reopened.lookup(OPERATION, 1) is not None
+        with sqlite3.connect(path) as database:
+            assert {row[1] for row in database.execute("PRAGMA table_info(v5_review_requests)")} == {
+                "operation",
+                "attempt",
+                "request_json",
+                "digest",
+            }
+        reopened.close()
 
     def test_stored_request_digest_is_verified_before_replay(self, tmp_path: Path) -> None:
         path = tmp_path / "review-requests.sqlite3"

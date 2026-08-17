@@ -50,6 +50,7 @@ from hamsterdan.contracts.readiness_v5 import (
     ReviewFault,
     ReviewLanded,
     ReviewMoved,
+    RoundDeferred,
     RoundMoved,
     RoundOpen,
     RoundUnable,
@@ -162,7 +163,7 @@ def make_activities(world: dict):
         )
 
     @motus_activity(converter=converter)
-    def review_agent(work: RoundOpen) -> AgentReview | RoundMoved | RoundUnable:
+    def review_agent(work: RoundOpen) -> AgentReview | RoundDeferred | RoundMoved | RoundUnable:
         # credential-less: sees only the work token, never the world
         auth = world["authority"]
         if (
@@ -183,6 +184,19 @@ def make_activities(world: dict):
                 mem=work.mem,
             )
         world["agent_calls"] += 1
+        if world["agent_mode"] == "deferred":
+            return RoundDeferred(
+                operation=work.operation,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                incarnation=work.incarnation,
+                prior_findings=work.prior_findings,
+                prior_lineage=work.prior_lineage,
+                mem=work.mem,
+                attempt=work.attempt,
+                blocker="9adff0dc-4784-4eed-9c78-047d6952efed",
+            )
         if world["agent_mode"] == "unable":
             return RoundUnable(
                 head=work.head,

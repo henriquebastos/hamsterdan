@@ -493,23 +493,36 @@ class V5IngressStore:
 
     def has_unstaged_custody(self, subject: str) -> bool:
         """Whether this PR has inbox authority not yet represented by a manifest."""
+        return self.unstaged_custody_id(subject) is not None
+
+    def unstaged_custody_id(self, subject: str) -> str | None:
+        """The oldest custodied delivery not yet represented by a manifest."""
         match = _SUBJECT.fullmatch(subject)
         if match is None:
             raise ValueError("V5 ingress subject is malformed")
         with self._lock:
             inbox = self._db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='inbox'").fetchone()
             if inbox is None:
-                return False
+                return None
             row = self._db.execute(
-                "SELECT 1 FROM inbox i LEFT JOIN v5_ingress_manifests m"
+                "SELECT i.delivery_id FROM inbox i LEFT JOIN v5_ingress_manifests m"
                 " ON m.delivery_id=i.delivery_id AND m.subject=?"
                 " WHERE i.status='pending' AND m.delivery_id IS NULL"
                 " AND json_extract(i.observation,'$.installation_id')=?"
                 " AND json_extract(i.observation,'$.repository_id')=?"
-                " AND json_extract(i.observation,'$.pull_request_number')=? LIMIT 1",
+                " AND json_extract(i.observation,'$.pull_request_number')=? ORDER BY i.rowid LIMIT 1",
                 (subject, *(int(value) for value in match.groups())),
             ).fetchone()
-        return row is not None
+        if row is None:
+            return None
+        delivery_id = row[0]
+        try:
+            canonical = str(uuid.UUID(delivery_id))
+        except AttributeError, ValueError:
+            raise RuntimeError("V5 unstaged custody identity is malformed") from None
+        if canonical != delivery_id:
+            raise RuntimeError("V5 unstaged custody identity is malformed")
+        return canonical
 
     def preview(self, subject: str, entries: tuple[IngressEntry, ...]) -> CurrentClaim:
         """Project the grant which staging these exact entries will commit."""

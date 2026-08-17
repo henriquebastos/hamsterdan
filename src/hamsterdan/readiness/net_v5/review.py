@@ -38,14 +38,16 @@ from hamsterdan.contracts.readiness_v5 import (
     ReviewMemory,
     ReviewMoved,
     ReviewStatus,
+    RoundDeferred,
     RoundMoved,
     RoundOpen,
     RoundUnable,
+    RoundWake,
 )
 from hamsterdan.readiness.net_v5.folding import revive, route, values
 
 GATES = {
-    "review.agent": ("review_agent", ("AgentReview", "RoundMoved", "RoundUnable")),
+    "review.agent": ("review_agent", ("AgentReview", "RoundDeferred", "RoundMoved", "RoundUnable")),
     "review.publish": (
         "publish_gate",
         ("ReviewLanded", "ReviewMoved", "ReviewBlocked", "ReviewFault"),
@@ -180,6 +182,28 @@ def _round_moved(binding, outputs):
     # claiming an agent round or mailing inability as current evidence; the
     # lifecycle actor's queued current HeadWork opens the replacement round.
     return route(outputs, {"review.memory": (revive(ReviewMemory, out.mem),)})
+
+
+def _wake_deferred(binding, outputs):
+    deferred, wake = values(binding, RoundDeferred, RoundWake)
+    if (wake.operation, wake.attempt, wake.blocker) != (
+        deferred.operation,
+        deferred.attempt,
+        deferred.blocker,
+    ):
+        raise ValueError("V5 review wake differs from its deferred round")
+    reopened = RoundOpen(
+        operation=deferred.operation,
+        head=deferred.head,
+        base=deferred.base,
+        policy=deferred.policy,
+        incarnation=deferred.incarnation,
+        prior_findings=list(deferred.prior_findings),
+        prior_lineage=list(deferred.prior_lineage),
+        mem=deferred.mem,
+        attempt=deferred.attempt + 1,
+    )
+    return route(outputs, {"review.round": (reopened,)})
 
 
 def _findings_fact(head: str, incarnation: int, findings, dismissed) -> GateFact:
@@ -339,6 +363,13 @@ def _end(binding, outputs):
     return route(outputs, {"review.done": (ended,)})
 
 
+def _end_deferred(binding, outputs):
+    close, deferred = values(binding, CloseFact, RoundDeferred)
+    mem = revive(ReviewMemory, deferred.mem)
+    ended = ReviewEnded(reviewed=mem.reviewed, pub_phase=mem.pub["phase"], reason=close.reason)
+    return route(outputs, {"review.done": (ended,)})
+
+
 def _drain_dismiss(binding, outputs):
     # a dismiss admitted while running can be applied AFTER the loop
     # retired (its transition waited on the baton a gate held in flight
@@ -353,6 +384,11 @@ def _drain_recover(binding, outputs):
     return route(outputs, {"review.done": (ended,)})
 
 
+def _drain_wake(binding, outputs):
+    _, ended = values(binding, RoundWake, ReviewEnded)
+    return route(outputs, {"review.done": (ended,)})
+
+
 # -- topology ------------------------------------------------------------
 
 
@@ -363,8 +399,10 @@ def declare(s) -> None:
     review.p.closed(CloseFact)
     review.p.recover(RecoverFact)
     review.p.dismiss(DismissFact)
+    review.p.wakes(RoundWake)
     review.p.memory(ReviewMemory)
     review.p.round(RoundOpen)
+    review.p.deferred(RoundDeferred)
     review.p.output(AgentReview)
     review.p.round_moved(RoundMoved)
     review.p.unable(RoundUnable)
@@ -381,6 +419,7 @@ def wire(net) -> None:
     """Wire this loop's transitions (sibling places must exist)."""
     s = net.s
     review, ready, dash = s.review, s.ready, s.dash
+    net.t.on_review_round_wake >> review.p.wakes
 
     (
         (review.p.heads, review.p.memory)
@@ -396,9 +435,15 @@ def wire(net) -> None:
         >> review.t.agent(handler="review_agent")
         >> (
             review.p.output,
+            review.p.deferred,
             review.p.round_moved,
             review.p.unable,
         )
+    )
+    (
+        (review.p.deferred, review.p.wakes)
+        >> review.t.wake_deferred(handler=petri_handler(_wake_deferred))
+        >> review.p.round
     )
     (review.p.round_moved >> review.t.fold_round_moved(handler=petri_handler(_round_moved)) >> review.p.memory)
     (
@@ -493,6 +538,11 @@ def wire(net) -> None:
         )
     )
     ((review.p.closed, review.p.memory) >> review.t.end(handler=petri_handler(_end)) >> review.p.done)
+    (
+        (review.p.closed, review.p.deferred)
+        >> review.t.end_deferred(handler=petri_handler(_end_deferred))
+        >> review.p.done
+    )
     # post-close drains: a note whose apply lost the race with close is
     # absorbed by the retired loop's persistent done baton, never stranded
     (
@@ -505,6 +555,7 @@ def wire(net) -> None:
         >> review.t.drain_recover(handler=petri_handler(_drain_recover))
         >> review.p.done
     )
+    ((review.p.wakes, review.p.done) >> review.t.drain_wake(handler=petri_handler(_drain_wake)) >> review.p.done)
 
 
 def seed(subject: str) -> dict:

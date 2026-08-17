@@ -310,6 +310,7 @@ class TestCensus:
             "on_comment",
             "on_human",
             "on_runs",
+            "on_review_round_wake",
             "on_timer",
             "on_timer_command_applied",
         }

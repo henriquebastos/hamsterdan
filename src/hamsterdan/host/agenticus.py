@@ -453,6 +453,13 @@ def _terminal_operations(histories: Path) -> set[str]:
                     continue
                 if variant not in {"Pushed", "MovedM", "DeclinedM"}:
                     raise AgentCompositionError("agent route repair History has a malformed mutation terminal")
+            if transition == "review.agent" and not failed:
+                if variant == "RoundDeferred":
+                    # The logical review operation remains live for the
+                    # next explicit Attempt after custody clears.
+                    continue
+                if variant not in {"AgentReview", "RoundMoved", "RoundUnable"}:
+                    raise AgentCompositionError("agent route repair History has a malformed review terminal")
             operations.add(operation)
     return operations
 

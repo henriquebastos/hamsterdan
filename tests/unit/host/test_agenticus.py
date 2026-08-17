@@ -441,6 +441,33 @@ def test_v5_review_terminal_history_repairs_the_global_agent_route(tmp_path: Pat
     ).fetchone() == (1,)
 
 
+def test_v5_deferred_review_history_keeps_the_global_agent_route_recoverable(tmp_path: Path) -> None:
+    agenticus = compose_agent()
+    operation = "review:github:1:2:pr:3:" + "a" * 40 + ":i1"
+    store = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    store.activate(agenticus, tmp_path / "applications")
+    store.claim(operation, agenticus)
+    store.close()
+    history = tmp_path / "applications/1/2/3/history.jsonl"
+    history.parent.mkdir(parents=True)
+    request = ActivityRequested(
+        NetPath("review.agent"),
+        activity="review_agent",
+        input={"work": {"operation": operation}},
+        policy=ExecutionPolicy(1, 300),
+        correlation=operation,
+        idempotency=operation,
+        occurrence=1,
+    )
+    completed = ActivityCompleted(NetPath("review.agent"), {"$variant": "RoundDeferred"}, occurrence=1)
+    history.write_text("\n".join(json.dumps(encode_record(record)) for record in (request, completed)) + "\n")
+
+    reopened = AgentRouteStore(tmp_path / "agent-routes.sqlite3")
+    reopened.activate(agenticus, tmp_path / "applications")
+
+    assert reopened.claim(operation, agenticus).resolved is False
+
+
 @pytest.mark.parametrize("variant", ["Pushed", "MovedM", "DeclinedM"])
 def test_v5_mutation_known_terminal_repairs_the_global_agent_route(tmp_path: Path, variant: str) -> None:
     agenticus = compose_agent()

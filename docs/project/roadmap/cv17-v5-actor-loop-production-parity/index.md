@@ -2,8 +2,8 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; deterministic parity and portable live bootstrap are qualified while fresh live V5 evidence remains
-updated: 2026-08-16
+status_reason: DS2 and DS3 are complete; the first live V5 PR exposed an authority race whose deferred recovery is qualified while fresh live evidence remains
+updated: 2026-08-17
 ---
 
 # CV17 — V5 actor-loop production parity
@@ -63,8 +63,13 @@ making that ruling.
   state. Role verification bypasses injected CLI authority, runtime reads
   reject symlinked ancestors, and Git publication cannot inherit a human
   credential helper. App, webhook, human-role, and OpenAI authority now live in
-  project custody. The App event inventory still lacks the required native
-  review-thread event before the complete fresh selected-V5 GitHub campaign.
+  project custody. The first fresh clean-green PR exposed a same-PR webhook
+  arrival during normalization: V5 now drains newly arrived custodied authority
+  before settlement, while a typed silent deferred round preserves the review
+  baton and stable operation through residual races and durable identified
+  wake-up. Production remains unchanged and default. The App event inventory
+  still lacks the required native review-thread event before the complete fresh
+  selected-V5 GitHub campaign.
 
 ## Done condition
 

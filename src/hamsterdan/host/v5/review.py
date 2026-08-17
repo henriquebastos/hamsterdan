@@ -29,10 +29,12 @@ from hamsterdan.agents.protocol import (
 from hamsterdan.contracts.readiness_v5 import (
     AgentReview,
     ReviewUnableCategory,
+    RoundDeferred,
     RoundMoved,
     RoundOpen,
     RoundUnable,
 )
+from hamsterdan.github_app.models import GitHubBoundaryError
 from hamsterdan.host.v5.claim import ClaimReader, CurrentClaim
 
 LOG = logging.getLogger(__name__)
@@ -60,9 +62,9 @@ class ReviewAuthority(Protocol):
 class ReviewRequestCustody(Protocol):
     """Freeze the exact credential-free request before Agenticus submission."""
 
-    def lookup(self, operation: str) -> ReviewRequest | None: ...
+    def lookup(self, operation: str, attempt: int = 1) -> ReviewRequest | None: ...
 
-    def claim(self, operation: str, request: ReviewRequest) -> ReviewRequest: ...
+    def claim(self, operation: str, request: ReviewRequest, attempt: int = 1) -> ReviewRequest: ...
 
 
 def _encode_request(request: ReviewRequest) -> str:
@@ -93,36 +95,61 @@ class V5ReviewRequestStore:
             self._database.execute("PRAGMA synchronous=FULL")
             self._database.execute(
                 """CREATE TABLE IF NOT EXISTS v5_review_requests (
-                    operation TEXT PRIMARY KEY,
+                    operation TEXT NOT NULL,
+                    attempt INTEGER NOT NULL CHECK(attempt >= 1),
                     request_json TEXT NOT NULL,
-                    digest TEXT NOT NULL
+                    digest TEXT NOT NULL,
+                    PRIMARY KEY(operation, attempt)
                 )"""
             )
+            columns = {str(row[1]) for row in self._database.execute("PRAGMA table_info(v5_review_requests)")}
+            if "attempt" not in columns:
+                self._database.execute("BEGIN IMMEDIATE")
+                try:
+                    self._database.execute("ALTER TABLE v5_review_requests RENAME TO v5_review_requests_v1")
+                    self._database.execute(
+                        """CREATE TABLE v5_review_requests (
+                            operation TEXT NOT NULL,
+                            attempt INTEGER NOT NULL CHECK(attempt >= 1),
+                            request_json TEXT NOT NULL,
+                            digest TEXT NOT NULL,
+                            PRIMARY KEY(operation, attempt)
+                        )"""
+                    )
+                    self._database.execute(
+                        "INSERT INTO v5_review_requests SELECT operation,1,request_json,digest"
+                        " FROM v5_review_requests_v1"
+                    )
+                    self._database.execute("DROP TABLE v5_review_requests_v1")
+                    self._database.commit()
+                except BaseException:
+                    self._database.rollback()
+                    raise
         except BaseException:
             self._database.close()
             raise
 
-    def lookup(self, operation: str) -> ReviewRequest | None:
+    def lookup(self, operation: str, attempt: int = 1) -> ReviewRequest | None:
         with self._lock:
             row = self._database.execute(
-                "SELECT request_json,digest FROM v5_review_requests WHERE operation=?",
-                (operation,),
+                "SELECT request_json,digest FROM v5_review_requests WHERE operation=? AND attempt=?",
+                (operation, attempt),
             ).fetchone()
         return None if row is None else _load_request(*row)
 
-    def claim(self, operation: str, request: ReviewRequest) -> ReviewRequest:
+    def claim(self, operation: str, request: ReviewRequest, attempt: int = 1) -> ReviewRequest:
         raw = _encode_request(request)
         digest = sha256(raw.encode()).hexdigest()
         with self._lock:
             self._database.execute("BEGIN IMMEDIATE")
             try:
                 self._database.execute(
-                    "INSERT OR IGNORE INTO v5_review_requests VALUES(?,?,?)",
-                    (operation, raw, digest),
+                    "INSERT OR IGNORE INTO v5_review_requests VALUES(?,?,?,?)",
+                    (operation, attempt, raw, digest),
                 )
                 row = self._database.execute(
-                    "SELECT request_json,digest FROM v5_review_requests WHERE operation=?",
-                    (operation,),
+                    "SELECT request_json,digest FROM v5_review_requests WHERE operation=? AND attempt=?",
+                    (operation, attempt),
                 ).fetchone()
                 if row is None:
                     raise RuntimeError("V5 review request custody did not retain its claim")
@@ -162,8 +189,9 @@ class V5ReviewGate:
     workflow_path: str
     claim: ClaimReader
     requests: ReviewRequestCustody
+    unstaged_custody: Callable[[], str | None] = lambda: None
 
-    def review_agent(self, work: RoundOpen) -> AgentReview | RoundMoved | RoundUnable:
+    def review_agent(self, work: RoundOpen) -> AgentReview | RoundDeferred | RoundMoved | RoundUnable:
         expected = CurrentClaim(
             phase="running",
             incarnation=work.incarnation,
@@ -171,10 +199,17 @@ class V5ReviewGate:
             base=work.base,
             policy=work.policy,
         )
-        request = self.requests.lookup(work.operation)
+        if (blocker := self.unstaged_custody()) is not None:
+            return self._deferred(work, blocker)
+        request = self.requests.lookup(work.operation, work.attempt)
         if request is not None:
             self._validate_request(work, request)
-        observed = self.claim()
+        try:
+            observed = self.claim()
+        except GitHubBoundaryError:
+            if (blocker := self.unstaged_custody()) is not None:
+                return self._deferred(work, blocker)
+            raise
         if observed != expected:
             return RoundMoved(
                 head=work.head,
@@ -187,17 +222,19 @@ class V5ReviewGate:
                 mem=work.mem,
             )
         if request is None:
-            request = self.requests.claim(work.operation, self._compose_request(work))
+            request = self.requests.claim(work.operation, self._compose_request(work), work.attempt)
             self._validate_request(work, request)
         try:
             result = self.runner.review(
                 self.public_clone_url,
                 request,
                 operation=work.operation,
-                attempt=1,
+                attempt=work.attempt,
                 is_current=self._current(expected),
             )
         except AgentProtocolError as error:
+            if error.canceled and error.cleanup_category is None and (blocker := self.unstaged_custody()) is not None:
+                return self._deferred(work, blocker)
             category = _category(error)
             LOG.warning(
                 "V5 review agent unavailable category=%s incarnation=%s head=%s operation=%s",
@@ -212,6 +249,8 @@ class V5ReviewGate:
                 category=category,
                 mem=work.mem,
             )
+        if (blocker := self.unstaged_custody()) is not None:
+            return self._deferred(work, blocker)
         if result.status == "unable":
             return RoundUnable(
                 head=work.head,
@@ -291,7 +330,32 @@ class V5ReviewGate:
             raise RuntimeError("V5 review operation selected a different review request")
 
     def _current(self, expected: CurrentClaim) -> Callable[[], bool]:
-        return lambda: self.claim() == expected
+        def current() -> bool:
+            if self.unstaged_custody() is not None:
+                return False
+            try:
+                return self.claim() == expected
+            except GitHubBoundaryError:
+                if self.unstaged_custody() is not None:
+                    return False
+                raise
+
+        return current
+
+    @staticmethod
+    def _deferred(work: RoundOpen, blocker: str) -> RoundDeferred:
+        return RoundDeferred(
+            operation=work.operation,
+            head=work.head,
+            base=work.base,
+            policy=work.policy,
+            incarnation=work.incarnation,
+            prior_findings=list(work.prior_findings),
+            prior_lineage=list(work.prior_lineage),
+            mem=work.mem,
+            attempt=work.attempt,
+            blocker=blocker,
+        )
 
 
 __all__ = ["V5ReviewGate", "V5ReviewRequestStore"]

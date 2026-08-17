@@ -570,7 +570,9 @@ class HostService:
         if observation is not None and not self.custody.eligible(observation.delivery_id, subject=key):
             return False
         candidates = (observation,) if observation is not None else self.custody.pending(limit=1000, subject=key)
-        selected = tuple(selection for item in candidates if (selection := self._select_observation(item)) is not None)
+        selected = [selection for item in candidates if (selection := self._select_observation(item)) is not None]
+        seen = {item.delivery_id for item in candidates}
+        all_selected = list(selected)
         route_active = self.registry.route(key[0], key[1]) is not None
         bound = (self.root / "applications" / str(key[0]) / str(key[1]) / str(key[2]) / "history.jsonl").is_file()
         if candidates and not selected and key not in self._apps and not bound:
@@ -595,21 +597,33 @@ class HostService:
                     # activity/timer wake must first collect its frozen
                     # terminal before any optional provider reconciliation.
                     outcome = application.settle()
-                for item, conversation in selected:
-                    attempted.add(item.delivery_id)
-                    try:
-                        applied, reason = self._apply_observation(application, item, conversation)
-                        activated = activated or applied
-                        succeeded.append((item, reason))
-                    except Exception as error:  # noqa: BLE001 -- isolate one delivery in a claimed Instance
-                        self._retry_observation(item, error)
-                        handled.add(item.delivery_id)
-                        if activation_error is None:
-                            activation_error = error
+                batch = selected
+                while batch:
+                    for item, conversation in batch:
+                        attempted.add(item.delivery_id)
+                        try:
+                            applied, reason = self._apply_observation(application, item, conversation)
+                            activated = activated or applied
+                            succeeded.append((item, reason))
+                        except Exception as error:  # noqa: BLE001 -- isolate one delivery in a claimed Instance
+                            self._retry_observation(item, error)
+                            handled.add(item.delivery_id)
+                            if activation_error is None:
+                                activation_error = error
+                            break
+                    if activation_error is not None or not self.readiness_composition.drain_pending_before_settle:
                         break
+                    arrived = tuple(
+                        item for item in self.custody.pending(limit=1000, subject=key) if item.delivery_id not in seen
+                    )
+                    if not arrived:
+                        break
+                    seen.update(item.delivery_id for item in arrived)
+                    batch = [selection for item in arrived if (selection := self._select_observation(item)) is not None]
+                    all_selected.extend(batch)
                 if (
                     reconcile_trigger is not None
-                    and not selected
+                    and not all_selected
                     and not self.custody.has_pending(subject=key)
                     and self.registry.route(key[0], key[1]) is not None
                 ):
@@ -628,8 +642,8 @@ class HostService:
                 if activation_error is not None:
                     raise activation_error
         except Exception as error:
-            retry = attempted or ({selected[0][0].delivery_id} if selected else set())
-            for item, _conversation in selected:
+            retry = attempted or ({all_selected[0][0].delivery_id} if all_selected else set())
+            for item, _conversation in all_selected:
                 if item.delivery_id in retry and item.delivery_id not in handled:
                     self._retry_observation(item, error)
             raise

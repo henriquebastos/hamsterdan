@@ -10,13 +10,13 @@ from hashlib import sha256
 from pathlib import Path
 
 import pytest
-from petrus.impetus.history import ExternalEventDelivered
+from petrus.impetus.history import ActivityFailed, ExternalEventDelivered, FiringFailed
 from petrus.impetus.petrinet import NetPath, Token
 from petrus.motus.dispatch import LocalDispatch
 
 from hamsterdan.agents.protocol import ConversationResult, ReviewResult
 from hamsterdan.contracts.readiness import AdmittedConversation
-from hamsterdan.contracts.readiness_v5 import CommentSeen, DraftSeen, HeadSeen, HumanSeen, ReadySeen
+from hamsterdan.contracts.readiness_v5 import CommentSeen, DraftSeen, HeadSeen, HumanSeen, ReadySeen, RoundWake
 from hamsterdan.github_app.models import (
     ActionsEvidence,
     ActionsRunSnapshot,
@@ -1264,6 +1264,196 @@ def test_v5_application_drains_the_real_topology_against_provider_backed_gates(t
     assert any(operations for operations in settled)
     assert any("hamsterdan:readiness" in str(item["body"]) for item in authority.transport.comments)
     application.close()
+
+
+def test_v5_review_waits_for_custodied_authority_then_retries_without_losing_its_baton(tmp_path: Path) -> None:
+    class AttemptRunner(Runner):
+        def __init__(self) -> None:
+            super().__init__()
+            self.review_calls: list[tuple[str, int]] = []
+
+        def review(self, repository_url, request, *, operation, attempt, is_current=None):
+            self.review_calls.append((operation, attempt))
+            assert is_current is not None and is_current()
+            return ReviewResult(
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                "clear",
+                [],
+                [],
+            )
+
+    identity = delivery()
+    blocker = delivery()
+    path = tmp_path / "webhooks.sqlite3"
+    runner = AttemptRunner()
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        Authority(),  # type: ignore[arg-type]
+        runner,  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=path,
+    )
+    application.process_observation(Observation(identity, "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "CREATE TABLE inbox (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, observation TEXT NOT NULL)"
+        )
+        database.execute(
+            "INSERT INTO inbox VALUES (?, 'pending', ?)",
+            (
+                blocker,
+                json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7}),
+            ),
+        )
+
+    application.settle()
+
+    records = tuple(application._runtime().engine.records)
+    assert runner.review_calls == []
+    assert not any(isinstance(record, (ActivityFailed, FiringFailed)) for record in records)
+    [deferred] = application._runtime().engine.marking.place(NetPath("review.deferred"))
+    assert deferred.data["blocker"] == blocker
+
+    with sqlite3.connect(path) as database:
+        database.execute("UPDATE inbox SET status='terminal' WHERE delivery_id=?", (blocker,))
+    application.settle()
+
+    assert runner.review_calls == [(f"review:{SUBJECT}:{'a' * 40}:i1", 2)]
+    assert application._runtime().engine.marking.place(NetPath("review.deferred")) == ()
+    [ready] = application._runtime().engine.marking.place(NetPath("ready.snap"))
+    assert ready.data["review"] == "clear"
+    application.close()
+
+
+def test_v5_review_wake_replays_after_restart_when_delivery_ack_is_lost(tmp_path: Path) -> None:
+    class AttemptRunner(Runner):
+        def __init__(self) -> None:
+            super().__init__()
+            self.review_calls: list[int] = []
+
+        def review(self, repository_url, request, *, operation, attempt, is_current=None):
+            self.review_calls.append(attempt)
+            assert is_current is not None and is_current()
+            return ReviewResult(
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                "clear",
+                [],
+                [],
+            )
+
+    path = tmp_path / "webhooks.sqlite3"
+    root = tmp_path / "application"
+    blocker = delivery()
+    runner = AttemptRunner()
+
+    def opened() -> PrReadinessV5Application:
+        return PrReadinessV5Application(
+            root,
+            SUBJECT,
+            Authority(),  # type: ignore[arg-type]
+            runner,  # type: ignore[arg-type]
+            agent_settle=lambda operations: None,
+            bot_login="hamsterdan-test[bot]",
+            public_clone_url="https://github.com/owner/repo.git",
+            custody_path=path,
+        )
+
+    first = opened()
+    first.process_observation(Observation(delivery(), "pull_request", "synchronize", 44, 23, 31, "owner/repo", 7))
+    with sqlite3.connect(path) as database:
+        database.execute(
+            "CREATE TABLE inbox (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, observation TEXT NOT NULL)"
+        )
+        database.execute(
+            "INSERT INTO inbox VALUES (?, 'pending', ?)",
+            (
+                blocker,
+                json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7}),
+            ),
+        )
+    first.settle()
+    first.close()
+    with sqlite3.connect(path) as database:
+        database.execute("UPDATE inbox SET status='terminal' WHERE delivery_id=?", (blocker,))
+
+    second = opened()
+    runtime = second._runtime()
+    deliver_wake = runtime.deliver_review_wake
+
+    def commit_then_lose_ack(value, identity):
+        deliver_wake(value, identity)
+        raise RuntimeError("review wake acknowledgement lost")
+
+    runtime.deliver_review_wake = commit_then_lose_ack  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="acknowledgement lost"):
+        second.settle()
+    second.close()
+
+    third = opened()
+    third.settle()
+
+    assert runner.review_calls == [2]
+    wake_deliveries = [
+        record.identity
+        for record in third._runtime().engine.records
+        if isinstance(record, ExternalEventDelivered) and str(record.source) == "on_review_round_wake"
+    ]
+    assert len(wake_deliveries) == 1 and wake_deliveries[0].startswith("v5-review-wake:")
+    third.close()
+
+
+@pytest.mark.parametrize(
+    ("derived_identity", "message"),
+    [(False, "identity is malformed"), (True, "has no deferred round")],
+)
+def test_v5_restart_fails_closed_on_malformed_review_wake_history(
+    tmp_path: Path,
+    derived_identity: bool,
+    message: str,
+) -> None:
+    root = tmp_path / "application"
+    options = {
+        "agent_settle": lambda operations: None,
+        "bot_login": "hamsterdan-test[bot]",
+        "public_clone_url": "https://github.com/owner/repo.git",
+        "custody_path": tmp_path / "webhooks.sqlite3",
+    }
+    first = PrReadinessV5Application(
+        root,
+        SUBJECT,
+        Authority(),  # type: ignore[arg-type]
+        Runner(),  # type: ignore[arg-type]
+        **options,
+    )
+    runtime = first._runtime()
+    wake = RoundWake(
+        operation=f"review:{SUBJECT}:{'a' * 40}:i1",
+        attempt=1,
+        blocker=delivery(),
+    )
+    identity = runtime.review_wake_identity(wake) if derived_identity else "malformed-review-wake-identity"
+    runtime.deliver_review_wake(wake, identity)
+    first.close()
+
+    with pytest.raises(RuntimeError, match=message):
+        PrReadinessV5Application(
+            root,
+            SUBJECT,
+            Authority(),  # type: ignore[arg-type]
+            Runner(),  # type: ignore[arg-type]
+            **options,
+        )
 
 
 def test_v5_durable_publications_use_an_instance_queue_owned_by_the_application(tmp_path: Path) -> None:

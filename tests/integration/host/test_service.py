@@ -1170,6 +1170,80 @@ def test_selected_v5_routes_custodied_webhook_into_identified_history_before_ack
     host.close()
 
 
+def test_selected_v5_stages_authority_that_arrives_during_normalization_before_review(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    second_delivery = str(uuid.uuid4())
+    second_body = json.dumps(
+        {
+            "action": "requested",
+            "installation": {"id": 44, "account": {"id": 23}},
+            "repository": {"id": 31, "full_name": "owner/one"},
+            "workflow_run": {"pull_requests": [{"number": 7}]},
+        }
+    ).encode()
+    review_calls: list[tuple[str, int]] = []
+    host: HostService
+
+    class ArrivingProvider(V5Provider):
+        def __init__(self) -> None:
+            super().__init__()
+            self.arrived = False
+
+        def request(self, method: str, path: str, body: object | None = None):
+            if not self.arrived and method == "GET" and path == "/repos/owner/one/pulls/7":
+                self.arrived = True
+                receipt = host.custody.receive(
+                    signed(second_body, second_delivery, "workflow_run").items()
+                    | {("content-length", str(len(second_body)))},
+                    second_body,
+                )
+                assert receipt.disposition == "accepted"
+            return super().request(method, path, body)
+
+    class CountingRunner(V5Runner):
+        def review(self, repository_url, request, *, operation, attempt, is_current=None):
+            review_calls.append((operation, attempt))
+            return super().review(
+                repository_url,
+                request,
+                operation=operation,
+                attempt=attempt,
+                is_current=is_current,
+            )
+
+    provider = ArrivingProvider()
+    monkeypatch.setattr("hamsterdan.host.service.GitHubKitTransport", lambda client: provider)
+    composition, routes = agent_custody(tmp_path)
+    host = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=CountingRunner(),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=V5,
+    )
+    host.registry.reconcile(44, ((31, "owner/one"),))
+    first_delivery, first_body = str(uuid.uuid4()), envelope()
+    host.custody.receive(
+        signed(first_body, first_delivery).items() | {("content-length", str(len(first_body)))},
+        first_body,
+    )
+
+    host.process(host.custody.pending()[0])
+
+    operation = f"review:github:44:31:pr:7:{provider.head}:i1"
+    assert review_calls == [(operation, 1)]
+    assert host.custody.status(first_delivery) == "terminal"
+    assert host.custody.status(second_delivery) == "terminal"
+    with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
+        assert database.execute(
+            "SELECT revision,source_id FROM v5_authority_grants WHERE subject='github:44:31:pr:7'"
+        ).fetchone() == (2, second_delivery)
+    host.close()
+
+
 def test_selected_v5_restart_replays_settled_webhook_after_death_before_acknowledgement(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

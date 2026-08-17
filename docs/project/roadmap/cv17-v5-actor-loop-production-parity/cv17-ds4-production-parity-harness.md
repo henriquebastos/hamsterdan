@@ -2,8 +2,8 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Eleven semantic oracles complete the selected deterministic portfolio; fresh live V5 GitHub acceptance remains
-updated: 2026-08-16
+status_reason: The first fresh live V5 PR exposed an authority-arrival race; deterministic deferred review recovery is qualified while a fresh live rerun remains
+updated: 2026-08-17
 ---
 
 # CV17.DS4 — Production-parity evidence
@@ -427,6 +427,43 @@ must enable that event before the collaboration journey can qualify live.
 `scripts/check full` passes with 1,121 Python tests, nine Bun relay tests,
 formatting, Ruff, typing, and source/wheel builds. No provider call or fresh PR
 was created in this slice.
+
+### DS4.13 — Live review authority-race recovery
+
+The first fresh selected-V5 clean-green attempt is preserved at
+[`HBNetwork/demo-pr-readiness` PR 52](https://github.com/HBNetwork/demo-pr-readiness/pull/52),
+head `a9fa303fa7ccc7fbd55ff94a8d9ef14c4d539e28`, Actions run
+`31979694600` attempt 1, and its
+[App dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/52#issuecomment-5310261923).
+All required workflow checks succeeded, but the review did not complete. While
+the host was normalizing the opening PR delivery, a workflow delivery for the
+same PR entered durable custody. The first manifest and authority grant then
+committed without that newer row. Immediate settlement correctly refused the
+review against the stale grant, but that refusal escaped as an Activity and
+firing failure and permanently consumed the review baton.
+
+The correction preserves rather than weakens the custody fence. Only selected
+V5 activation now drains newly arrived due rows for the same PR, in custody row
+order and under the existing per-instance lock, before one final settlement;
+webhook acknowledgement remains after settlement. A residual arrival during
+the agent boundary returns typed `RoundDeferred`. That terminal holds the
+review baton, emits no readiness or dashboard review fact, and leaves the
+globally stable Agenticus operation unsettled. Once the exact custody barrier
+has cleared, the host delivers an identified `RoundWake`; the same logical
+operation resumes as a fresh numbered agent attempt with fresh request custody
+and current provider context. Wake delivery survives a lost acknowledgement,
+and malformed wake history fails startup closed. Existing operation-keyed
+review request stores migrate their frozen row to attempt 1. Production keeps
+its prior activation path and remains the default topology.
+
+The deterministic boundary includes the exact normalization-time arrival,
+pre-call and in-flight residual races, silent deferred state, fresh-attempt
+request custody, Agenticus repair, wake crash replay, malformed-history
+refusal, and legacy request-store migration. `scripts/check full` passes with
+1,133 Python tests, nine Bun relay tests, formatting, Ruff, typing, and
+source/wheel builds. PR 52 remains failure evidence; its canonical failed
+firing is not rewritten. A fresh selected-V5 PR must prove the corrected
+clean-green journey live before acceptance.
 
 ## Done condition
 

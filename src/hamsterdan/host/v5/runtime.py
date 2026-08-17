@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
@@ -23,7 +24,7 @@ from petrus.motus.dispatch import InlineDispatch, LocalDispatch
 from petrus.motus.worker import Worker
 from pydantic import TypeAdapter, ValidationError
 
-from hamsterdan.contracts.readiness_v5 import TimerCommand, TimerCommandApplied, TimerDue
+from hamsterdan.contracts.readiness_v5 import RoundDeferred, RoundWake, TimerCommand, TimerCommandApplied, TimerDue
 from hamsterdan.host.protocol import DurableActivityResolver
 from hamsterdan.host.runtime import CompositeDispatch
 from hamsterdan.host.v5.claim import CurrentClaim
@@ -184,7 +185,9 @@ class V5Runtime:
 
                 resolver = resolve
             durable_worker = Worker(provider, activities, resolver=resolver)
-        return cls(engine, load, definitions, agent_settle, mutation_operation, durable_worker, policy)
+        runtime = cls(engine, load, definitions, agent_settle, mutation_operation, durable_worker, policy)
+        runtime._validate_review_wake_history()
+        return runtime
 
     def deliver(self, entry: IngressEntry) -> object:
         try:
@@ -298,6 +301,13 @@ class V5Runtime:
                 and record.result.get("$variant") == "FaultM"
             ):
                 continue
+            if (
+                activity_name == "review_agent"
+                and isinstance(record, ActivityCompleted)
+                and isinstance(record.result, dict)
+                and record.result.get("$variant") == "RoundDeferred"
+            ):
+                continue
             settled.add(operation)
         self._agent_settle(settled)
 
@@ -393,6 +403,64 @@ class V5Runtime:
 
     def deliver_timer_due(self, value: TimerDue, identity: str) -> object:
         return self.deliver(IngressEntry.from_value("on_timer", value, identity))
+
+    def review_deferred(self) -> RoundDeferred | None:
+        self._validate_review_wake_history()
+        tokens = tuple(self.engine.marking.place(NetPath("review.deferred")))
+        if not tokens:
+            return None
+        if len(tokens) != 1 or tokens[0].color != "RoundDeferred":
+            raise RuntimeError("V5 deferred review has invalid cardinality or color")
+        return self._review_value(RoundDeferred, tokens[0].data, "deferred review")
+
+    @staticmethod
+    def _review_value(model, data: object, label: str):
+        try:
+            return TypeAdapter(model).validate_json(json.dumps(data, sort_keys=True, separators=(",", ":")))
+        except TypeError, ValidationError:
+            raise RuntimeError(f"V5 {label} is malformed") from None
+
+    def _validate_review_wake_history(self) -> None:
+        deferred: set[str] = set()
+        seen: set[str] = set()
+        for record in self.engine.records:
+            if (
+                isinstance(record, ActivityCompleted)
+                and record.transition == NetPath("review.agent")
+                and isinstance(record.result, dict)
+                and record.result.get("$variant") == "RoundDeferred"
+            ):
+                value = self._review_value(
+                    RoundDeferred,
+                    {key: item for key, item in record.result.items() if key != "$variant"},
+                    "deferred review History terminal",
+                )
+                identity = self.review_wake_identity(
+                    RoundWake(operation=value.operation, attempt=value.attempt, blocker=value.blocker)
+                )
+                if identity in deferred:
+                    raise RuntimeError("V5 deferred review History terminal occurs more than once")
+                deferred.add(identity)
+                continue
+            if not isinstance(record, ExternalEventDelivered) or record.source != NetPath("on_review_round_wake"):
+                continue
+            if len(record.tokens) != 1 or record.tokens[0].color != "RoundWake":
+                raise RuntimeError("V5 review wake History delivery is malformed")
+            wake = self._review_value(RoundWake, record.tokens[0].data, "review wake History delivery")
+            expected = self.review_wake_identity(wake)
+            if record.identity != expected or record.identity in seen:
+                raise RuntimeError("V5 review wake History identity is malformed")
+            if expected not in deferred:
+                raise RuntimeError("V5 review wake History has no deferred round")
+            seen.add(record.identity)
+
+    @staticmethod
+    def review_wake_identity(value: RoundWake) -> str:
+        digest = sha256(f"{value.operation}\0{value.attempt}\0{value.blocker}".encode()).hexdigest()
+        return f"v5-review-wake:{digest}"
+
+    def deliver_review_wake(self, value: RoundWake, identity: str) -> object:
+        return self.deliver(IngressEntry.from_value("on_review_round_wake", value, identity))
 
     def run_durable_activities(self, limit: int) -> int:
         if self._durable_worker is None:
