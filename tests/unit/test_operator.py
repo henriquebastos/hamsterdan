@@ -492,21 +492,37 @@ def test_hero_inspection_proves_three_native_shapes_without_exposing_prose() -> 
     fake.responses[f"/repos/{operator.REPOSITORY}/issues/7/comments?per_page=100"] = issue_comments[:-1]
     head = "a" * 40
 
-    def finding(identifier: int, operation: str, body: str) -> dict[str, object]:
+    def finding(identifier: int, operation: str, body: str, *, path: str, line: int) -> dict[str, object]:
         return {
             "id": identifier,
             "html_url": f"https://github.test/reviews/{identifier}",
             "body": f"{body}\n\n<!-- hamsterdan:finding operation={operation} head={head} -->",
+            "path": path,
+            "line": line,
             "user": {"login": operator.APP_BOT_LOGIN},
         }
 
     fake.responses[f"/repos/{operator.REPOSITORY}/pulls/7/comments?per_page=100"] = [
-        finding(8, "finding:suggestion", "PRIVATE ONE\n```suggestion\nreplacement\n```"),
-        finding(9, "finding:conceptual", "PRIVATE TWO"),
+        finding(
+            8,
+            "finding:suggestion",
+            "PRIVATE ONE\n```suggestion\nreplacement\n```",
+            path="scenario-fixtures/hero_review/gate.py",
+            line=10,
+        ),
+        finding(
+            9,
+            "finding:conceptual",
+            "PRIVATE TWO",
+            path="scenario-fixtures/hero_review/gate.py",
+            line=16,
+        ),
         finding(
             10,
             "finding:related",
             f"PRIVATE THREE\nRelated locations:\n- [`src/two.py:19`](https://github.com/{operator.REPOSITORY}/blob/{head}/src/two.py#L19)",
+            path="scenario-fixtures/hero_review/cache.py",
+            line=11,
         ),
     ]
 
@@ -516,13 +532,104 @@ def test_hero_inspection_proves_three_native_shapes_without_exposing_prose() -> 
     assert all(
         next(check for check in result["checks"] if check["name"] == name)["pass"]
         for name in (
-            "hero_native_findings",
+            "hero_findings",
             "hero_suggestion",
-            "hero_conceptual_inline",
+            "hero_conceptual",
             "hero_related_locations",
         )
     )
     assert all(prose not in json.dumps(result) for prose in ("PRIVATE ONE", "PRIVATE TWO", "PRIVATE THREE"))
+
+
+def test_hero_inspection_accepts_one_semantic_v5_batch_while_readiness_is_blocked() -> None:
+    fake = inspection_runner()
+    issue_path = f"/repos/{operator.REPOSITORY}/issues/7/comments?per_page=100"
+    issue_comments = fake.responses[issue_path]
+    assert isinstance(issue_comments, list)
+    head = "a" * 40
+    batch = f"""## Hamsterdan review findings
+
+### `hero-f01` — PRIVATE TITLE ONE
+**blocking** · severity: **medium**
+
+PRIVATE BODY ONE
+
+Primary location: `scenario-fixtures/hero_review/gate.py:10`
+
+Suggested change:
+```suggestion
+replacement
+```
+
+### `hero-f02` — PRIVATE TITLE TWO
+**blocking** · severity: **high**
+
+PRIVATE BODY TWO
+
+Primary location: `scenario-fixtures/hero_review/gate.py:16`
+
+### `hero-f03` — PRIVATE TITLE THREE
+**blocking** · severity: **medium**
+
+PRIVATE BODY THREE
+
+Primary location: `scenario-fixtures/hero_review/cache.py:11`
+
+Related locations:
+- `scenario-fixtures/hero_review/cache.py:6`
+
+<!-- hamsterdan:findings-digest {"b" * 64} -->
+
+<!-- hamsterdan:finding operation=findings:{head}:i1 head={head} -->"""
+    fake.responses[issue_path] = [
+        comment for comment in issue_comments if isinstance(comment, dict) and comment.get("id") in {3, 6}
+    ] + [
+        {
+            "id": 8,
+            "html_url": "https://github.test/comments/8",
+            "body": batch,
+            "user": {"login": operator.APP_BOT_LOGIN},
+        }
+    ]
+
+    result = operator.inspect(7, fake, expect_hero_review=True, expect_readiness=False)
+
+    assert result["ok"] is True
+    assert all(check["pass"] for check in result["checks"])
+    finding = next(comment for comment in result["comments"] if comment["type"] == "finding")
+    assert finding == {
+        "id": 8,
+        "url": "https://github.test/comments/8",
+        "owner": operator.APP_BOT_LOGIN,
+        "type": "finding",
+        "inline": False,
+        "finding_count": 3,
+        "hero_finding_count": 3,
+        "suggestion_count": 1,
+        "conceptual_count": 1,
+        "related_location_count": 1,
+        "owned_by_app": True,
+    }
+    assert all(
+        prose not in json.dumps(result)
+        for prose in (
+            "PRIVATE TITLE ONE",
+            "PRIVATE TITLE TWO",
+            "PRIVATE TITLE THREE",
+            "PRIVATE BODY ONE",
+            "PRIVATE BODY TWO",
+            "PRIVATE BODY THREE",
+        )
+    )
+
+
+def test_inspection_parser_exposes_explicit_blocked_readiness_checkpoint() -> None:
+    args = operator.parser().parse_args(
+        ["inspect", "--pr", "59", "--expect-hero-review", "--expect-readiness", "absent"]
+    )
+
+    assert args.expect_hero_review is True
+    assert args.expect_readiness == "absent"
 
 
 def test_operator_ignores_embedded_nonfinal_trusted_marker() -> None:

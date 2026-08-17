@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; hero PR 58 exposed a marker-safe finding-ID prompt gap now qualified locally
+status_reason: PRs 56–57 qualify clean-green and transient CI; PR 59 qualifies the V5 hero finding checkpoint semantically
 updated: 2026-08-17
 ---
 
@@ -19,9 +19,10 @@ Production remains untouched and default.
 Deterministic fake-world and real-host scenarios are intermediate engineering
 evidence. CV17 remains open until a fresh selected-V5 campaign on
 `HBNetwork/demo-pr-readiness` records the real PRs, Actions runs, App comments,
-native reviews, human interactions, and resulting Hamsterdan behavior. The
-historical production PR portfolio is reference evidence, not fresh V5
-acceptance.
+finding presentation, human interactions, and resulting Hamsterdan behavior.
+Native review comments are production's presentation; V5's complete App-owned
+finding batch is equally valid when it preserves the same user-visible meaning.
+The historical production PR portfolio is reference evidence, not fresh V5 acceptance.
 
 ## Delivered slice
 
@@ -385,8 +386,8 @@ records, or publish byte-identical prose.
 After deterministic qualification, select V5 explicitly and exercise fresh
 controlled PRs in `HBNetwork/demo-pr-readiness`. Preserve PR and effect URLs,
 exact heads, Actions run and attempt IDs, App-owned dashboard/readiness/finding
-evidence, native review evidence, human review and thread transitions, agent
-and App attribution, final custody/Activity posture, and cleanup disposition.
+evidence, topology-appropriate finding presentation, human review and thread
+transitions, agent and App attribution, final custody/Activity posture, and cleanup disposition.
 Record short GitHub-site demonstrations at the meaningful checkpoints. Keep
 the production topology default and do not reuse historical PRs as acceptance.
 
@@ -678,7 +679,40 @@ default selector remain unchanged.
 The focused agent protocol and Petrus runtime-host checks pass 73 tests.
 `scripts/check full` passes 1,169 Python tests, nine Bun relay tests, Ruff,
 formatting, typing, and source/wheel builds. A fresh selected-V5 hero PR is still
-required to prove provider-produced marker-safe findings and native publication.
+required to prove provider-produced marker-safe findings and semantic publication.
+
+### DS4.20 — Live V5 hero finding checkpoint
+
+Fresh selected-V5
+[`HBNetwork/demo-pr-readiness` PR 59](https://github.com/HBNetwork/demo-pr-readiness/pull/59),
+head `493a99512a92aa0a21c02880319d7a2d32d1816f`, passed all six jobs in
+[Actions run 31992898160](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31992898160).
+`crisbastos` submitted a distinct-human
+[`CHANGES_REQUESTED` review](https://github.com/HBNetwork/demo-pr-readiness/pull/59#pullrequestreview-4948307201).
+The host remained online, isolating the prompt-version-3 correction from the
+restart behavior already exercised by PR 58. All 15 PR-specific webhook rows
+reached terminal custody.
+
+The real provider returned three marker-safe findings with complete matching
+lineage. Strict admission produced one `AgentReview`, and one
+[`ReviewLanded` batch](https://github.com/HBNetwork/demo-pr-readiness/pull/59#issuecomment-5311608847)
+shows the seconds/minutes lease defect and replacement, the conceptual approval
+counting defect, and the cache-normalization defect with its related location.
+The [App dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/59#issuecomment-5311608997)
+remains blocked. No readiness advisory is present, correctly: Cris still
+requests changes and all three agent findings remain open. Canonical History
+retains 875 records, including eleven `DashLanded`, two `RoundDeferred`, one
+`AgentReview`, and one `ReviewLanded`, with no Activity or firing failure.
+
+The prior operator hero check incorrectly required production's three native
+comments and a readiness advisory at this deliberately blocked checkpoint. The
+topology-neutral check now recognizes either production's native comments or
+V5's digest-bound batch, pins the three known fixture anchors and their required
+suggestion/conceptual/related-location meaning, and accepts an explicit
+`--expect-readiness absent`. Its JSON remains redacted to counts, identities,
+and provider URLs. The live PR 59 command passes all ten checks. This qualifies
+the finding checkpoint, not the later repair, status conversation, distinct
+approval, or final readiness journey.
 
 ## Done condition
 

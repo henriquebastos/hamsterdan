@@ -78,5 +78,10 @@ without repair or mutation. Fresh hero PR 58 preserved a second strict
 provider-output failure: its three otherwise structurally complete findings
 used colon-bearing IDs that the marker-safe validator rejects. Review prompt
 version 3 now supplies the exact shared identity grammar without weakening or
-normalizing admission. A fresh hero qualification and additional user-visible
-V5 journeys remain mandatory before CV17 closes.
+normalizing admission. Fresh PR 59 then qualified the V5 hero finding
+checkpoint: three marker-safe provider findings and complete lineage landed in
+one App-owned batch with the lease suggestion, conceptual approval defect, and
+cache related-location meaning. A topology-neutral redacted operator check
+accepts that V5 presentation or production's native comments while requiring
+readiness to remain absent at the blocked checkpoint. Later hero interactions
+and additional user-visible V5 journeys remain mandatory before CV17 closes.

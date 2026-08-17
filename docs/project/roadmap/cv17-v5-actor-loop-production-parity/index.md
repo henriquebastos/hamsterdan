@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: Clean-green and first-attempt-flake are qualified live; hero PR 58 exposed a marker-safe finding-ID prompt gap now qualified locally
+status_reason: Clean-green, first-attempt-flake, and the hero finding checkpoint are qualified live; later hero interactions remain
 updated: 2026-08-17
 ---
 
@@ -99,8 +99,13 @@ making that ruling.
   admission rejected colon-bearing finding IDs as `output_schema`. Review
   prompt version 3 now derives and supplies the existing marker-safe finding
   grammar without weakening validation or repairing provider output. PR 58
-  remains visible fail-closed evidence; a fresh hero and additional V5 user
-  journeys and recordings remain before CV17 acceptance.
+  remains visible fail-closed evidence. Fresh hero PR 59 then admitted three
+  marker-safe findings with complete lineage and published one V5 batch showing
+  the lease suggestion, conceptual approval defect, and cache defect with its
+  related location. A topology-neutral redacted operator check now accepts
+  production's native comments or V5's complete batch and correctly requires
+  readiness absence at that blocked checkpoint. Later repair, conversation,
+  approval, readiness, and recorded V5 journeys remain before CV17 acceptance.
 
 ## Done condition
 

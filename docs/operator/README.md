@@ -230,7 +230,7 @@ scripts/hamsterdan-demo create --scenario clean-green
 scripts/hamsterdan-demo create --scenario first-attempt-flake
 scripts/hamsterdan-demo create --scenario hero-review
 scripts/hamsterdan-demo inspect --pr <number>
-scripts/hamsterdan-demo inspect --pr <hero-number> --expect-hero-review
+scripts/hamsterdan-demo inspect --pr <hero-number> --expect-hero-review --expect-readiness absent
 ```
 
 Qualification orbs receive the two human operator sessions from the role-based
@@ -261,9 +261,11 @@ fixture's closed schema, validates them, and creates—but never merges—the PR
 The `hero-review` route also requests `crisbastos` immediately so human review
 authority is present before readiness can settle. Inspection covers both PR
 conversation comments and native inline review comments. It requires an
-App-owned dashboard, readiness advisory, no legacy marker, exact workflow
-heads, and App ownership for every recognized comment, while reporting only
-recognized marker identities/IDs/URLs, bounded workflow/job facts, and
+App-owned dashboard, no legacy marker, exact workflow heads, and App ownership
+for every recognized comment. Readiness is required by default; pass
+`--expect-readiness absent` only at a deliberately blocked checkpoint, such as
+the initial hero findings. Output contains only recognized marker
+identities/IDs/URLs, bounded workflow/job and finding-shape facts, and
 attribution. GitHub's App bot may be the **authenticated pusher** exposed in
 REST `author`/`committer` user objects, while the nested Git commit `author` and
 `committer` are explicit commit metadata; neither proves the other. See
@@ -291,10 +293,11 @@ the first review state.
 2. While the host remains stopped, use Cris's explicit identity to submit one
    `REQUEST_CHANGES` review on the original head. Keep its text short and
    human-authored; do not copy Dan's expected findings into it.
-3. Restart the supervised host. In **Files changed**, capture Dan's three native
-   review comments: a GitHub `suggestion` block, a conceptual inline comment,
-   and one inline concern with clickable related locations. In **Conversation**,
-   capture the single updating dashboard. Dan's blocking review may then launch
+3. Restart the supervised host. Production renders three native comments in
+   **Files changed**. Selected V5 renders one complete App-owned findings batch
+   in **Conversation**. In either presentation, capture the lease replacement,
+   conceptual approval-policy defect, cache-key defect with its related
+   location, and the updating dashboard. Dan's blocking review may then launch
    the ordinary fenced App repair and advance the head.
 4. After the repaired head settles, Henrique posts `@hamster-dan status`. Capture
    Dan's concise current-gate reply and the refreshed dashboard. If demonstrating
@@ -306,10 +309,12 @@ the first review state.
    then close the rehearsal PR unmerged unless a separately approved demo calls
    for merge.
 
-At the finding checkpoint, `inspect --expect-hero-review` adds redacted checks
-for at least three App-owned native findings and proves that the set includes a
-suggestion, an ordinary conceptual inline comment, and a related-location
-comment. It reports shape counts and provider URLs but never finding prose.
+At the blocked finding checkpoint, `inspect --expect-hero-review
+--expect-readiness absent` adds redacted, topology-neutral checks for the three
+fixture defects. Production's three native comments and V5's one findings batch
+must both expose the lease suggestion, conceptual approval-policy finding, and
+cache finding with its related location. The command reports semantic shape
+counts and provider URLs but never finding prose.
 
 For a cohesive recording, use three pinned browser tabs rather than repeatedly
 scrolling one growing conversation: **Conversation** anchored at the dashboard,
@@ -319,12 +324,14 @@ tab, keep the same browser zoom, and open each comment's permalink before the
 next event. This prevents appended comments from moving the subject under the
 cursor while preserving an honest chronological story.
 
-Native finding publication is lookup-first and fenced to the exact current head.
-Suggestions apply only at the primary anchor. A multi-location finding remains
-one operation and one visible comment, with links to its other locations. If
-GitHub definitively rejects a changed-line anchor as unavailable, Dan falls back
-to one immutable conversation comment; authorization failures and malformed
-payloads fail closed rather than disguising themselves as fallback success.
+Finding publication is lookup-first and fenced to the exact current head.
+Production uses native comments, where suggestions apply only at the primary
+anchor and a multi-location finding remains one operation with links to its
+other locations. V5 uses one immutable batch carrying the complete validated
+finding content and one digest-bound operation. If GitHub definitively rejects
+a production changed-line anchor as unavailable, Dan falls back to one immutable
+conversation comment; authorization failures and malformed payloads fail closed
+rather than disguising themselves as fallback success.
 Review and conversation agents receive Dan's canonical voice rules. Deterministic
 status, dashboard, reminder, readiness, malformed-request, and mutation messages
 follow the same register without changing stable markers or operation identities.

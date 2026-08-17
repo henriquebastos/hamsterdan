@@ -64,6 +64,17 @@ IMMUTABLE_RE = re.compile(
     r"<!-- hamsterdan:(?P<kind>finding|reminder|readiness) "
     r"operation=(?P<operation>[A-Za-z0-9][A-Za-z0-9._:-]{0,127}) head=(?P<head>[0-9a-f]{40}) -->\Z"
 )
+BATCH_FINDING_RE = re.compile(
+    r"^### `[A-Za-z0-9][A-Za-z0-9._-]{0,47}` — [^\n]+\n"
+    r"(?:\*\*blocking\*\*|advisory) · severity: \*\*[^*\n]+\*\*$",
+    re.MULTILINE,
+)
+PRIMARY_LOCATION_RE = re.compile(r"^Primary location: `(?P<path>[^`\n]+):(?P<line>[1-9][0-9]*)`$", re.MULTILINE)
+FINDINGS_DIGEST_RE = re.compile(r"^<!-- hamsterdan:findings-digest [0-9a-f]{64} -->$", re.MULTILINE)
+HERO_SUGGESTION_LOCATION = ("scenario-fixtures/hero_review/gate.py", 10)
+HERO_CONCEPTUAL_LOCATION = ("scenario-fixtures/hero_review/gate.py", 16)
+HERO_RELATED_LOCATION = ("scenario-fixtures/hero_review/cache.py", 11)
+HERO_FINDING_LOCATIONS = frozenset({HERO_SUGGESTION_LOCATION, HERO_CONCEPTUAL_LOCATION, HERO_RELATED_LOCATION})
 AUTHORITY_EXPECTATIONS = (
     "non-draft",
     "strict-stale",
@@ -810,18 +821,51 @@ def _safe_comment(
         if marker_kind == NEW_MARKER:
             kind = NEW_MARKER
     if kind:
-        return {
+        safe: dict[str, object] = {
             "id": identifier,
             "url": url,
             "owner": owner,
             "type": kind,
             "inline": inline,
-            "has_suggestion": inline and "```suggestion\n" in body,
-            "related_location_count": len(
-                re.findall(r"^- \[`[^`\n]+:[1-9][0-9]*`\]\(https://github\.com/", body, re.MULTILINE)
-            ),
             "owned_by_app": owner.casefold() == bot_login.casefold(),
-        }, markers
+        }
+        if kind == "finding":
+            batch = (
+                not inline
+                and body.startswith("## Hamsterdan review findings\n\n")
+                and FINDINGS_DIGEST_RE.search(body) is not None
+            )
+            matches = list(BATCH_FINDING_RE.finditer(body)) if batch else []
+            sections = [
+                body[match.start() : matches[index + 1].start() if index + 1 < len(matches) else len(body)]
+                for index, match in enumerate(matches)
+            ] or [body]
+            if inline:
+                line = comment.get("line") or comment.get("original_line")
+                locations = [(str(comment.get("path", "")), line) if type(line) is int and line > 0 else None]
+            else:
+                locations = [
+                    (primary.group("path"), int(primary.group("line")))
+                    if (primary := PRIMARY_LOCATION_RE.search(section)) is not None
+                    else None
+                    for section in sections
+                ]
+            safe.update(
+                {
+                    "finding_count": len(sections),
+                    "hero_finding_count": sum(location in HERO_FINDING_LOCATIONS for location in locations),
+                    "suggestion_count": sum(
+                        location == HERO_SUGGESTION_LOCATION and "```suggestion\n" in section
+                        for location, section in zip(locations, sections, strict=True)
+                    ),
+                    "conceptual_count": sum(location == HERO_CONCEPTUAL_LOCATION for location in locations),
+                    "related_location_count": sum(
+                        location == HERO_RELATED_LOCATION and "\nRelated locations:\n- " in section
+                        for location, section in zip(locations, sections, strict=True)
+                    ),
+                }
+            )
+        return safe, markers
     return None, markers
 
 
@@ -831,6 +875,7 @@ def inspect(
     *,
     bot_login: str = APP_BOT_LOGIN,
     expect_hero_review: bool = False,
+    expect_readiness: bool = True,
 ) -> dict[str, object]:
     if pr_number < 1:
         raise OperatorError("PR number must be positive")
@@ -889,25 +934,26 @@ def inspect(
         ),
         _check("hamsterdan_comment_ownership", owned and marker_owned, bot_login),
         _check("dashboard_present", "dashboard" in kinds, "dashboard" in kinds),
-        _check("readiness_advisory_present", "readiness" in kinds, "readiness" in kinds),
+        _check(
+            "readiness_advisory_present" if expect_readiness else "readiness_advisory_absent",
+            ("readiness" in kinds) is expect_readiness,
+            "readiness" in kinds,
+        ),
         _check("legacy_markers_absent", not old_markers, len(old_markers)),
         _check("workflow_heads_match", all(run["head"] == head for run in runs), head),
     ]
     if expect_hero_review:
-        inline_findings = [
-            item for item in safe_comments if item["type"] == "finding" and item["inline"] and item["owned_by_app"]
-        ]
-        suggestions = [item for item in inline_findings if item["has_suggestion"]]
-        related = [item for item in inline_findings if item["related_location_count"] != 0]
-        conceptual = [
-            item for item in inline_findings if not item["has_suggestion"] and item["related_location_count"] == 0
-        ]
+        findings = [item for item in safe_comments if item["type"] == "finding" and item["owned_by_app"]]
+        finding_count = sum(cast(int, item["hero_finding_count"]) for item in findings)
+        suggestion_count = sum(cast(int, item["suggestion_count"]) for item in findings)
+        conceptual_count = sum(cast(int, item["conceptual_count"]) for item in findings)
+        related_count = sum(cast(int, item["related_location_count"]) for item in findings)
         checks.extend(
             (
-                _check("hero_native_findings", len(inline_findings) >= 3, len(inline_findings)),
-                _check("hero_suggestion", bool(suggestions), len(suggestions)),
-                _check("hero_conceptual_inline", bool(conceptual), len(conceptual)),
-                _check("hero_related_locations", bool(related), len(related)),
+                _check("hero_findings", finding_count >= 3, finding_count),
+                _check("hero_suggestion", suggestion_count > 0, suggestion_count),
+                _check("hero_conceptual", conceptual_count > 0, conceptual_count),
+                _check("hero_related_locations", related_count > 0, related_count),
             )
         )
     authored = commit.get("commit", {})
@@ -1182,6 +1228,7 @@ def parser() -> argparse.ArgumentParser:
     inspect_parser.add_argument("--pr", type=int, required=True)
     inspect_parser.add_argument("--bot-login", default=APP_BOT_LOGIN)
     inspect_parser.add_argument("--expect-hero-review", action="store_true")
+    inspect_parser.add_argument("--expect-readiness", choices=("present", "absent"), default="present")
     authority_parser = commands.add_parser("inspect-authority")
     authority_parser.add_argument("--pr", type=int, required=True)
     authority_parser.add_argument("--expect", choices=AUTHORITY_EXPECTATIONS, required=True)
@@ -1202,7 +1249,12 @@ def main() -> int:
         elif args.command == "prepare-broker":
             output = prepare_broker()
         elif args.command == "inspect":
-            output = inspect(args.pr, bot_login=args.bot_login, expect_hero_review=args.expect_hero_review)
+            output = inspect(
+                args.pr,
+                bot_login=args.bot_login,
+                expect_hero_review=args.expect_hero_review,
+                expect_readiness=args.expect_readiness == "present",
+            )
         elif args.command == "qualification-setup":
             output = qualification_setup(args.credential_file, args.target_file, args.spent_marker)
         else:
