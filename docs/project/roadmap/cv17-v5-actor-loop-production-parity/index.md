@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 are complete; the first live V5 PR exposed an authority race whose deferred recovery is qualified while fresh live evidence remains
+status_reason: DS2 and DS3 are complete; fresh live V5 exposed qualified authority-race and bounded Actions-inventory corrections while completion remains
 updated: 2026-08-17
 ---
 
@@ -67,9 +67,12 @@ making that ruling.
   arrival during normalization: V5 now drains newly arrived custodied authority
   before settlement, while a typed silent deferred round preserves the review
   baton and stable operation through residual races and durable identified
-  wake-up. Production remains unchanged and default. The App event inventory
-  still lacks the required native review-thread event before the complete fresh
-  selected-V5 GitHub campaign.
+  wake-up. Production remains unchanged and default. The App's exact six-event
+  inventory now includes the native review-thread event, and isolated sessions
+  prove distinct author and reviewer identities. The next clean-green PR
+  crossed the 1 MiB unfiltered Actions-history boundary; provider reads now
+  request the exact head and 20 runs per page while retaining complete bounded
+  pagination and strict run validation.
 
 ## Done condition
 

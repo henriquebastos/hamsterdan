@@ -120,7 +120,7 @@ def test_pull_snapshot_resolves_current_base_ref_instead_of_stale_pr_base_sha() 
 
 def test_exact_head_workflow_selection_adopts_completed_draft_run() -> None:
     fake = FakeTransport()
-    path = "/repos/owner/repo/actions/workflows/ci.yml/runs?event=pull_request&per_page=100"
+    path = f"/repos/owner/repo/actions/workflows/ci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20"
     fake.responses[("GET", path)] = WireResponse(
         200,
         {
@@ -156,8 +156,8 @@ def test_exact_head_workflow_selection_adopts_completed_draft_run() -> None:
 def test_object_collection_requires_complete_consistent_pagination() -> None:
     fake = FakeTransport()
     root = "/repos/owner/repo"
-    first = f"{root}/actions/workflows/ci.yml/runs?event=pull_request&per_page=100"
-    second = f"{root}/actions/workflows/ci.yml/runs?event=pull_request&per_page=100&page=2"
+    first = f"{root}/actions/workflows/ci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20"
+    second = f"{root}/actions/workflows/ci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20&page=2"
     run = {
         "id": 1,
         "head_sha": HEAD,
@@ -932,7 +932,7 @@ def test_policy_falls_back_only_on_effective_endpoint_404_and_rejects_malformed_
 @pytest.mark.parametrize("field,value", [("event", "push"), ("path", ".github/workflows/other.yml")])
 def test_run_evidence_rejects_wrong_event_or_workflow(field: str, value: str) -> None:
     fake = FakeTransport()
-    path = "/repos/owner/repo/actions/workflows/ci.yml/runs?event=pull_request&per_page=100"
+    path = f"/repos/owner/repo/actions/workflows/ci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20"
     run = {
         "id": 1,
         "head_sha": HEAD,
@@ -1022,7 +1022,7 @@ def test_rerun_request_is_lookup_first_and_fenced_immediately_before_marker() ->
     comments = f"{root}/issues/7/comments"
     fake.responses[("GET", f"{root}/pulls/7")] = WireResponse(200, pull())
     fake.responses[("GET", f"{root}/git/ref/heads/main")] = WireResponse(200, {"object": {"sha": BASE}})
-    runs = f"{root}/actions/workflows/ci.yml/runs?event=pull_request&per_page=100"
+    runs = f"{root}/actions/workflows/ci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20"
     fake.responses[("GET", runs)] = WireResponse(
         200,
         {
@@ -1091,8 +1091,8 @@ def _rerun_world(fake: FakeTransport, runs: list[dict[str, Any]]) -> tuple[str, 
     comments = f"{root}/issues/7/comments"
     fake.responses[("GET", f"{root}/pulls/7")] = WireResponse(200, pull())
     fake.responses[("GET", f"{root}/git/ref/heads/main")] = WireResponse(200, {"object": {"sha": BASE}})
-    fake.responses[("GET", f"{root}/actions/workflows/ci.yml/runs?event=pull_request&per_page=100")] = WireResponse(
-        200, {"total_count": len(runs), "workflow_runs": runs}
+    fake.responses[("GET", f"{root}/actions/workflows/ci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20")] = (
+        WireResponse(200, {"total_count": len(runs), "workflow_runs": runs})
     )
     fake.page_values[f"{comments}?per_page=100"] = ()
     publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)

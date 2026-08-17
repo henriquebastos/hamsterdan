@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: The first fresh live V5 PR exposed an authority-arrival race; deterministic deferred review recovery is qualified while a fresh live rerun remains
+status_reason: Fresh V5 PRs exposed and qualified authority-race and bounded Actions-inventory corrections while live completion remains
 updated: 2026-08-17
 ---
 
@@ -422,8 +422,9 @@ including competing-writer, crash-cut, and restrictive-umask proof.
 
 The accepted App private key, webhook secret, human-role sessions, and OpenAI
 authority are now project-scoped so future project orbs can reproduce setup.
-The public App inventory still lacks `pull_request_review_thread`; the App owner
-must enable that event before the collaboration journey can qualify live.
+The App owner subsequently enabled `pull_request_review_thread`; checked host
+validation now accepts the exact six-event registration, and the isolated human
+sessions resolve to author `henriquebastos` and reviewer `crisbastos`.
 `scripts/check full` passes with 1,121 Python tests, nine Bun relay tests,
 formatting, Ruff, typing, and source/wheel builds. No provider call or fresh PR
 was created in this slice.
@@ -464,6 +465,31 @@ refusal, and legacy request-store migration. `scripts/check full` passes with
 source/wheel builds. PR 52 remains failure evidence; its canonical failed
 firing is not rewritten. A fresh selected-V5 PR must prove the corrected
 clean-green journey live before acceptance.
+
+### DS4.14 — Exact-head bounded Actions inventory
+
+The corrected host opened fresh selected-V5
+[`HBNetwork/demo-pr-readiness` PR 53](https://github.com/HBNetwork/demo-pr-readiness/pull/53)
+at head `a0d711448ffa33b2b711fa278ce4a5c1d27e288f`. Its Actions run
+`31982201595` attempt 1 completed successfully, but normalization failed closed
+before manifest staging or any agent/App effect. The App-authenticated PR,
+policy, base comparison, and human-review reads all succeeded; the workflow-run
+read crossed the transport's deliberate 1 MiB response bound because it asked
+GitHub for the repository's complete pull-request workflow history at 100 runs
+per page and only filtered the exact head afterward. PR 53 happened to cross
+that accumulated-history threshold.
+
+`GitHubAuthority.workflow_runs` now asks GitHub for the already-required exact
+head SHA and 20 runs per page. Complete, count-consistent, cycle-bounded
+pagination remains mandatory, all attempts for that head remain visible, and
+each run must still prove workflow, event, and PR association. The response
+bound is unchanged. This is a provider-boundary correction shared by both
+topologies; their user-visible Actions semantics and V5/production selection
+remain unchanged. Focused GitHub and topology-parity suites pass 94 tests, and
+`scripts/check full` passes 1,133 Python tests, nine Bun relay tests, Ruff,
+formatting, typing, and source/wheel builds. PR 53 remains custodied failure
+evidence until the qualified correction is deployed and its exact opening
+delivery resumes through the normal retry/requeue route.
 
 ## Done condition
 

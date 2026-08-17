@@ -287,7 +287,7 @@ class GitHubAuthority:
             raise ValueError("head must be an exact commit SHA")
         path = quote(workflow, safe="")
         values = self._object_collection(
-            f"{self.root}/actions/workflows/{path}/runs?event=pull_request&per_page=100",
+            f"{self.root}/actions/workflows/{path}/runs?event=pull_request&head_sha={head.lower()}&per_page=20",
             "workflow_runs",
         )
         # Closed historical PRs may be returned with an empty pull_requests

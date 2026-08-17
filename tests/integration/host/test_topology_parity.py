@@ -329,7 +329,7 @@ class ScenarioProvider:
         if (
             method == "GET"
             and path
-            == "/repos/owner/repo/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?event=pull_request&per_page=100"
+            == f"/repos/owner/repo/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?event=pull_request&head_sha={self.head}&per_page=20"
         ):
             return WireResponse(
                 200,
@@ -1396,7 +1396,7 @@ def assert_clean_green(result: JourneyResult) -> None:
         ("GET", f"/repos/owner/repo/compare/{BASE}...{HEAD}"),
         (
             "GET",
-            "/repos/owner/repo/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?event=pull_request&per_page=100",
+            f"/repos/owner/repo/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20",
         ),
         ("GET", "/repos/owner/repo/actions/runs/101/attempts/1/jobs?per_page=100"),
         ("GET", "/repos/owner/repo/pulls/7/requested_reviewers"),
@@ -1640,7 +1640,7 @@ def assert_seeded_review_finding(result: JourneyResult) -> None:
     assert result.git_reconciliations == result.git_publications == ()
     assert (
         "GET",
-        "/repos/owner/repo/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?event=pull_request&per_page=100",
+        f"/repos/owner/repo/actions/workflows/.github%2Fworkflows%2Fci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20",
     ) in result.provider_calls
     assert ("GET", "/repos/owner/repo/actions/runs/101/attempts/1/jobs?per_page=100") in result.provider_calls
 

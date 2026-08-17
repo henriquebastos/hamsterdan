@@ -71,3 +71,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-16 — V5 live campaign bootstrap qualified locally](entries/2026-08-16T1807Z-v5-live-bootstrap-qualified-locally.md)
 - [2026-08-16 — V5 provider-portable bootstrap qualified locally](entries/2026-08-16T2106Z-v5-provider-portable-bootstrap-qualified.md)
 - [2026-08-17 — V5 live review authority-race recovery qualified locally](entries/2026-08-17T0027Z-v5-live-review-authority-race-recovery-qualified.md)
+- [2026-08-17 — Exact-head bounded Actions inventory qualified locally](entries/2026-08-17T0042Z-exact-head-actions-inventory-qualified.md)
