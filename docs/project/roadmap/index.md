@@ -37,7 +37,7 @@ Both exact disposable targets remain explicit cleanup obligations externally
 deferred to Puck custody. The historical live causes remain unchanged and live
 support remains unaccepted; no setup, provider, or cleanup authority survives.
 
-Active parity delivery: [CV17 — V5 actor-loop production parity](cv17-v5-actor-loop-production-parity/index.md).
+Completed parity delivery: [CV17 — V5 actor-loop production parity](cv17-v5-actor-loop-production-parity/index.md).
 The ES-007 actor-loop workflow model is brought to production parity as a
 parallel, selectable implementation while production stays the untouched
 default. [CV17.DS1 — The V5 net as first-class code](cv17-v5-actor-loop-production-parity/cv17-ds1-v5-net-first-class.md),
@@ -48,7 +48,7 @@ canonical timer custody, fail-closed topology selection, stable synthetic
 reconciliation, and selected-host restart convergence across publication,
 inline-effect, timer-wake, and webhook-acknowledgement crash cuts.
 [CV17.DS4 — Production-parity evidence](cv17-v5-actor-loop-production-parity/cv17-ds4-production-parity-harness.md)
-is active: clean-green, first-attempt-flake, persistent-CI, seeded review
+is complete: clean-green, first-attempt-flake, persistent-CI, seeded review
 finding, conversational change, agent-repair, hero-review, draft-to-ready,
 stale-base update, true-conflict resolution, and collaboration approval
 semantic oracles pass through both real host compositions. They close V5 strict
@@ -96,8 +96,11 @@ Git write; the later status reply, distinct repaired-head approval, refreshed
 dashboard, and readiness advisory completed the three-actor story. The final
 hero inspection passes all ten checks, all 18 PR-specific webhook manifests are
 terminal, and History has no Activity or firing failure. PR 61 therefore
-qualifies the complete selected-V5 hero. GitHub-site recordings and additional
-user-visible V5 journeys remain mandatory before CV17 closes.
+qualifies the complete selected-V5 hero. Source-bound GitHub-site recordings
+preserve PR 56 clean green, PR 57 transient-CI recovery, and PR 61's complete
+three-actor hero. The Navigator accepted that campaign as sufficient
+user-visible parity evidence on 2026-08-17, completing CV17 without changing
+the production default or including sharded V5.
 
 Planned reliability work: [CV18 — Deterministic readiness simulation](cv18-deterministic-readiness-simulation/index.md).
 CV18 turns the existing semantic oracles, fake provider world, injected clocks,

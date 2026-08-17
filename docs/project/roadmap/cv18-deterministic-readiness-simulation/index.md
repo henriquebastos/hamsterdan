@@ -59,8 +59,8 @@ CV17 and CV18 ask different questions:
 
 CV18 does not compare internal traces or require two topologies forever. During
 coexistence, the independent domain oracle may judge both compositions where
-that reduces migration risk, but CV18 neither closes CV17 nor rules V5 as the
-default.
+that reduces migration risk, but CV18 neither reopens nor replaces completed
+CV17 and does not rule V5 as the default.
 
 Petrus CV19 owns the reusable deterministic event/fault harness. CV18.DS1 can
 define Hamsterdan's model and correctness contract independently; execution
@@ -182,7 +182,8 @@ discovery metadata, not the sole durable reproduction key.
 
 ## Out of scope
 
-- Replacing or completing CV17 parity and fresh selected-V5 acceptance.
+- Reopening or replacing CV17's completed parity and fresh selected-V5
+  acceptance.
 - Making V5 the default topology.
 - Full emulation of GitHub, Actions, Git, Pi, model providers, networks,
   filesystems, or CPython scheduling.

@@ -80,4 +80,4 @@ truth and failure rather than ad hoc mocks.
 - Real GitHub API, Git object, model-provider, or network fidelity claims.
 - Reimplementing readiness, authority, retry, settlement, or Petrus logic in
   the fault world.
-- Completing CV17 or selecting the default topology.
+- Reopening or replacing completed CV17, or selecting the default topology.

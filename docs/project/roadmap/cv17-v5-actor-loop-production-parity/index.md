@@ -1,8 +1,8 @@
 ---
 code: CV17
 level: Value
-status: Active
-status_reason: Clean-green, transient-CI recovery, and complete hero have durable real-GitHub montages; the campaign awaits Navigator acceptance and portfolio ruling
+status: Completed
+status_reason: The Navigator accepted the deterministic parity portfolio and durable clean-green, transient-CI recovery, and complete three-actor GitHub campaign
 updated: 2026-08-17
 ---
 
@@ -39,7 +39,7 @@ making that ruling.
   proves a settled but unacknowledged webhook replays from frozen custody on
   startup without duplicate provider, agent, History, or reconciliation work.
 - [CV17.DS4 — Production-parity evidence](cv17-ds4-production-parity-harness.md)
-  is active. DS4.0 through DS4.10 run strict clean-green,
+  is complete. DS4.0 through DS4.10 run strict clean-green,
   first-attempt-flake, persistent-CI, seeded-review-finding, and conversational
   change plus agent-repair, hero-review, and draft-to-ready GitHub journeys
   independently through the real host against both topologies and judge
@@ -144,9 +144,27 @@ making that ruling.
   also pass, and the montage, report, checksums, four-PNG archive, and contact
   sheet are published in the source-bound
   [`cv17-pr57-v5-transient-ci-aa3bde5` prerelease](https://github.com/henriquebastos/hamsterdan/releases/tag/cv17-pr57-v5-transient-ci-aa3bde5).
-  The three accepted live journeys now have durable recordings. CV17 remains
-  Active pending Navigator campaign acceptance and a ruling on whether another
-  live journey adds necessary user-visible evidence.
+  The three accepted live journeys now have durable recordings. The Navigator
+  accepted this campaign as sufficient user-visible parity evidence, completing
+  CV17. Production remains untouched and default; this acceptance does not
+  select V5 as its replacement.
+
+## Accepted value evidence
+
+The Navigator accepted CV17 on 2026-08-17. The deterministic real-host
+portfolio covers eleven user-visible semantic journeys independently through
+production and V5. Selected V5 restart evidence covers publication, inline
+effects, timer wake, and webhook acknowledgement crash cuts. Fresh GitHub PRs
+then qualified clean green, transient CI recovery, strict provider inability,
+findings, bounded coding and Git mutation, operation-scoped recovery, human
+conversation, distinct approval, dashboard convergence, and readiness.
+
+Three source-bound recordings durably preserve the representative GitHub-site
+campaign: PR 56 clean green, PR 57 transient-CI recovery, and PR 61's complete
+author–Hamsterdan–reviewer hero. The recordings show intended user-visible
+behavior rather than internal trace or implementation equality. Production
+remains the untouched default, V5 remains explicitly selectable, and sharded V5
+remains outside this Value.
 
 ## Done condition
 

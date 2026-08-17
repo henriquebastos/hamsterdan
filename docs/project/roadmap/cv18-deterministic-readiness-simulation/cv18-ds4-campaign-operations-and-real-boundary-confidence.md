@@ -59,8 +59,8 @@ and deployment evidence.
    real-boundary counterpart, documenting correspondence and non-equivalence.
 5. CI evidence reports profiles, semantic reach, deselections, and known blind
    spots—not only test count or seed count.
-6. CV17's remaining parity/live acceptance remains truthful and separate; CV18
-   neither closes it nor changes topology default.
+6. CV17's completed parity/live acceptance remains truthful and separate; CV18
+   neither reopens it nor changes topology default.
 7. `scripts/check full`, the documented scheduled campaign, selected actual
    process/persistence routes, and authorized real-provider acceptance pass with
    unexpected skips forbidden where the route requires them.

@@ -1,8 +1,8 @@
 ---
 code: CV17.DS4
 level: Delivery Story
-status: Active
-status_reason: Clean-green, transient-CI recovery, and complete hero now have durable real-GitHub montages; the recorded campaign awaits Navigator acceptance and portfolio ruling
+status: Completed
+status_reason: The Navigator accepted the deterministic parity portfolio and durable three-journey real-GitHub campaign as sufficient user-visible V5 parity evidence
 updated: 2026-08-17
 ---
 
@@ -17,12 +17,13 @@ independent fresh worlds and must each satisfy the same semantic outcome.
 Production remains untouched and default.
 
 Deterministic fake-world and real-host scenarios are intermediate engineering
-evidence. CV17 remains open until a fresh selected-V5 campaign on
-`HBNetwork/demo-pr-readiness` records the real PRs, Actions runs, App comments,
-finding presentation, human interactions, and resulting Hamsterdan behavior.
-Native review comments are production's presentation; V5's complete App-owned
-finding batch is equally valid when it preserves the same user-visible meaning.
-The historical production PR portfolio is reference evidence, not fresh V5 acceptance.
+evidence. CV17 stayed open until a fresh selected-V5 campaign on
+`HBNetwork/demo-pr-readiness` recorded the real PRs, Actions runs, App comments,
+finding presentation, human interactions, and resulting Hamsterdan behavior;
+the Navigator accepted that campaign in DS4.31. Native review comments are
+production's presentation; V5's complete App-owned finding batch is equally
+valid when it preserves the same user-visible meaning. The historical
+production PR portfolio is reference evidence, not fresh V5 acceptance.
 
 ## Delivered slice
 
@@ -1018,9 +1019,22 @@ The source-bound
 [`cv17-pr57-v5-transient-ci-aa3bde5` prerelease](https://github.com/henriquebastos/hamsterdan/releases/tag/cv17-pr57-v5-transient-ci-aa3bde5)
 contains the montage, bounded report, checksum file, four-PNG archive, and
 contact sheet. Clean-green, transient-CI recovery, and the complete three-actor
-hero now each have durable real-GitHub recordings. CV17 remains Active pending
-the Navigator's acceptance of that campaign and ruling on whether another live
-journey adds necessary user-visible evidence.
+hero now each have durable real-GitHub recordings.
+
+### DS4.31 — Navigator campaign acceptance
+
+The Navigator accepted the three recorded journeys as sufficient fresh
+GitHub-visible evidence for CV17: clean green demonstrates ordinary readiness,
+transient-CI demonstrates bounded recovery, and the complete hero demonstrates
+findings, author-directed repair, distinct-human approval, dashboard
+convergence, and readiness. Deterministic real-host scenarios and focused
+recovery tests retain the finer conflict and crash boundaries that should not be
+forced into one live PR.
+
+This acceptance closes parity as intended user-visible behavior, not internal
+trace or implementation equality. It does not make V5 the default, reopen the
+recorded PRs, claim that checkpoint montages are contemporaneous filming, or
+bring sharded V5 into scope.
 
 ## Done condition
 
