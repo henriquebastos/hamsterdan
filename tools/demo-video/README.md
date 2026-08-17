@@ -16,15 +16,17 @@ visible acceptance evidence; it is not a recreation and does not use Remotion.
 The rendered MP4 is a generated release asset. Source, scenario copy, timing
 rules, avatars, and render commands live here in Git.
 
-## Capture the real PR61 GitHub evidence
+## Capture real GitHub evidence
 
-The PR61 manifest identifies fourteen surviving checkpoints in the public
-GitHub UI: Cris's requested-changes review, three App findings, Henrique's
-repair request, the App commit, the successful repaired-head Actions run,
-operation-scoped recovery, status conversation, Cris's approval, and the final
-readiness advisory. The browser context is anonymous, nonpersistent, and read
-only. It accepts no login, cookie file, token, storage state, user profile, or
-arbitrary selector from the manifest.
+Checked-in manifests identify surviving checkpoints in the public GitHub UI.
+`pr61-v5-hero.json` covers Cris's requested-changes review, three App findings,
+Henrique's repair request, the App commit, the successful repaired-head Actions
+run, operation-scoped recovery, status conversation, Cris's approval, and final
+readiness. `pr56-v5-clean-green.json` covers exact-head green checks, the
+successful Actions run, App dashboard, and readiness advisory. The browser
+context is anonymous, nonpersistent, and read only. It accepts no login, cookie
+file, token, storage state, user profile, or arbitrary selector from the
+manifest.
 
 Run capture only from a clean committed worktree. The capture validates the
 repository, PR state, exact head identity, actor identity, and checkpoint text
@@ -34,17 +36,21 @@ in the rendered DOM before atomically publishing any output:
 cd tools/demo-video
 bun install --frozen-lockfile
 bunx playwright install --with-deps chromium
-capture_dir="$(bun run --silent capture:pr61)"
-bun run render:pr61 "$capture_dir"
+manifest=live/manifests/pr56-v5-clean-green.json
+capture_dir="$(bun run --silent live/capture-cli.ts "$manifest")"
+bun run live/render-cli.ts "$manifest" "$capture_dir"
 ```
+
+The `capture:pr61` and `render:pr61` package scripts remain shortcuts for the
+complete hero manifest.
 
 The output is written under:
 
 ```text
-output/live/pr61-v5-hero/<utc>-<manifest-digest>/
+output/live/<manifest-slug>/<utc>-<manifest-digest>/
   checkpoints/*.png
   report.json
-  hamsterdan-pr61-v5-hero-live-checkpoints.mp4
+  hamsterdan-<manifest-slug>-live-checkpoints.mp4
   SHA256SUMS
 ```
 

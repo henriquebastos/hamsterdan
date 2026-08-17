@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: Clean-green, transient CI, and the complete hero plus its durable real-GitHub checkpoint montage are accepted; additional journeys remain
+status_reason: Clean-green, transient CI, and the complete hero are qualified live; the hero montage is durable and the clean-green capture spec is qualified locally; committed-source recording and additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -128,7 +128,12 @@ making that ruling.
   complete media inspection; its montage, report, checksums, PNG archive, and
   contact sheet are published in the source-bound
   [`cv17-pr61-v5-hero-d2bd11c` prerelease](https://github.com/henriquebastos/hamsterdan/releases/tag/cv17-pr61-v5-hero-d2bd11c).
-  The remaining live journey portfolio still precedes CV17 acceptance.
+  A second closed manifest now binds PR 56's exact-head six green checks,
+  successful Actions run, clear App dashboard, and readiness advisory. Its
+  multiline-dashboard focus regression, forty focused tests, full project
+  checks, anonymous four-checkpoint probe, and complete 22-second media
+  inspection pass. Clean committed-source PR 56 recording and the remaining
+  live journey portfolio still precede CV17 acceptance.
 
 ## Done condition
 

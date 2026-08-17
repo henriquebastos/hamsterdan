@@ -84,3 +84,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-17 — Complete selected-V5 hero accepted live](entries/2026-08-17T0717Z-selected-v5-hero-accepted-live.md)
 - [2026-08-17 — Public GitHub checkpoint capture qualified locally](entries/2026-08-17T0852Z-public-github-checkpoint-capture-qualified-locally.md)
 - [2026-08-17 — PR 61 real-GitHub checkpoint montage accepted](entries/2026-08-17T0908Z-pr61-real-github-checkpoint-montage-accepted.md)
+- [2026-08-17 — PR 56 clean-green capture qualified locally](entries/2026-08-17T0927Z-pr56-clean-green-capture-qualified-locally.md)

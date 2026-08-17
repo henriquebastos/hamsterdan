@@ -212,7 +212,7 @@ const validatePage = async (
     assertions.push(assertion(`text-${index + 1}`, expected));
   }
 
-  const focus = scope.getByText(checkpoint.focusText, {exact: true});
+  const focus = scope.getByText(checkpoint.focusText, {exact: false});
   if ((await visibleCount(focus)) < 1) {
     throw new Error(`checkpoint ${checkpoint.id} focus is not visibly scoped to its target`);
   }

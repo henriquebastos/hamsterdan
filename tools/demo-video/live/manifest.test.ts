@@ -45,6 +45,13 @@ describe("live capture manifest", () => {
     expect(parseManifest(raw).checkpoints).toHaveLength(14);
   });
 
+  test("admits the committed PR56 clean-green manifest", async () => {
+    const raw = JSON.parse(await readFile(new URL("./manifests/pr56-v5-clean-green.json", import.meta.url), "utf8"));
+    const parsed = parseManifest(raw);
+    expect(parsed.slug).toBe("pr56-v5-clean-green");
+    expect(parsed.checkpoints).toHaveLength(4);
+  });
+
   test("accepts the closed public GitHub contract", () => {
     expect(parseManifest(validManifest()).slug).toBe("pr61-v5-hero");
   });

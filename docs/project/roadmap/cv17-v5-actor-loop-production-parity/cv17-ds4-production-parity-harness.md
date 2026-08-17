@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 qualifies the complete hero and its durable real-GitHub checkpoint montage; additional journeys remain
+status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 hero montage is durable; the PR 56 clean-green capture spec is qualified locally; committed-source recording and additional journeys remain
 updated: 2026-08-17
 ---
 
@@ -916,6 +916,33 @@ It contains the montage, bounded report, checksum file, fourteen-PNG archive,
 and review contact sheet. This closes the real-site recording for the complete
 three-actor hero; the remaining live journey portfolio still precedes CV17
 acceptance.
+
+### DS4.27 — PR 56 clean-green capture qualified locally
+
+The second closed manifest binds accepted selected-V5 PR 56, exact head
+`7e3266a5eb87f921485295358af9745016b4ee15`, and Actions run `31989355776`.
+Its four checkpoints show all six exact-head PR checks green, the successful
+Actions graph, the App dashboard's successful checks with zero findings and a
+clear review, and the final readiness advisory. The generic README runbook now
+accepts any checked-in live manifest while preserving the PR 61 convenience
+commands.
+
+The development probe exposed one provider-DOM shape the hero did not exercise:
+GitHub renders every dashboard fact as line breaks inside one paragraph. Focus
+selection now accepts the already asserted bounded `focusText` as a substring
+inside the already identity-validated checkpoint scope. It still cannot select
+outside the declared comment, and the complete scoped normalized text and
+assertion hash remain unchanged. A deterministic multiline dashboard
+regression covers that boundary.
+
+Forty focused live-capture tests pass. Quick and full checks pass with 1,183
+Python tests and nine webhook-relay tests. A fresh anonymous development probe
+validated the four real PR 56 pages and rendered a 22-second 1440×900 silent
+H.264 montage. Complete video inspection accepted the green checks, successful
+workflow, clear dashboard, and readiness sequence with no blank, error,
+challenge, or synthetic segment. Canonical capture still requires the clean
+committed manifest revision, so recording and publication follow this source
+slice rather than borrowing development-probe provenance.
 
 ## Done condition
 

@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "slug": "pr56-v5-clean-green",
+  "repository": "HBNetwork/demo-pr-readiness",
+  "pullRequest": 56,
+  "expectedState": "open",
+  "expectedHead": "7e3266a5eb87f921485295358af9745016b4ee15",
+  "viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "actors": [
+    {
+      "login": "henriquebastos",
+      "href": "/henriquebastos"
+    },
+    {
+      "login": "hamster-dan",
+      "href": "/apps/hamster-dan"
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "clean-green-checks",
+      "kind": "pr-checks",
+      "target": "31989355776",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/56/checks",
+      "actor": "henriquebastos",
+      "expectedText": [
+        "Hamsterdan demo: clean-green",
+        "7e3266a",
+        "scenario-control",
+        "lint",
+        "type",
+        "unit",
+        "build",
+        "integration"
+      ],
+      "focusText": "scenario-control",
+      "holdSeconds": 5
+    },
+    {
+      "id": "clean-green-actions",
+      "kind": "actions-run",
+      "target": "31989355776",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31989355776",
+      "actor": "henriquebastos",
+      "expectedText": [
+        "Hamsterdan demo: clean-green #83",
+        "Status",
+        "Success",
+        "scenario-control",
+        "lint",
+        "type",
+        "unit",
+        "integration"
+      ],
+      "focusText": "Success",
+      "holdSeconds": 5
+    },
+    {
+      "id": "clean-green-dashboard",
+      "kind": "issue-comment",
+      "target": "5311272876",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/56#issuecomment-5311272876",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "checks:{'status': 'success'}",
+        "findings:{'blocking': 0, 'count': 0, 'head': '7e3266a5eb87f921485295358af9745016b4ee15'}",
+        "review:{'head': '7e3266a5eb87f921485295358af9745016b4ee15', 'status': 'clear'}",
+        "announced:{'head': '7e3266a5eb87f921485295358af9745016b4ee15'}"
+      ],
+      "focusText": "review:{'head': '7e3266a5eb87f921485295358af9745016b4ee15', 'status': 'clear'}",
+      "holdSeconds": 6
+    },
+    {
+      "id": "clean-green-readiness",
+      "kind": "issue-comment",
+      "target": "5311276734",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/56#issuecomment-5311276734",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "Hamsterdan readiness advisory",
+        "All observed gates are ready. Clean. Humans keep merge authority; Dan never merges PRs."
+      ],
+      "focusText": "Hamsterdan readiness advisory",
+      "holdSeconds": 6
+    }
+  ]
+}

@@ -41,7 +41,7 @@ const manifest = (): CaptureManifest =>
     ],
   });
 
-const pageHtml = ({hidden = false, duplicate = false, script = ""} = {}) => `<!doctype html>
+const pageHtml = ({hidden = false, duplicate = false, dashboard = false, script = ""} = {}) => `<!doctype html>
 <html><head><title>Hamsterdan demo · Pull Request #61 · HBNetwork/demo-pr-readiness</title></head>
 <body>
   <header><a href="/HBNetwork/demo-pr-readiness">HBNetwork / demo-pr-readiness</a></header>
@@ -51,7 +51,11 @@ const pageHtml = ({hidden = false, duplicate = false, script = ""} = {}) => `<!d
     <div class="timeline-comment-group" id="issuecomment-5312507139" ${hidden ? "hidden" : ""}>
       <a href="/apps/hamster-dan">hamster-dan bot</a>
       <h2>Hamsterdan review findings</h2>
-      <p>Calculate lease duration in seconds</p>
+      <p>${
+        dashboard
+          ? "checks:{'status': 'success'}<br>review:{'status': 'clear'}<br>announced:{'head': 'e3d11a8'}"
+          : "Calculate lease duration in seconds"
+      }</p>
     </div>
     ${
       duplicate
@@ -116,6 +120,21 @@ describe("public GitHub checkpoint capture", () => {
       "text-2",
     ]);
     expect(report.video).toBeNull();
+  });
+
+  test("focuses an asserted dashboard line rendered inside one multiline element", async () => {
+    const rawManifest = JSON.parse(JSON.stringify(manifest()));
+    rawManifest.checkpoints[0].expectedText = ["review:{'status': 'clear'}"];
+    rawManifest.checkpoints[0].focusText = "review:{'status': 'clear'}";
+    const outputRoot = await mkdtemp(join(tmpdir(), "hamsterdan-live-capture-dashboard-"));
+    const result = await captureFixtureEvidence(Buffer.from(JSON.stringify(rawManifest)), {
+      browser,
+      outputRoot,
+      source,
+      now: new Date("2026-08-17T08:00:00Z"),
+      fixture: () => ({status: 200, body: pageHtml({dashboard: true})}),
+    });
+    expect(await readdir(result.directory)).toContain("report.json");
   });
 
   test.each([
