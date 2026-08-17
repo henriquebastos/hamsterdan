@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -44,6 +45,7 @@ _ALLOWED = (
     *_MUTATIONS,
 )
 _UNFENCED_PREFIXES = ("reply:", "reminder:", "dash:")
+_RECOVERY_OPERATION = re.compile(r"[!-~]{1,256}\Z")
 
 
 class PrReadinessV5Application:
@@ -284,7 +286,7 @@ class PrReadinessV5Application:
             arguments = raw.get("arguments", {})
             if not isinstance(kind, str) or kind not in _ALLOWED or not isinstance(arguments, dict):
                 raise AgentProtocolError("conversation selected an invalid intent")
-            arg = self._intent_arg(kind, cast(dict[str, Any], arguments))
+            arg = self._intent_arg(kind, cast(dict[str, Any], arguments), conversation.text)
             value = CommentSeen(
                 id=str(conversation.comment_id),
                 kind=kind,
@@ -315,7 +317,7 @@ class PrReadinessV5Application:
         )
 
     @staticmethod
-    def _intent_arg(kind: str, arguments: dict[str, Any]) -> str:
+    def _intent_arg(kind: str, arguments: dict[str, Any], comment: str) -> str:
         if kind in _MUTATIONS:
             return str(arguments.get("request", ""))
         if kind in {"dismiss", "acknowledge", "defer"}:
@@ -323,7 +325,15 @@ class PrReadinessV5Application:
             if isinstance(findings, list) and findings:
                 return str(findings[0])
         if kind == "recover_publication":
-            return f"{arguments.get('target', '')}:{arguments.get('operation', '')}"
+            operation = arguments.get("operation")
+            if (
+                set(arguments) != {"operation"}
+                or not isinstance(operation, str)
+                or _RECOVERY_OPERATION.fullmatch(operation) is None
+                or operation not in comment
+            ):
+                raise AgentProtocolError("publication recovery operation was not explicitly named")
+            return operation
         if kind == "reassign":
             return str(arguments.get("assignee", ""))
         return ""
@@ -339,7 +349,7 @@ class PrReadinessV5Application:
             "snooze": [],
             "resume": [],
             "reassign": ["assignee"],
-            "recover_publication": ["target", "operation"],
+            "recover_publication": ["operation"],
             "change": ["request"],
             "update_base": ["request"],
             "resolve_conflict": ["request"],

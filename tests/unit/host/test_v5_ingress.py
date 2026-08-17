@@ -1802,6 +1802,127 @@ def test_v5_comment_classification_is_frozen_and_settled_only_after_manifest_com
     application.close()
 
 
+@pytest.mark.parametrize(
+    "recovery_operation",
+    [
+        "push:comment:5312521927:" + "a" * 40 + ":i1",
+        "findings:" + "a" * 40 + ":i1",
+        "rerun:L1:fingerprint",
+        "reminder:timer-1",
+        "reply:comment-1",
+        "dash:digest-1",
+        "ready:" + "a" * 40 + ":i1",
+    ],
+)
+def test_v5_publication_recovery_preserves_the_explicit_operation_at_ingress(
+    tmp_path: Path, recovery_operation: str
+) -> None:
+    identity = delivery()
+
+    class RecoveryRunner(Runner):
+        def converse(self, repository_url, request, *, operation: str, attempt: int, is_current=None):
+            declaration = next(item for item in request.allowed_intents if item["type"] == "recover_publication")
+            assert declaration == {
+                "type": "recover_publication",
+                "mutation": False,
+                "arguments": ["operation"],
+                "requires_explicit": True,
+            }
+            assert attempt == 1 and is_current is not None and is_current()
+            return ConversationResult(
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                [{"type": "recover_publication", "arguments": {"operation": recovery_operation}}],
+            )
+
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        Authority(),  # type: ignore[arg-type]
+        RecoveryRunner(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+    observation = Observation(identity, "issue_comment", "created", 44, 23, 31, "owner/repo", 7)
+    conversation = AdmittedConversation(
+        identity,
+        19,
+        5,
+        "human",
+        "MEMBER",
+        f"recover publication for `{recovery_operation}`",
+    )
+
+    application.process_observation(observation, conversation=conversation)
+
+    manifest = application.ingress.manifest(identity, SUBJECT)
+    assert manifest is not None and manifest.entries[-1].payload == {
+        "id": "19",
+        "kind": "recover_publication",
+        "arg": recovery_operation,
+        "authorized": True,
+    }
+    application.close()
+
+
+@pytest.mark.parametrize(
+    ("arguments", "comment"),
+    [
+        ({"operation": "push:comment:1:head:i1"}, "recover the publication"),
+        (
+            {"target": "mutation", "operation": "push:comment:1:head:i1"},
+            "recover push:comment:1:head:i1",
+        ),
+        ({"operation": "push:bad operation"}, "recover push:bad operation"),
+        ({"operation": "p" * 257}, "recover " + "p" * 257),
+    ],
+)
+def test_v5_publication_recovery_requires_one_bounded_verbatim_operation(
+    tmp_path: Path, arguments: dict[str, str], comment: str
+) -> None:
+    identity = delivery()
+
+    class InvalidRecoveryRunner(Runner):
+        def converse(self, repository_url, request, *, operation: str, attempt: int, is_current=None):
+            return ConversationResult(
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                [{"type": "recover_publication", "arguments": arguments}],
+            )
+
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        Authority(),  # type: ignore[arg-type]
+        InvalidRecoveryRunner(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+    observation = Observation(identity, "issue_comment", "created", 44, 23, 31, "owner/repo", 7)
+    conversation = AdmittedConversation(identity, 19, 5, "human", "MEMBER", comment)
+
+    application.process_observation(observation, conversation=conversation)
+
+    manifest = application.ingress.manifest(identity, SUBJECT)
+    assert manifest is not None and manifest.entries[-1].payload == {
+        "id": "19",
+        "kind": "",
+        "arg": "",
+        "authorized": False,
+    }
+    application.close()
+
+
 def test_comment_route_settlement_replays_after_crash_following_manifest_commit(tmp_path: Path) -> None:
     identity = delivery()
     authority = Authority()

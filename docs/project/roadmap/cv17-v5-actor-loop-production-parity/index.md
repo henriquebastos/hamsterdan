@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: Clean-green, first-attempt-flake, and the hero finding checkpoint are qualified live; later hero interactions remain
+status_reason: Clean-green and transient CI are qualified; PR 61 reached a real App repair commit; exact recovery and later hero interactions remain
 updated: 2026-08-17
 ---
 
@@ -104,8 +104,17 @@ making that ruling.
   the lease suggestion, conceptual approval defect, and cache defect with its
   related location. A topology-neutral redacted operator check now accepts
   production's native comments or V5's complete batch and correctly requires
-  readiness absence at that blocked checkpoint. Later repair, conversation,
-  approval, readiness, and recorded V5 journeys remain before CV17 acceptance.
+  readiness absence at that blocked checkpoint. PR 60 then preserved an
+  explicit provider `unable` as typed `RoundUnable` without an effect fault.
+  Fresh PR 61 admitted the same three finding shapes, and one explicit author
+  request produced a two-file App-authored repair commit under the corrected
+  coding boundary; all six repaired-head checks passed. Immediate verification
+  saw the remote ref ahead of GitHub's PR projection and correctly retained a
+  mutation fault instead of forging success. V5 now exposes its existing
+  low-level recovery door as one exact operation-scoped intent, while
+  production's target-scoped contract remains unchanged. Exact lookup-first
+  recovery, later conversation, distinct approval, readiness, and recorded V5
+  journeys remain before CV17 acceptance.
 
 ## Done condition
 

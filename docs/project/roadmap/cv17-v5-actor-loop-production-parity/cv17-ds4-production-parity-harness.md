@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: PRs 56–57 qualify clean-green and transient CI; PR 59 qualifies hero findings and a typed coding inability; coding and restart corrections are local; fresh repair proof remains
+status_reason: PRs 56–57 qualify clean-green and transient CI; PR 61 proves a real App repair commit; exact publication recovery and later hero interactions remain
 updated: 2026-08-17
 ---
 
@@ -767,8 +767,63 @@ validating the bound repository before reconstructing the global mutation
 operation. The terminal-route test now uses the real V5 binding shape, and the
 fault-route test retains legacy-binding coverage. Fifty focused agent, binding,
 startup, and restart tests pass. Quick checks, 1,171 Python tests, and nine Bun
-relay tests also pass. The Oracle commit ruling and a restart against retained
-PR 59 state remain required.
+relay tests also pass, and Oracle returned `clear to commit`. After commit
+`68348b8`, a restart against retained PR 59 state succeeded: the selected-V5
+host served healthy with all nine retained applications, no degraded Instance,
+and no provider or Git operation replay.
+
+### DS4.23 — Operation-scoped V5 publication recovery
+
+Fresh selected-V5 PR 60 at head
+`ae2f55fb1a5951a28f90caa7a7facc234bee030a` passed all six jobs in
+[Actions run 31999782257](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31999782257)
+and received Cris's distinct-human
+[`CHANGES_REQUESTED` review](https://github.com/HBNetwork/demo-pr-readiness/pull/60#pullrequestreview-4948812533).
+Its one completed provider review explicitly returned `status="unable"` with
+zero findings. V5 recorded `RoundUnable`, published no findings, and retained
+the unchanged head without treating the result as an effect fault. PR 60 was
+not retried.
+
+Fresh [PR 61](https://github.com/HBNetwork/demo-pr-readiness/pull/61) then
+passed six jobs at original head
+`02e084286c2324220d7b25164b685655ec87a07d` in
+[Actions run 32000338070](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/32000338070),
+received Cris's
+[`CHANGES_REQUESTED` review](https://github.com/HBNetwork/demo-pr-readiness/pull/61#pullrequestreview-4948851022),
+and published one complete
+[three-finding V5 batch](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312507139)
+plus the blocked
+[dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312507328).
+The redacted operator check passed all ten blocked-checkpoint assertions.
+
+Henrique made one explicit
+[repair request](https://github.com/HBNetwork/demo-pr-readiness/pull/61#issuecomment-5312521927).
+Operation `push:comment:5312521927:02e084286c2324220d7b25164b685655ec87a07d:i1`
+used the corrected 32-call coding boundary and produced App-authored commit
+[`e3d11a8`](https://github.com/HBNetwork/demo-pr-readiness/commit/e3d11a8171dbbb4af910b7c199a5f240dfb2441e),
+changing only `gate.py` and `cache.py` with three additions and three deletions.
+All six repaired-head jobs passed in
+[Actions run 32001768005](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/32001768005).
+The exact ref CAS landed, but immediate lookup-first verification observed the
+Git remote at the new commit while GitHub's PR projection still reported the
+old head. V5 therefore retained `FaultM` with reason `Git remote ref differs
+from the current PR projection`; it did not forge a `Pushed` settlement.
+
+That real ambiguity exposed a provider-facing recovery gap. V5's actor loops
+route recovery by the stable operation prefix and require an exact retained
+operation match, but the V5 classifier had copied production's narrower
+`target + operation` declaration and concatenated those fields. The resulting
+value could not reach the `push` recovery mailbox. V5 now declares
+`recover_publication(operation)`, preserves one 256-byte graphic operation
+verbatim, and additionally requires the author to name it verbatim in the
+admitted comment. Production's `target + operation` contract is unchanged.
+Positive ingress coverage spans `push`, `findings`, `rerun`, `reminder`,
+`reply`, `dash`, and `ready`; missing, extra-target, non-graphic, and oversized
+operations fail closed. One hundred eighty-eight focused protocol, ingress,
+mutation-gate, and actor-loop tests pass, followed by quick checks, 1,183
+Python tests, and nine Bun relay tests. Oracle returned `clear to commit`.
+Redeployment and one explicit lookup-first recovery of the retained PR 61
+operation remain.
 
 ## Done condition
 

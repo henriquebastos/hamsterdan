@@ -129,6 +129,43 @@ def test_conversation_accepts_one_declared_explicit_mutation() -> None:
     assert result.intents == [intent]
 
 
+def test_conversation_accepts_only_explicit_operation_scoped_recovery() -> None:
+    request = ConversationRequest(
+        "owner/repo",
+        1,
+        0,
+        "a" * 40,
+        "b" * 40,
+        {},
+        {},
+        {},
+        [],
+        [],
+        [
+            {
+                "type": "recover_publication",
+                "mutation": False,
+                "arguments": ["operation"],
+                "requires_explicit": True,
+            }
+        ],
+    )
+    intent = {
+        "type": "recover_publication",
+        "arguments": {"operation": "push:comment:9:" + "a" * 40 + ":i1"},
+        "mutation": False,
+        "explicit": True,
+        "confidence": 1,
+    }
+
+    result = _validate_result("conversation", result_for(request, intents=[intent]), request)
+    assert result.intents == [intent]
+
+    intent["explicit"] = False
+    with pytest.raises(AgentProtocolError, match="requires explicit"):
+        _validate_result("conversation", result_for(request, intents=[intent]), request)
+
+
 def test_conversation_rejects_undeclared_intent() -> None:
     request = conversation_request()
     intent = {

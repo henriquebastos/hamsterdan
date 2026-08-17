@@ -83,5 +83,13 @@ checkpoint: three marker-safe provider findings and complete lineage landed in
 one App-owned batch with the lease suggestion, conceptual approval defect, and
 cache related-location meaning. A topology-neutral redacted operator check
 accepts that V5 presentation or production's native comments while requiring
-readiness to remain absent at the blocked checkpoint. Later hero interactions
-and additional user-visible V5 journeys remain mandatory before CV17 closes.
+readiness to remain absent at the blocked checkpoint. PR 60 next preserved one
+explicit provider `unable` as a typed non-effect-fault result. Fresh PR 61
+repeated the complete finding checkpoint and one explicit author request
+produced a two-file App-authored repair commit with six green repaired-head
+jobs. Immediate verification found the remote ref ahead of GitHub's PR
+projection and retained a mutation fault rather than forging success. V5's
+existing low-level recovery door is now exposed as one exact operation-scoped
+intent without changing production's target-scoped contract. Exact recovery,
+later hero interactions, and additional user-visible V5 journeys remain
+mandatory before CV17 closes.
