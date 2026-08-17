@@ -22,6 +22,7 @@ from .protocol import (
     _CODING_STATUSES,
     _CONVERSATION_RESULT_FIELDS,
     _FINDING_FIELDS,
+    _FINDING_ID_PATTERN,
     _FINDING_SEVERITIES,
     _INTENT_FIELDS,
     _LINEAGE_FIELDS,
@@ -128,7 +129,10 @@ def _response_contract(kind: str) -> JSONDict:
             "finding_exact_fields": _contract_fields(
                 _FINDING_FIELDS,
                 {
-                    "id": "unique string identifier",
+                    "id": (
+                        f"unique 1-48 ASCII-character identifier matching {_FINDING_ID_PATTERN}; "
+                        "colon and whitespace are forbidden"
+                    ),
                     "path": "repository-relative path",
                     "line": "positive integer line number",
                     "related_locations": "array of related-location objects; primary location must not repeat",
@@ -148,7 +152,10 @@ def _response_contract(kind: str) -> JSONDict:
             "lineage_exact_fields": _contract_fields(
                 _LINEAGE_FIELDS,
                 {
-                    "finding_id": "unique finding identifier for this result",
+                    "finding_id": (
+                        "unique within lineage; for new and still_open copy an exact "
+                        f"returned finding.id matching {_FINDING_ID_PATTERN}"
+                    ),
                     "state": f"one of {sorted(_LINEAGE_STATES)}",
                     "supersedes": "prior finding identifier or null",
                 },
@@ -219,7 +226,7 @@ def encode_prompt(kind: str, repository_url: str, request: AgentRequest) -> str:
     payload = {
         "instructions": _SEMANTICS[kind],
         "kind": kind,
-        "prompt_version": 2,
+        "prompt_version": 3 if kind == "review" else 2,
         "repository_url": urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", "")),
         "request": asdict(request),
         "response_contract": _response_contract(kind),

@@ -2,7 +2,7 @@
 code: CV17.DS4
 level: Delivery Story
 status: Active
-status_reason: Fresh V5 clean-green and first-attempt-flake are qualified through PRs 56–57; additional GitHub-visible journeys and recordings remain
+status_reason: PRs 56–57 qualify clean-green and transient CI; hero PR 58 exposed a marker-safe finding-ID prompt gap now qualified locally
 updated: 2026-08-17
 ---
 
@@ -640,6 +640,45 @@ dashboard, readiness, and legacy-marker checks. PR 57 remains open and unchanged
 as the live transient-CI recovery evidence. `scripts/check full` passes 1,168
 Python tests, nine Bun relay tests, Ruff, formatting, typing, and source/wheel
 builds.
+
+### DS4.19 — Marker-safe provider finding identity contract
+
+The first fresh selected-V5 hero attempt is preserved at
+[`HBNetwork/demo-pr-readiness` PR 58](https://github.com/HBNetwork/demo-pr-readiness/pull/58),
+head `8d754daf23b9e268af3379959fb94a5ef41cd040`, with all six jobs successful
+in [Actions run 31991321091](https://github.com/HBNetwork/demo-pr-readiness/actions/runs/31991321091),
+Cris's distinct-human
+[`CHANGES_REQUESTED` review](https://github.com/HBNetwork/demo-pr-readiness/pull/58#pullrequestreview-4948204540),
+and the
+[App dashboard](https://github.com/HBNetwork/demo-pr-readiness/pull/58#issuecomment-5311473843).
+The host was deliberately stopped while the author and reviewer acted, then
+restarted with V5 still explicitly selected. Seven relay deliveries entered
+host custody immediately after restart; all 14 eventual PR-specific webhook
+rows reached terminal custody and canonical History remained failure-free.
+
+The provider operation completed with one accepted append and clean runtime
+closure, but strict result admission returned `RoundUnable(output_schema)`.
+Bounded structural diagnostics found the exact top-level review fields, three
+otherwise structurally complete finding objects, and three matching lineage
+objects. Every finding ID was 15 ASCII characters but contained a colon.
+Hamsterdan's existing marker-safe grammar is
+`[A-Za-z0-9][A-Za-z0-9._-]{0,47}`, so no agent review, finding, repair, or
+readiness effect entered the Net. PR 58 remains unchanged as visible
+fail-closed evidence; no hidden retry or provider substitution occurred.
+
+The correction keeps that validator intact. The canonical prompt now imports
+the validator's one grammar source and explicitly requires unique 1–48-character
+finding IDs matching it, forbids colons and whitespace, and requires `new` or
+`still_open` lineage to copy the exact returned ID while every lineage reference
+remains unique. Review prompt version 3 separates this contract from retained
+version-2 review operations; conversation and coding remain version 2. No
+partial output is normalized or repaired, and the production topology and
+default selector remain unchanged.
+
+The focused agent protocol and Petrus runtime-host checks pass 73 tests.
+`scripts/check full` passes 1,169 Python tests, nine Bun relay tests, Ruff,
+formatting, typing, and source/wheel builds. A fresh selected-V5 hero PR is still
+required to prove provider-produced marker-safe findings and native publication.
 
 ## Done condition
 

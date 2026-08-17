@@ -2,7 +2,7 @@
 code: CV17
 level: Value
 status: Active
-status_reason: DS2 and DS3 plus the deterministic portfolio are complete; fresh V5 clean-green and first-attempt-flake are qualified live while additional journeys remain
+status_reason: Clean-green and first-attempt-flake are qualified live; hero PR 58 exposed a marker-safe finding-ID prompt gap now qualified locally
 updated: 2026-08-17
 ---
 
@@ -94,8 +94,13 @@ making that ruling.
   broker; the same run then moved from failed attempt 1 to successful attempt 2
   at the unchanged head, followed by a clear provider review and readiness
   advisory with no repair or Git mutation. Clean-green and transient-CI
-  recovery are therefore qualified live; additional fresh V5 user journeys and
-  recordings remain before CV17 acceptance.
+  recovery are therefore qualified live. Fresh hero PR 58 then completed its
+  provider operation with three structurally complete findings, but strict
+  admission rejected colon-bearing finding IDs as `output_schema`. Review
+  prompt version 3 now derives and supplies the existing marker-safe finding
+  grammar without weakening validation or repairing provider output. PR 58
+  remains visible fail-closed evidence; a fresh hero and additional V5 user
+  journeys and recordings remain before CV17 acceptance.
 
 ## Done condition
 

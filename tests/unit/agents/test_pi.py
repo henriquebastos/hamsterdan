@@ -150,15 +150,15 @@ def run_coding_activity(subject: PiNativeRunner, runtime: Runtime, operation: st
 
 
 @pytest.mark.parametrize(
-    ("kind", "agent_request", "result_type"),
+    ("kind", "agent_request", "result_type", "prompt_version"),
     [
-        ("review", review_request(), ReviewResult),
-        ("conversation", conversation_request(), ConversationResult),
-        ("coding", coding_request(), CodingResult),
+        ("review", review_request(), ReviewResult, 3),
+        ("conversation", conversation_request(), ConversationResult, 2),
+        ("coding", coding_request(), CodingResult, 2),
     ],
 )
 def test_prompts_supply_exact_canonical_bounded_result_contract(
-    kind: str, agent_request: object, result_type: type[object]
+    kind: str, agent_request: object, result_type: type[object], prompt_version: int
 ) -> None:
     prompt = encode_prompt(kind, URL, agent_request)  # type: ignore[arg-type]
     assert prompt == encode_prompt(kind, URL, agent_request)  # type: ignore[arg-type]
@@ -167,7 +167,7 @@ def test_prompts_supply_exact_canonical_bounded_result_contract(
     assert payload == {
         "instructions": payload["instructions"],
         "kind": kind,
-        "prompt_version": 2,
+        "prompt_version": prompt_version,
         "repository_url": URL,
         "request": asdict(agent_request),  # type: ignore[arg-type]
         "response_contract": payload["response_contract"],
@@ -190,6 +190,20 @@ def test_prompt_nested_contracts_share_validator_field_sets() -> None:
     assert set(_REVIEW_RESULT_FIELDS) == {item.name for item in fields(ReviewResult)}
     assert set(_COMMON_RESULT_FIELDS) < _REVIEW_RESULT_FIELDS
     assert set(_CODING_RESULT_FIELDS) == {item.name for item in fields(CodingResult)}
+
+
+def test_prompt_requires_marker_safe_finding_and_lineage_identities() -> None:
+    payload = json.loads(encode_prompt("review", URL, review_request()))
+    nested = payload["response_contract"]["nested"]
+    grammar = "[A-Za-z0-9][A-Za-z0-9._-]{0,47}"
+
+    assert payload["prompt_version"] == 3
+    assert nested["finding_exact_fields"]["id"] == (
+        f"unique 1-48 ASCII-character identifier matching {grammar}; colon and whitespace are forbidden"
+    )
+    assert nested["lineage_exact_fields"]["finding_id"] == (
+        f"unique within lineage; for new and still_open copy an exact returned finding.id matching {grammar}"
+    )
 
 
 def test_supplied_review_contract_describes_outputs_the_validator_accepts() -> None:
@@ -233,7 +247,7 @@ def test_prompt_envelope_fields_remain_invalid_result_fields() -> None:
         "status": "clear",
         "findings": [],
         "lineage": [],
-        "prompt_version": 2,
+        "prompt_version": 3,
     }
 
     with pytest.raises(AgentProtocolError, match="result fields differ"):
