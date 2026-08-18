@@ -28,3 +28,12 @@ noun or move concrete sibling composition outside `host`.
 Resolution requires behavior-preserving focused and exact-replay tests across
 the split, followed by at least one generated dimension using the resulting
 boundary without circular imports or mutable global registration.
+
+## Current state
+
+CV18.DS3's accepted first slice completed and fully verified the
+behavior-preserving split. Shared strict contracts, modeled provider truth, and
+real-host DST composition now have separate acyclic owners; exact profile and
+checker identities are characterized, and the accepted vertical replay remains
+green. The debt stays open until the next slice adds at least one generated
+dimension through this boundary, as required by the resolution condition.

@@ -2,7 +2,7 @@
 code: CV18
 level: Value
 status: Active
-status_reason: DS1's correctness contract and DS2's deterministic real-host vertical are accepted; DS3 generated campaigns are next
+status_reason: DS1 and DS2 are accepted; DS3 is active after its behavior-preserving composition split
 updated: 2026-08-18
 related:
   - ../cv17-v5-actor-loop-production-parity/index.md
@@ -143,8 +143,10 @@ readiness policy never enter Petrus.
    generated semantic coverage; remaining named cut adapters move with DS3's
    generated dimensions.
 3. [CV18.DS3 — Generated readiness and recovery campaigns](cv18-ds3-generated-readiness-and-recovery-campaigns.md)
-   adds stateful generation, broad and targeted profiles, shrinking, independent
-   semantic checks, fair-phase convergence, and regression promotion.
+   is active. Its prerequisite behavior-preserving split now separates strict
+   contracts and provider adapters from profile/checker/Timeline composition;
+   stateful generation, broad and targeted profiles, shrinking, independent
+   semantic checks, fair-phase convergence, and regression promotion remain.
 4. [CV18.DS4 — Campaign operations and real-boundary confidence](cv18-ds4-campaign-operations-and-real-boundary-confidence.md)
    establishes bounded PR/scheduled campaigns and preserves real GitHub,
    process, persistence, and provider evidence as distinct complementary gates.

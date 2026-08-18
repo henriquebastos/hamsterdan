@@ -1,8 +1,8 @@
 ---
 code: CV18.DS3
 level: Delivery Story
-status: Planned
-status_reason: DS2 proves one replayable real-host vertical; generated semantic schedules, remaining fault adapters, and shrinking do not yet exist
+status: Active
+status_reason: The accepted prerequisite split preserves DS2 compatibility; generated schedules, remaining fault adapters, and shrinking remain
 updated: 2026-08-18
 related:
   - index.md
@@ -51,6 +51,21 @@ defines the expected semantic outcome.
   content and collaboration states, effect classes, fault outcomes, authority
   fences, crash cuts, recovery paths, terminal dispositions, and model/checker
   activations.
+
+## Current progress
+
+The accepted first slice extracted shared strict contracts and compatibility
+identities into `_readiness_contract.py` and modeled provider truth plus
+boundary adapters into `_readiness_provider.py`. Petrus profile, independent
+checker, Timeline, World, and replay composition remain together in
+`readiness_world.py`. Characterization fixes the exact profile and checker
+identities, and the existing crash/reconstruction artifact still replays
+exactly through the one interpreter.
+
+This is the prerequisite structural boundary, not generated semantic coverage.
+No command vocabulary, fault adapter, dependency, topology selection, or Petrus
+surface changed. The next slice must exercise the boundary with a generated
+dimension before the composition debt can close.
 
 ## Acceptance / Done condition
 

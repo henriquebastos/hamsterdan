@@ -10,7 +10,9 @@ from petrus.testing.dst import Disposition, DstError, InvariantViolation, StaleG
 from hamsterdan.host.service import HostService
 from hamsterdan.host.testing.readiness_world import (
     BASE,
+    CHECKER_IDENTITY,
     HEAD,
+    PROFILE_IDENTITY,
     PROFILE_LIMITS,
     READINESS_POLICY_DIGEST,
     ReadinessWorld,
@@ -35,6 +37,19 @@ def clean_green(timeline, *, response_lost: bool = True) -> str:
         timeline.lose_effect_response("readiness")
     timeline.deliver_webhook(delivery)
     return delivery
+
+
+def test_profile_and_checker_compatibility_identities_are_stable() -> None:
+    assert PROFILE_IDENTITY.model_dump(mode="json") == {
+        "name": "hamsterdan.readiness.production-world",
+        "version": 1,
+        "digest": "sha256:6d47f75e43b1011a8a666323b51d3e3d0ef361d876a3e5bde5ceff00ea9699dd",
+    }
+    assert CHECKER_IDENTITY.model_dump(mode="json") == {
+        "name": "hamsterdan.readiness.independent-model",
+        "version": 1,
+        "digest": "sha256:75de395e559a673b41f391de6a61300486a308d186eefd451e2cbcd769250cdc",
+    }
 
 
 def test_world_refuses_unknown_commands_and_undeclared_provider_calls(tmp_path: Path) -> None:
