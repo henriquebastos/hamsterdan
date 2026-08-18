@@ -89,3 +89,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-17 — PR 57 transient-CI capture qualified locally](entries/2026-08-17T0943Z-pr57-transient-ci-capture-qualified-locally.md)
 - [2026-08-17 — PR 57 real-GitHub transient-CI montage accepted](entries/2026-08-17T0948Z-pr57-real-github-transient-ci-montage-accepted.md)
 - [2026-08-17 — CV17 V5 production parity accepted](entries/2026-08-17T2040Z-cv17-v5-production-parity-accepted.md)
+- [2026-08-18 — Readiness correctness model and simulation contract accepted](entries/2026-08-18T0112Z-readiness-correctness-model-and-simulation-contract-accepted.md)

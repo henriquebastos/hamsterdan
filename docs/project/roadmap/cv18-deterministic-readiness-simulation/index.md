@@ -1,9 +1,9 @@
 ---
 code: CV18
 level: Value
-status: Planned
-status_reason: Hamsterdan has deterministic scenarios and crash tests, but no generated replayable host/provider fault campaign judged by an independent readiness model
-updated: 2026-08-17
+status: Active
+status_reason: DS1's independent expected-readiness model and simulation contract are accepted; DS2's executable real-host World is next
+updated: 2026-08-18
 related:
   - ../cv17-v5-actor-loop-production-parity/index.md
   - ../../../../tests/unit/readiness/net_v5/harness.py
@@ -24,7 +24,7 @@ be replayed locally from a retained, minimized scenario.
 CV18 applies Deterministic Simulation Testing (DST) to Hamsterdan's application
 layer. It does not ask a simulator to prove correctness or imitate GitHub in
 full. It runs the real host composition and readiness topology against a small
-independent domain oracle and explicit provider truth, while Petrus owns the
+independent expected-readiness model and explicit provider truth, while Petrus owns the
 generic logical event scheduler, runtime fault seams, and process-reconstruction
 discipline.
 
@@ -33,7 +33,7 @@ discipline.
 Hamsterdan already has strong pieces:
 
 - CV3's deterministic scenario laboratory and live recovery portfolio;
-- CV17's semantic parity oracles through the real host composition;
+- CV17's semantic parity checks through the real host composition;
 - a V5 fake world with authority, GitHub, agent, publication, mutation, rerun,
   dashboard, and classified-failure modes;
 - injected clocks for webhook custody, runnable work, agents, and V5 timer
@@ -58,15 +58,15 @@ CV17 and CV18 ask different questions:
   generated schedules and faults?
 
 CV18 does not compare internal traces or require two topologies forever. During
-coexistence, the independent domain oracle may judge both compositions where
+coexistence, the independent expected-readiness model may judge both compositions where
 that reduces migration risk, but CV18 neither reopens nor replaces completed
 CV17 and does not rule V5 as the default.
 
-Petrus CV19 owns the reusable deterministic event/fault harness. CV18.DS1 can
-define Hamsterdan's model and correctness contract independently; execution
-stories consume an accepted compatible Petrus test surface. If that surface is
-not ready, Hamsterdan records the blocked seam rather than forking a scheduler
-or importing private Petrus internals.
+Petrus CV19 owns the reusable deterministic event/fault harness. Petrus commit
+`1936ae8` now supplies the accepted `petrus.testing.dst/v1` test surface and
+`petrus-dst-world` v1 artifact consumed by execution stories. Hamsterdan pins
+that public surface rather than forking a scheduler or importing private Petrus
+runtime internals.
 
 ## Correctness contract
 
@@ -117,7 +117,7 @@ accident to progress.
 
 Hamsterdan owns:
 
-- the independent readiness/authority model and semantic checkers;
+- the independent expected-readiness/authority model and semantic checkers;
 - normalized GitHub, agent, human, timer, and provider event vocabularies;
 - provider truth and effect-ledger models, including definite rejection,
   accepted-but-response-lost ambiguity, delayed visibility, stale reads,
@@ -132,7 +132,7 @@ readiness policy never enter Petrus.
 ## Delivery
 
 1. [CV18.DS1 — Readiness correctness model and simulation contract](cv18-ds1-readiness-correctness-model-and-simulation-contract.md)
-   freezes the independent oracle, safety/liveness assumptions, event/fault
+   freezes the independent model, safety/liveness assumptions, event/fault
    vocabulary, bounds, Petrus compatibility seam, and project-level agent
    guidance.
 2. [CV18.DS2 — Deterministic host and provider fault world](cv18-ds2-deterministic-host-and-provider-fault-world.md)
@@ -175,8 +175,8 @@ provider ambiguity classes, timer/retry states, crash cuts, restart repairs,
 terminal dispositions, checker activations, fair-phase convergence, and known
 ungenerated dimensions.
 
-Every retained failure records the Hamsterdan and Petrus commits, scenario and
-oracle versions, expanded event/fault schedule, relevant runtime/dependency
+Every retained failure records the Hamsterdan and Petrus commits, scenario,
+profile, and checker versions, expanded event/fault schedule, relevant runtime/dependency
 identity, failing property, shrink lineage, and exact replay route. Seed is
 discovery metadata, not the sole durable reproduction key.
 
@@ -190,7 +190,7 @@ discovery metadata, not the sole durable reproduction key.
 - Exactly-once external-effect claims.
 - Random chaos without deterministic replay and executable properties.
 - Reusing the production readiness topology or host folds as the independent
-  oracle.
+  expected-readiness model.
 - Replacing real GitHub acceptance, process-kill, persistence, contract, load,
   security, or credential-isolation testing.
 - Global user AGENTS.md changes.

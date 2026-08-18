@@ -3,7 +3,7 @@ code: CV18.DS2
 level: Delivery Story
 status: Planned
 status_reason: The real host composition does not yet run against one replayable logical GitHub/agent/provider event-and-fault world
-updated: 2026-08-17
+updated: 2026-08-18
 related:
   - index.md
   - cv18-ds1-readiness-correctness-model-and-simulation-contract.md
@@ -20,8 +20,9 @@ truth and failure rather than ad hoc mocks.
 
 ## Scope
 
-- Consume the accepted Petrus CV19 event, logical-time, Activity, fault,
-  crash/reload, and replay contracts through an approved test surface.
+- Consume Petrus commit `1936ae8` only through the accepted
+  `petrus.testing.dst/v1` event, logical-time, fault, crash/reload, checker, and
+  `petrus-dst-world` v1 replay surface.
 - Drive real Hamsterdan composition doors with normalized events for:
   - PR open/head/base/policy, draft/resume/close, and reconciliation;
   - Actions workflow/run/job attempts and delayed or reordered observations;
@@ -52,7 +53,7 @@ truth and failure rather than ad hoc mocks.
    external effect accepted → terminal/acknowledgement crash → full host rebuild
    → lookup-first settlement without duplicate effect.
 2. Replaying an expanded scenario produces the same normalized provider truth,
-   accepted Histories/custody, oracle observations, and terminal disposition at
+   accepted Histories/custody, expected-model/checker observations, and terminal disposition at
    the same commits.
 3. The host is genuinely reconstructed; no runtime, provider client, mutable
    fake-world alias, timer object, or Engine survives a simulated process crash.
@@ -81,3 +82,11 @@ truth and failure rather than ad hoc mocks.
 - Reimplementing readiness, authority, retry, settlement, or Petrus logic in
   the fault world.
 - Reopening or replacing completed CV17, or selecting the default topology.
+
+## Accepted dependency limit
+
+Petrus artifact v1 retains authored normal endings. A live budget exhaustion or
+checker failure is explicit but cannot yet serialize its failed attempted
+operation. That does not block this story's successful vertical replay. Failed
+case shrinking/replay remains blocked for DS3 until Petrus evolves the artifact
+explicitly; Hamsterdan will not add a second runner.

@@ -102,10 +102,12 @@ three-actor hero. The Navigator accepted that campaign as sufficient
 user-visible parity evidence on 2026-08-17, completing CV17 without changing
 the production default or including sharded V5.
 
-Planned reliability work: [CV18 — Deterministic readiness simulation](cv18-deterministic-readiness-simulation/index.md).
-CV18 turns the existing semantic oracles, fake provider world, injected clocks,
+Active reliability work: [CV18 — Deterministic readiness simulation](cv18-deterministic-readiness-simulation/index.md).
+CV18 turns the existing semantic checks, fake provider world, injected clocks,
 and hand-authored crash cuts into generated, replayable readiness campaigns over
 the real host composition. It owns Hamsterdan's independent domain model and
 provider/authority fault world while consuming, rather than duplicating, the
-reusable deterministic event-and-fault substrate planned by Petrus CV19. CV18
-does not replace CV17 parity or make V5 the production default.
+accepted `petrus.testing.dst/v1` event-and-fault substrate from Petrus CV19. CV18
+does not replace CV17 parity or make V5 the production default. CV18.DS1's
+independent expected-readiness model and simulation contract are accepted;
+CV18.DS2's executable real-host World is the next planned slice.

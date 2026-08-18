@@ -117,9 +117,9 @@ uv sync --frozen
 scripts/check full
 ```
 
-The Petrus dependency is pinned to the exact accepted clean-root baseline.
-Canonical environments never float on Petrus `main`, assume package
-publication, or depend on a local checkout.
+The Petrus dependency is pinned to the exact accepted revision recorded in the
+project references. Canonical environments never float on Petrus `main`, assume
+package publication, or depend on a local checkout.
 
 ## Runtime ownership
 

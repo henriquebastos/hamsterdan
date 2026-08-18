@@ -27,6 +27,10 @@ The Driver records expected and observed behavior, pass/fail status, commands,
 GitHub identities and links, redacted diagnostics, and confidence limits. The
 Navigator receives an Experience Report rather than routine QA assignments.
 
+For durable, concurrent, stateful, or externally effectful work, include the
+proportional [complex-system correctness sketch](complex-system-correctness.md)
+in the Plan. Local pure changes do not need it.
+
 ## Documentation and history
 
 Keep roadmap state, decisions, worklog milestones, debt, operator instructions,

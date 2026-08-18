@@ -29,6 +29,16 @@ from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.git_publish import GitPublishResult, GitReconciliation, HostGitPublisher, _git_environment
 from hamsterdan.host.service import HostService
 from hamsterdan.host.topology import PRODUCTION, V5, ReadinessComposition
+from hamsterdan.testing.readiness import (
+    AuthorityClaim,
+    AuthorityFacts,
+    CheckFacts,
+    CiFacts,
+    HumanFacts,
+    ReadinessFacts,
+    ReadinessModel,
+    ReviewFacts,
+)
 
 HEAD = "a" * 40
 NEW_HEAD = "c" * 40
@@ -1356,6 +1366,42 @@ def assert_public_clone(repository_url: str) -> None:
     assert repository_url == "https://github.com/owner/repo.git"
 
 
+def clean_green_model_facts(result: JourneyResult) -> ReadinessFacts:
+    """Normalize only provider/agent facts; never inspect either topology."""
+    state, draft, merged, mergeable, _mergeable_state, head, base = result.provider_state
+    lifecycle = "merged" if merged else "draft" if draft else "closed" if state == "closed" else "active"
+    authority = AuthorityClaim(
+        installation=44,
+        repository=31,
+        pull_request=7,
+        head=head,
+        base=base,
+        policy="parity-policy",
+        lifecycle=lifecycle,
+        strict_base=True,
+        base_current=True,
+        mergeable=mergeable,
+    )
+    [review] = result.runner.review_results
+    return ReadinessFacts(
+        subject="github:44:31:pr:7",
+        authority=AuthorityFacts(generation=1, admitted=authority, provider=authority),
+        admitted_observations=("initial-pull-request-delivery",),
+        ci=CiFacts(
+            head=head,
+            required_checks=("build",),
+            checks=(
+                CheckFacts(
+                    name="build",
+                    status="success" if result.run_conclusion == "success" else "failure",
+                ),
+            ),
+        ),
+        review=ReviewFacts(head=head, status=review.status),
+        human=HumanFacts(approvals=1, required_approvals=1),
+    )
+
+
 def assert_clear_review(result: JourneyResult) -> None:
     assert len(result.runner.reviews) == 1
     repository_url, request, operation, attempt = result.runner.reviews[0]
@@ -2517,7 +2563,10 @@ def test_clean_green_user_journey(
     monkeypatch: pytest.MonkeyPatch,
     topology: ReadinessComposition,
 ) -> None:
-    assert_clean_green(run_clean_green(tmp_path / topology.topology, monkeypatch, topology))
+    result = run_clean_green(tmp_path / topology.topology, monkeypatch, topology)
+
+    assert_clean_green(result)
+    assert ReadinessModel().evaluate(clean_green_model_facts(result)).disposition == "ready"
 
 
 @pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])

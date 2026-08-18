@@ -51,6 +51,13 @@
   `typed_guard(..., converter=...)` authoring over the existing typed guard
   plan. Ordinary guards and canonical Net, History, wire, runtime, handler, and
   Activity contracts remain unchanged.
+- Accepted deterministic-simulation test-kit dependency:
+  `henriquebastos/petrus@1936ae8b78e6840fba043e06e5d886cdd27ccd4d`,
+  inspected and pinned 2026-08-18. It supplies the pytest-independent supported
+  `petrus.testing.dst/v1` defining module and `petrus-dst-world` artifact v1.
+  Hamsterdan consumes only that public test surface; profile, checker, API, and
+  artifact compatibility remain separately pinned. Artifact v1 cannot yet
+  retain a failed attempted operation from live budget/invariant failure.
 
 ## GitHub documentation
 

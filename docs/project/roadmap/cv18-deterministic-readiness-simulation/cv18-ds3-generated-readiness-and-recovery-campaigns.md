@@ -14,7 +14,7 @@ related:
 ## Intent
 
 Explore readiness, authority, collaboration, effect, and recovery state space
-automatically while an independent oracle—not the topology or fake provider—
+automatically while an independent expected-readiness model—not the topology or fake provider—
 defines the expected semantic outcome.
 
 ## Scope
