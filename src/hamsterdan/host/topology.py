@@ -142,9 +142,7 @@ V5 = ReadinessComposition(
 
 
 def select_readiness_composition(value: str | None) -> ReadinessComposition:
-    if value is None or value == "production":
-        return PRODUCTION
-    if value == "v5":
+    if value is None or value in {"production", "v5"}:
         return V5
     raise ValueError("readiness topology must be 'production' or 'v5'")
 

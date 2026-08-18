@@ -369,16 +369,21 @@ artifacts.
 
 ## Strict replay contract
 
-Hamsterdan pins Petrus commit `5ded726a339907175e5af6eb79cda9ab66816308`
+Hamsterdan pins Petrus commit `44cac5ff48ac371ebae56323941983f30db13c0d`
 and consumes only `petrus.testing.dst`:
 
-- API compatibility: `petrus.testing.dst/v3`;
-- artifact format: `petrus-dst-world`, version 3;
+- API compatibility: `petrus.testing.dst/v4`;
+- artifact format: `petrus-dst-world`, version 4;
 - replay-result format: version 2; and
-- public values/protocols: `Command`, `Fault`, `Budget`, `ScheduledCommand`,
-  `ApplyResult`, `GenerationStart`, `ObservationRequest`, `Observation`,
-  `CheckResult`, `ScenarioProfile`, `Checker`, `World`, `Timeline`,
-  `ScenarioArtifact`, `ReplayResult`, and `ScenarioRegistry`.
+- public values/protocols include `Command`, `Fault`, `BudgetV4`,
+  `ResourceUsage`, `ResourceScenarioProfile`, `ScheduledCommand`, `ApplyResult`,
+  `GenerationStart`, `ObservationRequest`, `Observation`, `CheckResult`,
+  `Checker`, `World`, `Timeline`, `ScenarioArtifact`, `ReplayResult`, and
+  `ScenarioRegistry`.
+
+Petrus's separately versioned `petrus.testing.dst.runner/v1` owns outer-process
+wall-clock containment. A killed call retains its acknowledged prefix and
+unfinished attempt but deliberately produces no deterministic artifact.
 
 Hamsterdan neither constructs a private Petrus `Coordinator` nor retains
 mutable Petrus Instance/History/Dispatch handles. The generic World sees one
@@ -497,9 +502,10 @@ Repository reality at the start of DS1:
 - focused CV17 recovery tests cover those omitted cuts separately. CV18 does
   not reopen or replace that accepted evidence.
 
-Production remains the default. V5 may be judged by the same independent model
-where useful, but DS1 does not select it as a replacement and does not include
-sharded V5. Instant Offer is the authoring precedent for World, Timeline,
+At DS1 acceptance, the former production topology remained the default and DS1
+did not select V5. The Navigator's subsequent topology ruling supersedes that
+operational constraint: non-sharded V5 is now the sole production composition,
+while sharded V5 remains excluded. Instant Offer is the authoring precedent for World, Timeline,
 business verbs, and run-until diagnostics—not the completeness bar. CV18 adds
 independent expected truth, deterministic IDs/order, true generation drop and
 reload, strict expanded replay, fair liveness, generation, shrinking, and
@@ -512,8 +518,8 @@ The semantic acceptance surface is:
 1. read the five-step authority story above;
 2. inspect `src/hamsterdan/testing/readiness.py` as the independent referee;
 3. inspect `tests/unit/testing/test_readiness_model.py` for its domain stories;
-4. inspect `test_clean_green_user_journey` to see production and V5 take
-   different real-host paths while the same independent facts yield `ready`;
+4. inspect the V5 World integration stories and CV17's historical
+   `test_clean_green_user_journey` parity evidence;
 5. confirm that the World/Timeline pseudocode matches the desired debugger-like
    authoring experience; and
 6. confirm that DS2—not this story—owns implementation of that World/Timeline
@@ -532,6 +538,7 @@ still require low-level Petrus/HostService knowledge from scenario authors.
 - Modifying Petrus, forking its scheduler, importing private Petrus runtime
   internals, or consuming Petrus code outside `petrus.testing.dst`.
 - Replacing CV17's parity checks or live acceptance.
-- Choosing V5 as production default or including sharded V5.
+- The later choice of V5 as production default was outside DS1 and is now owned
+  by its superseding decision; sharded V5 remains out of scope.
 - Claiming exhaustive coverage, exactly-once external effects, or correctness
   beyond executed evidence.

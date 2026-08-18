@@ -33,3 +33,8 @@ Focused model/parity verification passed 29 tests. `scripts/check full` passed
 1,210 Python tests, 44 media tests, nine webhook-relay tests, static checks, and
 source/wheel builds. No production behavior, CV17 evidence, topology default,
 Petrus repository, or sharded V5 changed.
+
+Historical scope note: those topology and Petrus-version statements describe
+DS1 at acceptance. The Navigator later selected non-sharded V5 as production,
+and CV18 now pins the supported Petrus v4 test kit; the superseding decision and
+current CV18 roadmap own present behavior.

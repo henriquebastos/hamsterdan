@@ -37,6 +37,7 @@ class _Effect:
     head: str
     content_digest: str
     authority: AuthorityClaim
+    provider_authority_at_acceptance: AuthorityClaim
     body: str
     visible: bool = True
     response_lost: bool = False
@@ -78,6 +79,7 @@ class ReadinessProviderTruth:
         self.review_threads: dict[str, bool] = {}
         self.comments: list[dict[str, Any]] = []
         self.effects: list[_Effect] = []
+        self.effect_authorities: dict[tuple[str, str], AuthorityClaim] = {}
         self.collisions: list[str] = []
         self.emitted: dict[str, _Emitted] = {}
         self.custodied: list[str] = []
@@ -94,6 +96,18 @@ class ReadinessProviderTruth:
         self.authority = authority
         if authority != self.authorities[-1]:
             self.authorities.append(authority)
+
+    def bind_effect_authority(self, kind: str, operation: str, authority: AuthorityClaim) -> None:
+        """Bind one provider operation to the full authority that authored it."""
+        key = kind, operation
+        existing = self.effect_authorities.get(key)
+        if (
+            existing is not None
+            and existing != authority
+            and any(effect.kind == kind and effect.operation == operation for effect in self.effects)
+        ):
+            raise ValueError("stable provider operation was reused under different authored authority")
+        self.effect_authorities[key] = authority
 
     def request(
         self,
@@ -276,13 +290,19 @@ class ReadinessProviderTruth:
             kind, operation, head = "dashboard", f"dashboard:{strict_digest(payload)[:24]}", self.authority.head
         else:
             kind, operation, head = matched.groups()
-        attempted_authority = next(
-            (authority for authority in reversed(self.authorities) if authority.head == head),
-            self.authority,
-        )
+        attempted_authority = self.effect_authorities.get((kind, operation))
+        if attempted_authority is None:
+            if kind == "readiness":
+                message = "readiness provider effect has no exact authored authority binding"
+                self.harness_errors.append(message)
+                raise AssertionError(message)
+            attempted_authority = next(
+                (authority for authority in reversed(self.authorities) if authority.head == head),
+                self.authority,
+            )
         existing = next((effect for effect in self.effects if effect.operation == operation), None)
         if existing is not None:
-            if existing.content_digest != strict_digest(payload):
+            if existing.content_digest != strict_digest(payload) or existing.authority != attempted_authority:
                 raise ValueError("stable provider operation collided with different content")
             comment = next(item for item in self.comments if item["id"] == existing.reference)
             return WireResponse(201, dict(comment))
@@ -302,12 +322,13 @@ class ReadinessProviderTruth:
         response_lost = cut == "after_acceptance_before_response"
         visible = cut != "before_visibility"
         effect = _Effect(
-            kind,
-            operation,
-            head,
-            strict_digest(payload),
-            attempted_authority,
-            payload,
+            kind=kind,
+            operation=operation,
+            head=head,
+            content_digest=strict_digest(payload),
+            authority=attempted_authority,
+            provider_authority_at_acceptance=self.authority,
+            body=payload,
             visible=visible,
             response_lost=response_lost,
             reference=identifier,
@@ -325,6 +346,69 @@ class ReadinessProviderTruth:
             raise GitHubBoundaryError("modeled provider accepted but response was lost")
         return WireResponse(201, dict(comment))
 
+    def retained_bytes(self) -> int:
+        """Return the canonical size of all reconstructable modeled provider truth."""
+        data = {
+            "authority": self.authority.dump(),
+            "authorities": [authority.dump() for authority in self.authorities],
+            "required_checks": list(self.required_checks),
+            "checks": self.checks,
+            "review_head": self.review_head,
+            "review_status": self.review_status,
+            "findings": self.findings,
+            "human_reviews": {key: list(value) for key, value in sorted(self.human_reviews.items())},
+            "review_threads": dict(sorted(self.review_threads.items())),
+            "comments": self.comments,
+            "effects": [
+                {
+                    "kind": effect.kind,
+                    "operation": effect.operation,
+                    "head": effect.head,
+                    "content_digest": effect.content_digest,
+                    "authority": effect.authority.dump(),
+                    "provider_authority_at_acceptance": effect.provider_authority_at_acceptance.dump(),
+                    "body": effect.body,
+                    "visible": effect.visible,
+                    "response_lost": effect.response_lost,
+                    "recovered": effect.recovered,
+                    "reference": effect.reference,
+                }
+                for effect in self.effects
+            ],
+            "effect_authorities": [
+                {"kind": key[0], "operation": key[1], "authority": authority.dump()}
+                for key, authority in sorted(self.effect_authorities.items())
+            ],
+            "collisions": self.collisions,
+            "emitted": [
+                {
+                    "delivery": item.delivery,
+                    "event": item.event,
+                    "action": item.action,
+                    "authority": item.authority.dump(),
+                }
+                for item in (self.emitted[key] for key in sorted(self.emitted))
+            ],
+            "custodied": self.custodied,
+            "admitted": [
+                {
+                    "delivery": item.delivery,
+                    "event": item.event,
+                    "action": item.action,
+                    "authority": item.authority.dump(),
+                }
+                for item in self.admitted
+            ],
+            "custody_actions": self.custody_actions,
+            "delivery_attempts": dict(sorted(self.delivery_attempts.items())),
+            "agent_calls": self.agent_calls,
+            "agent_terminal": self.agent_terminal,
+            "calls": self.calls,
+            "harness_errors": self.harness_errors,
+            "provider_truth_changes": self.provider_truth_changes,
+        }
+        return len(json.dumps(data, allow_nan=False, sort_keys=True, separators=(",", ":")).encode())
+
     def observation(self) -> dict[str, JsonValue]:
         accepted = Counter(effect.kind for effect in self.effects)
         return {
@@ -334,7 +418,9 @@ class ReadinessProviderTruth:
                     "kind": effect.kind,
                     "operation": effect.operation,
                     "head": effect.head,
+                    "authority": effect.authority.dump(),
                     "content_digest": effect.content_digest,
+                    "provider_authority_at_acceptance": effect.provider_authority_at_acceptance.dump(),
                     "visible": effect.visible,
                     "response_lost": effect.response_lost,
                     "recovered": effect.recovered,

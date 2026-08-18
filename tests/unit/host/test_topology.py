@@ -40,14 +40,14 @@ def forbidden_announce(work: AnnounceReq) -> ABlocked:
     raise AssertionError(f"provider announce gate executed for {work.op}")
 
 
-def test_selector_preserves_production_default_and_rejects_every_unknown_value() -> None:
-    assert select_readiness_composition(None) is PRODUCTION
-    assert select_readiness_composition("production") is PRODUCTION
+def test_selector_makes_v5_the_only_runtime_composition_and_rejects_every_unknown_value() -> None:
+    assert select_readiness_composition(None) is V5
+    assert select_readiness_composition("production") is V5
     assert select_readiness_composition("v5") is V5
     assert PRODUCTION.application_factory is PrReadinessApplication
     assert V5.application_factory is PrReadinessV5Application
 
-    for malformed in ("", "V5", "legacy", "production "):
+    for malformed in ("", "V5", "legacy", "production ", "sharded-v5"):
         with pytest.raises(ValueError, match="readiness topology"):
             select_readiness_composition(malformed)
 

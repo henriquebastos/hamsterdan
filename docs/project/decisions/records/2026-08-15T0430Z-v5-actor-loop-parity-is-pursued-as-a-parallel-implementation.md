@@ -2,6 +2,7 @@
 status: Decided
 raised: 2026-08-15
 decided: 2026-08-15
+superseded_by: 2026-08-18T1425Z-non-sharded-v5-replaces-the-parallel-production-topology.md
 deciders:
   - Henrique (Navigator)
 related:
@@ -11,6 +12,11 @@ related:
 ---
 
 # V5 actor-loop parity is pursued as a parallel implementation
+
+> **Superseded 2026-08-18:** the accepted parity portfolio enabled the
+> Navigator's later ruling that non-sharded V5 replaces the parallel
+> production topology. This record preserves the constraints under which CV17
+> established parity.
 
 ## Decision
 

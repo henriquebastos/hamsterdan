@@ -57,15 +57,17 @@ CV17 and CV18 ask different questions:
 - **CV18:** does the supported composition remain safe and recoverable across
   generated schedules and faults?
 
-CV18 does not compare internal traces or require two topologies forever. During
-coexistence, the independent expected-readiness model may judge both compositions where
-that reduces migration risk, but CV18 neither reopens nor replaces completed
-CV17 and does not rule V5 as the default.
+CV18 does not compare internal traces or require two topologies. CV17's accepted
+parity portfolio remains historical evidence; the Navigator subsequently ruled
+that non-sharded V5 replaces the parallel production topology. CV18 therefore
+drives the real V5 host only, without reopening CV17 or including sharded V5.
 
 Petrus CV19 owns the reusable deterministic event/fault harness. Petrus commit
-`5ded726` supplies the accepted `petrus.testing.dst/v3` test surface and
-`petrus-dst-world` v3 artifact consumed by generated execution stories, with
-strict legacy v1/v2 decode and replay. Hamsterdan pins that public surface
+`44cac5f` supplies the accepted `petrus.testing.dst/v4` test surface and
+`petrus-dst-world` v4 artifact consumed by generated execution stories, with
+strict v1-v3 decode and replay. V4 adds deterministic profile resource gauges;
+the separately versioned process runner contains a non-returning call without
+fabricating a replay artifact. Hamsterdan pins that public surface
 rather than forking a scheduler or importing private Petrus runtime internals.
 
 ## Correctness contract
@@ -136,17 +138,18 @@ readiness policy never enter Petrus.
    vocabulary, bounds, Petrus compatibility seam, and project-level agent
    guidance.
 2. [CV18.DS2 — Deterministic host and provider fault world](cv18-ds2-deterministic-host-and-provider-fault-world.md)
-   is complete: a debugger-like World/Timeline runs the production host under
-   Petrus scheduling, continuously checks independent expected truth, and
+   is complete: a debugger-like World/Timeline established the real-host
+   substrate under Petrus scheduling, continuously checked independent truth, and
    exactly replays signed-ingress → ambiguous effect → crash → reconstruction
    → lookup-first convergence. The accepted vertical is plumbing proof, not
-   generated semantic coverage; remaining named cut adapters move with DS3's
+   generated semantic coverage. DS3 now composes that surface over the sole
+   non-sharded V5 production host; remaining named cut adapters move with its
    generated dimensions.
 3. [CV18.DS3 — Generated readiness and recovery campaigns](cv18-ds3-generated-readiness-and-recovery-campaigns.md)
-   is active. Its first bounded Hypothesis state machine now generates one-step
-   host progress, duplicate delivery, effect ambiguity, and abrupt
-   reconstruction through the split composition; successful schedules and a
-   shrunk checker counterexample replay exactly. Broader and targeted profiles,
+   is active. Bounded Hypothesis state machines now generate one-step V5 host
+   progress, duplicate delivery, effect ambiguity, abrupt reconstruction, and
+   authority lifecycle/head movement. Successful schedules and shrunk checker
+   and resource counterexamples replay exactly. Broader targeted profiles,
    remaining fault adapters, semantic coverage, and campaign operations remain.
 4. [CV18.DS4 — Campaign operations and real-boundary confidence](cv18-ds4-campaign-operations-and-real-boundary-confidence.md)
    establishes bounded PR/scheduled campaigns and preserves real GitHub,
@@ -191,7 +194,8 @@ discovery metadata, not the sole durable reproduction key.
 
 - Reopening or replacing CV17's completed parity and fresh selected-V5
   acceptance.
-- Making V5 the default topology.
+- The V5 production replacement itself, which is owned by its separate
+  decision; sharded V5 remains excluded.
 - Full emulation of GitHub, Actions, Git, Pi, model providers, networks,
   filesystems, or CPython scheduling.
 - Exactly-once external-effect claims.

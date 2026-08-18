@@ -61,6 +61,14 @@
   that public test surface; profile, checker, API, artifact, and replay-result
   compatibility remain separately pinned. Profile/runtime implementation
   exceptions remain harness failures rather than promoted counterexamples.
+- Current resource-bounded deterministic-simulation dependency:
+  `henriquebastos/petrus@44cac5ff48ac371ebae56323941983f30db13c0d`,
+  inspected and pinned 2026-08-18. It supplies `petrus.testing.dst/v4` and
+  `petrus-dst-world` artifact v4 with strict v1-v3 compatibility, exact
+  deterministic profile-resource accounting, and the separately versioned
+  `petrus.testing.dst.runner/v1` outer-process containment contract. A killed
+  call yields an acknowledged prefix and unfinished attempt, never a fabricated
+  replay artifact.
 
 ## GitHub documentation
 

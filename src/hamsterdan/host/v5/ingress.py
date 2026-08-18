@@ -486,6 +486,12 @@ class V5IngressStore:
         with self._lock:
             return self._claim_row(subject, required=True).claim
 
+    def detached_claim(self, subject: str) -> CurrentClaim | None:
+        """Return the persisted host grant, if admission has established one."""
+        with self._lock:
+            stored = self._claim_row(subject)
+            return None if stored.revision == 0 else stored.claim
+
     def has_pending_custody(self, subject: str) -> bool:
         self._validate_subject(subject)
         with self._lock:

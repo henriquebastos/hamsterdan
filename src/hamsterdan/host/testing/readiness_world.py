@@ -1,4 +1,4 @@
-"""Deterministic external world around the real production HostService.
+"""Deterministic external world around the real non-sharded V5 HostService.
 
 Petrus owns scheduling, crash generations, checker cadence, and strict replay.
 This module owns only Hamsterdan commands, modeled provider truth, detached
@@ -13,10 +13,10 @@ import json
 import math
 import re
 import sqlite3
-import time
 import uuid
 import weakref
 from collections import Counter
+from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self, cast
@@ -24,7 +24,7 @@ from typing import Any, Self, cast
 from fastapi.testclient import TestClient
 from petrus.testing.dst import (
     ApplyResult,
-    Budget,
+    BudgetV4,
     CheckResult,
     Command,
     Disposition,
@@ -34,6 +34,7 @@ from petrus.testing.dst import (
     Observation,
     ObservationRequest,
     ReplayResult,
+    ResourceUsage,
     ScenarioArtifact,
     ScenarioContext,
     ScenarioRegistry,
@@ -49,7 +50,7 @@ from hamsterdan.github_app.config import HostConfig
 from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
 from hamsterdan.host.service import HostService
-from hamsterdan.host.topology import PRODUCTION
+from hamsterdan.host.topology import V5
 from hamsterdan.testing.readiness import (
     AuthorityClaim,
     AuthorityFacts,
@@ -74,6 +75,7 @@ from ._readiness_contract import (
     NAME,
     PROFILE_IDENTITY,
     PROFILE_LIMITS,
+    PROFILE_RESOURCE_LIMITS,
     READINESS_POLICY_DIGEST,
     SHA,
     SUBJECT,
@@ -104,7 +106,7 @@ class _Generation:
 
 
 class ReadinessScenarioProfile:
-    """Petrus profile over one opaque real production HostService generation."""
+    """Petrus profile over one opaque real non-sharded V5 HostService generation."""
 
     identity = PROFILE_IDENTITY
 
@@ -112,7 +114,6 @@ class ReadinessScenarioProfile:
         self.root = root
         self.truth = ReadinessProviderTruth()
         self._dropped: list[weakref.ReferenceType[_Generation]] = []
-        self._started_at = time.monotonic()
         self._host_followups = 0
 
     def validate(self, command: Command) -> Command:
@@ -263,7 +264,7 @@ class ReadinessScenarioProfile:
             runner=cast(Any, AgentRunner(self.truth)),
             agent_composition=composition,
             agent_routes=routes,
-            readiness_composition=PRODUCTION,
+            readiness_composition=V5,
             reminder_delay=86_400,
             clock=lambda: float(context.now()),
             transport_factory=transport_factory,
@@ -294,7 +295,6 @@ class ReadinessScenarioProfile:
                         )
                     )
                     self._host_followups += 1
-            self._assert_bounds(generation)
             return ApplyResult(disposition=disposition, value=value, scheduled=scheduled)
         finally:
             generation.context["value"] = None
@@ -422,16 +422,24 @@ class ReadinessScenarioProfile:
                 (self.truth.emitted[delivery] for delivery in self.truth.custodied if delivery not in admitted),
                 None,
             )
-            if candidate is not None:
-                self.truth.admitted.append(candidate)
             observed = generation.host.process_one()
             expected = None if candidate is None else {"delivery": candidate.delivery, "disposition": "completed"}
             observed_value = (
                 None if observed is None else {"delivery": observed.delivery_id, "disposition": observed.disposition}
             )
+            if candidate is not None and observed_value == expected:
+                self.truth.admitted.append(
+                    _Emitted(
+                        delivery=candidate.delivery,
+                        event=candidate.event,
+                        action=candidate.action,
+                        authority=self.truth.authority,
+                    )
+                )
             self.truth.custody_actions.append({"expected": expected, "observed": observed_value})
             return {"custody": observed_value}, "applied" if observed is not None else "refused_expected"
         if name == "readiness.host.activity_one":
+            self._bind_readiness_effect_authorities()
             processed = generation.host.run_one_activity()
             return {"processed": processed}, "applied" if processed else "refused_expected"
         if name == "readiness.host.drive_one":
@@ -485,13 +493,26 @@ class ReadinessScenarioProfile:
         custody = {delivery: generation.host.custody.status(delivery) for delivery in sorted(self.truth.emitted)}
         facts = self._facts()
         expected = ReadinessModel().evaluate(facts)
-        host = generation.host.subject_state(44, 31, 7)
+        detached = generation.host.subject_state(44, 31, 7)
+        host = {"ready": None, "snapshot": None} if detached is None else cast(dict[str, JsonValue], detached)
+        snapshot = host["snapshot"]
+        current_readiness = False
+        if type(snapshot) is dict and type(snapshot.get("incarnation")) is int:
+            operation = f"ready:{self.truth.authority.head}:i{snapshot['incarnation']}"
+            current_readiness = any(
+                effect.kind == "readiness"
+                and effect.operation == operation
+                and effect.authority == self.truth.authority
+                and effect.provider_authority_at_acceptance == self.truth.authority
+                for effect in self.truth.effects
+            )
         history, terminal_operations = _history(self.root)
         state: dict[str, JsonValue] = {
             "subject": SUBJECT,
             "expected": expected.dump(),
             "facts": facts.dump(),
-            "host": {"ready": False, "snapshot": None} if host is None else cast(dict[str, JsonValue], host),
+            "actual": {"readiness_published": current_readiness},
+            "host": host,
             "provider": self.truth.observation(),
             "custody": cast(dict[str, JsonValue], custody),
             "history": history,
@@ -499,56 +520,67 @@ class ReadinessScenarioProfile:
             "terminal_operations": terminal_operations,
             "work": cast(dict[str, JsonValue], generation.host.work_state()),
             "bounds": {
-                "limits": cast(dict[str, JsonValue], PROFILE_LIMITS),
+                "limits": cast(dict[str, JsonValue], PROFILE_RESOURCE_LIMITS),
                 "usage": self._usage(generation),
             },
         }
-        self._assert_bounds(
-            generation,
-            observation_bytes=len(bounded_json(state, PROFILE_LIMITS["observation_bytes"], "readiness observation")),
-        )
+        bounded_json(state, PROFILE_LIMITS["observation_bytes"], "readiness observation")
         return state
 
-    def _usage(self, generation: _Generation) -> dict[str, JsonValue]:
-        custody = generation.host.custody.counts()
-        motus = _motus(self.root)
+    def resource_usage(self, generation: _Generation | None) -> ResourceUsage:
+        """Account for all profile-retained data and hidden pending work."""
+        return ResourceUsage(values=self._usage(generation))
+
+    def _usage(self, generation: _Generation | None) -> dict[str, int]:
+        history = _history_records(self.root)
         history_bytes = sum(
             path.stat().st_size for path in (self.root / "applications").glob("*/*/*/history.jsonl") if path.is_file()
         )
-        return {
-            "authority_generations": len(self.truth.authorities),
-            "provider_truth_changes": self.truth.provider_truth_changes,
-            "webhook_emissions": len(self.truth.emitted),
-            "delivery_attempts": sum(self.truth.delivery_attempts.values()),
-            "checks": len(self.truth.checks),
-            "reviews": len(self.truth.human_reviews),
-            "findings": len(self.truth.findings),
-            "comments": len(self.truth.comments),
-            "threads": len(self.truth.review_threads),
-            "agent_operations": len(self.truth.agent_calls),
-            "provider_calls": len(self.truth.calls),
-            "effects": len(self.truth.effects),
-            "host_followups": self._host_followups,
-            "pending_custody": int(custody.get("pending", 0)),
-            "runnable": generation.host.runnable.count(),
-            "dispatch_entries": sum(cast(int, value) for value in motus.values()),
-            "history_bytes": history_bytes,
+        sqlite_rows, sqlite_bytes, sqlite_counts = _sqlite_retained(self.root)
+        terminal_occurrences = {
+            record.get("occurrence")
+            for record in history
+            if record.get("record") in {"ActivityCompleted", "ActivityFailed", "ActivityTerminalQuarantined"}
+            and type(record.get("occurrence")) is int
         }
-
-    def _assert_bounds(self, generation: _Generation, *, observation_bytes: int = 0) -> None:
-        usage = self._usage(generation)
-        for name, value in usage.items():
-            limit = PROFILE_LIMITS[name]
-            if cast(int, value) > limit:
-                raise RuntimeError(f"readiness profile bound {name} exhausted at {limit}")
-        if observation_bytes > PROFILE_LIMITS["observation_bytes"]:
-            raise RuntimeError(
-                f"readiness profile bound observation_bytes exhausted at {PROFILE_LIMITS['observation_bytes']}"
-            )
-        if time.monotonic() - self._started_at > PROFILE_LIMITS["wall_watchdog_seconds"]:
-            raise RuntimeError(
-                f"readiness profile wall watchdog exhausted at {PROFILE_LIMITS['wall_watchdog_seconds']} seconds"
-            )
+        requested_occurrences = {
+            record.get("occurrence")
+            for record in history
+            if record.get("record") == "ActivityRequested" and type(record.get("occurrence")) is int
+        }
+        return {
+            "retained.host.history_bytes": history_bytes,
+            "retained.host.history_records": len(history),
+            "retained.host.sqlite_bytes": sqlite_bytes,
+            "retained.host.sqlite_rows": sqlite_rows,
+            "retained.profile.dropped_generations": len(self._dropped),
+            "retained.profile.followups": self._host_followups,
+            "retained.provider.admissions": len(self.truth.admitted),
+            "retained.provider.agent_operations": len(self.truth.agent_calls),
+            "retained.provider.authorities": len(self.truth.authorities),
+            "retained.provider.bytes": self.truth.retained_bytes(),
+            "retained.provider.calls": len(self.truth.calls),
+            "retained.provider.checks": len(self.truth.checks),
+            "retained.provider.collisions": len(self.truth.collisions),
+            "retained.provider.comments": len(self.truth.comments),
+            "retained.provider.custody_actions": len(self.truth.custody_actions),
+            "retained.provider.delivery_attempts": sum(self.truth.delivery_attempts.values()),
+            "retained.provider.effect_bindings": len(self.truth.effect_authorities),
+            "retained.provider.effects": len(self.truth.effects),
+            "retained.provider.findings": len(self.truth.findings),
+            "retained.provider.reviews": len(self.truth.human_reviews),
+            "retained.provider.threads": len(self.truth.review_threads),
+            "retained.provider.truth_changes": self.truth.provider_truth_changes,
+            "retained.provider.webhooks": len(self.truth.emitted),
+            "pending.host.activities": len(requested_occurrences - terminal_occurrences),
+            "pending.host.custody": sqlite_counts.get("inbox.pending", 0),
+            "pending.host.dispatch": sqlite_counts.get("impetus_local_dispatch.pending", 0),
+            "pending.host.runnable": sqlite_counts.get("wakes", 0),
+            "pending.host.timer_acks": sqlite_counts.get("v5_timer_operations.pending_ack", 0),
+            "pending.host.timer_maturities": sqlite_counts.get("v5_timers.pending_maturity", 0),
+            "pending.host.timers": sqlite_counts.get("v5_timers.armed", 0),
+            "pending.profile.proposals": 0 if generation is None else len(generation.proposed),
+        }
 
     def _facts(self) -> ReadinessFacts:
         admitted_events = self.truth.admitted
@@ -556,7 +588,7 @@ class ReadinessScenarioProfile:
         generations = 0
         prior: AuthorityClaim | None = None
         for emitted in admitted_events:
-            if prior is None or emitted.authority.head != prior.head:
+            if prior is None or emitted.authority != prior:
                 generations += 1
             prior = emitted.authority
         checks = tuple(CheckFacts(str(item["name"]), cast(Any, item["status"])) for item in self.truth.checks)
@@ -587,6 +619,7 @@ class ReadinessScenarioProfile:
                 authority=effect.authority,
                 content_digest=effect.content_digest,
                 status="settled" if effect.recovered else "accepted",
+                provider_authority_at_acceptance=effect.provider_authority_at_acceptance,
                 blocks_readiness=False,
             )
             for effect in self.truth.effects
@@ -611,6 +644,47 @@ class ReadinessScenarioProfile:
             effects=effects,
         )
 
+    def _bind_readiness_effect_authorities(self) -> None:
+        records = _history_records(self.root)
+        terminal_occurrences = {
+            record.get("occurrence")
+            for record in records
+            if record.get("record") in {"ActivityCompleted", "ActivityFailed", "ActivityTerminalQuarantined"}
+            and type(record.get("occurrence")) is int
+        }
+        for record in records:
+            occurrence = record.get("occurrence")
+            if (
+                record.get("record") != "ActivityRequested"
+                or record.get("activity") != "announce_gate"
+                or type(occurrence) is not int
+                or occurrence in terminal_occurrences
+            ):
+                continue
+            payload = record.get("input")
+            work = payload.get("work") if isinstance(payload, dict) else None
+            if not isinstance(work, dict):
+                raise TypeError("V5 readiness Activity request has no strict work payload")
+            operation = work.get("op")
+            matches = []
+            for admitted in self.truth.admitted:
+                authority = admitted.authority
+                if (
+                    isinstance(operation, str)
+                    and authority.lifecycle == "active"
+                    and authority.mergeable
+                    and authority.head == work.get("head")
+                    and authority.base == work.get("base")
+                    and authority.policy == work.get("policy")
+                    and authority.strict_base is work.get("strict_base")
+                    and authority.base_current is work.get("base_current")
+                    and authority not in matches
+                ):
+                    matches.append(authority)
+            if not isinstance(operation, str) or len(matches) != 1:
+                raise AssertionError("V5 readiness Activity request has no unique independently admitted authority")
+            self.truth.bind_effect_authority("readiness", operation, matches[0])
+
     def drop(self, generation: _Generation) -> None:
         self._dropped.append(weakref.ref(generation))
         generation.client.close()
@@ -625,7 +699,7 @@ class ReadinessScenarioProfile:
 
 
 class ReadinessChecker:
-    """Compare independent expected facts with the detached real-host verdict."""
+    """Compare independent expected facts with V5's durable grant and effects."""
 
     identity = CHECKER_IDENTITY
     request = ObservationRequest(name="readiness.state", payload={})
@@ -633,6 +707,7 @@ class ReadinessChecker:
     def check(self, observation: Observation) -> CheckResult:
         state = cast(dict[str, JsonValue], observation.value)
         expected = cast(dict[str, JsonValue], state["expected"])
+        actual = cast(dict[str, JsonValue], state["actual"])
         host = cast(dict[str, JsonValue], state["host"])
         provider = cast(dict[str, JsonValue], state["provider"])
         effects = cast(list[dict[str, JsonValue]], provider["effects"])
@@ -653,9 +728,23 @@ class ReadinessChecker:
         terminal_overrun = cast(int, motus["terminals"]) > cast(int, motus["requests"])
         violations = cast(list[JsonValue], expected["violations"])
         work = cast(dict[str, JsonValue], state["work"])
-        parity = host["ready"] == expected["ready"] or (
-            host["snapshot"] is None and work["unloaded_application"] is True
+        facts = cast(dict[str, JsonValue], state["facts"])
+        authority = cast(dict[str, JsonValue], facts["authority"])
+        authority_lag = authority["admitted"] != authority["provider"]
+        unloaded = host["snapshot"] is None and work["unloaded_application"] is True
+        snapshot = host["snapshot"]
+        admitted = authority["admitted"]
+        snapshot_parity = unloaded or self._snapshot_matches(admitted, snapshot)
+        provider_authority = authority["provider"]
+        observed_readiness = self._current_readiness(effects, provider_authority, snapshot)
+        actual_parity = actual["readiness_published"] == observed_readiness
+        progress_disclosed = self._progress_disclosed(work, observation.instant)
+        readiness_parity = observed_readiness == expected["ready"] or (
+            expected["ready"] is True and not observed_readiness and progress_disclosed
         )
+        neutral_host_verdict = host["ready"] is None
+        ready_parity = readiness_parity and actual_parity and neutral_host_verdict
+        parity = ready_parity and snapshot_parity
         retained = bounded_json(state, PROFILE_LIMITS["observation_bytes"], "checker observation").decode()
         sensitive = [
             label
@@ -680,8 +769,14 @@ class ReadinessChecker:
             passed=passed,
             detail={
                 "parity": parity,
+                "ready_parity": ready_parity,
+                "snapshot_parity": snapshot_parity,
+                "authority_lag": authority_lag,
                 "expected_ready": expected["ready"],
-                "host_ready": host["ready"],
+                "readiness_published": observed_readiness,
+                "progress_disclosed": progress_disclosed,
+                "actual_parity": actual_parity,
+                "neutral_host_verdict": neutral_host_verdict,
                 "custody_action_mismatches": custody_mismatches,
                 "duplicate_acceptance": duplicate,
                 "effect_identity_collisions": collisions,
@@ -690,6 +785,56 @@ class ReadinessChecker:
                 "sensitive_values": sensitive,
                 "violations": violations,
             },
+        )
+
+    @staticmethod
+    def _snapshot_matches(admitted: JsonValue, snapshot: JsonValue) -> bool:
+        if admitted is None:
+            return snapshot is None
+        if type(admitted) is not dict or type(snapshot) is not dict:
+            return False
+        lifecycle = admitted["lifecycle"]
+        if lifecycle in {"closed", "merged"}:
+            return snapshot.get("phase") == "terminal"
+        expected_phase = "quiescent" if lifecycle == "draft" else "running"
+        return (
+            snapshot.get("phase") == expected_phase
+            and snapshot.get("head") == admitted["head"]
+            and snapshot.get("base_head") == admitted["base"]
+            and snapshot.get("policy_digest") == admitted["policy"]
+        )
+
+    @staticmethod
+    def _current_readiness(
+        effects: list[dict[str, JsonValue]],
+        provider_authority: JsonValue,
+        snapshot: JsonValue,
+    ) -> bool:
+        if type(provider_authority) is not dict or type(snapshot) is not dict:
+            return False
+        incarnation = snapshot.get("incarnation")
+        if type(incarnation) is not int:
+            return False
+        operation = f"ready:{provider_authority['head']}:i{incarnation}"
+        return any(
+            effect["kind"] == "readiness"
+            and effect["operation"] == operation
+            and effect["authority"] == provider_authority
+            and effect["provider_authority_at_acceptance"] == provider_authority
+            for effect in effects
+        )
+
+    @staticmethod
+    def _progress_disclosed(work: dict[str, JsonValue], instant: int) -> bool:
+        due = work["runnable_due"]
+        due_now = type(due) in {int, float} and math.ceil(cast(float, due)) <= instant
+        return any(
+            (
+                work["pending_custody"] is True,
+                work["unresolved_activity"] is True,
+                work["unloaded_application"] is True,
+                due_now,
+            )
         )
 
 
@@ -820,9 +965,9 @@ class ReadinessTimeline:
 
 
 class ReadinessWorld:
-    """Convenience owner for one deterministic production-host scenario."""
+    """Convenience owner for one deterministic non-sharded V5 host scenario."""
 
-    def __init__(self, root: Path, budget: Budget = DEFAULT_BUDGET, *, seed: int | None = None) -> None:
+    def __init__(self, root: Path, budget: BudgetV4 = DEFAULT_BUDGET, *, seed: int | None = None) -> None:
         self.profile = ReadinessScenarioProfile(root)
         # Petrus stores generations opaquely as ``object``; its registry makes
         # the same safe erasure after checking the profile identity.
@@ -837,7 +982,7 @@ class ReadinessWorld:
         return self.timeline()
 
     def artifact(self, scenario_id: str) -> ScenarioArtifact:
-        return self.world.artifact(scenario_id)
+        return cast(ScenarioArtifact, self.world.artifact(scenario_id))
 
     def close(self) -> None:
         self.world.close()
@@ -904,11 +1049,76 @@ def _history(root: Path) -> tuple[list[JsonValue], list[str]]:
     return summary, sorted(requested[item] for item in terminal & requested.keys())
 
 
+def _sqlite_retained(root: Path) -> tuple[int, int, dict[str, int]]:
+    """Count durable SQLite rows, scalar bytes, and named pending subsets."""
+    count = 0
+    encoded_bytes = 0
+    counts: Counter[str] = Counter()
+    for path in sorted(root.rglob("*.sqlite3")):
+        if not path.is_file():
+            continue
+        with closing(sqlite3.connect(path)) as database:
+            tables = [
+                str(row[0])
+                for row in database.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+                )
+            ]
+            for table in tables:
+                quoted = table.replace('"', '""')
+                columns = [str(row[1]) for row in database.execute(f'PRAGMA table_info("{quoted}")')]
+                scalar_bytes = "+".join(
+                    f'length(CAST(quote("{column.replace(chr(34), chr(34) * 2)}") AS BLOB))' for column in columns
+                )
+                row_count, data_bytes = database.execute(
+                    f'SELECT COUNT(*),COALESCE(SUM({scalar_bytes}),0) FROM "{quoted}"'
+                ).fetchone()
+                rows = int(row_count)
+                count += rows
+                counts[table] += rows
+                encoded_bytes += len(str(path.relative_to(root)).encode()) + len(table.encode()) + int(data_bytes)
+                if table == "inbox":
+                    counts["inbox.pending"] += _where_count(database, quoted, "status='pending'")
+                elif table == "v5_timer_operations":
+                    counts["v5_timer_operations.pending_ack"] += _where_count(
+                        database,
+                        quoted,
+                        "ack_delivered=0",
+                    )
+                elif table == "v5_timers":
+                    counts["v5_timers.pending_maturity"] += _where_count(
+                        database,
+                        quoted,
+                        "state='matured' AND maturity_delivered=0",
+                    )
+                    counts["v5_timers.armed"] += _where_count(database, quoted, "state='armed'")
+            if {
+                "impetus_local_dispatch_tasks",
+                "impetus_local_dispatch_terminals",
+                "impetus_local_dispatch_cancellations",
+            } <= set(tables):
+                counts["impetus_local_dispatch.pending"] += int(
+                    database.execute(
+                        "SELECT COUNT(*) FROM impetus_local_dispatch_tasks AS task"
+                        " LEFT JOIN impetus_local_dispatch_terminals AS terminal"
+                        " USING(instance,occurrence)"
+                        " LEFT JOIN impetus_local_dispatch_cancellations AS cancellation"
+                        " USING(instance,occurrence)"
+                        " WHERE terminal.occurrence IS NULL AND cancellation.occurrence IS NULL"
+                    ).fetchone()[0]
+                )
+    return count, encoded_bytes, dict(counts)
+
+
+def _where_count(database: sqlite3.Connection, quoted_table: str, where: str) -> int:
+    return int(database.execute(f'SELECT COUNT(*) FROM "{quoted_table}" WHERE {where}').fetchone()[0])
+
+
 def _motus(root: Path) -> dict[str, JsonValue]:
     path = root / "activity-dispatch.sqlite3"
     if not path.is_file():
         return {"requests": 0, "terminals": 0, "cancellations": 0}
-    with sqlite3.connect(path) as database:
+    with closing(sqlite3.connect(path)) as database:
         names = {str(row[0]) for row in database.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
         def count(table: str) -> int:
@@ -928,6 +1138,7 @@ __all__ = [
     "HEAD",
     "PROFILE_IDENTITY",
     "PROFILE_LIMITS",
+    "PROFILE_RESOURCE_LIMITS",
     "READINESS_POLICY_DIGEST",
     "ReadinessChecker",
     "ReadinessScenarioProfile",

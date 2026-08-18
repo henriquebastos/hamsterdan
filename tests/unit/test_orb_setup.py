@@ -271,15 +271,6 @@ def test_service_requires_an_owned_private_regular_runtime_environment() -> None
 def test_host_launcher_strips_setup_and_ambient_provider_authority(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
     assert _run(workspace, environment).returncode == 0
-    selected = subprocess.run(
-        ("scripts/hamsterdan-host", "topology", "v5"),
-        cwd=workspace,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert selected.returncode == 0, selected.stdout + selected.stderr
     capture = tmp_path / "environment-names"
     binaries = Path(environment["PATH"].split(":", 1)[0])
     _executable(binaries / "uv", '#!/bin/sh\nenv | cut -d= -f1 | sort > "$CAPTURE"\n')
@@ -307,7 +298,7 @@ def test_host_launcher_strips_setup_and_ambient_provider_authority(tmp_path: Pat
     assert result.returncode == 0, result.stdout
     names = set(capture.read_text().splitlines())
     assert REQUIRED_LAUNCH_NAMES <= names
-    assert "HAMSTERDAN_READINESS_TOPOLOGY" in names
+    assert "HAMSTERDAN_READINESS_TOPOLOGY" not in names
     assert "HAMSTERDAN_QUALIFICATION_FAULT" in names
     assert (
         not {
@@ -361,7 +352,7 @@ def test_host_launcher_refuses_unqualified_or_redirected_pi_authority(tmp_path: 
     for mutation in mutations:
         launch.write_text(mutation)
         result = subprocess.run(
-            ("scripts/hamsterdan-host", "topology", "v5"),
+            ("scripts/hamsterdan-host",),
             cwd=workspace,
             env=environment,
             check=False,
@@ -393,12 +384,12 @@ def test_host_launcher_refuses_a_symlinked_runtime_ancestor_with_stale_authority
     assert (stale_runtime / "hamsterdan.env").read_text()
 
 
-def test_host_topology_selector_is_private_explicit_and_reversible(tmp_path: Path) -> None:
+def test_host_launcher_rejects_the_retired_parallel_topology_switch(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
     assert _run(workspace, environment).returncode == 0
     selector = workspace / ".amp" / "runtime" / "readiness-topology"
 
-    selected = subprocess.run(
+    v5 = subprocess.run(
         ("scripts/hamsterdan-host", "topology", "v5"),
         cwd=workspace,
         env=environment,
@@ -406,17 +397,7 @@ def test_host_topology_selector_is_private_explicit_and_reversible(tmp_path: Pat
         capture_output=True,
         text=True,
     )
-    assert _private(selector)
-    assert selector.read_text() == "v5\n"
-    unknown = subprocess.run(
-        ("scripts/hamsterdan-host", "topology", "unknown"),
-        cwd=workspace,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    restored = subprocess.run(
+    production = subprocess.run(
         ("scripts/hamsterdan-host", "topology", "production"),
         cwd=workspace,
         env=environment,
@@ -425,9 +406,8 @@ def test_host_topology_selector_is_private_explicit_and_reversible(tmp_path: Pat
         text=True,
     )
 
-    assert selected.returncode == 0
-    assert unknown.returncode != 0
-    assert restored.returncode == 0
+    assert v5.returncode != 0
+    assert production.returncode != 0
     assert not selector.exists()
 
 

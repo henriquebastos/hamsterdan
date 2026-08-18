@@ -450,8 +450,20 @@ class PrReadinessV5Application:
         self._runtime().stop_durable_activities()
 
     def detached_state(self) -> dict[str, object]:
-        """Expose diagnostics without leaking the mutable V5 runtime graph."""
-        return {"ready": None, "snapshot": self._runtime().engine.snapshot()}
+        """Expose the durable authority grant without leaking V5 runtime state."""
+        claim = self.ingress.detached_claim(self.instance_id)
+        return {
+            "ready": None,
+            "snapshot": None
+            if claim is None
+            else {
+                "phase": claim.phase,
+                "incarnation": claim.incarnation,
+                "head": claim.head,
+                "base_head": claim.base,
+                "policy_digest": claim.policy,
+            },
+        }
 
     def _runtime(self) -> V5Runtime:
         if self.runtime is None:

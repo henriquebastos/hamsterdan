@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from typing import cast
 
 import pytest
-from hypothesis import HealthCheck, event, settings
+from hypothesis import HealthCheck, event, example, given, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -36,6 +36,9 @@ from hamsterdan.host.testing.readiness_world import (
     replay_readiness,
 )
 
+_AUTHORITY_HEAD = "c" * 40
+_GENERATED_ACTIONS = ("step", "restart", "redeliver-old", "redeliver-current")
+
 
 def _start_clean_green(timeline: ReadinessTimeline, *, response_lost: bool) -> str:
     timeline.set_pull_request(
@@ -54,6 +57,42 @@ def _start_clean_green(timeline: ReadinessTimeline, *, response_lost: bool) -> s
         timeline.lose_effect_response("readiness")
     timeline.deliver_webhook(delivery)
     return delivery
+
+
+def _retain_failure_artifact(
+    world: ReadinessWorld,
+    *,
+    scenario_id: str,
+    failure_path: Path,
+    replay_root: Path,
+    primary: BaseException,
+) -> bool:
+    if world.world.disposition not in {
+        Disposition.BUDGET_EXHAUSTED,
+        Disposition.INVARIANT_FAILURE,
+    }:
+        return False
+    try:
+        artifact = world.artifact(scenario_id)
+        encoded = encode_artifact(artifact) + b"\n"
+        failure_path.parent.mkdir(parents=True, exist_ok=True)
+        failure_path.write_bytes(encoded)
+        replayed = replay_readiness(artifact, replay_root)
+        if (
+            replayed.outcome != "pass"
+            or replayed.disposition != world.world.disposition.value
+            or replayed.failure is None
+        ):
+            raise AssertionError("retained readiness counterexample did not replay its exact failure")
+        primary.add_note(
+            f"retained exact readiness DST counterexample at {failure_path} ({artifact.expected.journal_digest})"
+        )
+    except Exception as retention_error:  # noqa: BLE001 - preserve the primary counterexample
+        primary.add_note(
+            f"secondary readiness counterexample retention failure: {type(retention_error).__name__}: {retention_error}"
+        )
+        return False
+    return True
 
 
 def test_timeline_steps_one_disclosed_host_action(tmp_path: Path) -> None:
@@ -75,14 +114,14 @@ class _DeliveryRecoveryMachine(RuleBasedStateMachine):
         self,
         *,
         force_failure: bool = False,
-        failure_path: Path = Path(".hypothesis/readiness-artifacts/readiness-counterexample-v3.json"),
+        failure_path: Path = Path(".hypothesis/readiness-artifacts/readiness-counterexample-v4.json"),
     ) -> None:
         super().__init__()
         self._directory = TemporaryDirectory(prefix="hamsterdan-readiness-campaign-")
         self._world: ReadinessWorld | None = None
         self._timeline: ReadinessTimeline | None = None
         self._delivery = ""
-        self._scenario_id = "readiness-generated-counterexample-v3"
+        self._scenario_id = "readiness-generated-counterexample-v4"
         self._seed = 0
         self._response_lost = False
         self._redeliver_at_finish = False
@@ -168,19 +207,18 @@ class _DeliveryRecoveryMachine(RuleBasedStateMachine):
                 observation = self._capture_failure(timeline.converge)
                 final = cast(dict[str, JsonValue], observation.value)
                 expected = cast(dict[str, JsonValue], final["expected"])
-                host = cast(dict[str, JsonValue], final["host"])
                 provider = cast(dict[str, JsonValue], final["provider"])
                 accepted = cast(dict[str, JsonValue], provider["accepted_by_kind"])
                 facts = cast(dict[str, JsonValue], final["facts"])
                 assert expected["ready"] is True
-                assert host["ready"] is True
+                assert cast(dict[str, JsonValue], final["actual"])["readiness_published"] is True
                 assert accepted["readiness"] == 1
                 assert facts["admitted_observations"] == [f"github-delivery:{self._delivery}"]
                 if self._response_lost:
                     assert cast(int, provider["lookup_recoveries"]) >= 1
 
                 artifact = world.artifact(self._scenario_id)
-                assert artifact.version == 3
+                assert artifact.version == 4
                 assert artifact.origin is not None
                 assert artifact.origin.seed == self._seed
                 assert artifact.origin.draws == {
@@ -256,33 +294,221 @@ class _DeliveryRecoveryMachine(RuleBasedStateMachine):
         if self._failure_retained:
             return
         world = self._world
-        if world is None or world.world.disposition not in {
-            Disposition.BUDGET_EXHAUSTED,
-            Disposition.INVARIANT_FAILURE,
-        }:
+        if world is None:
             return
+        self._failure_retained = _retain_failure_artifact(
+            world,
+            scenario_id=self._scenario_id,
+            failure_path=self._failure_path,
+            replay_root=Path(self._directory.name) / "failure-replay",
+            primary=primary,
+        )
+
+
+def _run_generated_actions(
+    world: ReadinessWorld,
+    timeline: ReadinessTimeline,
+    *,
+    old_delivery: str,
+    current_delivery: str,
+    actions: list[str],
+) -> ReadinessTimeline:
+    for action in actions:
+        if action == "step":
+            if timeline.pending():
+                timeline.step()
+        elif action == "restart":
+            timeline.crash("generated_authority_lifecycle_cut")
+            timeline = world.restart()
+        elif action == "redeliver-old":
+            if not timeline.pending():
+                timeline.deliver_webhook(old_delivery)
+        elif action == "redeliver-current":
+            if not timeline.pending():
+                timeline.deliver_webhook(current_delivery)
+        else:
+            raise AssertionError(f"unknown generated readiness action {action!r}")
+    return timeline
+
+
+def _drain(timeline: ReadinessTimeline) -> None:
+    while timeline.pending():
+        timeline.step()
+
+
+@settings(
+    max_examples=6,
+    deadline=None,
+    derandomize=True,
+    suppress_health_check=(HealthCheck.too_slow,),
+)
+@example(seed=0, path="active", before=[], after=[])
+@example(seed=0, path="draft_resume", before=[], after=[])
+@example(seed=0, path="closed", before=[], after=[])
+@given(
+    seed=st.integers(min_value=0, max_value=2**53 - 1),
+    path=st.sampled_from(("active", "draft_resume", "closed")),
+    before=st.lists(st.sampled_from(_GENERATED_ACTIONS), max_size=1),
+    after=st.lists(st.sampled_from(_GENERATED_ACTIONS), max_size=1),
+)
+def test_generated_authority_lifecycle_schedules_replay_exactly(
+    seed: int,
+    path: str,
+    before: list[str],
+    after: list[str],
+) -> None:
+    event(f"authority_path={path}")
+    event(f"authority_before={','.join(before) or 'none'}")
+    event(f"authority_after={','.join(after) or 'none'}")
+    directory = TemporaryDirectory(prefix="hamsterdan-readiness-authority-")
+    root = Path(directory.name)
+    world = ReadinessWorld(root / "live", seed=seed)
+    timeline = world.timeline()
+    scenario_id = f"readiness-authority-lifecycle-{path}-v2"
+    failure_path = Path(".hypothesis/readiness-artifacts/readiness-authority-lifecycle-v4.json")
+    closed = False
+    try:
+        old_delivery = _start_clean_green(timeline, response_lost=False)
+        _drain(timeline)
+        initial = cast(dict[str, JsonValue], timeline.observe().value)
+        assert cast(dict[str, JsonValue], initial["expected"])["ready"] is True
+
+        initial_lifecycle = "draft" if path == "draft_resume" else path
+        timeline.set_pull_request(
+            head=_AUTHORITY_HEAD,
+            base=BASE,
+            policy=READINESS_POLICY_DIGEST,
+            lifecycle=initial_lifecycle,
+            strict_base=True,
+            base_current=True,
+            mergeable=True,
+        )
+        timeline.set_ci(
+            head=_AUTHORITY_HEAD,
+            required_checks=("build",),
+            checks={"build": "success"},
+        )
+        timeline.set_review(head=_AUTHORITY_HEAD, status="clear")
+        current_delivery = timeline.emit_webhook(
+            "pull_request",
+            action="closed" if path == "closed" else "synchronize",
+        )
+        timeline.deliver_webhook(current_delivery)
+        timeline = _run_generated_actions(
+            world,
+            timeline,
+            old_delivery=old_delivery,
+            current_delivery=current_delivery,
+            actions=before,
+        )
+        _drain(timeline)
+
+        current = cast(dict[str, JsonValue], timeline.observe().value)
+        expected = cast(dict[str, JsonValue], current["expected"])
+        actual = cast(dict[str, JsonValue], current["actual"])
+        if path == "active":
+            assert expected["disposition"] == "ready"
+            assert actual["readiness_published"] is True
+        elif path == "closed":
+            assert expected["disposition"] == "terminal"
+            assert actual["readiness_published"] is False
+        else:
+            assert expected["disposition"] == "human_wait"
+            assert expected["blockers"] == ["pull_request_draft"]
+            assert actual["readiness_published"] is False
+            timeline.set_pull_request(
+                head=_AUTHORITY_HEAD,
+                base=BASE,
+                policy=READINESS_POLICY_DIGEST,
+                lifecycle="active",
+                strict_base=True,
+                base_current=True,
+                mergeable=True,
+            )
+            current_delivery = timeline.emit_webhook("pull_request", action="ready_for_review")
+            timeline.deliver_webhook(current_delivery)
+
+        timeline = _run_generated_actions(
+            world,
+            timeline,
+            old_delivery=old_delivery,
+            current_delivery=current_delivery,
+            actions=after,
+        )
+        final_observation = timeline.converge()
+        final = cast(dict[str, JsonValue], final_observation.value)
+        final_expected = cast(dict[str, JsonValue], final["expected"])
+        final_host = cast(dict[str, JsonValue], final["host"])
+        final_actual = cast(dict[str, JsonValue], final["actual"])
+        provider = cast(dict[str, JsonValue], final["provider"])
+        effects = cast(list[dict[str, JsonValue]], provider["effects"])
+        facts = cast(dict[str, JsonValue], final["facts"])
+
+        assert final_expected["violations"] == []
+        assert final_expected["generation"] == (3 if path == "draft_resume" else 2)
+        assert all(
+            effect["head"] == cast(dict[str, JsonValue], effect["provider_authority_at_acceptance"])["head"]
+            for effect in effects
+        )
+        assert len({cast(str, effect["operation"]) for effect in effects}) == len(effects)
+        assert len(cast(list[JsonValue], facts["admitted_observations"])) == (3 if path == "draft_resume" else 2)
+        if path == "closed":
+            assert final_expected["disposition"] == "terminal"
+            assert final_actual["readiness_published"] is False
+            assert cast(dict[str, JsonValue], final_host["snapshot"])["phase"] == "terminal"
+            assert cast(dict[str, JsonValue], provider["accepted_by_kind"])["readiness"] == 1
+        else:
+            assert final_expected["disposition"] == "ready"
+            assert final_actual["readiness_published"] is True
+            assert cast(dict[str, JsonValue], final_host["snapshot"])["head"] == _AUTHORITY_HEAD
+            assert cast(dict[str, JsonValue], provider["accepted_by_kind"])["readiness"] == 2
+
+        artifact = world.artifact(scenario_id)
+        assert artifact.version == 4
+        assert artifact.origin is not None
+        assert artifact.origin.seed == seed
+        operations = len(artifact.operations)
+        world.close()
+        closed = True
+
+        replayed = replay_readiness(artifact, root / "replay")
+        assert replayed.outcome == "pass"
+        assert replayed.disposition == Disposition.CONVERGED.value
+        assert replayed.failure is None
+        assert replayed.operations == operations
+    except (BudgetExhausted, InvariantViolation) as error:
+        _retain_failure_artifact(
+            world,
+            scenario_id=scenario_id,
+            failure_path=failure_path,
+            replay_root=root / "failure-replay",
+            primary=error,
+        )
+        raise
+    finally:
+        primary = sys.exception()
         try:
-            artifact = world.artifact(self._scenario_id)
-            encoded = encode_artifact(artifact) + b"\n"
-            self._failure_path.parent.mkdir(parents=True, exist_ok=True)
-            self._failure_path.write_bytes(encoded)
-            replayed = replay_readiness(artifact, Path(self._directory.name) / "failure-replay")
-            if (
-                replayed.outcome != "pass"
-                or replayed.disposition != world.world.disposition.value
-                or replayed.failure is None
-            ):
-                raise AssertionError("retained readiness counterexample did not replay its exact failure")
-            self._failure_retained = True
-            primary.add_note(
-                f"retained exact readiness DST counterexample at {self._failure_path} "
-                f"({artifact.expected.journal_digest})"
-            )
-        except Exception as retention_error:  # noqa: BLE001 - preserve the primary counterexample
-            primary.add_note(
-                "secondary readiness counterexample retention failure: "
-                f"{type(retention_error).__name__}: {retention_error}"
-            )
+            if not closed:
+                world.close()
+        except BaseException as close_error:
+            if primary is not None:
+                primary.add_note(
+                    f"secondary readiness campaign close failure: {type(close_error).__name__}: {close_error}"
+                )
+            else:
+                primary = close_error
+                raise
+        finally:
+            try:
+                directory.cleanup()
+            except BaseException as cleanup_error:
+                if primary is not None:
+                    primary.add_note(
+                        "secondary readiness campaign directory cleanup failure: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+                else:
+                    raise
 
 
 def test_generated_delivery_recovery_schedules_replay_exactly() -> None:
@@ -315,7 +541,7 @@ def test_shrunk_checker_failure_retains_an_exact_replayable_artifact(tmp_path: P
         )
 
     artifact = load_artifact(retained)
-    assert artifact.version == 3
+    assert artifact.version == 4
     assert artifact.expected.disposition == Disposition.INVARIANT_FAILURE.value
     replayed = replay_readiness(artifact, tmp_path / "retained-replay")
     assert replayed.outcome == "pass"

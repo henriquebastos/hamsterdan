@@ -32,7 +32,7 @@ from .agenticus import AgentComposition, AgentRouteStore, RoutedAgentRunner
 from .binding import preflight_topology, read_instance_binding
 from .protocol import ReadinessApplication
 from .runnable import RunnableIndex
-from .topology import PRODUCTION, ReadinessComposition
+from .topology import V5, ReadinessComposition
 
 LOG = logging.getLogger("hamsterdan.host")
 _FAULT_BOUNDARIES = frozenset({"agent", "comment"})
@@ -155,7 +155,7 @@ class HostService:
         agent_composition: AgentComposition,
         agent_routes: AgentRouteStore,
         agent_runtime: PiA2RuntimeHost | None = None,
-        readiness_composition: ReadinessComposition = PRODUCTION,
+        readiness_composition: ReadinessComposition = V5,
         workflow_path: str = ".github/workflows/ci.yml",
         reminder_delay: float = 259200,
         poll_interval: float = 0.25,
@@ -579,7 +579,18 @@ class HostService:
     def run_one_activity(self) -> int:
         """Execute at most one immediately claimable durable Activity Attempt."""
         with self._pump_lock:
-            if self._stop.is_set() or self.activity_worker is None:
+            if self._stop.is_set():
+                return 0
+            for instance, key in tuple(self._instances.items()):
+                if self.custody.has_pending(subject=key):
+                    continue
+                application = self._apps[key]
+                with self._locks[key]:
+                    completed = application.run_durable_activities(1)
+                    if completed:
+                        self._record_posture(instance, application.settle())
+                        return completed
+            if self.activity_worker is None:
                 return 0
             return self.activity_worker.run_available(limit=1)
 

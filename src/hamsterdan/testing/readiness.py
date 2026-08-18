@@ -154,8 +154,13 @@ class EffectObligation(StrictValue):
     authority: AuthorityClaim
     content_digest: str
     status: EffectStatus
+    provider_authority_at_acceptance: AuthorityClaim | None = None
     authorization: str | None = None
     blocks_readiness: bool = True
+
+    def __post_init__(self) -> None:
+        if self.status in {"accepted", "settled"} and self.provider_authority_at_acceptance is None:
+            raise ValueError("accepted effects require provider authority at acceptance")
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -401,7 +406,10 @@ class ReadinessModel:
             violations.append(f"effect_identity_collision:{operation}")
 
         for effect in facts.effects:
-            if effect.status in {"accepted", "settled"} and effect.authority != facts.authority.provider:
+            if (
+                effect.provider_authority_at_acceptance is not None
+                and effect.authority != effect.provider_authority_at_acceptance
+            ):
                 violations.append(f"stale_effect_settled:{effect.operation}")
 
         gate_blockers = tuple(blocker for blocker in blockers if not blocker.startswith(("effect_", "timer_")))
@@ -410,7 +418,7 @@ class ReadinessModel:
                 continue
             if effect.authority.lifecycle != "active":
                 violations.append(f"readiness_published_outside_active_lifecycle:{effect.operation}")
-            if gate_blockers:
+            if effect.provider_authority_at_acceptance == facts.authority.provider and gate_blockers:
                 violations.append(f"readiness_published_with_closed_gates:{effect.operation}")
         return tuple(violations)
 

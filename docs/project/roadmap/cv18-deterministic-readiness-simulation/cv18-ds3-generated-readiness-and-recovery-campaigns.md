@@ -2,7 +2,7 @@
 code: CV18.DS3
 level: Delivery Story
 status: Active
-status_reason: The first bounded generated recovery campaign and exact successful/failure replay are accepted; broader vocabulary, checker coverage, and operations remain
+status_reason: Generated V5 authority/lifecycle recovery and exact resource-bounded replay are implemented locally; broader vocabulary, checker coverage, and operations remain
 updated: 2026-08-18
 related:
   - index.md
@@ -70,21 +70,34 @@ state is inspected after every generated boundary; a declared fair phase then
 requires one ready host result and at most one accepted readiness effect. Every
 successful expanded schedule exactly replays through Petrus's one interpreter.
 
-A mutation-style checker-sensitivity regression creates a disposed-custody
+A checker-sensitivity regression creates a disposed-custody
 mismatch, lets Hypothesis reduce the executable story, retains the exact
-terminal checker-failure operation as a v3 artifact, and replays that failure
+terminal checker-failure operation as a strict artifact, and replays that failure
 through the same interpreter. Primary counterexamples survive teardown and
 artifact-retention diagnostics. Timeline `pending` and one-step `step` are
 generation-fenced, so a stale authoring handle cannot reach a replacement host.
 
-The project now pins Petrus commit `5ded726`, API `petrus.testing.dst/v3`,
-artifact v3, and replay-result v2. V3 adds seeded provenance; inherited v2/v3
-support retains World-owned budget/checker failures. Hypothesis is a bounded
-development dependency. No production topology, profile/checker identity, or
-V5 selection changed.
+The current local slice makes non-sharded V5 the sole runtime and DST
+composition after the Navigator's superseding topology ruling. A second bounded
+state machine now crosses active, draft→active, and closed authority/head
+movement, stale redelivery, one-step progress, and crash/restart. The
+independent model derives expected readiness from authored external facts;
+actual readiness comes only from authority-fenced provider acceptance plus the
+detached durable V5 grant, never a Petrus marking or production decision fold.
 
-This is one focused generated recovery dimension, not broad campaign
-completion. Lifecycle/head evolution, timer/retry schedules, remaining DS1
+The project now pins Petrus commit `44cac5f`, API
+`petrus.testing.dst/v4`, artifact v4, and replay-result v2. V4 continuously
+samples a profile-pinned manifest covering modeled provider truth, all durable
+SQLite rows/scalar bytes, canonical History, disclosed proposals, custody,
+Dispatch, Activity, runnable, and timer pending work. A deliberately low
+authority-retention limit proves that an accepted operation followed by
+resource exhaustion is retained and exactly replayed as a World counterexample.
+The separate process runner is reserved for DS4 process qualification: a killed
+call is a harness failure with an acknowledged prefix, not a fabricated
+deterministic artifact.
+
+This remains bounded generated evidence, not broad campaign completion.
+Timer/retry schedules, remaining DS1
 fault adapters, wider checker properties, semantic coverage reporting, and
 operational campaign retention remain active DS3/DS4 work.
 

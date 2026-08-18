@@ -39,3 +39,8 @@ current coherent vertical module must split provider adapters from
 profile/checker/Timeline ownership before that expansion; the debt ledger owns
 the trigger. Actual process-kill and real-provider correspondence remain DS4
 evidence.
+
+Historical scope note: this entry records the topology and Petrus v1 used when
+DS2 was accepted. The Navigator later selected non-sharded V5 as production;
+DS3's current World consumes Petrus v4 while preserving the accepted
+World/Timeline and independent-checker contract.

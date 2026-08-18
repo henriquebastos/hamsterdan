@@ -122,6 +122,7 @@ def test_a_new_provider_head_invalidates_old_readiness_until_fresh_evidence_arri
                 kind="readiness",
                 operation="ready:head-a",
                 authority=admitted_a,
+                provider_authority_at_acceptance=provider_b,
                 content_digest="head-a-ready",
                 status="settled",
             ),
@@ -150,6 +151,54 @@ def test_a_new_provider_head_invalidates_old_readiness_until_fresh_evidence_arri
         review=ReviewFacts(head=provider_b.head, status="clear"),
     )
     assert model.evaluate(current_b).disposition == "ready"
+
+
+def test_historical_effect_does_not_become_stale_when_provider_authority_later_moves() -> None:
+    authority_a = claim()
+    authority_b = claim(head="c" * 40)
+    facts = replace(
+        ready_facts(),
+        authority=AuthorityFacts(generation=1, admitted=authority_a, provider=authority_b),
+        effects=(
+            EffectObligation(
+                kind="readiness",
+                operation="ready:head-a",
+                authority=authority_a,
+                provider_authority_at_acceptance=authority_a,
+                content_digest="head-a-ready",
+                status="settled",
+            ),
+        ),
+    )
+
+    expectation = ReadinessModel().evaluate(facts)
+
+    assert expectation.blockers == ("current_authority_admission",)
+    assert expectation.violations == ()
+
+
+def test_effect_accepted_after_provider_authority_moves_is_stale() -> None:
+    authority_a = claim()
+    authority_b = claim(head="c" * 40)
+    facts = replace(
+        ready_facts(),
+        authority=AuthorityFacts(generation=1, admitted=authority_a, provider=authority_b),
+        effects=(
+            EffectObligation(
+                kind="readiness",
+                operation="ready:head-a-late",
+                authority=authority_a,
+                provider_authority_at_acceptance=authority_b,
+                content_digest="head-a-ready-late",
+                status="settled",
+            ),
+        ),
+    )
+
+    assert ReadinessModel().evaluate(facts).violations == (
+        "stale_effect_settled:ready:head-a-late",
+        "readiness_published_with_closed_gates:ready:head-a-late",
+    )
 
 
 def test_transient_ci_failure_progresses_but_persistent_repair_waits_for_a_human() -> None:
@@ -331,6 +380,7 @@ def test_coding_and_git_mutation_require_explicit_human_authorization(kind: str)
                 kind=kind,
                 operation="push:comment:1",
                 authority=claim(),
+                provider_authority_at_acceptance=claim(),
                 content_digest="change-1",
                 status="accepted",
             ),
@@ -358,6 +408,7 @@ def test_change_authorization_is_bound_to_one_exact_operation() -> None:
                 kind="coding",
                 operation="push:comment:2",
                 authority=claim(),
+                provider_authority_at_acceptance=claim(),
                 content_digest="change-2",
                 status="accepted",
                 authorization="delivery:comment:1",
@@ -383,6 +434,7 @@ def test_change_effect_must_reference_the_exact_authorization_identity() -> None
                 kind="coding",
                 operation="push:comment:1",
                 authority=claim(),
+                provider_authority_at_acceptance=claim(),
                 content_digest="change-1",
                 status="accepted",
                 authorization="delivery:someone-elses-comment",
@@ -407,6 +459,7 @@ def test_change_authorization_requires_its_human_delivery_to_be_admitted() -> No
                 kind="coding",
                 operation="push:comment:1",
                 authority=claim(),
+                provider_authority_at_acceptance=claim(),
                 content_digest="change-1",
                 status="accepted",
                 authorization="delivery:comment:1",
@@ -441,6 +494,7 @@ def test_change_authorization_is_bound_to_the_current_full_authority() -> None:
                 kind="git_mutation",
                 operation="push:comment:1",
                 authority=authority_b,
+                provider_authority_at_acceptance=authority_b,
                 content_digest="change-1",
                 status="accepted",
                 authorization="delivery:comment:1",
@@ -460,6 +514,7 @@ def test_duplicate_admission_and_effect_identity_collision_are_safety_violations
                 kind="dashboard",
                 operation="dashboard:1",
                 authority=claim(),
+                provider_authority_at_acceptance=claim(),
                 content_digest="one",
                 status="settled",
             ),
@@ -467,6 +522,7 @@ def test_duplicate_admission_and_effect_identity_collision_are_safety_violations
                 kind="dashboard",
                 operation="dashboard:1",
                 authority=claim(),
+                provider_authority_at_acceptance=claim(),
                 content_digest="two",
                 status="settled",
             ),
@@ -493,6 +549,7 @@ def test_stale_effect_and_premature_readiness_publication_are_safety_violations(
                 kind="readiness",
                 operation="ready:old",
                 authority=claim(head="0" * 40),
+                provider_authority_at_acceptance=claim(),
                 content_digest="ready",
                 status="settled",
             ),
@@ -519,6 +576,7 @@ def test_readiness_cannot_be_published_outside_an_active_lifecycle(lifecycle: st
                 kind="readiness",
                 operation=f"ready:{lifecycle}",
                 authority=authority,
+                provider_authority_at_acceptance=authority,
                 content_digest="ready",
                 status="settled",
             ),
@@ -548,6 +606,7 @@ def test_settled_effect_is_stale_when_provider_authority_moves_before_admission(
                 kind="git_mutation",
                 operation="push:stale",
                 authority=admitted,
+                provider_authority_at_acceptance=provider,
                 content_digest="change",
                 status="settled",
                 authorization="delivery:comment:1",
@@ -587,9 +646,9 @@ def test_model_values_fit_the_supported_petrus_detached_contract() -> None:
     )
     result = CheckResult(passed=expectation.ready, detail=expectation.dump())
 
-    assert API_COMPATIBILITY == "petrus.testing.dst/v3"
+    assert API_COMPATIBILITY == "petrus.testing.dst/v4"
     assert ARTIFACT_FORMAT == "petrus-dst-world"
-    assert ARTIFACT_VERSION == 3
+    assert ARTIFACT_VERSION == 4
     assert RESULT_VERSION == 2
     assert observation.value == facts.dump()
     assert result.passed is True

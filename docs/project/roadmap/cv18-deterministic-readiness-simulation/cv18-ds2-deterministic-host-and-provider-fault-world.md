@@ -13,6 +13,11 @@ related:
 
 # CV18.DS2 — Deterministic host and provider fault world
 
+> **Current topology note:** DS2 was accepted while the former production Net
+> was the default. The Navigator subsequently made non-sharded V5 the sole
+> production composition. DS3's current World preserves this contract and
+> authoring experience over the real V5 host; sharded V5 remains excluded.
+
 ## Intent
 
 Run the real supported Hamsterdan host composition under deterministic logical
@@ -57,10 +62,10 @@ it does not serialize the Python predicate.
 
 - Consume Petrus only through its accepted public deterministic event,
   logical-time, fault, crash/reload, checker, and replay surface. DS2 was
-  accepted against commit `1936ae8` / `petrus.testing.dst/v1`; DS3 advances the
-  project pin to commit `5ded726` / `petrus.testing.dst/v3` without changing the
-  DS2 profile or checker identity.
-- Compose the real production-default `HostService`, production readiness Net,
+  accepted against commit `1936ae8` / `petrus.testing.dst/v1`; DS3 first
+  advanced to `5ded726` / v3 and now pins `44cac5f` / v4 for deterministic
+  profile resources.
+- At acceptance, compose the real production-default `HostService`, production readiness Net,
   signed ASGI webhook route, durable custody, canonical Petrus History, Motus
   Activity worker, runnable index, and reconciliation path. V5 receives only
   compatibility-preserving clock propagation; it is not selected by this World.
@@ -194,4 +199,6 @@ endings. Petrus commit `5ded726` resolves that DS3 blocker: v2/v3 artifacts
 retain exact World-owned budget/checker failures, and v3 adds seeded provenance,
 while strict v1/v2 replay remains supported. Hamsterdan's first generated slice
 now promotes and replays a checker counterexample through the same interpreter;
-profile/runtime exceptions deliberately remain harness failures.
+profile/runtime exceptions deliberately remain harness failures. Current commit
+`44cac5f` adds v4 resource-bound failures and exact v1-v3 compatibility without
+changing that distinction.

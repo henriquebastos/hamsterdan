@@ -7,7 +7,7 @@ import json
 import re
 from typing import Literal, cast
 
-from petrus.testing.dst import Budget, CheckerIdentity, ProfileIdentity, digest_json
+from petrus.testing.dst import BudgetV4, CheckerIdentity, ProfileIdentity, digest_json
 from pydantic import JsonValue, TypeAdapter
 
 from hamsterdan.testing.readiness import AuthorityClaim
@@ -37,10 +37,44 @@ PROFILE_LIMITS = {
     "pending_custody": 64,
     "runnable": 64,
     "dispatch_entries": 256,
+    "reloads": 8,
     "payload_bytes": 65_536,
     "history_bytes": 2_097_152,
     "observation_bytes": 2_097_152,
-    "wall_watchdog_seconds": 60,
+}
+
+PROFILE_RESOURCE_LIMITS = {
+    "retained.host.history_bytes": PROFILE_LIMITS["history_bytes"],
+    "retained.host.history_records": 4_096,
+    "retained.host.sqlite_bytes": 4_194_304,
+    "retained.host.sqlite_rows": 4_096,
+    "retained.profile.dropped_generations": PROFILE_LIMITS["reloads"],
+    "retained.profile.followups": PROFILE_LIMITS["host_followups"],
+    "retained.provider.admissions": PROFILE_LIMITS["webhook_emissions"],
+    "retained.provider.agent_operations": PROFILE_LIMITS["agent_operations"],
+    "retained.provider.authorities": PROFILE_LIMITS["authority_generations"],
+    "retained.provider.bytes": 2_097_152,
+    "retained.provider.calls": PROFILE_LIMITS["provider_calls"],
+    "retained.provider.checks": PROFILE_LIMITS["checks"],
+    "retained.provider.collisions": PROFILE_LIMITS["effects"],
+    "retained.provider.comments": PROFILE_LIMITS["comments"],
+    "retained.provider.custody_actions": PROFILE_LIMITS["delivery_attempts"],
+    "retained.provider.delivery_attempts": PROFILE_LIMITS["delivery_attempts"],
+    "retained.provider.effect_bindings": PROFILE_LIMITS["effects"],
+    "retained.provider.effects": PROFILE_LIMITS["effects"],
+    "retained.provider.findings": PROFILE_LIMITS["findings"],
+    "retained.provider.reviews": PROFILE_LIMITS["reviews"],
+    "retained.provider.threads": PROFILE_LIMITS["threads"],
+    "retained.provider.truth_changes": PROFILE_LIMITS["provider_truth_changes"],
+    "retained.provider.webhooks": PROFILE_LIMITS["webhook_emissions"],
+    "pending.host.activities": PROFILE_LIMITS["dispatch_entries"],
+    "pending.host.custody": PROFILE_LIMITS["pending_custody"],
+    "pending.host.dispatch": PROFILE_LIMITS["dispatch_entries"],
+    "pending.host.runnable": PROFILE_LIMITS["runnable"],
+    "pending.host.timer_acks": PROFILE_LIMITS["dispatch_entries"],
+    "pending.host.timer_maturities": PROFILE_LIMITS["dispatch_entries"],
+    "pending.host.timers": PROFILE_LIMITS["dispatch_entries"],
+    "pending.profile.proposals": PROFILE_LIMITS["runnable"],
 }
 
 _POLICY_CANONICAL = {
@@ -56,8 +90,19 @@ READINESS_POLICY_DIGEST = hashlib.sha256(
 ).hexdigest()
 
 _PROFILE_DEFINITION = {
-    "topology": "production",
+    "dst_api": "petrus.testing.dst/v4",
+    "topology": "v5",
     "limits": PROFILE_LIMITS,
+    "resource_limits": PROFILE_RESOURCE_LIMITS,
+    "observation_semantics": [
+        "effect provider authority is retained at acceptance",
+        "readiness effect authorship is bound to the exact outstanding V5 Activity request",
+        "semantic admission records provider authority when custody executes",
+        "every distinct full admitted authority claim advances the model generation",
+        "provider movement does not retroactively invalidate historical effects",
+        "current readiness is an authority-fenced V5 provider effect",
+        "detached host state is the durable V5 authority grant, never a Petri marking",
+    ],
     "commands": [
         "readiness.agent.terminal",
         "readiness.github.ci.set",
@@ -79,17 +124,19 @@ _PROFILE_DEFINITION = {
     "faults": ["readiness.github.effect"],
 }
 PROFILE_IDENTITY = ProfileIdentity(
-    name="hamsterdan.readiness.production-world",
+    name="hamsterdan.readiness.v5-world",
     version=1,
     digest=digest_json(_PROFILE_DEFINITION),
 )
 CHECKER_IDENTITY = CheckerIdentity(
     name="hamsterdan.readiness.independent-model",
-    version=1,
+    version=2,
     digest=digest_json(
         {
             "checks": [
-                "expected readiness equals detached host verdict",
+                "expected readiness equals the current authority-fenced V5 provider effect after disclosed work drains",
+                "only disclosed eligible work permits transient readiness-publication lag",
+                "durable V5 grant matches active or quiescent authority and terminal lifecycle",
                 "modeled custody action equals detached host disposition",
                 "provider effect identity accepts at most once",
                 "independent readiness safety violations remain empty",
@@ -97,14 +144,15 @@ CHECKER_IDENTITY = CheckerIdentity(
         }
     ),
 )
-DEFAULT_BUDGET = Budget(
+DEFAULT_BUDGET = BudgetV4(
     actions=512,
     queued_commands=64,
     timer_advances=32,
     logical_instant=2_000_000,
-    reloads=8,
+    reloads=PROFILE_LIMITS["reloads"],
     predicate_polls=256,
     artifact_bytes=4_194_304,
+    profile_resources=PROFILE_RESOURCE_LIMITS,
 )
 
 COMMAND_KEYS = {

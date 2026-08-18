@@ -153,27 +153,19 @@ ambient Amp, GitHub, and provider credentials, and accepts only its exact
 generated key set. The host's Git publication boundary separately runs every
 Git command with global/system config, prompts, hooks, askpass, SSH-agent, and
 ambient credential helpers unavailable. Validate the App registration and
-selected-repository installation through that boundary:
+selected-repository installation through that boundary. Non-sharded V5 is the
+production topology after every setup:
 
 ```sh
 scripts/hamsterdan-host validate
 amp orb services ensure
 ```
 
-Production remains the default after every setup. To run one fresh V5 campaign,
-stop any existing writer, select V5 explicitly, validate, and then start the
-supervised service:
-
-```sh
-amp orb service stop hamsterdan-host  # harmless if already stopped
-scripts/hamsterdan-host topology v5
-scripts/hamsterdan-host validate
-amp orb services ensure
-```
-
-`scripts/hamsterdan-host topology production` removes the private local V5
-selector and restores the default. Unknown values fail closed. Existing state
-bindings still prevent either topology from opening the other's state.
+The former `scripts/hamsterdan-host topology ...` switch is retired and fails
+closed. Setup removes its stale private selector. Existing topology-labeled
+state still cannot be opened under a different topology; a root containing the
+former production topology must be migrated or replaced deliberately rather
+than silently reinterpreted as V5 state.
 
 The supervised service listens only for the local durable relay; it does not
 need a browser portal. Ensure the App's webhook URL is the exact capability from

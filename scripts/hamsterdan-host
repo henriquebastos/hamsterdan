@@ -12,7 +12,6 @@ import sys
 AMP_DIRECTORY = ".amp"
 RUNTIME_DIRECTORY = "runtime"
 ENVIRONMENT = "hamsterdan.env"
-SELECTOR = "readiness-topology"
 MAX_BYTES = 64 * 1024
 REQUIRED = {
     "HAMSTERDAN_ALLOWED_REPOSITORIES",
@@ -129,60 +128,11 @@ def _parse(value: bytes) -> dict[str, str]:
     return parsed
 
 
-def _topology(runtime: int) -> str | None:
-    try:
-        exists = os.stat(SELECTOR, dir_fd=runtime, follow_symlinks=False)
-    except FileNotFoundError:
-        return None
-    if not stat.S_ISREG(exists.st_mode) or _read(runtime, SELECTOR, 3) != b"v5\n":
-        _fail()
-    return "v5"
-
-
-def _select_topology(runtime: int, value: str) -> None:
-    _parse(_read(runtime, ENVIRONMENT))
-    selected = _topology(runtime)
-    if value == "production":
-        if selected is not None:
-            os.unlink(SELECTOR, dir_fd=runtime)
-            os.fsync(runtime)
-        return
-    if value != "v5":
-        _fail()
-    temporary = f".readiness-topology-{os.getpid()}"
-    try:
-        descriptor = os.open(
-            temporary,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
-            dir_fd=runtime,
-        )
-        try:
-            if os.write(descriptor, b"v5\n") != 3:
-                _fail()
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        os.replace(temporary, SELECTOR, src_dir_fd=runtime, dst_dir_fd=runtime)
-        os.fsync(runtime)
-    finally:
-        try:
-            os.unlink(temporary, dir_fd=runtime)
-        except FileNotFoundError:
-            pass
-
-
 def main() -> None:
     arguments = tuple(sys.argv[1:])
-    runtime = _open_runtime()
     if arguments[:1] == ("topology",):
-        try:
-            if len(arguments) != 2:
-                _fail()
-            _select_topology(runtime, arguments[1])
-        finally:
-            os.close(runtime)
-        return
+        _fail()
+    runtime = _open_runtime()
     try:
         port = os.getenv("PORT", "8000")
         if not port.isascii() or not port.isdecimal() or not 1 <= int(port) <= 65535:
@@ -201,9 +151,6 @@ def main() -> None:
         if qualification_fault:
             environment["HAMSTERDAN_QUALIFICATION_FAULT"] = qualification_fault
         environment.update(_parse(_read(runtime, ENVIRONMENT)))
-        topology = _topology(runtime)
-        if topology is not None:
-            environment["HAMSTERDAN_READINESS_TOPOLOGY"] = topology
     finally:
         os.close(runtime)
     host_arguments = arguments or ("serve", "--host", "0.0.0.0", "--port", port)

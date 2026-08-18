@@ -1105,12 +1105,21 @@ def test_v5_shutdown_during_first_attempt_prevents_a_second_instance_queue_claim
     host.close()
 
 
-def test_explicit_v5_composition_opens_the_real_v5_application_and_labeled_history(tmp_path: Path) -> None:
-    host = service(tmp_path, factory=PrReadinessV5Application, readiness_composition=V5)
+def test_default_composition_opens_the_real_v5_application_and_labeled_history(tmp_path: Path) -> None:
+    composition, routes = agent_custody(tmp_path)
+    host = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=object(),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+    )
+    host.registry.reconcile(44, ((31, "owner/one"),))
 
     application = host._application(44, 31, 7)
 
     assert isinstance(application, PrReadinessV5Application)
+    assert host.subject_state(44, 31, 7) == {"ready": None, "snapshot": None}
     assert host.activity_worker is None
     binding = read_instance_binding(tmp_path / "applications/44/31/7/binding.json")
     assert binding.topology == "v5" and not binding.legacy
@@ -1159,6 +1168,17 @@ def test_selected_v5_routes_custodied_webhook_into_identified_history_before_ack
 
     application = host._apps[(44, 31, 7)]
     assert isinstance(application, PrReadinessV5Application)
+    current = application.current_claim()
+    assert host.subject_state(44, 31, 7) == {
+        "ready": None,
+        "snapshot": {
+            "phase": "running",
+            "incarnation": 1,
+            "head": provider.head,
+            "base_head": provider.base,
+            "policy_digest": current.policy,
+        },
+    }
     expected = tuple(f"github-delivery:{delivery}:{door}" for door in ("on_head", "on_ready", "on_human"))
     assert len(acknowledged_after) == 1 and acknowledged_after[0][:3] == expected
     assert any(identity.startswith("v5-timer-command-applied:") for identity in acknowledged_after[0])

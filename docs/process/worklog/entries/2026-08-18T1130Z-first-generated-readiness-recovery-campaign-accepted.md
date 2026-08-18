@@ -33,3 +33,7 @@ The generated use satisfies and resolves the readiness-DST composition debt.
 CV18.DS3 remains Active: this is one focused recovery dimension, not coverage
 of lifecycle/head evolution, timer/retry schedules, all DS1 fault adapters,
 broad semantic combinations, coverage reporting, or campaign operations.
+
+Historical scope note: this first campaign was accepted before the Navigator
+selected non-sharded V5 as production and before Petrus v4 resource accounting
+shipped. The current DS3 roadmap owns the V5-only profile and v4 dependency.
