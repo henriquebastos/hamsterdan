@@ -38,6 +38,7 @@ from petrus.testing.dst import (
     ScenarioContext,
     ScenarioRegistry,
     ScheduledCommand,
+    StaleGeneration,
     Timeline,
     World,
     replay,
@@ -701,6 +702,18 @@ class ReadinessTimeline:
     def command(self, name: str, payload: object) -> ApplyResult:
         return self._timeline.command(name, payload)
 
+    def pending(self) -> bool:
+        self._require_current_generation()
+        return bool(self._owner.world.pending())
+
+    def step(self) -> ApplyResult:
+        self._require_current_generation()
+        return self._owner.world.step().result
+
+    def _require_current_generation(self) -> None:
+        if self._timeline.generation != self._owner.world.generation:
+            raise StaleGeneration(f"readiness Timeline generation {self._timeline.generation} is stale")
+
     def set_pull_request(
         self,
         *,
@@ -809,11 +822,11 @@ class ReadinessTimeline:
 class ReadinessWorld:
     """Convenience owner for one deterministic production-host scenario."""
 
-    def __init__(self, root: Path, budget: Budget = DEFAULT_BUDGET) -> None:
+    def __init__(self, root: Path, budget: Budget = DEFAULT_BUDGET, *, seed: int | None = None) -> None:
         self.profile = ReadinessScenarioProfile(root)
         # Petrus stores generations opaquely as ``object``; its registry makes
         # the same safe erasure after checking the profile identity.
-        self.world = World(cast(Any, self.profile), budget, checkers=(ReadinessChecker(),))
+        self.world = World(cast(Any, self.profile), budget, checkers=(ReadinessChecker(),), seed=seed)
         self._delivery = 0
 
     def timeline(self) -> ReadinessTimeline:
@@ -840,7 +853,7 @@ def replay_readiness(artifact: ScenarioArtifact, root: Path) -> ReplayResult:
     registry = ScenarioRegistry()
     registry.register_profile(ReadinessScenarioProfile(root))
     registry.register_checker(ReadinessChecker())
-    return replay(artifact, registry)
+    return cast(ReplayResult, replay(artifact, registry))
 
 
 def _config(root: Path) -> HostConfig:

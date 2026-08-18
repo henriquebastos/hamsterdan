@@ -2,7 +2,7 @@
 code: CV18.DS3
 level: Delivery Story
 status: Active
-status_reason: The accepted prerequisite split preserves DS2 compatibility; generated schedules, remaining fault adapters, and shrinking remain
+status_reason: The first bounded generated recovery campaign and exact successful/failure replay are accepted; broader vocabulary, checker coverage, and operations remain
 updated: 2026-08-18
 related:
   - index.md
@@ -54,18 +54,39 @@ defines the expected semantic outcome.
 
 ## Current progress
 
-The accepted first slice extracted shared strict contracts and compatibility
-identities into `_readiness_contract.py` and modeled provider truth plus
-boundary adapters into `_readiness_provider.py`. Petrus profile, independent
-checker, Timeline, World, and replay composition remain together in
-`readiness_world.py`. Characterization fixes the exact profile and checker
-identities, and the existing crash/reconstruction artifact still replays
-exactly through the one interpreter.
+The accepted prerequisite slice extracted shared strict contracts and
+compatibility identities into `_readiness_contract.py` and modeled provider
+truth plus boundary adapters into `_readiness_provider.py`. Petrus profile,
+independent checker, Timeline, World, and replay composition remain together in
+`readiness_world.py`; exact profile/checker identities and the accepted DS2
+vertical remain stable.
 
-This is the prerequisite structural boundary, not generated semantic coverage.
-No command vocabulary, fault adapter, dependency, topology selection, or Petrus
-surface changed. The next slice must exercise the boundary with a generated
-dimension before the composition debt can close.
+The accepted first generated slice now uses that split through a bounded
+Hypothesis state machine. A Petrus seed authoritatively chooses effect-response
+loss, initial crash order, finish-time redelivery, and scenario identity.
+Generated rules interleave one disclosed host action, duplicate webhook
+delivery, and abrupt generation reconstruction. The independent readiness
+state is inspected after every generated boundary; a declared fair phase then
+requires one ready host result and at most one accepted readiness effect. Every
+successful expanded schedule exactly replays through Petrus's one interpreter.
+
+A mutation-style checker-sensitivity regression creates a disposed-custody
+mismatch, lets Hypothesis reduce the executable story, retains the exact
+terminal checker-failure operation as a v3 artifact, and replays that failure
+through the same interpreter. Primary counterexamples survive teardown and
+artifact-retention diagnostics. Timeline `pending` and one-step `step` are
+generation-fenced, so a stale authoring handle cannot reach a replacement host.
+
+The project now pins Petrus commit `5ded726`, API `petrus.testing.dst/v3`,
+artifact v3, and replay-result v2. V3 adds seeded provenance; inherited v2/v3
+support retains World-owned budget/checker failures. Hypothesis is a bounded
+development dependency. No production topology, profile/checker identity, or
+V5 selection changed.
+
+This is one focused generated recovery dimension, not broad campaign
+completion. Lifecycle/head evolution, timer/retry schedules, remaining DS1
+fault adapters, wider checker properties, semantic coverage reporting, and
+operational campaign retention remain active DS3/DS4 work.
 
 ## Acceptance / Done condition
 

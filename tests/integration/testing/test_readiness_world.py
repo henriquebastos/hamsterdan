@@ -5,7 +5,15 @@ import json
 from pathlib import Path
 
 import pytest
-from petrus.testing.dst import Disposition, DstError, InvariantViolation, StaleGeneration
+from petrus.testing.dst import (
+    API_COMPATIBILITY,
+    ARTIFACT_VERSION,
+    Disposition,
+    DstError,
+    FailureOperation,
+    InvariantViolation,
+    StaleGeneration,
+)
 
 from hamsterdan.host.service import HostService
 from hamsterdan.host.testing.readiness_world import (
@@ -40,6 +48,8 @@ def clean_green(timeline, *, response_lost: bool = True) -> str:
 
 
 def test_profile_and_checker_compatibility_identities_are_stable() -> None:
+    assert API_COMPATIBILITY == "petrus.testing.dst/v3"
+    assert ARTIFACT_VERSION == 3
     assert PROFILE_IDENTITY.model_dump(mode="json") == {
         "name": "hamsterdan.readiness.production-world",
         "version": 1,
@@ -89,8 +99,16 @@ def test_real_host_recovers_one_ambiguous_readiness_effect_after_crash_and_exact
     assert world.profile.dropped_generations_alive() == 0
     with pytest.raises(StaleGeneration):
         stale.observe()
+    with pytest.raises(StaleGeneration):
+        stale.pending()
+    with pytest.raises(StaleGeneration):
+        stale.step()
 
     timeline = world.restart()
+    with pytest.raises(StaleGeneration):
+        stale.pending()
+    with pytest.raises(StaleGeneration):
+        stale.step()
     final = timeline.converge()
     assert final.value["expected"]["ready"] is True
     assert final.value["host"]["ready"] is True
@@ -177,9 +195,11 @@ def test_unexpected_retained_custody_cannot_be_normalized_as_success(
                 "observed": {"delivery": delivery, "disposition": "retained"},
             }
         ]
-        check = world.world.journal[-1]
+        check, failure = world.world.journal[-2:]
         assert check.kind == "check"
         assert check.value["result"]["detail"]["custody_action_mismatches"] == world.profile.truth.custody_actions
+        assert failure.kind == "failure"
+        assert failure.value["failure"]["kind"] == "invariant_failure"
     finally:
         world.close()
 
@@ -200,5 +220,17 @@ def test_terminally_disposed_custody_cannot_be_normalized_as_semantic_admission(
             "expected": {"delivery": delivery, "disposition": "completed"},
             "observed": {"delivery": delivery, "disposition": "disposed"},
         }
+        artifact = world.artifact("disposed-custody-invariant-v3")
+        failure = artifact.operations[-1]
+        assert isinstance(failure, FailureOperation)
+        assert failure.attempt.kind == "step"
+        assert failure.accepted_operations == 1
+        assert failure.failure.kind == "invariant_failure"
     finally:
         world.close()
+
+    replayed = replay_readiness(artifact, tmp_path / "replay")
+    assert replayed.outcome == "pass"
+    assert replayed.disposition == Disposition.INVARIANT_FAILURE.value
+    assert replayed.failure is not None
+    assert replayed.failure.kind == "invariant_failure"

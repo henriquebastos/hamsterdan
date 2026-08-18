@@ -107,11 +107,14 @@ CV18 turns the existing semantic checks, fake provider world, injected clocks,
 and hand-authored crash cuts into generated, replayable readiness campaigns over
 the real host composition. It owns Hamsterdan's independent domain model and
 provider/authority fault world while consuming, rather than duplicating, the
-accepted `petrus.testing.dst/v1` event-and-fault substrate from Petrus CV19. CV18
+accepted `petrus.testing.dst/v3` event-and-fault substrate from Petrus CV19. CV18
 does not replace CV17 parity or make V5 the production default. CV18.DS1's
 independent expected-readiness model and simulation contract are accepted.
 CV18.DS2's debugger-like real-production-host World is also accepted: its first
 strict replay crosses signed custody, an accepted-but-response-lost readiness
 effect, abrupt generation drop, fresh reconstruction, and lookup-first
-single-acceptance convergence. CV18.DS3 next owns generated schedules,
-remaining fault adapters, checker expansion, and shrinking.
+single-acceptance convergence. CV18.DS3 has accepted its first bounded stateful
+campaign over one-step host progress, duplicate delivery, effect ambiguity, and
+host reconstruction, including exact replay of successful schedules and a
+retained checker counterexample. Broader generated vocabulary, remaining fault
+adapters, checker expansion, semantic coverage, and campaign operations remain.

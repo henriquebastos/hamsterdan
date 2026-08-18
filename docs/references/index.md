@@ -52,12 +52,15 @@
   plan. Ordinary guards and canonical Net, History, wire, runtime, handler, and
   Activity contracts remain unchanged.
 - Accepted deterministic-simulation test-kit dependency:
-  `henriquebastos/petrus@1936ae8b78e6840fba043e06e5d886cdd27ccd4d`,
+  `henriquebastos/petrus@5ded726a339907175e5af6eb79cda9ab66816308`,
   inspected and pinned 2026-08-18. It supplies the pytest-independent supported
-  `petrus.testing.dst/v1` defining module and `petrus-dst-world` artifact v1.
-  Hamsterdan consumes only that public test surface; profile, checker, API, and
-  artifact compatibility remain separately pinned. Artifact v1 cannot yet
-  retain a failed attempted operation from live budget/invariant failure.
+  `petrus.testing.dst/v3` defining module and `petrus-dst-world` artifact v3,
+  while preserving strict v1/v2 artifact decode and replay. V3 adds seeded
+  provenance; v2/v3 retain and exactly replay World-owned budget exhaustion and
+  checker invariant failures through replay-result v2. Hamsterdan consumes only
+  that public test surface; profile, checker, API, artifact, and replay-result
+  compatibility remain separately pinned. Profile/runtime implementation
+  exceptions remain harness failures rather than promoted counterexamples.
 
 ## GitHub documentation
 

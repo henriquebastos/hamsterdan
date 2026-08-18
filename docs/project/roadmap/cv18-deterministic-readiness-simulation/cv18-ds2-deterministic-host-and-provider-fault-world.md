@@ -55,10 +55,11 @@ it does not serialize the Python predicate.
 
 ## Delivered scope
 
-- Consume Petrus commit `1936ae8b78e6840fba043e06e5d886cdd27ccd4d`
-  only through the accepted
-  `petrus.testing.dst/v1` event, logical-time, fault, crash/reload, checker, and
-  `petrus-dst-world` v1 replay surface.
+- Consume Petrus only through its accepted public deterministic event,
+  logical-time, fault, crash/reload, checker, and replay surface. DS2 was
+  accepted against commit `1936ae8` / `petrus.testing.dst/v1`; DS3 advances the
+  project pin to commit `5ded726` / `petrus.testing.dst/v3` without changing the
+  DS2 profile or checker identity.
 - Compose the real production-default `HostService`, production readiness Net,
   signed ASGI webhook route, durable custody, canonical Petrus History, Motus
   Activity worker, runnable index, and reconciliation path. V5 receives only
@@ -175,18 +176,22 @@ accepted these explicit carry-forwards:
   History/Dispatch/timer cuts, agent-terminal delivery cuts, and Git publication
   cuts—become executable in DS3 beside the generated schedules and checker
   properties that exercise them. DS2 does not claim those cuts ran.
-- `readiness_world.py` deliberately remains one coherent vertical composition
-  for this story. Before DS3 adds vocabulary, provider truth/adapters must split
-  from profile/checker/Timeline ownership under the linked debt item.
-- The v1 profile is one fixed safe subject and deterministic fixture family.
+- `readiness_world.py` was accepted as one coherent vertical composition for
+  this story. DS3 has since split provider truth/adapters from
+  profile/checker/Timeline ownership and exercised that boundary with its first
+  generated dimension, resolving the linked debt item.
+- The version-1 Hamsterdan profile is one fixed safe subject and deterministic
+  fixture family; that profile identity is separate from Petrus API/artifact
+  versions.
   Subject/profile expansion belongs to generated campaigns, not this proof.
 - Same-process generation revocation/collection is simulation evidence. Actual
   process-kill and real-provider correspondence remain separate DS4 evidence.
 
-## Accepted dependency limit
+## Resolved dependency limit
 
-Petrus artifact v1 retains authored normal endings. A live budget exhaustion or
-checker failure is explicit but cannot yet serialize its failed attempted
-operation. That does not block this story's successful vertical replay. Failed
-case shrinking/replay remains blocked for DS3 until Petrus evolves the artifact
-explicitly; Hamsterdan will not add a second runner.
+DS2 was accepted while Petrus artifact v1 could retain only authored normal
+endings. Petrus commit `5ded726` resolves that DS3 blocker: v2/v3 artifacts
+retain exact World-owned budget/checker failures, and v3 adds seeded provenance,
+while strict v1/v2 replay remains supported. Hamsterdan's first generated slice
+now promotes and replays a checker counterexample through the same interpreter;
+profile/runtime exceptions deliberately remain harness failures.

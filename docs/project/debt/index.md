@@ -9,4 +9,4 @@ an item only when debt should outlive one story's review notes.
 - [Petrus Pi A2 host factory delivered](items/petrus-lacks-supported-pi-a2-host-factory.md)
 - [Pi A2 workspace archive application resolved](items/pi-a2-workspace-archives-lack-safe-host-tree-application.md)
 - [DS11 publication observation resolved; new disposable cleanup open](items/ds11-live-publication-and-repository-cleanup.md)
-- [Readiness DST composition must split before campaign expansion](items/readiness-dst-composition-must-split-before-campaign-expansion.md)
+- [Readiness DST composition split resolved through generated use](items/readiness-dst-composition-must-split-before-campaign-expansion.md)

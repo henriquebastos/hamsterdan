@@ -4,7 +4,14 @@ import json
 from dataclasses import replace
 
 import pytest
-from petrus.testing.dst import API_COMPATIBILITY, ARTIFACT_FORMAT, CheckResult, Observation
+from petrus.testing.dst import (
+    API_COMPATIBILITY,
+    ARTIFACT_FORMAT,
+    ARTIFACT_VERSION,
+    RESULT_VERSION,
+    CheckResult,
+    Observation,
+)
 from pydantic import ValidationError
 
 from hamsterdan.testing.readiness import (
@@ -580,8 +587,10 @@ def test_model_values_fit_the_supported_petrus_detached_contract() -> None:
     )
     result = CheckResult(passed=expectation.ready, detail=expectation.dump())
 
-    assert API_COMPATIBILITY == "petrus.testing.dst/v1"
+    assert API_COMPATIBILITY == "petrus.testing.dst/v3"
     assert ARTIFACT_FORMAT == "petrus-dst-world"
+    assert ARTIFACT_VERSION == 3
+    assert RESULT_VERSION == 2
     assert observation.value == facts.dump()
     assert result.passed is True
 

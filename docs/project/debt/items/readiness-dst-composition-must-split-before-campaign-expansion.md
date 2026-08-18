@@ -1,6 +1,7 @@
 ---
-status: Accepted
+status: Resolved
 raised: 2026-08-18
+resolved: 2026-08-18
 owner: CV18.DS3
 related:
   - CV18.DS2
@@ -31,9 +32,16 @@ boundary without circular imports or mutable global registration.
 
 ## Current state
 
-CV18.DS3's accepted first slice completed and fully verified the
-behavior-preserving split. Shared strict contracts, modeled provider truth, and
-real-host DST composition now have separate acyclic owners; exact profile and
-checker identities are characterized, and the accepted vertical replay remains
-green. The debt stays open until the next slice adds at least one generated
-dimension through this boundary, as required by the resolution condition.
+Resolved by CV18.DS3. Its prerequisite slice completed and fully verified the
+behavior-preserving split: shared strict contracts, modeled provider truth, and
+real-host DST composition have separate acyclic owners; exact profile and
+checker identities are characterized; and the accepted vertical replay remains
+green.
+
+The next accepted slice satisfied the remaining resolution condition by
+running one bounded Hypothesis state machine through that split. It generates
+one-step host progress, duplicate delivery, effect ambiguity, and abrupt
+reconstruction without circular imports or mutable global registration, then
+exactly replays both successful schedules and a retained checker failure.
+Broader campaign vocabulary remains planned DS3 scope rather than debt in this
+ownership boundary.

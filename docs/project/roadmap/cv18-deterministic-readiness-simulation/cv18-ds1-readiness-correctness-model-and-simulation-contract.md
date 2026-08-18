@@ -369,11 +369,12 @@ artifacts.
 
 ## Strict replay contract
 
-Hamsterdan pins Petrus commit `1936ae8b78e6840fba043e06e5d886cdd27ccd4d`
+Hamsterdan pins Petrus commit `5ded726a339907175e5af6eb79cda9ab66816308`
 and consumes only `petrus.testing.dst`:
 
-- API compatibility: `petrus.testing.dst/v1`;
-- artifact format: `petrus-dst-world`, version 1; and
+- API compatibility: `petrus.testing.dst/v3`;
+- artifact format: `petrus-dst-world`, version 3;
+- replay-result format: version 2; and
 - public values/protocols: `Command`, `Fault`, `Budget`, `ScheduledCommand`,
   `ApplyResult`, `GenerationStart`, `ObservationRequest`, `Observation`,
   `CheckResult`, `ScenarioProfile`, `Checker`, `World`, `Timeline`,
@@ -406,12 +407,12 @@ is optional metadata; the expanded schedule plus code/profile/checker identities
 is authoritative. Artifacts contain no closures, predicates, clients, runtime
 handles, credentials, raw private payloads, or mutable aliases.
 
-Petrus v1 currently retains only authored normal endings. Live
-`budget_exhausted` and `invariant_failure` are explicit, but their failed
-attempted operation cannot yet be serialized as a replay artifact. This does
-not block DS2's successful vertical replay. It does block DS3 from claiming
-failed-case shrinking/replay until Petrus evolves the artifact explicitly;
-Hamsterdan must not invent a second failure runner.
+Petrus retains strict v1/v2 artifact decode and replay. V2/v3 artifacts retain
+the exact terminal attempted operation for World-owned `budget_exhausted` and
+checker `invariant_failure`; v3 adds seeded provenance. DS3 may therefore
+promote and exactly replay those failures through the same interpreter.
+Profile/runtime implementation exceptions remain harness failures rather than
+modeled counterexamples; Hamsterdan must not invent a second failure runner.
 
 ## Hamsterdan profile and real-host seam for DS2
 

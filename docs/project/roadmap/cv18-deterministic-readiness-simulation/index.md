@@ -2,7 +2,7 @@
 code: CV18
 level: Value
 status: Active
-status_reason: DS1 and DS2 are accepted; DS3 is active after its behavior-preserving composition split
+status_reason: DS1 and DS2 are accepted; DS3 has accepted its first generated recovery campaign and remains active for broader semantic coverage
 updated: 2026-08-18
 related:
   - ../cv17-v5-actor-loop-production-parity/index.md
@@ -63,10 +63,10 @@ that reduces migration risk, but CV18 neither reopens nor replaces completed
 CV17 and does not rule V5 as the default.
 
 Petrus CV19 owns the reusable deterministic event/fault harness. Petrus commit
-`1936ae8` now supplies the accepted `petrus.testing.dst/v1` test surface and
-`petrus-dst-world` v1 artifact consumed by execution stories. Hamsterdan pins
-that public surface rather than forking a scheduler or importing private Petrus
-runtime internals.
+`5ded726` supplies the accepted `petrus.testing.dst/v3` test surface and
+`petrus-dst-world` v3 artifact consumed by generated execution stories, with
+strict legacy v1/v2 decode and replay. Hamsterdan pins that public surface
+rather than forking a scheduler or importing private Petrus runtime internals.
 
 ## Correctness contract
 
@@ -143,10 +143,11 @@ readiness policy never enter Petrus.
    generated semantic coverage; remaining named cut adapters move with DS3's
    generated dimensions.
 3. [CV18.DS3 — Generated readiness and recovery campaigns](cv18-ds3-generated-readiness-and-recovery-campaigns.md)
-   is active. Its prerequisite behavior-preserving split now separates strict
-   contracts and provider adapters from profile/checker/Timeline composition;
-   stateful generation, broad and targeted profiles, shrinking, independent
-   semantic checks, fair-phase convergence, and regression promotion remain.
+   is active. Its first bounded Hypothesis state machine now generates one-step
+   host progress, duplicate delivery, effect ambiguity, and abrupt
+   reconstruction through the split composition; successful schedules and a
+   shrunk checker counterexample replay exactly. Broader and targeted profiles,
+   remaining fault adapters, semantic coverage, and campaign operations remain.
 4. [CV18.DS4 — Campaign operations and real-boundary confidence](cv18-ds4-campaign-operations-and-real-boundary-confidence.md)
    establishes bounded PR/scheduled campaigns and preserves real GitHub,
    process, persistence, and provider evidence as distinct complementary gates.

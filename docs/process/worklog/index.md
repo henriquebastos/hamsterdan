@@ -92,3 +92,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-18 — Readiness correctness model and simulation contract accepted](entries/2026-08-18T0112Z-readiness-correctness-model-and-simulation-contract-accepted.md)
 - [2026-08-18 — Deterministic readiness World accepted](entries/2026-08-18T0250Z-deterministic-readiness-world-accepted.md)
 - [2026-08-18 — Readiness DST composition split accepted](entries/2026-08-18T1030Z-readiness-dst-composition-split-accepted.md)
+- [2026-08-18 — First generated readiness recovery campaign accepted](entries/2026-08-18T1130Z-first-generated-readiness-recovery-campaign-accepted.md)
