@@ -153,8 +153,11 @@ class PublicationActivityHandler:
 class WallClock:
     """Observe production timers without advancing beyond real wall time."""
 
+    def __init__(self, clock: Callable[[], float] = time.time) -> None:
+        self._clock = clock
+
     def now(self) -> float:
-        return time.time()
+        return self._clock()
 
     def observe(self, instant: float) -> float | None:
         now = self.now()
@@ -333,6 +336,7 @@ class PrReadinessHost:
         reminder_delay: float = 3 * 24 * 60 * 60,
         agent_settle: Callable[[set[str]], None] | None = None,
         dispatch_path: Path | None = None,
+        clock: Callable[[], float] = time.time,
     ) -> PrReadinessHost:
         root.mkdir(mode=0o700, parents=True, exist_ok=True)
         built = build_net(reminder_delay)
@@ -366,7 +370,7 @@ class PrReadinessHost:
                 handlers=handlers,
                 guards=built.guards,
                 policy=choose_throughput,
-                clock=WallClock(),
+                clock=WallClock(clock),
                 activities=activities,
             )
 
@@ -384,7 +388,7 @@ class PrReadinessHost:
                 handlers=handlers,
                 guards=built.guards,
                 policy=choose_throughput,
-                clock=WallClock(),
+                clock=WallClock(clock),
                 activities=activities,
                 marking=marking,
             )

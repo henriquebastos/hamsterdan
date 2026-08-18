@@ -68,6 +68,7 @@ class PrReadinessV5Application:
         dispatch_path: Path | None = None,
         timer_clock_us: Callable[[], int] | None = None,
         durable_activity_resolver: DurableActivityResolver | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         if (
             isinstance(reminder_delay, bool)
@@ -152,7 +153,8 @@ class PrReadinessV5Application:
             reminder_delay_s=reminder_delay_s,
             durable_activity_resolver=durable_activity_resolver,
         )
-        timer_options = {} if timer_clock_us is None else {"clock_us": timer_clock_us}
+        selected_timer_clock = timer_clock_us or (None if clock is None else lambda: int(clock() * 1_000_000))
+        timer_options = {} if selected_timer_clock is None else {"clock_us": selected_timer_clock}
         self.timers = V5TimerStore.open(
             root / "timers.sqlite3",
             instance_id,
@@ -446,6 +448,10 @@ class PrReadinessV5Application:
 
     def stop_durable_activities(self) -> None:
         self._runtime().stop_durable_activities()
+
+    def detached_state(self) -> dict[str, object]:
+        """Expose diagnostics without leaking the mutable V5 runtime graph."""
+        return {"ready": None, "snapshot": self._runtime().engine.snapshot()}
 
     def _runtime(self) -> V5Runtime:
         if self.runtime is None:

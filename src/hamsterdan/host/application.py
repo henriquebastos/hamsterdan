@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
@@ -20,6 +21,7 @@ from hamsterdan.contracts.readiness import (
     GenerationStop,
     HumanObservation,
     ReadinessSnapshot,
+    workflow_gates_ready,
 )
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
 from hamsterdan.github_app.gateway import GitHubAuthority
@@ -56,6 +58,7 @@ class PrReadinessApplication:
         dispatch_path: Path | None = None,
         custody_path: Path | None = None,
         durable_activity_resolver: DurableActivityResolver | None = None,
+        clock: Callable[[], float] | None = None,
     ):
         del custody_path, durable_activity_resolver  # topology-neutral HostService factory contract
         self.root, self.instance_id, self.authority, self.runner = root, instance_id, authority, runner
@@ -68,6 +71,7 @@ class PrReadinessApplication:
         self.publication_fault = publication_fault
         self.agent_settle = agent_settle
         self.dispatch_path = dispatch_path
+        self.clock = time.time if clock is None else clock
         self.host: PrReadinessHost | None = None
         if (root / "history.jsonl").exists():
             self.host = self._open_host()
@@ -108,6 +112,7 @@ class PrReadinessApplication:
             reminder_delay=self.reminder_delay,
             agent_settle=self.agent_settle,
             dispatch_path=self.dispatch_path,
+            clock=self.clock,
         )
 
     def _bind_state_root(self) -> None:
@@ -457,6 +462,14 @@ class PrReadinessApplication:
         if self.host is not None:
             return self.host.drain()
         return None
+
+    def detached_state(self) -> dict[str, object]:
+        """Expose normalized host-owned readiness without mutable runtime objects."""
+        snapshot = None if self.host is None else self.host.snapshot
+        return {
+            "ready": False if snapshot is None else workflow_gates_ready(snapshot),
+            "snapshot": None if snapshot is None else snapshot.dump(),
+        }
 
     def activity(self, name: str):
         return None if self.host is None else self.host.activity(name)

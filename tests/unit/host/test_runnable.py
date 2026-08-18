@@ -17,9 +17,12 @@ def test_wakes_coalesce_and_due_instances_are_taken_deterministically(tmp_path: 
     index.wake("instance-c", 11, "webhook", "delivery")
 
     assert index.count() == 3
+    assert index.next_due() == 1
     assert index.take_due() == ("instance-a", "instance-b")
+    assert index.next_due() == 11
     assert index.take_due() == ()
     assert index.take_due(now=11) == ("instance-c",)
+    assert index.next_due() is None
 
 
 def test_wake_added_after_take_is_not_lost_and_reopen_is_durable(tmp_path: Path) -> None:

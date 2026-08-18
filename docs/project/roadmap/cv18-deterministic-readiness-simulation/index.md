@@ -2,7 +2,7 @@
 code: CV18
 level: Value
 status: Active
-status_reason: DS1's independent expected-readiness model and simulation contract are accepted; DS2's executable real-host World is next
+status_reason: DS1's correctness contract and DS2's deterministic real-host vertical are accepted; DS3 generated campaigns are next
 updated: 2026-08-18
 related:
   - ../cv17-v5-actor-loop-production-parity/index.md
@@ -136,8 +136,12 @@ readiness policy never enter Petrus.
    vocabulary, bounds, Petrus compatibility seam, and project-level agent
    guidance.
 2. [CV18.DS2 — Deterministic host and provider fault world](cv18-ds2-deterministic-host-and-provider-fault-world.md)
-   runs the real host composition under Petrus-owned logical scheduling with
-   controlled GitHub, agent, timer, effect, crash, and restart behavior.
+   is complete: a debugger-like World/Timeline runs the production host under
+   Petrus scheduling, continuously checks independent expected truth, and
+   exactly replays signed-ingress → ambiguous effect → crash → reconstruction
+   → lookup-first convergence. The accepted vertical is plumbing proof, not
+   generated semantic coverage; remaining named cut adapters move with DS3's
+   generated dimensions.
 3. [CV18.DS3 — Generated readiness and recovery campaigns](cv18-ds3-generated-readiness-and-recovery-campaigns.md)
    adds stateful generation, broad and targeted profiles, shrinking, independent
    semantic checks, fair-phase convergence, and regression promotion.

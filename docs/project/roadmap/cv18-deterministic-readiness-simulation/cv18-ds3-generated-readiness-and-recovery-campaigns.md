@@ -2,11 +2,12 @@
 code: CV18.DS3
 level: Delivery Story
 status: Planned
-status_reason: Hamsterdan scenarios are hand-authored and do not yet explore or shrink cross-domain event and failure schedules
-updated: 2026-08-17
+status_reason: DS2 proves one replayable real-host vertical; generated semantic schedules, remaining fault adapters, and shrinking do not yet exist
+updated: 2026-08-18
 related:
   - index.md
   - cv18-ds2-deterministic-host-and-provider-fault-world.md
+  - ../../debt/items/readiness-dst-composition-must-split-before-campaign-expansion.md
 ---
 
 # CV18.DS3 — Generated readiness and recovery campaigns
@@ -19,6 +20,13 @@ defines the expected semantic outcome.
 
 ## Scope
 
+- First split DS2's provider truth/transport/agent adapters from its Petrus
+  profile/checker/Timeline composition without changing artifact identity or
+  behavior. Do not expand the current 1,495-line vertical module in place.
+- Materialize the remaining DS1 fault adapters only beside generated commands
+  and properties that exercise them: stale/rate-limited reads,
+  History/Dispatch/timer cuts, agent terminal delivery, and Git publication.
+  The accepted DS2 vertical is not evidence for those families.
 - Add Hypothesis state-machine commands over DS2's normalized event and fault
   vocabulary. Generate valid external actions, stale/duplicate actions, and
   deliberately malformed boundary inputs without directly choosing internal
@@ -62,6 +70,8 @@ defines the expected semantic outcome.
    fold they claim to verify.
 7. Retained failures contain no credentials, unrestricted provider payloads, or
    agent workspace content.
+8. Every generated fault family names its executable adapter and checker;
+   contract-only names are reported as blocked rather than counted as coverage.
 
 ## Driver QA and evidence plan
 

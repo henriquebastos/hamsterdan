@@ -148,6 +148,12 @@ class RunnableIndex:
         with self._lock:
             return int(self._db.execute("SELECT COUNT(*) FROM wakes").fetchone()[0])
 
+    def next_due(self) -> float | None:
+        """Return the earliest detached wake instant without claiming it."""
+        with self._lock:
+            row = self._db.execute("SELECT MIN(due_at) FROM wakes").fetchone()
+        return None if row is None or row[0] is None else float(row[0])
+
     def close(self) -> None:
         with self._lock:
             if self._closed:

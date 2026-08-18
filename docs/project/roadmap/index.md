@@ -109,5 +109,9 @@ the real host composition. It owns Hamsterdan's independent domain model and
 provider/authority fault world while consuming, rather than duplicating, the
 accepted `petrus.testing.dst/v1` event-and-fault substrate from Petrus CV19. CV18
 does not replace CV17 parity or make V5 the production default. CV18.DS1's
-independent expected-readiness model and simulation contract are accepted;
-CV18.DS2's executable real-host World is the next planned slice.
+independent expected-readiness model and simulation contract are accepted.
+CV18.DS2's debugger-like real-production-host World is also accepted: its first
+strict replay crosses signed custody, an accepted-but-response-lost readiness
+effect, abrupt generation drop, fresh reconstruction, and lookup-first
+single-acceptance convergence. CV18.DS3 next owns generated schedules,
+remaining fault adapters, checker expansion, and shrinking.

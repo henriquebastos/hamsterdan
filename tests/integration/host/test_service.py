@@ -2221,3 +2221,107 @@ def test_registration_failure_preserves_the_current_registry_and_host_identity(t
     assert host.installation_id == 44
     assert host.registry.route(44, 31) is not None
     assert host.registry.route(44, 32) is not None
+
+
+def test_host_service_uses_one_injected_clock_and_transport_factory(tmp_path: Path) -> None:
+    clock = lambda: 17.0
+    transports: list[object] = []
+
+    def transport_factory(client: object) -> V5Provider:
+        transports.append(client)
+        return V5Provider()
+
+    composition, routes = agent_custody(tmp_path)
+    host = HostService(
+        config(tmp_path),
+        clients=Clients(),
+        runner=object(),  # type: ignore[arg-type]
+        agent_composition=composition,
+        agent_routes=routes,
+        readiness_composition=replace(PRODUCTION, application_factory=Application),
+        clock=clock,
+        transport_factory=transport_factory,
+    )
+    host.registry.reconcile(44, ((31, "owner/one"),))
+
+    host._application(44, 31, 7)
+    host.runnable.wake("github:44:31:pr:7", clock(), "test", "clock")
+
+    assert transports == [host.clients.operation_client]
+    assert host.runnable.take_due() == ("github:44:31:pr:7",)
+    assert host._apps[(44, 31, 7)].kwargs["clock"] is clock
+    host.close()
+
+
+def test_bounded_host_doors_execute_at_most_one_item(tmp_path: Path) -> None:
+    host = service(tmp_path)
+    activity_limits: list[int] = []
+
+    class ActivityWorker:
+        def run_available(self, *, limit: int) -> int:
+            activity_limits.append(limit)
+            return limit
+
+        def close(self) -> None:
+            pass
+
+    host.activity_worker = ActivityWorker()  # type: ignore[assignment]
+    first, second = str(uuid.uuid4()), str(uuid.uuid4())
+    first_body, second_body = envelope(), envelope()
+    host.custody.receive((signed(first_body, first) | {"content-length": str(len(first_body))}).items(), first_body)
+    host.custody.receive((signed(second_body, second) | {"content-length": str(len(second_body))}).items(), second_body)
+
+    result = host.process_one()
+    assert result is not None and (result.delivery_id, result.disposition) == (first, "completed")
+    assert host.custody.status(first) == "terminal"
+    assert host.custody.status(second) == "pending"
+    assert host.run_one_activity() == 1
+    assert activity_limits == [1]
+    host.close()
+
+
+def test_bounded_custody_door_reports_disposal_with_an_existing_application(tmp_path: Path) -> None:
+    host = service(tmp_path)
+    host._application(44, 31, 7)
+    delivery = str(uuid.uuid4())
+    body = json.dumps(
+        {
+            "action": "created",
+            "installation": {"id": 44, "account": {"id": 23}},
+            "repository": {"id": 31, "full_name": "owner/one"},
+            "issue": {"number": 7, "pull_request": {"url": "https://api.github.test/pulls/7"}},
+            "comment": {
+                "id": 9,
+                "body": "not addressed to the App",
+                "author_association": "MEMBER",
+                "user": {"id": 5, "login": "human", "type": "User"},
+            },
+        }
+    ).encode()
+    host.custody.receive(signed(body, delivery, "issue_comment").items() | {("content-length", str(len(body)))}, body)
+
+    result = host.process_one()
+
+    assert result is not None and (result.delivery_id, result.disposition) == (delivery, "disposed")
+    assert host.custody.status(delivery) == "terminal"
+    host.close()
+
+
+def test_abrupt_drop_releases_resources_without_settling(tmp_path: Path) -> None:
+    events: list[str] = []
+
+    class DropApplication(Application):
+        def settle(self) -> None:
+            events.append("settle")
+
+        def close(self) -> None:
+            events.append("close")
+
+    host = service(tmp_path, factory=DropApplication)
+    host._application(44, 31, 7)
+
+    host.abort()
+    host.abort()
+
+    assert events == ["close"]
+    assert host.clients.closed == 1

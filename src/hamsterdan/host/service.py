@@ -9,8 +9,9 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
 from petrus.motus.activity import Activity, ActivityDefinition, ActivityError
@@ -22,7 +23,7 @@ from hamsterdan.contracts.readiness import AdmittedConversation
 from hamsterdan.github_app.auth import GitHubAppClients
 from hamsterdan.github_app.config import HostConfig
 from hamsterdan.github_app.gateway import GitHubAuthority
-from hamsterdan.github_app.models import GitHubBoundaryError
+from hamsterdan.github_app.models import GitHubBoundaryError, Transport
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 from hamsterdan.github_app.webhooks import Observation, WebhookCustody, admit_conversation
@@ -37,6 +38,14 @@ LOG = logging.getLogger("hamsterdan.host")
 _FAULT_BOUNDARIES = frozenset({"agent", "comment"})
 _FAULT_PHASES = frozenset({"timed_out", "malformed", "before_call", "after_call"})
 _INSTANCE_PATTERN = re.compile(r"github:([1-9][0-9]*):([1-9][0-9]*):pr:([1-9][0-9]*)\Z")
+
+
+@dataclass(frozen=True)
+class CustodyOneResult:
+    """Detached outcome of one bounded custody attempt."""
+
+    delivery_id: str
+    disposition: Literal["completed", "disposed", "retained", "failed"]
 
 
 @dataclass
@@ -152,6 +161,8 @@ class HostService:
         poll_interval: float = 0.25,
         sweep_interval: float = 60,
         qualification_fault: QualificationFault | None = None,
+        clock: Callable[[], float] | None = None,
+        transport_factory: Callable[[Any], Transport] | None = None,
     ) -> None:
         self.config = config
         self.root = config.state_path
@@ -163,7 +174,12 @@ class HostService:
             self.root / "routes.sqlite3", account_id=config.account_id, allowed_repositories=config.allowed_repositories
         )
         _, secret = config._credentials()
-        self.custody = WebhookCustody(self.root / "webhooks.sqlite3", webhook_secret=secret, registry=self.registry)
+        self._clock = time.time if clock is None else clock
+        self._application_clock = clock
+        self._transport_factory = GitHubKitTransport if transport_factory is None else transport_factory
+        self.custody = WebhookCustody(
+            self.root / "webhooks.sqlite3", webhook_secret=secret, registry=self.registry, clock=self._clock
+        )
         self.runner = runner
         self.agent_composition, self.agent_routes, self.agent_runtime = agent_composition, agent_routes, agent_runtime
         self.workflow_path, self.reminder_delay, self.poll_interval = workflow_path, reminder_delay, poll_interval
@@ -178,7 +194,7 @@ class HostService:
         self._application_lock = threading.RLock()
         self._pump_lock = threading.Lock()
         self._scheduler_errors: dict[str, str] = {}
-        self.runnable = RunnableIndex(self.root / "runnable.sqlite3")
+        self.runnable = RunnableIndex(self.root / "runnable.sqlite3", clock=self._clock)
         dispatch_path = self.root / "activity-dispatch.sqlite3"
         self.activity_worker: Worker | None = None
         if readiness_composition.topology == "production":
@@ -241,7 +257,7 @@ class HostService:
                         retryable=False,
                     ) from error
             finally:
-                self.runnable.wake(instance, time.time(), "activity-terminal", name)
+                self.runnable.wake(instance, self._clock(), "activity-terminal", name)
 
         return wake
 
@@ -316,7 +332,7 @@ class HostService:
                 assert route is not None
                 repository_full_name = route.repository_full_name
             operation_client = self.clients.installation(installation_id, [repository_id])
-            transport = GitHubKitTransport(operation_client)
+            transport = self._transport_factory(operation_client)
             authority = GitHubAuthority(
                 transport,
                 repository_full_name,
@@ -350,6 +366,7 @@ class HostService:
                 dispatch_path=self._dispatch_path,
                 custody_path=self.root / "webhooks.sqlite3",
                 durable_activity_resolver=self._guard_durable_activity,
+                clock=self._application_clock,
             )
             self._locks[key] = threading.Lock()
             self._apps[key] = application
@@ -527,8 +544,87 @@ class HostService:
             # the resolver. The durable Dispatch/History remain authoritative.
             for instance, key in tuple(self._instances.items()):
                 if self.readiness_composition.has_unresolved(self._apps[key]):
-                    self.runnable.wake(instance, time.time(), "dispatch-repair", "unresolved-publication")
+                    self.runnable.wake(instance, self._clock(), "dispatch-repair", "unresolved-publication")
             return processed
+
+    def process_one(self) -> CustodyOneResult | None:
+        """Process at most one currently due custodied delivery."""
+        pending = self.custody.pending(limit=1)
+        if not pending:
+            return None
+        item = pending[0]
+        if self._select_observation(item) is None:
+            return CustodyOneResult(item.delivery_id, self._custody_disposition(item, completed=False))
+        instance = self._instance(item)
+        assert instance is not None
+        try:
+            completed = self._activate_instance(instance, observation=item)
+        except Exception:  # noqa: BLE001 -- activation retained and classified the one delivery
+            completed = False
+        return CustodyOneResult(item.delivery_id, self._custody_disposition(item, completed=completed))
+
+    def _custody_disposition(
+        self,
+        item: Observation,
+        *,
+        completed: bool,
+    ) -> Literal["completed", "disposed", "retained", "failed"]:
+        status = self.custody.status(item.delivery_id)
+        if status == "terminal":
+            return "completed" if completed else "disposed"
+        if status == "failed":
+            return "failed"
+        return "retained"
+
+    def run_one_activity(self) -> int:
+        """Execute at most one immediately claimable durable Activity Attempt."""
+        with self._pump_lock:
+            if self._stop.is_set() or self.activity_worker is None:
+                return 0
+            return self.activity_worker.run_available(limit=1)
+
+    def subject_state(self, installation: int, repository: int, pull_request: int) -> dict[str, object] | None:
+        """Return detached application state for one loaded PR subject."""
+        application = self._apps.get((installation, repository, pull_request))
+        return None if application is None else application.detached_state()
+
+    def work_state(self) -> dict[str, object]:
+        """Disclose bounded eligible work without exposing runtime handles."""
+        applications = self.root / "applications"
+        persisted = tuple(applications.glob("*/*/*/history.jsonl")) if applications.is_dir() else ()
+        loaded_roots = {
+            self.root / "applications" / str(key[0]) / str(key[1]) / str(key[2]) / "history.jsonl" for key in self._apps
+        }
+        return {
+            "pending_custody": bool(self.custody.pending(limit=1)),
+            "runnable_due": self.runnable.next_due(),
+            "unresolved_activity": any(
+                self.readiness_composition.has_unresolved(application) for application in self._apps.values()
+            ),
+            "unloaded_application": any(path not in loaded_roots for path in persisted),
+        }
+
+    def reconcile_one(self, trigger: str = "scheduled") -> bool:
+        """Reconcile at most one persisted PR Instance."""
+        applications = self.root / "applications"
+        if not applications.is_dir():
+            return False
+        for history in sorted(applications.glob("*/*/*/history.jsonl")):
+            try:
+                installation, repository, pull_request = (int(part) for part in history.parts[-4:-1])
+            except ValueError:
+                continue
+            if min(installation, repository, pull_request) <= 0:
+                continue
+            if (installation, repository, pull_request) in self._apps:
+                continue
+            instance = f"github:{installation}:{repository}:pr:{pull_request}"
+            try:
+                return self._activate_instance(instance, reconcile_trigger=trigger)
+            except Exception as error:  # noqa: BLE001 -- preserve the production scheduler failure classification
+                self._scheduler_errors[instance] = type(error).__name__
+                return False
+        return False
 
     @staticmethod
     def _instance(item: Observation) -> str | None:
@@ -548,7 +644,7 @@ class HostService:
                 self.process(item)
                 continue
             identity = item.delivery_id if item.event == "issue_comment" else "reconcile"
-            self.runnable.wake(instance, time.time(), "webhook", identity)
+            self.runnable.wake(instance, self._clock(), "webhook", identity)
             projected += 1
         return projected
 
@@ -659,7 +755,7 @@ class HostService:
             except Exception as error:  # noqa: BLE001 -- one damaged Instance must not consume later due wakes
                 error_class = type(error).__name__
                 self._scheduler_errors[instance] = error_class
-                self.runnable.wake(instance, time.time(), "scheduler-repair", "run-due-failure")
+                self.runnable.wake(instance, self._clock(), "scheduler-repair", "run-due-failure")
                 LOG.warning(
                     "scheduler_instance_degraded instance=%s error_class=%s",
                     instance,
@@ -708,16 +804,25 @@ class HostService:
                     extra={"instance": instance, "error_class": type(error).__name__},
                 )
 
+    def abort(self) -> None:
+        """Release this process generation without settling semantic work."""
+        self._release(settle=False)
+
     def close(self) -> None:
+        """Gracefully settle loaded terminals and release owned resources."""
+        self._release(settle=True)
+
+    def _release(self, *, settle: bool) -> None:
         if self._closed:
             return
         self._closed = True
         failure: Exception | None = None
         with self._pump_lock:
-            try:
-                self.settle_terminals_for_shutdown()
-            except Exception as error:  # noqa: BLE001 -- remaining resources still require closure
-                failure = error
+            if settle:
+                try:
+                    self.settle_terminals_for_shutdown()
+                except Exception as error:  # noqa: BLE001 -- remaining resources still require closure
+                    failure = error
             try:
                 if self.activity_worker is not None:
                     self.activity_worker.close()
@@ -739,5 +844,9 @@ class HostService:
             except Exception as error:  # noqa: BLE001 -- every owned resource must still receive exactly one close
                 if failure is None:
                     failure = error
+        self._apps.clear()
+        self._locks.clear()
+        self._instances.clear()
+        self.activity_worker = None
         if failure is not None:
             raise failure
