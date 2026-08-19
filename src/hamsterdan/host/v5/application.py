@@ -24,7 +24,7 @@ from hamsterdan.host.protocol import DurableActivityResolver
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.gates import UnstagedCustodyError, V5PublicationGates
 from hamsterdan.host.v5.ingress import IngressEntry, V5IngressNormalizer, V5IngressStore
-from hamsterdan.host.v5.mutation import V5MutationGate
+from hamsterdan.host.v5.mutation import MutationPublisher, V5MutationGate
 from hamsterdan.host.v5.rerun import V5RerunGate
 from hamsterdan.host.v5.review import V5ReviewGate, V5ReviewRequestStore
 from hamsterdan.host.v5.runtime import V5Runtime
@@ -69,6 +69,7 @@ class PrReadinessV5Application:
         timer_clock_us: Callable[[], int] | None = None,
         durable_activity_resolver: DurableActivityResolver | None = None,
         clock: Callable[[], float] | None = None,
+        mutation_publisher: MutationPublisher | None = None,
     ) -> None:
         if (
             isinstance(reminder_delay, bool)
@@ -124,7 +125,7 @@ class PrReadinessV5Application:
             authority.repository,
             authority.pr_number,
             runner,
-            HostGitPublisher(authority, public_clone_url),
+            HostGitPublisher(authority, public_clone_url) if mutation_publisher is None else mutation_publisher,
             public_clone_url,
             self.current_claim,
         )

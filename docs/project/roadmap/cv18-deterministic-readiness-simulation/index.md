@@ -2,8 +2,8 @@
 code: CV18
 level: Value
 status: Active
-status_reason: DS1 and DS2 are accepted; DS3 now has generated authority, lifecycle, ambiguity, crash, and V5 timer recovery evidence and remains active for broader semantic coverage
-updated: 2026-08-18
+status_reason: DS1 and DS2 are accepted; DS3 now has generated authority, lifecycle, timer, and Git mutation ambiguity recovery evidence and remains active for broader semantic coverage
+updated: 2026-08-19
 related:
   - ../cv17-v5-actor-loop-production-parity/index.md
   - ../../../../tests/unit/readiness/net_v5/harness.py
@@ -150,7 +150,10 @@ readiness policy never enter Petrus.
    progress, duplicate delivery, effect ambiguity, abrupt reconstruction, and
    authority lifecycle/head movement. A focused reminder campaign additionally
    crosses durable timer arm/maturity/acknowledgement, accepted-but-response-lost
-   publication, old redelivery, three crash classes, and fair recovery.
+   publication, old redelivery, three crash classes, and fair recovery. A
+   focused Git campaign drives trusted-human conversation and coding through one
+   modeled ref acceptance, lost proof, `FaultM`, reconstruction, exact
+   human-authorized lookup-first recovery, and `Pushed` without a second CAS.
    Successful schedules and shrunk checker and resource counterexamples replay
    exactly. Broader targeted profiles, remaining fault adapters, semantic
    coverage, and campaign operations remain.

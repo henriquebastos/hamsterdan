@@ -701,6 +701,170 @@ def test_generated_reminder_timer_recovery_schedules_replay_exactly(
                     raise
 
 
+@pytest.mark.timeout(120)
+@settings(
+    max_examples=5,
+    deadline=None,
+    derandomize=True,
+    suppress_health_check=(HealthCheck.too_slow,),
+)
+@example(seed=0, response_lost=False, crash_cut="before_delivery", redeliver=False)
+@example(seed=1, response_lost=True, crash_cut="after_acceptance", redeliver=True)
+@example(seed=2, response_lost=True, crash_cut="after_head", redeliver=False)
+@example(seed=3, response_lost=False, crash_cut="none", redeliver=True)
+@given(
+    seed=st.integers(min_value=0, max_value=2**53 - 1),
+    response_lost=st.booleans(),
+    crash_cut=st.sampled_from(("none", "before_delivery", "after_acceptance", "after_head")),
+    redeliver=st.booleans(),
+)
+def test_generated_v5_git_publication_recovery_schedules_replay_exactly(
+    seed: int,
+    response_lost: bool,
+    crash_cut: str,
+    redeliver: bool,
+) -> None:
+    event(f"git_response_lost={response_lost}")
+    event(f"git_crash_cut={crash_cut}")
+    event(f"git_redeliver={redeliver}")
+    directory = TemporaryDirectory(prefix="hamsterdan-readiness-git-")
+    root = Path(directory.name)
+    world = ReadinessWorld(root / "live", seed=seed)
+    timeline = world.timeline()
+    scenario_id = f"readiness-v5-git-publication-{crash_cut}-v1"
+    failure_path = Path(".hypothesis/readiness-artifacts/readiness-v5-git-publication-v4.json")
+    closed = False
+    try:
+        _start_clean_green(timeline, response_lost=False)
+        _drain(timeline)
+
+        comment = 501
+        timeline.set_human_comment(comment=comment, fixture="change")
+        delivery = timeline.emit_webhook("issue_comment", action="created")
+        publication_operation = f"push:comment:{comment}:{HEAD}:i1"
+        timeline.set_agent_terminal(
+            operation=f"conversation:owner/repo:pr:7:delivery:{delivery}",
+            fixture="conversation_change",
+            status="changed",
+        )
+        timeline.set_agent_terminal(
+            operation=f"mutation:owner/repo:pr:7:{publication_operation}",
+            fixture="coding",
+            status="changed",
+        )
+        if response_lost:
+            timeline.fault_git_publication(publication_operation, "ref_cas")
+        if crash_cut == "before_delivery":
+            timeline.crash("generated_git_before_delivery")
+            timeline = world.restart()
+            _drain(timeline)
+
+        timeline.deliver_webhook(delivery)
+        accepted = timeline.run_until(
+            "generated Git ref accepted",
+            lambda state: len(state["provider"].get("git_publications", [])) == 1,
+        )
+        accepted_state = cast(dict[str, JsonValue], accepted.value)
+        accepted_provider = cast(dict[str, JsonValue], accepted_state["provider"])
+        publication = cast(list[dict[str, JsonValue]], accepted_provider["git_publications"])[0]
+        new_head = cast(str, publication["result_head"])
+        if crash_cut == "after_acceptance":
+            timeline.crash("generated_git_after_acceptance")
+            timeline = world.restart()
+            _drain(timeline)
+        else:
+            _drain(timeline)
+
+        timeline.set_ci(head=new_head, required_checks=("build",), checks={"build": "success"})
+        timeline.set_review(head=new_head, status="clear")
+        head_delivery = timeline.emit_webhook("pull_request", action="synchronize")
+        timeline.deliver_webhook(head_delivery)
+        _drain(timeline)
+        if redeliver:
+            timeline.deliver_webhook(delivery)
+        if crash_cut == "after_head":
+            timeline.crash("generated_git_after_head")
+            timeline = world.restart()
+            _drain(timeline)
+
+        if response_lost:
+            recovery_comment = 502
+            timeline.set_human_comment(
+                comment=recovery_comment,
+                fixture=f"recover:{publication_operation}",
+            )
+            recovery_delivery = timeline.emit_webhook("issue_comment", action="created")
+            timeline.set_agent_terminal(
+                operation=f"conversation:owner/repo:pr:7:delivery:{recovery_delivery}",
+                fixture="conversation_recover",
+                status="clear",
+            )
+            timeline.deliver_webhook(recovery_delivery)
+
+        final = cast(dict[str, JsonValue], timeline.converge().value)
+        provider = cast(dict[str, JsonValue], final["provider"])
+        publications = cast(list[dict[str, JsonValue]], provider["git_publications"])
+        git_custody = cast(dict[str, JsonValue], final["git_custody"])
+        requests = cast(list[dict[str, JsonValue]], git_custody["requests"])
+        terminals = cast(list[dict[str, JsonValue]], git_custody["terminals"])
+
+        assert cast(dict[str, JsonValue], final["expected"])["violations"] == []
+        assert cast(dict[str, JsonValue], final["expected"])["ready"] is True
+        assert cast(dict[str, JsonValue], final["actual"])["readiness_published"] is True
+        assert len(publications) == 1
+        assert publications[0]["operation"] == publication_operation
+        assert publications[0]["response_lost"] is response_lost
+        assert publications[0]["recovered"] is response_lost
+        assert [item["operation"] for item in requests] == [publication_operation] * (2 if response_lost else 1)
+        assert [item["variant"] for item in terminals] == (["FaultM", "Pushed"] if response_lost else ["Pushed"])
+        coding_calls = [
+            item for item in cast(list[dict[str, JsonValue]], provider["agent_call_log"]) if item["kind"] == "coding"
+        ]
+        assert len(coding_calls) == 1
+
+        artifact = world.artifact(scenario_id)
+        operations = len(artifact.operations)
+        world.close()
+        closed = True
+
+        replayed = replay_readiness(artifact, root / "replay")
+        assert replayed.outcome == "pass"
+        assert replayed.disposition == Disposition.CONVERGED.value
+        assert replayed.failure is None
+        assert replayed.operations == operations
+    except (BudgetExhausted, InvariantViolation) as error:
+        _retain_failure_artifact(
+            world,
+            scenario_id=scenario_id,
+            failure_path=failure_path,
+            replay_root=root / "failure-replay",
+            primary=error,
+        )
+        raise
+    finally:
+        primary = sys.exception()
+        try:
+            if not closed:
+                world.close()
+        except BaseException as close_error:
+            if primary is not None:
+                primary.add_note(f"secondary Git campaign close failure: {type(close_error).__name__}: {close_error}")
+            else:
+                primary = close_error
+                raise
+        finally:
+            try:
+                directory.cleanup()
+            except BaseException as cleanup_error:
+                if primary is not None:
+                    primary.add_note(
+                        "secondary Git campaign directory cleanup failure: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+                else:
+                    raise
+
+
 def test_generated_delivery_recovery_schedules_replay_exactly() -> None:
     run_state_machine_as_test(
         _DeliveryRecoveryMachine,

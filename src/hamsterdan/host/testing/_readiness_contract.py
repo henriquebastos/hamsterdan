@@ -31,6 +31,8 @@ PROFILE_LIMITS = {
     "comments": 128,
     "threads": 128,
     "agent_operations": 128,
+    "git_publications": 64,
+    "git_reconciliations": 128,
     "provider_calls": 512,
     "effects": 128,
     "host_followups": 512,
@@ -63,6 +65,8 @@ PROFILE_RESOURCE_LIMITS = {
     "retained.provider.effect_bindings": PROFILE_LIMITS["effects"],
     "retained.provider.effects": PROFILE_LIMITS["effects"],
     "retained.provider.findings": PROFILE_LIMITS["findings"],
+    "retained.provider.git_publications": PROFILE_LIMITS["git_publications"],
+    "retained.provider.git_reconciliations": PROFILE_LIMITS["git_reconciliations"],
     "retained.provider.reviews": PROFILE_LIMITS["reviews"],
     "retained.provider.threads": PROFILE_LIMITS["threads"],
     "retained.provider.truth_changes": PROFILE_LIMITS["provider_truth_changes"],
@@ -110,6 +114,9 @@ _PROFILE_DEFINITION = {
         ),
         "timer custody is detached from the durable V5 host boundary",
         "detached host state is the durable V5 authority grant, never a Petri marking",
+        "authorized Git publication is derived from one admitted human comment and exact operation identity",
+        "Git ref acceptance and lookup-first recovery live in independent modeled provider truth",
+        "ambiguous Git recovery requires one admitted human grant naming the exact operation",
     ],
     "commands": [
         "readiness.agent.terminal",
@@ -129,16 +136,16 @@ _PROFILE_DEFINITION = {
         "readiness.time.advance",
     ],
     "observations": ["readiness.state"],
-    "faults": ["readiness.github.effect"],
+    "faults": ["readiness.github.effect", "readiness.git.publish"],
 }
 PROFILE_IDENTITY = ProfileIdentity(
     name="hamsterdan.readiness.v5-world",
-    version=1,
+    version=2,
     digest=digest_json(_PROFILE_DEFINITION),
 )
 CHECKER_IDENTITY = CheckerIdentity(
     name="hamsterdan.readiness.independent-model",
-    version=3,
+    version=4,
     digest=digest_json(
         {
             "checks": [
@@ -151,6 +158,8 @@ CHECKER_IDENTITY = CheckerIdentity(
                 ),
                 "modeled custody action equals detached host disposition",
                 "provider effect identity accepts at most once",
+                "authorized Git acceptance matches canonical V5 request and terminal recovery",
+                "lookup-first Git recovery retains its exact admitted human grant",
                 "independent readiness safety violations remain empty",
             ]
         }
@@ -187,6 +196,7 @@ COMMAND_KEYS = {
 HOST_COMMANDS = frozenset(name for name in COMMAND_KEYS if name.startswith("readiness.host."))
 SHA = re.compile(r"[0-9a-f]{40}")
 NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.:-]{0,127}")
+OPERATION = re.compile(r"[A-Za-z][A-Za-z0-9_./:-]{0,255}")
 EVENTS = frozenset(
     {
         "issue_comment",

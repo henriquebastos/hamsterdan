@@ -17,7 +17,7 @@ import uuid
 import weakref
 from collections import Counter
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Self, cast
 
@@ -51,13 +51,16 @@ from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
 from hamsterdan.host.service import HostService
 from hamsterdan.host.topology import V5
+from hamsterdan.host.v5.application import PrReadinessV5Application
 from hamsterdan.testing.readiness import (
     AuthorityClaim,
     AuthorityFacts,
+    ChangeAuthorization,
     CheckFacts,
     CiFacts,
     EffectObligation,
     HumanFacts,
+    MutationFacts,
     ReadinessFacts,
     ReadinessModel,
     ReviewFacts,
@@ -74,6 +77,7 @@ from ._readiness_contract import (
     HEAD,
     HOST_COMMANDS,
     NAME,
+    OPERATION,
     PROFILE_IDENTITY,
     PROFILE_LIMITS,
     PROFILE_RESOURCE_LIMITS,
@@ -91,6 +95,7 @@ from ._readiness_contract import (
 )
 from ._readiness_provider import (
     AgentRunner,
+    ModeledGitPublisher,
     ProviderClients,
     ProviderTransport,
     ReadinessProviderTruth,
@@ -185,16 +190,20 @@ class ReadinessScenarioProfile:
                 raise ValueError("comment identity must be positive")
             bounded_text(payload["author"], "comment author", pattern=NAME)
             fixture = bounded_text(payload["fixture"], "comment fixture", pattern=NAME)
+            if fixture != "change" and not fixture.startswith("recover:"):
+                raise ValueError("unsupported human comment fixture")
+            if fixture.startswith("recover:"):
+                bounded_text(fixture.removeprefix("recover:"), "recovery operation", pattern=OPERATION)
             if payload["digest"] != strict_digest({"fixture": fixture}):
                 raise ValueError("comment fixture digest does not match")
         elif command.name == "readiness.agent.terminal":
-            bounded_text(payload["operation"], "agent operation", pattern=NAME)
+            bounded_text(payload["operation"], "agent operation", pattern=OPERATION)
             if type(payload["attempt"]) is not int or payload["attempt"] <= 0:
                 raise ValueError("agent attempt must be positive")
             if payload["status"] not in {"clear", "blocking", "unable", "changed", "unchanged"}:
                 raise ValueError("unsupported agent terminal status")
             fixture = bounded_text(payload["fixture"], "agent fixture", pattern=NAME)
-            if fixture not in {"review", "conversation", "coding"}:
+            if fixture not in {"review", "conversation_change", "conversation_recover", "coding"}:
                 raise ValueError("unsupported agent fixture")
             if payload["digest"] != strict_digest({"fixture": fixture, "status": payload["status"]}):
                 raise ValueError("agent fixture digest does not match")
@@ -226,6 +235,14 @@ class ReadinessScenarioProfile:
 
     def validate_fault(self, fault: Fault) -> Fault:
         bounded_json(fault.payload, 4096, fault.name)
+        if fault.name == "readiness.git.publish":
+            if not fault.target.startswith("git:") or fault.disposition != FaultDisposition.RAISE.value:
+                raise ValueError("unsupported readiness Git publication fault")
+            bounded_text(fault.target.removeprefix("git:"), "Git publication operation", pattern=OPERATION)
+            payload = strict_object(fault.payload, {"cut"}, fault.name)
+            if payload["cut"] != "ref_cas":
+                raise ValueError("unsupported readiness Git publication cut")
+            return fault
         if (
             fault.name != "readiness.github.effect"
             or not fault.target.startswith("effect:")
@@ -253,20 +270,26 @@ class ReadinessScenarioProfile:
     def _start(self, context: ScenarioContext) -> GenerationStart[_Generation]:
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         routes = AgentRouteStore(self.root / "agent-routes.sqlite3")
-        composition = compose_agent()
-        routes.activate(composition, self.root / "applications")
+        agent_composition = compose_agent()
+        routes.activate(agent_composition, self.root / "applications")
         context_holder: dict[str, ScenarioContext | None] = {"value": None}
 
         def transport_factory(_client: object) -> ProviderTransport:
             return ProviderTransport(self.truth, context_holder)
 
+        def application_factory(*args: Any, **kwargs: Any) -> PrReadinessV5Application:
+            kwargs["mutation_publisher"] = ModeledGitPublisher(self.truth, context_holder)
+            return PrReadinessV5Application(*args, **kwargs)
+
+        readiness_composition = replace(V5, application_factory=application_factory)
+
         host = HostService(
             _config(self.root),
             clients=cast(Any, ProviderClients()),
             runner=cast(Any, AgentRunner(self.truth)),
-            agent_composition=composition,
+            agent_composition=agent_composition,
             agent_routes=routes,
-            readiness_composition=V5,
+            readiness_composition=readiness_composition,
             reminder_delay=REMINDER_DELAY,
             clock=lambda: float(context.now()),
             transport_factory=transport_factory,
@@ -341,7 +364,7 @@ class ReadinessScenarioProfile:
             self.truth.review_head = cast(str, payload["head"])
             self.truth.review_status = cast(str, status)
             self.truth.findings = cast(list[dict[str, JsonValue]], findings)
-            self.truth.agent_terminal = {
+            self.truth.review_terminal = {
                 "kind": "review",
                 "status": status,
                 "findings": findings,
@@ -357,10 +380,18 @@ class ReadinessScenarioProfile:
             self.truth.review_threads[cast(str, payload["thread"])] = cast(bool, payload["resolved"])
             return {"thread": payload["thread"], "resolved": payload["resolved"]}, "applied"
         if name == "readiness.github.human.comment":
+            self.truth.set_human_comment(
+                cast(int, payload["comment"]),
+                cast(str, payload["author"]),
+                cast(str, payload["fixture"]),
+            )
             return {"comment": payload["comment"]}, "applied"
         if name == "readiness.agent.terminal":
-            self.truth.agent_terminal = {
+            operation = cast(str, payload["operation"])
+            self.truth.agent_terminals[operation] = {
                 "kind": cast(str, payload["fixture"]),
+                "operation": operation,
+                "attempt": cast(int, payload["attempt"]),
                 "status": payload["status"],
                 "findings": [],
             }
@@ -372,7 +403,8 @@ class ReadinessScenarioProfile:
             if payload["digest"] != strict_digest({"event": event, "fixture": fixture}):
                 raise ValueError("webhook fixture digest does not match")
             action = fixture.partition(":")[2]
-            emitted = _Emitted(delivery, event, action, self.truth.authority)
+            comment = self.truth.human_comments[-1] if event == "issue_comment" and self.truth.human_comments else None
+            emitted = _Emitted(delivery, event, action, self.truth.authority, comment)
             existing = self.truth.emitted.get(delivery)
             if existing is not None and existing != emitted:
                 return {"delivery": delivery}, "quarantined"
@@ -424,13 +456,18 @@ class ReadinessScenarioProfile:
                 (self.truth.emitted[delivery] for delivery in self.truth.custodied if delivery not in admitted),
                 None,
             )
-            observed = generation.host.process_one()
+            admission_authority = self.truth.authority
+            self.truth.active_admission = candidate
+            try:
+                observed = generation.host.process_one()
+            finally:
+                self.truth.active_admission = None
             expected = None if candidate is None else {"delivery": candidate.delivery, "disposition": "completed"}
             observed_value = (
                 None if observed is None else {"delivery": observed.delivery_id, "disposition": observed.disposition}
             )
             if candidate is not None and observed_value == expected:
-                self.truth.admit(candidate, context.now())
+                self.truth.admit(candidate, context.now(), admission_authority)
             self.truth.custody_actions.append({"expected": expected, "observed": observed_value})
             return {"custody": observed_value}, "applied" if observed is not None else "refused_expected"
         if name == "readiness.host.activity_one":
@@ -442,6 +479,19 @@ class ReadinessScenarioProfile:
             return {"processed": processed}, "applied" if processed else "refused_expected"
         if name == "readiness.host.reconcile_one":
             processed = generation.host.reconcile_one("dst")
+            if processed and (not self.truth.admitted or self.truth.admitted[-1].authority != self.truth.authority):
+                identity = f"github-reconcile:{len(self.truth.admitted) + 1}"
+                self.truth.admit(
+                    _Emitted(
+                        delivery=identity,
+                        event="reconciliation",
+                        action="provider_snapshot",
+                        authority=self.truth.authority,
+                        source_identity=identity,
+                    ),
+                    context.now(),
+                    self.truth.authority,
+                )
             return {"processed": processed}, "applied" if processed else "refused_expected"
         raise AssertionError(f"validated command has no readiness implementation: {name}")
 
@@ -456,7 +506,11 @@ class ReadinessScenarioProfile:
                 context.now(),
                 due is not None and math.ceil(due) <= context.now(),
             ),
-            ("readiness.host.activity_one", context.now(), cast(bool, state["unresolved_activity"])),
+            (
+                "readiness.host.activity_one",
+                context.now(),
+                cast(bool, state["unresolved_activity"]) and self._activity_terminal_ready(),
+            ),
         ]
         scheduled = []
         for name, instant, eligible in candidates:
@@ -472,6 +526,44 @@ class ReadinessScenarioProfile:
                 )
             )
         return scheduled
+
+    def _activity_terminal_ready(self) -> bool:
+        records = _history_records(self.root)
+        terminal = {
+            record.get("occurrence")
+            for record in records
+            if record.get("record") in {"ActivityCompleted", "ActivityFailed", "ActivityTerminalQuarantined"}
+        }
+        request = next(
+            (
+                record
+                for record in records
+                if record.get("record") == "ActivityRequested" and record.get("occurrence") not in terminal
+            ),
+            None,
+        )
+        if request is None:
+            return False
+        activity = request.get("activity")
+        if activity == "review_agent":
+            return self.truth.review_terminal is not None and self.truth.review_terminal.get("kind") == "review"
+        if activity != "git_gate":
+            return True
+        payload = request.get("input")
+        work = payload.get("work") if isinstance(payload, dict) else None
+        op_key = work.get("op_key") if isinstance(work, dict) else None
+        if not isinstance(op_key, str):
+            raise TypeError("V5 Git Activity request has no strict operation key")
+        if any(item.operation == op_key for item in self.truth.git_publications):
+            return True
+        operation = f"mutation:owner/repo:pr:7:{op_key}"
+        terminal_value = self.truth.agent_terminals.get(operation)
+        return (
+            terminal_value is not None
+            and terminal_value.get("kind") == "coding"
+            and terminal_value.get("operation") == operation
+            and terminal_value.get("attempt") == 1
+        )
 
     def observe(
         self,
@@ -514,6 +606,7 @@ class ReadinessScenarioProfile:
             "timer_custody": _timer_custody(self.root),
             "history": history,
             "motus": _motus(self.root),
+            "git_custody": _git_custody(self.root),
             "terminal_operations": terminal_operations,
             "work": cast(dict[str, JsonValue], generation.host.work_state()),
             "bounds": {
@@ -565,6 +658,8 @@ class ReadinessScenarioProfile:
             "retained.provider.effect_bindings": len(self.truth.effect_authorities),
             "retained.provider.effects": len(self.truth.effects),
             "retained.provider.findings": len(self.truth.findings),
+            "retained.provider.git_publications": len(self.truth.git_publications),
+            "retained.provider.git_reconciliations": self.truth.git_reconciliations,
             "retained.provider.reviews": len(self.truth.human_reviews),
             "retained.provider.threads": len(self.truth.review_threads),
             "retained.provider.truth_changes": self.truth.provider_truth_changes,
@@ -602,26 +697,32 @@ class ReadinessScenarioProfile:
         latest_reviews = {reviewer: state for reviewer, (_submitted, state) in self.truth.human_reviews.items()}
         approvals = sum(state == "APPROVED" for state in latest_reviews.values())
         changes = any(state == "CHANGES_REQUESTED" for state in latest_reviews.values())
-        effects = tuple(
-            EffectObligation(
-                kind=cast(
-                    Any,
-                    "findings"
-                    if effect.kind == "finding"
-                    else effect.kind
-                    if effect.kind in {"dashboard", "conversation", "readiness", "reminder", "rerun"}
-                    else "dashboard",
-                ),
-                operation=effect.operation,
-                authority=effect.authority,
-                content_digest=effect.content_digest,
-                status="settled" if effect.recovered else "accepted",
-                provider_authority_at_acceptance=effect.provider_authority_at_acceptance,
-                blocks_readiness=False,
-            )
-            for effect in self.truth.effects
+        mutation, mutation_effect = self._expected_mutation()
+        effects = (
+            *(
+                EffectObligation(
+                    kind=cast(
+                        Any,
+                        "findings"
+                        if effect.kind == "finding"
+                        else effect.kind
+                        if effect.kind in {"dashboard", "conversation", "readiness", "reminder", "rerun"}
+                        else "dashboard",
+                    ),
+                    operation=effect.operation,
+                    authority=effect.authority,
+                    content_digest=effect.content_digest,
+                    status="settled" if effect.recovered else "accepted",
+                    provider_authority_at_acceptance=effect.provider_authority_at_acceptance,
+                    blocks_readiness=False,
+                )
+                for effect in self.truth.effects
+            ),
+            *((mutation_effect,) if mutation_effect is not None else ()),
         )
-        record_identities = tuple(f"github-delivery:{event.delivery}" for event in admitted_events)
+        record_identities = tuple(
+            event.source_identity or f"github-delivery:{event.delivery}" for event in admitted_events
+        )
         return ReadinessFacts(
             subject=SUBJECT,
             authority=AuthorityFacts(generations, admitted, self.truth.authority),
@@ -638,6 +739,7 @@ class ReadinessScenarioProfile:
                 changes_requested=changes,
                 unresolved_conversations=sum(not value for value in self.truth.review_threads.values()),
             ),
+            mutation=mutation,
             effects=effects,
             timers=tuple(
                 TimerObligation(
@@ -646,6 +748,75 @@ class ReadinessScenarioProfile:
                     blocks_readiness=False,
                 )
                 for timer in timer_expectations
+            ),
+        )
+
+    def _expected_mutation(self) -> tuple[MutationFacts, EffectObligation | None]:
+        change = next(
+            (
+                event
+                for event in reversed(self.truth.admitted)
+                if event.comment is not None and event.comment.get("fixture") == "change"
+            ),
+            None,
+        )
+        if change is None or change.comment is None:
+            return MutationFacts(), None
+        incarnation = 0
+        prior: AuthorityClaim | None = None
+        for admitted in self.truth.admitted:
+            if prior is None or admitted.authority != prior:
+                incarnation += 1
+            prior = admitted.authority
+            if admitted is change:
+                break
+        comment = cast(dict[str, JsonValue], change.comment)
+        identity = f"github-delivery:{change.delivery}"
+        operation = f"push:comment:{comment['id']}:{change.authority.head}:i{incarnation}"
+        authorization = ChangeAuthorization(
+            identity=identity,
+            operation=operation,
+            authority=change.authority,
+            intent="change",
+            intent_digest=strict_digest({"fixture": comment["fixture"]}),
+        )
+        publication = next((item for item in self.truth.git_publications if item.operation == operation), None)
+        if publication is None:
+            return (
+                MutationFacts(
+                    status="requested",
+                    operation=operation,
+                    head=change.authority.head,
+                    authorization=authorization,
+                ),
+                None,
+            )
+        admitted = self.truth.admitted[-1].authority if self.truth.admitted else None
+        recovery_identity = self.truth.recovery_identity(operation)
+        recovered_with_grant = publication.recovered and publication.recovery_identity == recovery_identity != ""
+        if publication.response_lost and not recovered_with_grant:
+            status = "ambiguous"
+        elif admitted is None or admitted.head != publication.result_head:
+            status = "accepted_pending_admission"
+        else:
+            return MutationFacts(), None
+        return (
+            MutationFacts(
+                status=status,
+                operation=operation,
+                head=change.authority.head,
+                result_head=publication.result_head,
+                authorization=authorization,
+            ),
+            EffectObligation(
+                kind="git_mutation",
+                operation=operation,
+                authority=change.authority,
+                content_digest=publication.payload_digest,
+                status="ambiguous" if status == "ambiguous" else "accepted",
+                provider_authority_at_acceptance=publication.authority,
+                authorization=identity,
+                blocks_readiness=False,
             ),
         )
 
@@ -827,9 +998,11 @@ class ReadinessChecker:
         )
         timer_mismatches = self._timer_custody_mismatches(state)
         timer_custody_parity = not timer_mismatches or progress_disclosed
+        git_mismatches = self._git_custody_mismatches(state, progress_disclosed)
+        git_custody_parity = not git_mismatches
         neutral_host_verdict = host["ready"] is None
         ready_parity = readiness_parity and actual_parity and neutral_host_verdict
-        parity = ready_parity and snapshot_parity and timer_custody_parity
+        parity = ready_parity and snapshot_parity and timer_custody_parity and git_custody_parity
         retained = bounded_json(state, PROFILE_LIMITS["observation_bytes"], "checker observation").decode()
         sensitive = [
             label
@@ -858,6 +1031,8 @@ class ReadinessChecker:
                 "snapshot_parity": snapshot_parity,
                 "timer_custody_parity": timer_custody_parity,
                 "timer_custody_mismatches": timer_mismatches,
+                "git_custody_parity": git_custody_parity,
+                "git_custody_mismatches": git_mismatches,
                 "authority_lag": authority_lag,
                 "expected_ready": expected["ready"],
                 "readiness_published": observed_readiness,
@@ -873,6 +1048,101 @@ class ReadinessChecker:
                 "violations": violations,
             },
         )
+
+    @staticmethod
+    def _git_custody_mismatches(state: dict[str, JsonValue], progress_disclosed: bool) -> list[dict[str, JsonValue]]:
+        provider = cast(dict[str, JsonValue], state["provider"])
+        publications = cast(list[dict[str, JsonValue]], provider["git_publications"])
+        admitted_recoveries = cast(list[dict[str, JsonValue]], provider["admitted_recoveries"])
+        custody = cast(dict[str, JsonValue], state["git_custody"])
+        requests = cast(list[dict[str, JsonValue]], custody["requests"])
+        terminals = cast(list[dict[str, JsonValue]], custody["terminals"])
+        mismatches: list[dict[str, JsonValue]] = []
+        operations = Counter(cast(str, publication["operation"]) for publication in publications)
+        for operation, count in sorted(operations.items()):
+            if count > 1:
+                mismatches.append({"operation": operation, "field": "acceptances", "expected": 1, "observed": count})
+        for publication in publications:
+            operation = cast(str, publication["operation"])
+            authority = cast(dict[str, JsonValue], publication["authority"])
+            recovery_identities = [
+                recovery["identity"] for recovery in admitted_recoveries if recovery["operation"] == operation
+            ]
+            if publication["recovered"] and publication["recovery_identity"] not in recovery_identities:
+                mismatches.append(
+                    {
+                        "operation": operation,
+                        "field": "recovery_authorization",
+                        "expected": recovery_identities,
+                        "observed": publication["recovery_identity"],
+                    }
+                )
+            matching_requests = [request for request in requests if request["operation"] == operation]
+            if not matching_requests:
+                mismatches.append({"operation": operation, "field": "request", "expected": True, "observed": False})
+            if publication["expected_head"] != authority["head"]:
+                mismatches.append(
+                    {
+                        "operation": operation,
+                        "field": "expected_head",
+                        "expected": authority["head"],
+                        "observed": publication["expected_head"],
+                    }
+                )
+            for request in matching_requests:
+                for authority_field in ("head", "base"):
+                    expected = authority[authority_field]
+                    if request[authority_field] != expected:
+                        mismatches.append(
+                            {
+                                "operation": operation,
+                                "field": f"request_{authority_field}",
+                                "expected": expected,
+                                "observed": request[authority_field],
+                            }
+                        )
+            if progress_disclosed:
+                continue
+            matching = [terminal for terminal in terminals if terminal["operation"] == operation]
+            expected_variants = (
+                ["FaultM", "Pushed"]
+                if publication["response_lost"] and publication["recovered"]
+                else ["FaultM"]
+                if publication["response_lost"]
+                else ["Pushed"]
+            )
+            observed_variants = [terminal["variant"] for terminal in matching]
+            if observed_variants != expected_variants:
+                mismatches.append(
+                    {
+                        "operation": operation,
+                        "field": "terminal",
+                        "expected": cast(list[JsonValue], expected_variants),
+                        "observed": observed_variants,
+                    }
+                )
+            expected_requests = len(expected_variants)
+            if len(matching_requests) != expected_requests:
+                mismatches.append(
+                    {
+                        "operation": operation,
+                        "field": "requests",
+                        "expected": expected_requests,
+                        "observed": len(matching_requests),
+                    }
+                )
+            for terminal in matching:
+                expected_head = publication["result_head"] if terminal["variant"] == "Pushed" else None
+                if terminal["result_head"] != expected_head:
+                    mismatches.append(
+                        {
+                            "operation": operation,
+                            "field": "terminal_result_head",
+                            "expected": expected_head,
+                            "observed": terminal["result_head"],
+                        }
+                    )
+        return mismatches
 
     @staticmethod
     def _timer_custody_mismatches(state: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
@@ -1051,6 +1321,31 @@ class ReadinessTimeline:
             {"subject": SUBJECT, "head": head, "status": status, "findings": list(findings)},
         )
 
+    def set_human_comment(self, *, comment: int, fixture: str, author: str = "author") -> ApplyResult:
+        return self.command(
+            "readiness.github.human.comment",
+            {
+                "subject": SUBJECT,
+                "comment": comment,
+                "author": author,
+                "fixture": fixture,
+                "digest": strict_digest({"fixture": fixture}),
+            },
+        )
+
+    def set_agent_terminal(self, *, operation: str, fixture: str, status: str, attempt: int = 1) -> ApplyResult:
+        return self.command(
+            "readiness.agent.terminal",
+            {
+                "subject": SUBJECT,
+                "operation": operation,
+                "attempt": attempt,
+                "status": status,
+                "fixture": fixture,
+                "digest": strict_digest({"fixture": fixture, "status": status}),
+            },
+        )
+
     def emit_webhook(self, event: str, *, action: str) -> str:
         self._owner._delivery += 1
         delivery = str(uuid.UUID(int=self._owner._delivery))
@@ -1077,6 +1372,15 @@ class ReadinessTimeline:
         self._timeline.activate_fault(
             "readiness.github.effect",
             f"effect:{kind}",
+            occurrence=occurrence,
+            disposition=FaultDisposition.RAISE,
+            payload={"cut": cut},
+        )
+
+    def fault_git_publication(self, operation: str, cut: str, *, occurrence: int = 1) -> None:
+        self._timeline.activate_fault(
+            "readiness.git.publish",
+            f"git:{operation}",
             occurrence=occurrence,
             disposition=FaultDisposition.RAISE,
             payload={"cut": cut},
@@ -1185,13 +1489,15 @@ def _history_records(root: Path) -> list[dict[str, JsonValue]]:
     return [cast(dict[str, JsonValue], json.loads(line)) for line in path.read_text().splitlines() if line]
 
 
-def _history(root: Path) -> tuple[list[JsonValue], list[str]]:
+def _history(root: Path) -> tuple[dict[str, JsonValue], list[str]]:
     records = _history_records(root)
     requested: dict[int, str] = {}
     terminal: set[int] = set()
-    summary: list[JsonValue] = []
+    summary: list[dict[str, JsonValue]] = []
+    kinds: Counter[str] = Counter()
     for record in records:
         kind = str(record.get("record", ""))
+        kinds[kind] += 1
         occurrence = record.get("occurrence")
         operation = None
         if kind == "ActivityRequested" and type(occurrence) is int:
@@ -1209,7 +1515,58 @@ def _history(root: Path) -> tuple[list[JsonValue], list[str]]:
                 "operation": operation,
             }
         )
-    return summary, sorted(requested[item] for item in terminal & requested.keys())
+    return (
+        {
+            "records": len(records),
+            "by_kind": dict(sorted(kinds.items())),
+            "digest": strict_digest(records),
+            "tail": cast(list[JsonValue], summary[-32:]),
+        },
+        sorted(requested[item] for item in terminal & requested.keys()),
+    )
+
+
+def _git_custody(root: Path) -> dict[str, JsonValue]:
+    """Project V5 Git requests and terminals from canonical public History."""
+
+    requests: list[dict[str, JsonValue]] = []
+    terminals: list[dict[str, JsonValue]] = []
+    requested: dict[int, str] = {}
+    for record in _history_records(root):
+        occurrence = record.get("occurrence")
+        if record.get("record") == "ActivityRequested" and record.get("activity") == "git_gate":
+            payload = record.get("input")
+            work = payload.get("work") if isinstance(payload, dict) else None
+            if type(occurrence) is not int or not isinstance(work, dict):
+                raise RuntimeError("V5 Git History request is malformed")
+            operation = work.get("op_key")
+            if not isinstance(operation, str):
+                raise RuntimeError("V5 Git History request has no strict operation key")
+            requested[occurrence] = operation
+            requests.append(
+                {
+                    "occurrence": occurrence,
+                    "operation": operation,
+                    "head": work.get("head"),
+                    "base": work.get("base"),
+                }
+            )
+            continue
+        if record.get("record") not in {"ActivityCompleted", "ActivityFailed", "ActivityTerminalQuarantined"}:
+            continue
+        if type(occurrence) is not int or occurrence not in requested:
+            continue
+        result = record.get("result")
+        variant = result.get("$variant") if isinstance(result, dict) else record.get("record")
+        terminals.append(
+            {
+                "occurrence": occurrence,
+                "operation": requested[occurrence],
+                "variant": variant,
+                "result_head": result.get("new_head") if isinstance(result, dict) else None,
+            }
+        )
+    return {"requests": requests, "terminals": terminals}
 
 
 def _timer_custody(root: Path) -> dict[str, JsonValue]:

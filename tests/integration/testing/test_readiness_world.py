@@ -65,13 +65,13 @@ def test_profile_and_checker_compatibility_identities_are_stable() -> None:
     assert DEFAULT_BUDGET.profile_resources == PROFILE_RESOURCE_LIMITS
     assert PROFILE_IDENTITY.model_dump(mode="json") == {
         "name": "hamsterdan.readiness.v5-world",
-        "version": 1,
-        "digest": "sha256:8119f333ef3d408e78a423a49b554663f8cdbb373e77d41c411803f2a8465a6f",
+        "version": 2,
+        "digest": "sha256:937b60ac87644fd2d97c5c4c529e760a254293ac49cc633c741f0226a2e92e5d",
     }
     assert CHECKER_IDENTITY.model_dump(mode="json") == {
         "name": "hamsterdan.readiness.independent-model",
-        "version": 3,
-        "digest": "sha256:b8bec72c57f5ea96cb6d1c65159674cc8db9e8b610f7359bebaceef77410d83f",
+        "version": 4,
+        "digest": "sha256:05134192a4e6df87fada8cb73c5f67d85ebff6eb94c70f247258a2b51a434f9a",
     }
 
 
@@ -298,6 +298,115 @@ def test_real_host_recovers_one_ambiguous_reminder_after_timer_maturity_and_cras
     assert [item["state"] for item in final.value["timer_custody"]["timers"]] == ["matured", "armed"]
 
     artifact = world.artifact("hamsterdan-readiness-reminder-ambiguity-restart-v1")
+    operations = len(artifact.operations)
+    world.close()
+
+    replayed = replay_readiness(artifact, tmp_path / "replay")
+    assert replayed.outcome == "pass"
+    assert replayed.disposition == Disposition.CONVERGED.value
+    assert replayed.operations == operations
+
+
+def test_real_v5_recovers_one_ambiguous_authorized_git_publication_after_crash(tmp_path: Path) -> None:
+    world = ReadinessWorld(tmp_path / "live")
+    timeline = world.timeline()
+    clean_green(timeline, response_lost=False)
+    while timeline.pending():
+        timeline.step()
+
+    comment = 501
+    timeline.set_human_comment(comment=comment, fixture="change")
+    delivery = timeline.emit_webhook("issue_comment", action="created")
+    conversation_operation = f"conversation:owner/repo:pr:7:delivery:{delivery}"
+    timeline.set_agent_terminal(
+        operation=conversation_operation,
+        fixture="conversation_change",
+        status="changed",
+    )
+    publication_operation = f"push:comment:{comment}:{HEAD}:i1"
+    coding_operation = f"mutation:owner/repo:pr:7:{publication_operation}"
+    timeline.set_agent_terminal(operation=coding_operation, fixture="coding", status="changed")
+    timeline.fault_git_publication(publication_operation, "ref_cas")
+    timeline.deliver_webhook(delivery)
+    accepted = timeline.run_until(
+        "Git ref update accepted without a response",
+        lambda state: len(state["provider"].get("git_publications", [])) == 1,
+    )
+    publication = accepted.value["provider"]["git_publications"][0]
+    new_head = publication["result_head"]
+    assert publication["operation"] == publication_operation
+    assert publication["response_lost"] is True
+
+    timeline.crash("after_git_ref_acceptance_before_recovery")
+    timeline = world.restart()
+    while timeline.pending():
+        timeline.step()
+    timeline.set_ci(head=new_head, required_checks=("build",), checks={"build": "success"})
+    timeline.set_review(head=new_head, status="clear")
+    head_delivery = timeline.emit_webhook("pull_request", action="synchronize")
+    timeline.deliver_webhook(head_delivery)
+    while timeline.pending():
+        timeline.step()
+
+    recovery_comment = 502
+    timeline.set_human_comment(
+        comment=recovery_comment,
+        fixture=f"recover:{publication_operation}",
+    )
+    recovery_delivery = timeline.emit_webhook("issue_comment", action="created")
+    timeline.set_agent_terminal(
+        operation=f"conversation:owner/repo:pr:7:delivery:{recovery_delivery}",
+        fixture="conversation_recover",
+        status="clear",
+    )
+    timeline.deliver_webhook(recovery_delivery)
+    final = timeline.converge()
+
+    assert final.value["expected"]["violations"] == []
+    assert final.value["expected"]["ready"] is True
+    assert final.value["actual"]["readiness_published"] is True
+    recovery_identity = f"github-delivery:{recovery_delivery}"
+    assert final.value["provider"]["git_publications"] == [
+        publication | {"recovered": True, "recovery_identity": recovery_identity}
+    ]
+    assert final.value["provider"]["git_reconciliations"] >= 3
+    assert [item["variant"] for item in final.value["git_custody"]["terminals"]] == ["FaultM", "Pushed"]
+
+    assert final.value["provider"]["git_publications"][0]["recovery_identity"] == recovery_identity
+    assert final.value["provider"]["admitted_recoveries"] == [
+        {"operation": publication_operation, "identity": recovery_identity}
+    ]
+
+    corrupted = deepcopy(final.value)
+    corrupted["provider"]["admitted_recoveries"] = []
+    sensitivity = ReadinessChecker().check(
+        Observation(
+            name="readiness.state",
+            value=corrupted,
+            instant=world.world.instant,
+            generation=world.world.generation,
+            sequence=0,
+        )
+    )
+    assert sensitivity.passed is False
+    assert sensitivity.detail["git_custody_parity"] is False
+    assert sensitivity.detail["git_custody_mismatches"][0]["field"] == "recovery_authorization"
+
+    corrupted = deepcopy(final.value)
+    corrupted["git_custody"]["terminals"][-1]["result_head"] = "d" * 40
+    sensitivity = ReadinessChecker().check(
+        Observation(
+            name="readiness.state",
+            value=corrupted,
+            instant=world.world.instant,
+            generation=world.world.generation,
+            sequence=0,
+        )
+    )
+    assert sensitivity.passed is False
+    assert any(mismatch["field"] == "terminal_result_head" for mismatch in sensitivity.detail["git_custody_mismatches"])
+
+    artifact = world.artifact("hamsterdan-v5-git-ambiguity-restart-v1")
     operations = len(artifact.operations)
     world.close()
 

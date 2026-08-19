@@ -141,11 +141,14 @@ class MutationFacts(StrictValue):
     status: MutationStatus = "idle"
     operation: str = ""
     head: str = ""
+    result_head: str = ""
     authorization: ChangeAuthorization | None = None
 
     def __post_init__(self) -> None:
         if self.status != "idle" and (not self.operation or not self.head):
             raise ValueError("active mutation facts require an operation and head")
+        if self.result_head and self.status not in {"accepted_pending_admission", "ambiguous"}:
+            raise ValueError("only an accepted or ambiguous mutation may declare a result head")
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -377,13 +380,20 @@ class ReadinessModel:
         violations = []
         for operation in sorted(operations):
             bound_effects = tuple(effect for effect in change_effects if effect.operation == operation)
+            self_push = (
+                authorization is not None
+                and facts.mutation.operation == operation
+                and facts.mutation.status in {"accepted_pending_admission", "ambiguous"}
+                and facts.mutation.result_head == current.head
+                and facts.authority.admitted in {authorization.authority, current}
+                and self._same_authority_except_head(authorization.authority, current)
+            )
             authorized = (
                 authorization is not None
                 and authorization.operation == operation
                 and authorization.identity in facts.admitted_observations
-                and authorization.authority == current
                 and authorization.authority.lifecycle == "active"
-                and authority_is_admitted
+                and ((authorization.authority == current and authority_is_admitted) or self_push)
                 and all(
                     effect.authority == authorization.authority and effect.authorization == authorization.identity
                     for effect in bound_effects
@@ -397,6 +407,13 @@ class ReadinessModel:
             if not authorized:
                 violations.append(f"unauthorized_change:{operation}")
         return tuple(violations)
+
+    @staticmethod
+    def _same_authority_except_head(left: AuthorityClaim, right: AuthorityClaim) -> bool:
+        left_value, right_value = left.dump(), right.dump()
+        left_value.pop("head")
+        right_value.pop("head")
+        return left_value == right_value
 
     def _effect_violations(self, facts: ReadinessFacts, blockers: tuple[str, ...]) -> tuple[str, ...]:
         violations = []

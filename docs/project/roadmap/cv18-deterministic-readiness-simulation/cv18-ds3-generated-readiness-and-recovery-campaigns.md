@@ -2,8 +2,8 @@
 code: CV18.DS3
 level: Delivery Story
 status: Active
-status_reason: Generated V5 authority/lifecycle and reminder-timer recovery now replay exactly; broader vocabulary, checker coverage, and operations remain
-updated: 2026-08-18
+status_reason: Generated V5 authority/lifecycle, reminder-timer, and Git ambiguity recovery now replay exactly; broader vocabulary, checker coverage, and operations remain
+updated: 2026-08-19
 related:
   - index.md
   - cv18-ds2-deterministic-host-and-provider-fault-world.md
@@ -113,6 +113,28 @@ phase, and exactly replays every successful v4 artifact. Four explicit semantic
 anchors guarantee every selected path and crash class; five deterministic
 generated schedules add combinations and remain shrinkable. This satisfies Done
 condition 1 for the selected V5 reminder boundary, not the other DS3 conditions.
+
+The qualified Git-mutation slice now drives an admitted trusted-human change
+through the real V5 conversation, coding, mutation, canonical History, and
+HostService crash/reconstruction paths while only the external Git provider is
+modeled. The provider accepts one deterministic ref CAS and loses its response
+and immediate proof; V5 records `FaultM` and remains fail-closed after the new
+head is admitted. A second admitted human comment must name the exact operation
+before lookup-first recovery can produce `Pushed`. The independent model and
+checker bind the original authority, one provider acceptance, admitted recovery
+identity, complete `FaultM` → `Pushed` request/terminal sequence, and recovered
+head without reading the V5 marking or decision fold.
+
+One fixed vertical crashes after ref acceptance and exactly replays the complete
+artifact. A focused generated campaign varies definite response versus response
+loss, crashes before delivery, after acceptance, and after new-head admission,
+and old-delivery redelivery. Four explicit semantic anchors plus five
+deterministic generated schedules remain shrinkable and exactly replay through
+Petrus v4. Checker-sensitivity mutations prove that a plausible recovery trace
+without its admitted human grant and a `Pushed` terminal with the wrong head are
+both rejected. Production continues to construct `HostGitPublisher` by default;
+the DST composition injects modeled Git truth through a narrow V5 application
+constructor seam.
 
 This remains bounded generated evidence, not broad campaign completion.
 Retry schedules, repeated/overlapping time advances, remaining DS1 fault

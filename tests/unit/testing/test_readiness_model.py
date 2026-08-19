@@ -528,6 +528,42 @@ def test_change_authorization_is_bound_to_the_current_full_authority() -> None:
     assert ReadinessModel().evaluate(facts).violations == ("unauthorized_change:push:comment:1",)
 
 
+def test_authorized_self_push_may_advance_only_to_its_declared_result_head() -> None:
+    original = claim()
+    pushed = claim(head="c" * 40)
+    facts = replace(
+        ready_facts(),
+        admitted_observations=("delivery:open", "delivery:comment:1"),
+        authority=AuthorityFacts(generation=1, admitted=original, provider=pushed),
+        mutation=MutationFacts(
+            status="ambiguous",
+            operation="push:comment:1",
+            head=original.head,
+            result_head=pushed.head,
+            authorization=authorization(authority=original),
+        ),
+        effects=(
+            EffectObligation(
+                kind="git_mutation",
+                operation="push:comment:1",
+                authority=original,
+                provider_authority_at_acceptance=original,
+                content_digest="change-1",
+                status="ambiguous",
+                authorization="delivery:comment:1",
+            ),
+        ),
+    )
+
+    expectation = ReadinessModel().evaluate(facts)
+
+    assert expectation.blockers == ("current_authority_admission",)
+    assert expectation.violations == ()
+
+    unrelated = replace(facts, authority=AuthorityFacts(generation=1, admitted=original, provider=claim(head="d" * 40)))
+    assert ReadinessModel().evaluate(unrelated).violations == ("unauthorized_change:push:comment:1",)
+
+
 def test_duplicate_admission_and_effect_identity_collision_are_safety_violations() -> None:
     facts = replace(
         ready_facts(),
