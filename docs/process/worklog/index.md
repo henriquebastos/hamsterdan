@@ -93,3 +93,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-18 — Deterministic readiness World accepted](entries/2026-08-18T0250Z-deterministic-readiness-world-accepted.md)
 - [2026-08-18 — Readiness DST composition split accepted](entries/2026-08-18T1030Z-readiness-dst-composition-split-accepted.md)
 - [2026-08-18 — First generated readiness recovery campaign accepted](entries/2026-08-18T1130Z-first-generated-readiness-recovery-campaign-accepted.md)
+- [2026-08-18 — Generated V5 reminder-timer campaign qualified locally](entries/2026-08-18T1750Z-generated-v5-reminder-timer-campaign-qualified.md)

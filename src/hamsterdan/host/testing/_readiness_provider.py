@@ -39,6 +39,8 @@ class _Effect:
     authority: AuthorityClaim
     provider_authority_at_acceptance: AuthorityClaim
     body: str
+    accepted_at: int
+    semantic_order: int
     visible: bool = True
     response_lost: bool = False
     recovered: bool = False
@@ -51,6 +53,8 @@ class _Emitted:
     event: str
     action: str
     authority: AuthorityClaim
+    instant: int = 0
+    semantic_order: int = 0
 
 
 class ReadinessProviderTruth:
@@ -91,6 +95,7 @@ class ReadinessProviderTruth:
         self.calls: list[dict[str, JsonValue]] = []
         self.harness_errors: list[str] = []
         self.provider_truth_changes = 0
+        self._semantic_order = 0
 
     def set_authority(self, authority: AuthorityClaim) -> None:
         self.authority = authority
@@ -108,6 +113,18 @@ class ReadinessProviderTruth:
         ):
             raise ValueError("stable provider operation was reused under different authored authority")
         self.effect_authorities[key] = authority
+
+    def admit(self, emitted: _Emitted, instant: int) -> None:
+        self.admitted.append(
+            _Emitted(
+                delivery=emitted.delivery,
+                event=emitted.event,
+                action=emitted.action,
+                authority=self.authority,
+                instant=instant,
+                semantic_order=self._next_semantic_order(),
+            )
+        )
 
     def request(
         self,
@@ -321,6 +338,7 @@ class ReadinessProviderTruth:
         identifier = len(self.comments) + 1
         response_lost = cut == "after_acceptance_before_response"
         visible = cut != "before_visibility"
+        accepted_at = 0 if context is None else context.now()
         effect = _Effect(
             kind=kind,
             operation=operation,
@@ -329,6 +347,8 @@ class ReadinessProviderTruth:
             authority=attempted_authority,
             provider_authority_at_acceptance=self.authority,
             body=payload,
+            accepted_at=accepted_at,
+            semantic_order=self._next_semantic_order(),
             visible=visible,
             response_lost=response_lost,
             reference=identifier,
@@ -368,6 +388,8 @@ class ReadinessProviderTruth:
                     "authority": effect.authority.dump(),
                     "provider_authority_at_acceptance": effect.provider_authority_at_acceptance.dump(),
                     "body": effect.body,
+                    "accepted_at": effect.accepted_at,
+                    "semantic_order": effect.semantic_order,
                     "visible": effect.visible,
                     "response_lost": effect.response_lost,
                     "recovered": effect.recovered,
@@ -386,6 +408,8 @@ class ReadinessProviderTruth:
                     "event": item.event,
                     "action": item.action,
                     "authority": item.authority.dump(),
+                    "instant": item.instant,
+                    "semantic_order": item.semantic_order,
                 }
                 for item in (self.emitted[key] for key in sorted(self.emitted))
             ],
@@ -396,6 +420,8 @@ class ReadinessProviderTruth:
                     "event": item.event,
                     "action": item.action,
                     "authority": item.authority.dump(),
+                    "instant": item.instant,
+                    "semantic_order": item.semantic_order,
                 }
                 for item in self.admitted
             ],
@@ -421,6 +447,8 @@ class ReadinessProviderTruth:
                     "authority": effect.authority.dump(),
                     "content_digest": effect.content_digest,
                     "provider_authority_at_acceptance": effect.provider_authority_at_acceptance.dump(),
+                    "accepted_at": effect.accepted_at,
+                    "semantic_order": effect.semantic_order,
                     "visible": effect.visible,
                     "response_lost": effect.response_lost,
                     "recovered": effect.recovered,
@@ -440,6 +468,10 @@ class ReadinessProviderTruth:
             raise RuntimeError(
                 f"readiness profile bound provider_calls exhausted at {PROFILE_LIMITS['provider_calls']}"
             )
+
+    def _next_semantic_order(self) -> int:
+        self._semantic_order += 1
+        return self._semantic_order
 
 
 class ProviderTransport:

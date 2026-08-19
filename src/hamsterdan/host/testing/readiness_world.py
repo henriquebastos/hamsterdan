@@ -61,6 +61,7 @@ from hamsterdan.testing.readiness import (
     ReadinessFacts,
     ReadinessModel,
     ReviewFacts,
+    TimerObligation,
 )
 
 from ._readiness_contract import (
@@ -77,6 +78,7 @@ from ._readiness_contract import (
     PROFILE_LIMITS,
     PROFILE_RESOURCE_LIMITS,
     READINESS_POLICY_DIGEST,
+    REMINDER_DELAY,
     SHA,
     SUBJECT,
     WEBHOOK_SECRET,
@@ -265,7 +267,7 @@ class ReadinessScenarioProfile:
             agent_composition=composition,
             agent_routes=routes,
             readiness_composition=V5,
-            reminder_delay=86_400,
+            reminder_delay=REMINDER_DELAY,
             clock=lambda: float(context.now()),
             transport_factory=transport_factory,
         )
@@ -428,14 +430,7 @@ class ReadinessScenarioProfile:
                 None if observed is None else {"delivery": observed.delivery_id, "disposition": observed.disposition}
             )
             if candidate is not None and observed_value == expected:
-                self.truth.admitted.append(
-                    _Emitted(
-                        delivery=candidate.delivery,
-                        event=candidate.event,
-                        action=candidate.action,
-                        authority=self.truth.authority,
-                    )
-                )
+                self.truth.admit(candidate, context.now())
             self.truth.custody_actions.append({"expected": expected, "observed": observed_value})
             return {"custody": observed_value}, "applied" if observed is not None else "refused_expected"
         if name == "readiness.host.activity_one":
@@ -484,20 +479,20 @@ class ReadinessScenarioProfile:
         request: ObservationRequest,
         context: ScenarioContext,
     ) -> JsonValue:
-        del context
         if request.name != "readiness.state" or request.payload not in (None, {}):
             raise ValueError("readiness profile exposes only readiness.state without parameters")
-        return self._state(generation)
+        return self._state(generation, context.now())
 
-    def _state(self, generation: _Generation) -> dict[str, JsonValue]:
+    def _state(self, generation: _Generation, instant: int) -> dict[str, JsonValue]:
         custody = {delivery: generation.host.custody.status(delivery) for delivery in sorted(self.truth.emitted)}
-        facts = self._facts()
+        timer_expectations = self._expected_timers(instant)
+        facts = self._facts(timer_expectations)
         expected = ReadinessModel().evaluate(facts)
         detached = generation.host.subject_state(44, 31, 7)
         host = {"ready": None, "snapshot": None} if detached is None else cast(dict[str, JsonValue], detached)
         snapshot = host["snapshot"]
         current_readiness = False
-        if type(snapshot) is dict and type(snapshot.get("incarnation")) is int:
+        if type(snapshot) is dict and snapshot.get("phase") == "running" and type(snapshot.get("incarnation")) is int:
             operation = f"ready:{self.truth.authority.head}:i{snapshot['incarnation']}"
             current_readiness = any(
                 effect.kind == "readiness"
@@ -515,6 +510,8 @@ class ReadinessScenarioProfile:
             "host": host,
             "provider": self.truth.observation(),
             "custody": cast(dict[str, JsonValue], custody),
+            "timer_expectations": cast(list[JsonValue], timer_expectations),
+            "timer_custody": _timer_custody(self.root),
             "history": history,
             "motus": _motus(self.root),
             "terminal_operations": terminal_operations,
@@ -582,7 +579,7 @@ class ReadinessScenarioProfile:
             "pending.profile.proposals": 0 if generation is None else len(generation.proposed),
         }
 
-    def _facts(self) -> ReadinessFacts:
+    def _facts(self, timer_expectations: list[dict[str, JsonValue]]) -> ReadinessFacts:
         admitted_events = self.truth.admitted
         admitted = admitted_events[-1].authority if admitted_events else None
         generations = 0
@@ -612,7 +609,7 @@ class ReadinessScenarioProfile:
                     "findings"
                     if effect.kind == "finding"
                     else effect.kind
-                    if effect.kind in {"dashboard", "conversation", "readiness", "rerun"}
+                    if effect.kind in {"dashboard", "conversation", "readiness", "reminder", "rerun"}
                     else "dashboard",
                 ),
                 operation=effect.operation,
@@ -642,7 +639,93 @@ class ReadinessScenarioProfile:
                 unresolved_conversations=sum(not value for value in self.truth.review_threads.values()),
             ),
             effects=effects,
+            timers=tuple(
+                TimerObligation(
+                    identity=cast(str, timer["identity"]),
+                    status=cast(Any, timer["status"]),
+                    blocks_readiness=False,
+                )
+                for timer in timer_expectations
+            ),
         )
+
+    def _expected_timers(self, instant: int) -> list[dict[str, JsonValue]]:
+        """Fold authored admissions and provider effects into expected reminder custody."""
+        timers: list[dict[str, JsonValue]] = []
+        current: dict[str, JsonValue] | None = None
+        phase = "running"
+        head = ""
+        incarnation = 0
+
+        def cancel() -> None:
+            nonlocal current
+            if current is not None and current["status"] in {"scheduled", "due"}:
+                current["status"] = "canceled"
+            current = None
+
+        def arm(at: int, timer_head: str, sequence: int = 0) -> dict[str, JsonValue]:
+            timer = {
+                "identity": f"timer:{SUBJECT}:i{incarnation}:s{sequence}",
+                "incarnation": incarnation,
+                "sequence": sequence,
+                "head": timer_head,
+                "due_at": at + REMINDER_DELAY,
+                "status": "scheduled",
+                "matured_at": None,
+            }
+            timers.append(timer)
+            return timer
+
+        ordered: list[tuple[int, str, object]] = [
+            (event.semantic_order, "admission", event) for event in self.truth.admitted
+        ]
+        ordered.extend(
+            (effect.semantic_order, "reminder", effect) for effect in self.truth.effects if effect.kind == "reminder"
+        )
+        for _order, kind, value in sorted(ordered, key=lambda item: item[0]):
+            if kind == "admission":
+                event = cast(_Emitted, value)
+                authority = event.authority
+                if authority.lifecycle in {"closed", "merged"}:
+                    cancel()
+                    phase = "terminal"
+                    continue
+                if phase == "terminal":
+                    continue
+                if phase == "quiescent":
+                    head = authority.head
+                elif authority.head != head:
+                    cancel()
+                    incarnation += 1
+                    head = authority.head
+                    phase = "running"
+                    current = arm(event.instant, head)
+                if authority.lifecycle == "draft":
+                    if phase == "running":
+                        cancel()
+                    phase = "quiescent"
+                elif phase == "quiescent":
+                    phase = "running"
+                    incarnation += 1
+                    current = arm(event.instant, head)
+                continue
+
+            effect = cast(Any, value)
+            timer_id = effect.operation.removeprefix("reminder:")
+            matched = next((timer for timer in timers if timer["identity"] == timer_id), None)
+            if matched is None or matched["status"] == "canceled":
+                continue
+            matched["status"] = "acknowledged"
+            matched["matured_at"] = effect.accepted_at
+            if current is matched and phase == "running":
+                sequence = cast(int, matched["sequence"]) + 1
+                current = arm(effect.accepted_at, cast(str, matched["head"]), sequence)
+
+        if current is not None and current["status"] == "scheduled" and cast(int, current["due_at"]) <= instant:
+            current["status"] = "due"
+            current["matured_at"] = instant
+            current = arm(instant, cast(str, current["head"]), cast(int, current["sequence"]) + 1)
+        return timers
 
     def _bind_readiness_effect_authorities(self) -> None:
         records = _history_records(self.root)
@@ -742,9 +825,11 @@ class ReadinessChecker:
         readiness_parity = observed_readiness == expected["ready"] or (
             expected["ready"] is True and not observed_readiness and progress_disclosed
         )
+        timer_mismatches = self._timer_custody_mismatches(state)
+        timer_custody_parity = not timer_mismatches or progress_disclosed
         neutral_host_verdict = host["ready"] is None
         ready_parity = readiness_parity and actual_parity and neutral_host_verdict
-        parity = ready_parity and snapshot_parity
+        parity = ready_parity and snapshot_parity and timer_custody_parity
         retained = bounded_json(state, PROFILE_LIMITS["observation_bytes"], "checker observation").decode()
         sensitive = [
             label
@@ -771,6 +856,8 @@ class ReadinessChecker:
                 "parity": parity,
                 "ready_parity": ready_parity,
                 "snapshot_parity": snapshot_parity,
+                "timer_custody_parity": timer_custody_parity,
+                "timer_custody_mismatches": timer_mismatches,
                 "authority_lag": authority_lag,
                 "expected_ready": expected["ready"],
                 "readiness_published": observed_readiness,
@@ -786,6 +873,82 @@ class ReadinessChecker:
                 "violations": violations,
             },
         )
+
+    @staticmethod
+    def _timer_custody_mismatches(state: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
+        expected = cast(list[dict[str, JsonValue]], state["timer_expectations"])
+        custody = cast(dict[str, JsonValue], state["timer_custody"])
+        actual = cast(list[dict[str, JsonValue]], custody["timers"])
+        actual_by_identity = {cast(str, timer["identity"]): timer for timer in actual}
+        mismatches: list[dict[str, JsonValue]] = []
+        compatible_states = {
+            "scheduled": {"armed"},
+            "due": {"armed", "matured"},
+            "acknowledged": {"matured"},
+            "canceled": {"cancelled", "superseded", "retired"},
+        }
+        for timer in expected:
+            identity = cast(str, timer["identity"])
+            observed = actual_by_identity.get(identity)
+            if observed is None:
+                mismatches.append({"identity": identity, "field": "presence", "expected": True, "observed": False})
+                continue
+            for attribute in ("incarnation", "sequence", "head", "due_at", "matured_at"):
+                if observed[attribute] != timer[attribute]:
+                    mismatches.append(
+                        {
+                            "identity": identity,
+                            "field": attribute,
+                            "expected": timer[attribute],
+                            "observed": observed[attribute],
+                        }
+                    )
+            status = cast(str, timer["status"])
+            if observed["state"] not in compatible_states[status]:
+                mismatches.append(
+                    {
+                        "identity": identity,
+                        "field": "status",
+                        "expected": status,
+                        "observed": observed["state"],
+                    }
+                )
+            if status == "acknowledged" and observed["maturity_delivered"] is not True:
+                mismatches.append(
+                    {
+                        "identity": identity,
+                        "field": "maturity_delivered",
+                        "expected": True,
+                        "observed": observed["maturity_delivered"],
+                    }
+                )
+        expected_identities = {cast(str, timer["identity"]) for timer in expected}
+        for identity in sorted(set(actual_by_identity) - expected_identities):
+            mismatches.append({"identity": identity, "field": "presence", "expected": False, "observed": True})
+
+        operations = cast(list[dict[str, JsonValue]], custody["operations"])
+        generations = [operation["generation"] for operation in operations]
+        expected_generations = list(range(1, len(operations) + 1))
+        if generations != expected_generations:
+            mismatches.append(
+                {
+                    "identity": "timer-operations",
+                    "field": "generations",
+                    "expected": expected_generations,
+                    "observed": generations,
+                }
+            )
+        for operation in operations:
+            if operation["acknowledged"] is not True:
+                mismatches.append(
+                    {
+                        "identity": operation["identity"],
+                        "field": "acknowledged",
+                        "expected": True,
+                        "observed": operation["acknowledged"],
+                    }
+                )
+        return mismatches
 
     @staticmethod
     def _snapshot_matches(admitted: JsonValue, snapshot: JsonValue) -> bool:
@@ -810,7 +973,7 @@ class ReadinessChecker:
         provider_authority: JsonValue,
         snapshot: JsonValue,
     ) -> bool:
-        if type(provider_authority) is not dict or type(snapshot) is not dict:
+        if type(provider_authority) is not dict or type(snapshot) is not dict or snapshot.get("phase") != "running":
             return False
         incarnation = snapshot.get("incarnation")
         if type(incarnation) is not int:
@@ -1049,6 +1212,56 @@ def _history(root: Path) -> tuple[list[JsonValue], list[str]]:
     return summary, sorted(requested[item] for item in terminal & requested.keys())
 
 
+def _timer_custody(root: Path) -> dict[str, JsonValue]:
+    """Detach V5 timer custody without exposing a Net marking or live store."""
+
+    operations: list[JsonValue] = []
+    timers: list[JsonValue] = []
+    for path in sorted((root / "applications").glob("*/*/*/timers.sqlite3")):
+        with closing(sqlite3.connect(path)) as database:
+            names = {str(row[0]) for row in database.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            if {"v5_timer_operations", "v5_timers"} - names:
+                raise RuntimeError("readiness timer custody store is incomplete")
+            for operation, generation, applied_at, acknowledged in database.execute(
+                "SELECT operation,generation,applied_at_us,ack_delivered"
+                " FROM v5_timer_operations ORDER BY generation,operation"
+            ):
+                operations.append(
+                    {
+                        "identity": str(operation),
+                        "generation": int(generation),
+                        "applied_at": _whole_seconds(applied_at, "timer operation instant"),
+                        "acknowledged": acknowledged == 1,
+                    }
+                )
+            for row in database.execute(
+                "SELECT timer_id,incarnation,sequence,head,due_at_us,state,matured_at_us,maturity_delivered"
+                " FROM v5_timers ORDER BY incarnation,sequence,timer_id"
+            ):
+                identity, incarnation, sequence, head, due_at, state, matured_at, delivered = row
+                timers.append(
+                    {
+                        "identity": str(identity),
+                        "incarnation": int(incarnation),
+                        "sequence": int(sequence),
+                        "head": str(head),
+                        "due_at": _whole_seconds(due_at, "timer deadline"),
+                        "state": str(state),
+                        "matured_at": None
+                        if matured_at is None
+                        else _whole_seconds(matured_at, "timer maturity instant"),
+                        "maturity_delivered": delivered == 1,
+                    }
+                )
+    return {"operations": operations, "timers": timers}
+
+
+def _whole_seconds(value: object, label: str) -> int:
+    if type(value) is not int or value % 1_000_000:
+        raise RuntimeError(f"{label} is not a deterministic whole second")
+    return value // 1_000_000
+
+
 def _sqlite_retained(root: Path) -> tuple[int, int, dict[str, int]]:
     """Count durable SQLite rows, scalar bytes, and named pending subsets."""
     count = 0
@@ -1140,6 +1353,7 @@ __all__ = [
     "PROFILE_LIMITS",
     "PROFILE_RESOURCE_LIMITS",
     "READINESS_POLICY_DIGEST",
+    "REMINDER_DELAY",
     "ReadinessChecker",
     "ReadinessScenarioProfile",
     "ReadinessTimeline",

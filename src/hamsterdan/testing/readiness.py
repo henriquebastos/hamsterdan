@@ -24,6 +24,7 @@ EffectKind = Literal[
     "dashboard",
     "findings",
     "conversation",
+    "reminder",
     "readiness",
     "rerun",
     "git_mutation",
@@ -407,7 +408,8 @@ class ReadinessModel:
 
         for effect in facts.effects:
             if (
-                effect.provider_authority_at_acceptance is not None
+                effect.kind not in {"dashboard", "conversation", "reminder"}
+                and effect.provider_authority_at_acceptance is not None
                 and effect.authority != effect.provider_authority_at_acceptance
             ):
                 violations.append(f"stale_effect_settled:{effect.operation}")
@@ -418,7 +420,14 @@ class ReadinessModel:
                 continue
             if effect.authority.lifecycle != "active":
                 violations.append(f"readiness_published_outside_active_lifecycle:{effect.operation}")
-            if effect.provider_authority_at_acceptance == facts.authority.provider and gate_blockers:
+            if (
+                (
+                    facts.authority.admitted == facts.authority.provider
+                    or effect.authority != effect.provider_authority_at_acceptance
+                )
+                and effect.provider_authority_at_acceptance == facts.authority.provider
+                and gate_blockers
+            ):
                 violations.append(f"readiness_published_with_closed_gates:{effect.operation}")
         return tuple(violations)
 

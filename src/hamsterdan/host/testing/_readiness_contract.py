@@ -88,10 +88,12 @@ _POLICY_CANONICAL = {
 READINESS_POLICY_DIGEST = hashlib.sha256(
     json.dumps(_POLICY_CANONICAL, sort_keys=True, separators=(",", ":")).encode()
 ).hexdigest()
+REMINDER_DELAY = 86_400
 
 _PROFILE_DEFINITION = {
     "dst_api": "petrus.testing.dst/v4",
     "topology": "v5",
+    "reminder_delay": REMINDER_DELAY,
     "limits": PROFILE_LIMITS,
     "resource_limits": PROFILE_RESOURCE_LIMITS,
     "observation_semantics": [
@@ -100,7 +102,13 @@ _PROFILE_DEFINITION = {
         "semantic admission records provider authority when custody executes",
         "every distinct full admitted authority claim advances the model generation",
         "provider movement does not retroactively invalidate historical effects",
+        "dashboard, conversation, and reminder effects are fixed incarnation-bound unfenced kinds",
         "current readiness is an authority-fenced V5 provider effect",
+        (
+            "reminder identity, incarnation, sequence, head, due, maturity, and status derive from "
+            "admitted authority, logical time, and provider acceptance"
+        ),
+        "timer custody is detached from the durable V5 host boundary",
         "detached host state is the durable V5 authority grant, never a Petri marking",
     ],
     "commands": [
@@ -130,13 +138,17 @@ PROFILE_IDENTITY = ProfileIdentity(
 )
 CHECKER_IDENTITY = CheckerIdentity(
     name="hamsterdan.readiness.independent-model",
-    version=2,
+    version=3,
     digest=digest_json(
         {
             "checks": [
                 "expected readiness equals the current authority-fenced V5 provider effect after disclosed work drains",
                 "only disclosed eligible work permits transient readiness-publication lag",
                 "durable V5 grant matches active or quiescent authority and terminal lifecycle",
+                (
+                    "independent reminder identity, authority, due/maturity instants, and status match "
+                    "detached durable V5 timer custody after disclosed work drains"
+                ),
                 "modeled custody action equals detached host disposition",
                 "provider effect identity accepts at most once",
                 "independent readiness safety violations remain empty",

@@ -2,7 +2,7 @@
 code: CV18.DS3
 level: Delivery Story
 status: Active
-status_reason: Generated V5 authority/lifecycle recovery and exact resource-bounded replay are implemented locally; broader vocabulary, checker coverage, and operations remain
+status_reason: Generated V5 authority/lifecycle and reminder-timer recovery now replay exactly; broader vocabulary, checker coverage, and operations remain
 updated: 2026-08-18
 related:
   - index.md
@@ -96,10 +96,31 @@ The separate process runner is reserved for DS4 process qualification: a killed
 call is a harness failure with an acknowledged prefix, not a fabricated
 deterministic artifact.
 
+The current qualified timer slice derives reminder obligations independently
+from admitted external authority events, the World clock, and provider effect
+acceptance. A separate V5 adapter observes durable timer operations and custody
+without reading a Petri marking or retaining a live runtime handle. The checker
+compares timer identity, incarnation, sequence, head, deadline, maturity,
+status, acknowledgement, and command generations after disclosed work drains.
+Checker-sensitivity regressions prove that wrong authority and early maturity
+are rejected.
+
+One bounded campaign combines stable authority, new-head replacement,
+draft→active resumption, and closure with crashes before maturity, after
+maturity, and after provider acceptance. It also varies old webhook redelivery
+and accepted-but-response-lost reminder publication, enters Petrus's fair
+phase, and exactly replays every successful v4 artifact. Four explicit semantic
+anchors guarantee every selected path and crash class; five deterministic
+generated schedules add combinations and remain shrinkable. This satisfies Done
+condition 1 for the selected V5 reminder boundary, not the other DS3 conditions.
+
 This remains bounded generated evidence, not broad campaign completion.
-Timer/retry schedules, remaining DS1
-fault adapters, wider checker properties, semantic coverage reporting, and
-operational campaign retention remain active DS3/DS4 work.
+Retry schedules, repeated/overlapping time advances, remaining DS1 fault
+adapters, wider checker properties, semantic coverage reporting, and
+operational campaign retention remain active DS3/DS4 work. The timer result is
+specifically bounded to the World-owned exact-delay drive: it does not claim
+arbitrary extra time advances while reminder work is intentionally left
+pending.
 
 ## Acceptance / Done condition
 

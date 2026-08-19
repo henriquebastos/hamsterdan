@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from typing import cast
 
 import pytest
-from hypothesis import HealthCheck, event, example, given, settings
+from hypothesis import HealthCheck, assume, event, example, given, settings
 from hypothesis import strategies as st
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -31,6 +31,7 @@ from hamsterdan.host.testing.readiness_world import (
     BASE,
     HEAD,
     READINESS_POLICY_DIGEST,
+    REMINDER_DELAY,
     ReadinessTimeline,
     ReadinessWorld,
     replay_readiness,
@@ -505,6 +506,195 @@ def test_generated_authority_lifecycle_schedules_replay_exactly(
                 if primary is not None:
                     primary.add_note(
                         "secondary readiness campaign directory cleanup failure: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    )
+                else:
+                    raise
+
+
+@pytest.mark.timeout(60)
+@settings(
+    max_examples=5,
+    deadline=None,
+    derandomize=True,
+    suppress_health_check=(HealthCheck.too_slow,),
+)
+@example(seed=0, path="stable", crash_cut="before_due", response_lost=False, redeliver=False)
+@example(seed=1, path="new_head", crash_cut="after_due", response_lost=False, redeliver=True)
+@example(seed=2, path="draft_resume", crash_cut="after_acceptance", response_lost=True, redeliver=True)
+@example(seed=3, path="closed", crash_cut="after_due", response_lost=False, redeliver=True)
+@given(
+    seed=st.integers(min_value=0, max_value=2**53 - 1),
+    path=st.sampled_from(("stable", "new_head", "draft_resume", "closed")),
+    crash_cut=st.sampled_from(("before_due", "after_due", "after_acceptance")),
+    response_lost=st.booleans(),
+    redeliver=st.booleans(),
+)
+def test_generated_reminder_timer_recovery_schedules_replay_exactly(
+    seed: int,
+    path: str,
+    crash_cut: str,
+    response_lost: bool,
+    redeliver: bool,
+) -> None:
+    assume(path != "closed" or (crash_cut != "after_acceptance" and not response_lost))
+    event(f"timer_path={path}")
+    event(f"timer_crash_cut={crash_cut}")
+    event(f"timer_response_lost={response_lost}")
+    event(f"timer_redeliver={redeliver}")
+    directory = TemporaryDirectory(prefix="hamsterdan-readiness-timer-")
+    root = Path(directory.name)
+    world = ReadinessWorld(root / "live", seed=seed)
+    timeline = world.timeline()
+    scenario_id = f"readiness-reminder-timer-{path}-v1"
+    failure_path = Path(".hypothesis/readiness-artifacts/readiness-reminder-timer-v4.json")
+    closed = False
+    try:
+        initial_delivery = _start_clean_green(timeline, response_lost=False)
+        _drain(timeline)
+        expected_incarnation = 1
+
+        if path == "new_head":
+            timeline.set_pull_request(
+                head=_AUTHORITY_HEAD,
+                base=BASE,
+                policy=READINESS_POLICY_DIGEST,
+                lifecycle="active",
+                strict_base=True,
+                base_current=True,
+                mergeable=True,
+            )
+            timeline.set_ci(head=_AUTHORITY_HEAD, required_checks=("build",), checks={"build": "success"})
+            timeline.set_review(head=_AUTHORITY_HEAD, status="clear")
+            moved = timeline.emit_webhook("pull_request", action="synchronize")
+            timeline.deliver_webhook(moved)
+            _drain(timeline)
+            expected_incarnation = 2
+        elif path == "draft_resume":
+            timeline.set_pull_request(
+                head=HEAD,
+                base=BASE,
+                policy=READINESS_POLICY_DIGEST,
+                lifecycle="draft",
+                strict_base=True,
+                base_current=True,
+                mergeable=True,
+            )
+            draft = timeline.emit_webhook("pull_request", action="converted_to_draft")
+            timeline.deliver_webhook(draft)
+            _drain(timeline)
+            timeline.set_pull_request(
+                head=HEAD,
+                base=BASE,
+                policy=READINESS_POLICY_DIGEST,
+                lifecycle="active",
+                strict_base=True,
+                base_current=True,
+                mergeable=True,
+            )
+            resumed = timeline.emit_webhook("pull_request", action="ready_for_review")
+            timeline.deliver_webhook(resumed)
+            _drain(timeline)
+            expected_incarnation = 2
+        elif path == "closed":
+            timeline.set_pull_request(
+                head=HEAD,
+                base=BASE,
+                policy=READINESS_POLICY_DIGEST,
+                lifecycle="closed",
+                strict_base=True,
+                base_current=True,
+                mergeable=True,
+            )
+            closed_delivery = timeline.emit_webhook("pull_request", action="closed")
+            timeline.deliver_webhook(closed_delivery)
+            _drain(timeline)
+
+        if redeliver:
+            timeline.deliver_webhook(initial_delivery)
+        if response_lost:
+            timeline.lose_effect_response("reminder")
+        if crash_cut == "before_due":
+            timeline.crash("generated_timer_before_due")
+            timeline = world.restart()
+            _drain(timeline)
+
+        timeline.advance_time(REMINDER_DELAY)
+        if crash_cut == "after_due":
+            timeline.crash("generated_timer_after_due")
+            timeline = world.restart()
+
+        if path != "closed":
+            accepted = timeline.run_until(
+                "generated reminder accepted",
+                lambda state: state["provider"].get("accepted_by_kind", {}).get("reminder", 0) == 1,
+            )
+            assert accepted.value["provider"]["accepted_by_kind"]["reminder"] == 1
+            if crash_cut == "after_acceptance":
+                timeline.crash("generated_timer_after_acceptance")
+                timeline = world.restart()
+
+        final = cast(dict[str, JsonValue], timeline.converge().value)
+        provider = cast(dict[str, JsonValue], final["provider"])
+        effects = cast(list[dict[str, JsonValue]], provider["effects"])
+        reminders = [effect for effect in effects if effect["kind"] == "reminder"]
+        timers = cast(list[dict[str, JsonValue]], cast(dict[str, JsonValue], final["facts"])["timers"])
+        timer_custody = cast(dict[str, JsonValue], final["timer_custody"])
+
+        assert cast(dict[str, JsonValue], final["expected"])["violations"] == []
+        assert len(reminders) == (0 if path == "closed" else 1)
+        assert len({cast(str, effect["operation"]) for effect in reminders}) == len(reminders)
+        assert all(operation["acknowledged"] is True for operation in timer_custody["operations"])
+        if path == "closed":
+            assert [timer["status"] for timer in timers] == ["canceled"]
+            assert cast(dict[str, JsonValue], final["actual"])["readiness_published"] is False
+        else:
+            expected_timer = f"timer:github:44:31:pr:7:i{expected_incarnation}:s0"
+            assert reminders[0]["operation"] == f"reminder:{expected_timer}"
+            assert sum(timer["status"] == "acknowledged" for timer in timers) == 1
+            assert sum(timer["status"] == "scheduled" for timer in timers) == 1
+            assert cast(dict[str, JsonValue], final["actual"])["readiness_published"] is True
+            if response_lost:
+                assert cast(int, provider["lookup_recoveries"]) >= 1
+
+        artifact = world.artifact(scenario_id)
+        assert artifact.version == 4
+        operations = len(artifact.operations)
+        world.close()
+        closed = True
+
+        replayed = replay_readiness(artifact, root / "replay")
+        assert replayed.outcome == "pass"
+        assert replayed.disposition == Disposition.CONVERGED.value
+        assert replayed.failure is None
+        assert replayed.operations == operations
+    except (BudgetExhausted, InvariantViolation) as error:
+        _retain_failure_artifact(
+            world,
+            scenario_id=scenario_id,
+            failure_path=failure_path,
+            replay_root=root / "failure-replay",
+            primary=error,
+        )
+        raise
+    finally:
+        primary = sys.exception()
+        try:
+            if not closed:
+                world.close()
+        except BaseException as close_error:
+            if primary is not None:
+                primary.add_note(f"secondary timer campaign close failure: {type(close_error).__name__}: {close_error}")
+            else:
+                primary = close_error
+                raise
+        finally:
+            try:
+                directory.cleanup()
+            except BaseException as cleanup_error:
+                if primary is not None:
+                    primary.add_note(
+                        "secondary timer campaign directory cleanup failure: "
                         f"{type(cleanup_error).__name__}: {cleanup_error}"
                     )
                 else:

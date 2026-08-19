@@ -22,6 +22,7 @@ from petrus.testing.dst import (
 )
 
 from hamsterdan.host.service import HostService
+from hamsterdan.host.testing._readiness_contract import SUBJECT, strict_digest
 from hamsterdan.host.testing._readiness_provider import ReadinessProviderTruth
 from hamsterdan.host.testing.readiness_world import (
     BASE,
@@ -31,6 +32,7 @@ from hamsterdan.host.testing.readiness_world import (
     PROFILE_IDENTITY,
     PROFILE_RESOURCE_LIMITS,
     READINESS_POLICY_DIGEST,
+    REMINDER_DELAY,
     ReadinessChecker,
     ReadinessWorld,
     replay_readiness,
@@ -64,12 +66,12 @@ def test_profile_and_checker_compatibility_identities_are_stable() -> None:
     assert PROFILE_IDENTITY.model_dump(mode="json") == {
         "name": "hamsterdan.readiness.v5-world",
         "version": 1,
-        "digest": "sha256:835f57bc478ac9cb28c529d90f313ab89af4112bd27863c00376715cf3e1cebf",
+        "digest": "sha256:8119f333ef3d408e78a423a49b554663f8cdbb373e77d41c411803f2a8465a6f",
     }
     assert CHECKER_IDENTITY.model_dump(mode="json") == {
         "name": "hamsterdan.readiness.independent-model",
-        "version": 2,
-        "digest": "sha256:c60ac2c4274e6f161ad7abd2088d6f46ed6a3cd72e6988ba91c069611cdcaa43",
+        "version": 3,
+        "digest": "sha256:b8bec72c57f5ea96cb6d1c65159674cc8db9e8b610f7359bebaceef77410d83f",
     }
 
 
@@ -240,6 +242,141 @@ def test_real_host_recovers_one_ambiguous_readiness_effect_after_crash_and_exact
     assert replayed.journal_entries == journal_entries
 
 
+def test_real_host_recovers_one_ambiguous_reminder_after_timer_maturity_and_crash(tmp_path: Path) -> None:
+    world = ReadinessWorld(tmp_path / "live")
+    timeline = world.timeline()
+    clean_green(timeline, response_lost=False)
+    while timeline.pending():
+        timeline.step()
+
+    timer = "timer:github:44:31:pr:7:i1:s0"
+    armed = timeline.observe().value
+    assert armed["facts"]["timers"] == [{"identity": timer, "status": "scheduled", "blocks_readiness": False}]
+    assert armed["timer_custody"] == {
+        "operations": [
+            {
+                "identity": "timer-command:github:44:31:pr:7:g1",
+                "generation": 1,
+                "applied_at": 0,
+                "acknowledged": True,
+            }
+        ],
+        "timers": [
+            {
+                "identity": timer,
+                "incarnation": 1,
+                "sequence": 0,
+                "head": HEAD,
+                "due_at": REMINDER_DELAY,
+                "state": "armed",
+                "matured_at": None,
+                "maturity_delivered": False,
+            }
+        ],
+    }
+
+    timeline.lose_effect_response("reminder")
+    timeline.advance_time(REMINDER_DELAY)
+    accepted = timeline.run_until(
+        "reminder effect accepted",
+        lambda state: state["provider"]["response_losses"] == ["reminder"],
+    )
+    assert accepted.value["provider"]["accepted_by_kind"]["reminder"] == 1
+
+    timeline.crash("after_reminder_acceptance_before_projection")
+    timeline = world.restart()
+    final = timeline.converge()
+    next_timer = "timer:github:44:31:pr:7:i1:s1"
+    assert final.value["facts"]["timers"] == [
+        {"identity": timer, "status": "acknowledged", "blocks_readiness": False},
+        {"identity": next_timer, "status": "scheduled", "blocks_readiness": False},
+    ]
+    assert final.value["expected"]["ready"] is True
+    assert final.value["actual"]["readiness_published"] is True
+    assert final.value["provider"]["accepted_by_kind"]["reminder"] == 1
+    assert final.value["provider"]["lookup_recoveries"] >= 1
+    assert [item["state"] for item in final.value["timer_custody"]["timers"]] == ["matured", "armed"]
+
+    artifact = world.artifact("hamsterdan-readiness-reminder-ambiguity-restart-v1")
+    operations = len(artifact.operations)
+    world.close()
+
+    replayed = replay_readiness(artifact, tmp_path / "replay")
+    assert replayed.outcome == "pass"
+    assert replayed.disposition == Disposition.CONVERGED.value
+    assert replayed.operations == operations
+
+
+def test_checker_rejects_timer_custody_that_differs_from_independent_schedule(tmp_path: Path) -> None:
+    world = ReadinessWorld(tmp_path)
+    timeline = world.timeline()
+    clean_green(timeline, response_lost=False)
+    try:
+        while timeline.pending():
+            timeline.step()
+        corrupted = deepcopy(timeline.observe().value)
+        corrupted["timer_custody"]["timers"][0]["head"] = "c" * 40
+
+        result = ReadinessChecker().check(
+            Observation(
+                name="readiness.state",
+                value=corrupted,
+                instant=world.world.instant,
+                generation=world.world.generation,
+                sequence=0,
+            )
+        )
+
+        assert result.passed is False
+        assert result.detail["timer_custody_parity"] is False
+        assert result.detail["timer_custody_mismatches"] == [
+            {
+                "identity": "timer:github:44:31:pr:7:i1:s0",
+                "field": "head",
+                "expected": HEAD,
+                "observed": "c" * 40,
+            }
+        ]
+    finally:
+        world.close()
+
+
+def test_checker_rejects_timer_maturity_before_the_independent_deadline(tmp_path: Path) -> None:
+    world = ReadinessWorld(tmp_path)
+    timeline = world.timeline()
+    clean_green(timeline, response_lost=False)
+    try:
+        while timeline.pending():
+            timeline.step()
+        timeline.advance_time(REMINDER_DELAY)
+        settled = timeline.converge()
+        corrupted = deepcopy(settled.value)
+        corrupted["timer_custody"]["timers"][0]["matured_at"] = REMINDER_DELAY - 1
+
+        result = ReadinessChecker().check(
+            Observation(
+                name="readiness.state",
+                value=corrupted,
+                instant=world.world.instant,
+                generation=world.world.generation,
+                sequence=0,
+            )
+        )
+
+        assert result.passed is False
+        assert result.detail["timer_custody_parity"] is False
+        assert result.detail["timer_custody_mismatches"] == [
+            {
+                "identity": "timer:github:44:31:pr:7:i1:s0",
+                "field": "matured_at",
+                "expected": REMINDER_DELAY,
+                "observed": REMINDER_DELAY - 1,
+            }
+        ]
+    finally:
+        world.close()
+
+
 def test_provider_head_movement_allows_projection_lag_without_retroactive_effect_failure(tmp_path: Path) -> None:
     world = ReadinessWorld(tmp_path)
     timeline = world.timeline()
@@ -401,6 +538,31 @@ def test_duplicate_delivery_is_one_independent_admission_and_logical_time_is_exp
         assert state["provider"]["accepted_by_kind"]["readiness"] == 1
         assert state["facts"]["admitted_observations"] == [f"github-delivery:{delivery}"]
         assert state["custody"][delivery] == "terminal"
+    finally:
+        world.close()
+
+
+def test_identical_webhook_emission_remains_idempotent_after_logical_time_moves(tmp_path: Path) -> None:
+    world = ReadinessWorld(tmp_path)
+    timeline = world.timeline()
+    try:
+        delivery = timeline.emit_webhook("issue_comment", action="created")
+        timeline.advance_time(7)
+        fixture = "issue_comment:created"
+
+        repeated = timeline.command(
+            "readiness.github.webhook.emit",
+            {
+                "subject": SUBJECT,
+                "delivery": delivery,
+                "event": "issue_comment",
+                "fixture": fixture,
+                "digest": strict_digest({"event": "issue_comment", "fixture": fixture}),
+            },
+        )
+
+        assert repeated.disposition == "idempotent"
+        assert len(world.profile.truth.emitted) == 1
     finally:
         world.close()
 

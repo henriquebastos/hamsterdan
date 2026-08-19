@@ -2,7 +2,7 @@
 code: CV18
 level: Value
 status: Active
-status_reason: DS1 and DS2 are accepted; DS3 has accepted its first generated recovery campaign and remains active for broader semantic coverage
+status_reason: DS1 and DS2 are accepted; DS3 now has generated authority, lifecycle, ambiguity, crash, and V5 timer recovery evidence and remains active for broader semantic coverage
 updated: 2026-08-18
 related:
   - ../cv17-v5-actor-loop-production-parity/index.md
@@ -148,9 +148,12 @@ readiness policy never enter Petrus.
 3. [CV18.DS3 — Generated readiness and recovery campaigns](cv18-ds3-generated-readiness-and-recovery-campaigns.md)
    is active. Bounded Hypothesis state machines now generate one-step V5 host
    progress, duplicate delivery, effect ambiguity, abrupt reconstruction, and
-   authority lifecycle/head movement. Successful schedules and shrunk checker
-   and resource counterexamples replay exactly. Broader targeted profiles,
-   remaining fault adapters, semantic coverage, and campaign operations remain.
+   authority lifecycle/head movement. A focused reminder campaign additionally
+   crosses durable timer arm/maturity/acknowledgement, accepted-but-response-lost
+   publication, old redelivery, three crash classes, and fair recovery.
+   Successful schedules and shrunk checker and resource counterexamples replay
+   exactly. Broader targeted profiles, remaining fault adapters, semantic
+   coverage, and campaign operations remain.
 4. [CV18.DS4 — Campaign operations and real-boundary confidence](cv18-ds4-campaign-operations-and-real-boundary-confidence.md)
    establishes bounded PR/scheduled campaigns and preserves real GitHub,
    process, persistence, and provider evidence as distinct complementary gates.

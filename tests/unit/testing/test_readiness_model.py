@@ -20,6 +20,7 @@ from hamsterdan.testing.readiness import (
     ChangeAuthorization,
     CheckFacts,
     CiFacts,
+    EffectKind,
     EffectObligation,
     FairEnvironment,
     Finding,
@@ -199,6 +200,28 @@ def test_effect_accepted_after_provider_authority_moves_is_stale() -> None:
         "stale_effect_settled:ready:head-a-late",
         "readiness_published_with_closed_gates:ready:head-a-late",
     )
+
+
+@pytest.mark.parametrize("kind", ["dashboard", "conversation", "reminder"])
+def test_incarnation_bound_effects_remain_valid_after_provider_authority_moves(kind: EffectKind) -> None:
+    authority_a = claim()
+    authority_b = claim(head="c" * 40)
+    facts = replace(
+        ready_facts(),
+        authority=AuthorityFacts(generation=2, admitted=authority_b, provider=authority_b),
+        effects=(
+            EffectObligation(
+                kind=kind,
+                operation=f"{kind}:incarnation-1",
+                authority=authority_a,
+                provider_authority_at_acceptance=authority_b,
+                content_digest="incarnation-bound-effect",
+                status="settled",
+            ),
+        ),
+    )
+
+    assert ReadinessModel().evaluate(facts).violations == ()
 
 
 def test_transient_ci_failure_progresses_but_persistent_repair_waits_for_a_human() -> None:
@@ -586,6 +609,30 @@ def test_readiness_cannot_be_published_outside_an_active_lifecycle(lifecycle: st
     assert f"readiness_published_outside_active_lifecycle:ready:{lifecycle}" in (
         ReadinessModel().evaluate(facts).violations
     )
+
+
+def test_historical_readiness_is_not_current_while_resumed_authority_awaits_admission() -> None:
+    active = claim()
+    draft = claim(lifecycle="draft")
+    facts = replace(
+        ready_facts(),
+        authority=AuthorityFacts(generation=2, admitted=draft, provider=active),
+        effects=(
+            EffectObligation(
+                kind="readiness",
+                operation="ready:head:i1",
+                authority=active,
+                provider_authority_at_acceptance=active,
+                content_digest="ready",
+                status="settled",
+            ),
+        ),
+    )
+
+    expectation = ReadinessModel().evaluate(facts)
+
+    assert expectation.blockers == ("current_authority_admission",)
+    assert expectation.violations == ()
 
 
 def test_settled_effect_is_stale_when_provider_authority_moves_before_admission() -> None:
