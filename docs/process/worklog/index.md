@@ -95,3 +95,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-18 — First generated readiness recovery campaign accepted](entries/2026-08-18T1130Z-first-generated-readiness-recovery-campaign-accepted.md)
 - [2026-08-18 — Generated V5 reminder-timer campaign qualified locally](entries/2026-08-18T1750Z-generated-v5-reminder-timer-campaign-qualified.md)
 - [2026-08-19 — Generated V5 Git ambiguity campaign qualified locally](entries/2026-08-19T0156Z-generated-v5-git-ambiguity-campaign-qualified.md)
+- [2026-08-22 — V5 typed readiness topology promoted](entries/2026-08-22T0116Z-v5-typed-readiness-topology-promoted.md)

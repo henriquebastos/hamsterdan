@@ -2,12 +2,13 @@
 
 The V5 discipline (ES-007, CV17): one concern = one loop = one memory
 baton plus mailbox places; cross-loop influence is mailed facts only;
-zero guards, zero read arcs, zero CEL filters, zero unowned places.
-One deliberate exception: readiness's `authorize` carries LOOP-INTERNAL
-inhibit arcs on readiness's own mailbox places, so an announce is only
-ever authorized from a snapshot that has folded every fact already
-mailed to it — mailbox quiescence as a structural precondition, not a
-cross-loop control place.
+zero guards, zero read arcs, zero unowned places. CEL filters exist only
+on readiness's input-only migration branches for pre-promotion envelope
+facts. Readiness also carries LOOP-INTERNAL inhibit arcs on its own
+mailboxes: they make authority and producer ordering explicit and allow
+an announce only from a snapshot that has folded every fact already
+mailed to it. These are structural preconditions, not cross-loop control
+places.
 Every decision is a pure fold on token data. Ingress doors are the only
 no-input transitions; the engine's identified delivery is the only
 deduplication anywhere.

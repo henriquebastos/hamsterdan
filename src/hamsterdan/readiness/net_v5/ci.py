@@ -16,12 +16,14 @@ from petrus.impetus.dsl import petri_handler
 from petrus.impetus.petrinet import NetPath, Token
 
 from hamsterdan.contracts.readiness_v5 import (
+    ChecksFact,
+    ChecksFactBody,
     ChecksFailure,
+    ChecksStatus,
     CiEnded,
     CiState,
     CloseFact,
     EscMoved,
-    GateFact,
     HeadWork,
     RunWork,
 )
@@ -30,8 +32,8 @@ from hamsterdan.readiness.net_v5.folding import route, values
 # -- folds ---------------------------------------------------------------
 
 
-def _checks_fact(incarnation: int, status: str) -> GateFact:
-    return GateFact(kind="checks", incarnation=incarnation, body={"status": status})
+def _checks_fact(incarnation: int, status: ChecksStatus) -> ChecksFact:
+    return ChecksFact(incarnation=incarnation, body=ChecksFactBody(status=status))
 
 
 def _failure_mail(state: CiState, fingerprint: str, run_id: int, attempt: int) -> ChecksFailure:
@@ -85,7 +87,7 @@ def _admit_head(binding, outputs):
     fact = _checks_fact(work.incarnation, "pending")
     return route(
         outputs,
-        {"ci.state": (admitted,), "ready.facts": (fact,), "dash.facts": (fact,)},
+        {"ci.state": (admitted,), "ready.checks_facts": (fact,), "dash.facts": (fact,)},
     )
 
 
@@ -116,7 +118,7 @@ def _assess(binding, outputs):
         parked=[],  # fresh evidence obsoletes any parked escalation
     )
     fact = _checks_fact(state.incarnation, run.conclusion)
-    routes = {"ci.state": (updated,), "ready.facts": (fact,), "dash.facts": (fact,)}
+    routes = {"ci.state": (updated,), "ready.checks_facts": (fact,), "dash.facts": (fact,)}
     if run.conclusion == "failure":
         routes["esc.failures"] = (_failure_mail(state, run.fingerprint, run.run_id, run.attempt),)
     return route(outputs, routes)
@@ -174,7 +176,7 @@ def wire(net) -> None:
         >> ci.t.admit_head(handler=petri_handler(_admit_head))
         >> (
             ci.p.state,
-            ready.p.facts,
+            ready.p.checks_facts,
             esc.p.failures,
             dash.p.facts,
         )
@@ -184,7 +186,7 @@ def wire(net) -> None:
         >> ci.t.assess(handler=petri_handler(_assess))
         >> (
             ci.p.state,
-            ready.p.facts,
+            ready.p.checks_facts,
             esc.p.failures,
             dash.p.facts,
         )

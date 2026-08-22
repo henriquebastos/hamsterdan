@@ -30,14 +30,20 @@ from petrus.impetus.petrinet import NetPath, Token
 from hamsterdan.contracts.readiness_v5 import (
     CloseFact,
     DeclinedM,
+    FaultClearedFact,
+    FaultClearedFactBody,
     FaultM,
-    GateFact,
+    FaultRaisedFact,
     MovedM,
+    MutationPendingFact,
+    MutationPendingFactBody,
     MutationRequest,
     MutationSettled,
+    MutationSettledFact,
     MutEnded,
     MutState,
     MutWork,
+    OperationFaultBody,
     ProvisionalHead,
     Pushed,
     RecoverFact,
@@ -89,8 +95,8 @@ def _settled(
     return MutationSettled(op=op, op_key=op_key, outcome=outcome, incarnation=incarnation, fingerprint=_budget_key(op))
 
 
-def _settled_fact(settled: MutationSettled) -> GateFact:
-    return GateFact(kind="mutation_settled", incarnation=settled.incarnation, body=settled.dump())
+def _settled_fact(settled: MutationSettled) -> MutationSettledFact:
+    return MutationSettledFact(incarnation=settled.incarnation, body=settled)
 
 
 def _start(binding, outputs):
@@ -103,7 +109,12 @@ def _start(binding, outputs):
         fact = _settled_fact(settled)
         return route(
             outputs,
-            {"mut.state": (st,), "esc.settled": (settled,), "ready.facts": (fact,), "dash.facts": (fact,)},
+            {
+                "mut.state": (st,),
+                "esc.settled": (settled,),
+                "ready.mutation_settled_facts": (fact,),
+                "dash.facts": (fact,),
+            },
         )
     # the baton is HELD until a terminal fold returns it: one at a time
     work = MutWork(
@@ -119,8 +130,11 @@ def _start(binding, outputs):
         run_id=req.run_id,
         attempt=req.attempt,
     )
-    fact = GateFact(kind="mutation_pending", incarnation=req.incarnation, body={"op": req.op, "op_key": work.op_key})
-    return route(outputs, {"mut.work": (work,), "ready.facts": (fact,), "dash.facts": (fact,)})
+    fact = MutationPendingFact(
+        incarnation=req.incarnation,
+        body=MutationPendingFactBody(op=req.op, op_key=work.op_key),
+    )
+    return route(outputs, {"mut.work": (work,), "ready.mutation_pending_facts": (fact,), "dash.facts": (fact,)})
 
 
 def _fold_pushed(binding, outputs):
@@ -136,7 +150,7 @@ def _fold_pushed(binding, outputs):
             "mut.state": (_IDLE,),
             "life.provisional": (note,),
             "esc.settled": (settled,),
-            "ready.facts": (fact,),
+            "ready.mutation_settled_facts": (fact,),
             "dash.facts": (fact,),
         },
     )
@@ -150,7 +164,12 @@ def _fold_moved(binding, outputs):
     fact = _settled_fact(settled)
     return route(
         outputs,
-        {"mut.state": (_IDLE,), "esc.settled": (settled,), "ready.facts": (fact,), "dash.facts": (fact,)},
+        {
+            "mut.state": (_IDLE,),
+            "esc.settled": (settled,),
+            "ready.mutation_settled_facts": (fact,),
+            "dash.facts": (fact,),
+        },
     )
 
 
@@ -163,14 +182,22 @@ def _fold_declined(binding, outputs):
     fact = _settled_fact(settled)
     return route(
         outputs,
-        {"mut.state": (_IDLE,), "esc.settled": (settled,), "ready.facts": (fact,), "dash.facts": (fact,)},
+        {
+            "mut.state": (_IDLE,),
+            "esc.settled": (settled,),
+            "ready.mutation_settled_facts": (fact,),
+            "dash.facts": (fact,),
+        },
     )
 
 
 def _fold_fault(binding, outputs):
     (out,) = values(binding, FaultM)
     settled = _settled(out.op, out.op_key, "faulted", out.incarnation)
-    fact = GateFact(kind="fault", incarnation=0, body={"where": "mutation", "op": out.op_key, "reason": out.reason})
+    fact = FaultRaisedFact(
+        incarnation=0,
+        body=OperationFaultBody(where="mutation", op=out.op_key, reason=out.reason),
+    )
     # A2: Faulted retains the exact operation identity and the FULL
     # authority claim so recovery reissues the SAME operation
     faulted = MutState(
@@ -189,7 +216,12 @@ def _fold_fault(binding, outputs):
     )
     return route(
         outputs,
-        {"mut.state": (faulted,), "esc.settled": (settled,), "ready.facts": (fact,), "dash.facts": (fact,)},
+        {
+            "mut.state": (faulted,),
+            "esc.settled": (settled,),
+            "ready.fault_raised_facts": (fact,),
+            "dash.facts": (fact,),
+        },
     )
 
 
@@ -213,13 +245,27 @@ def _recover(binding, outputs):
         run_id=st.run_id,
         attempt=st.attempt,
     )
-    pending = GateFact(kind="mutation_pending", incarnation=st.incarnation, body={"op": st.op, "op_key": st.op_key})
+    pending = MutationPendingFact(
+        incarnation=st.incarnation,
+        body=MutationPendingFactBody(op=st.op, op_key=st.op_key),
+    )
     # the reissue CLEARS the operation-keyed fault: readiness never
     # stays fail-closed after the human ruled — and it cannot announce
     # during the reopened round either, because `pending` holds the op
     # until the terminal settles; a re-fault restores the entry
-    resolved = GateFact(kind="fault", incarnation=0, body={"where": "mutation", "op": st.op_key, "status": "resolved"})
-    return route(outputs, {"mut.work": (work,), "ready.facts": (pending, resolved), "dash.facts": (pending, resolved)})
+    resolved = FaultClearedFact(
+        incarnation=0,
+        body=FaultClearedFactBody(where="mutation", op=st.op_key, status="resolved"),
+    )
+    return route(
+        outputs,
+        {
+            "mut.work": (work,),
+            "ready.mutation_pending_facts": (pending,),
+            "ready.fault_cleared_facts": (resolved,),
+            "dash.facts": (pending, resolved),
+        },
+    )
 
 
 def _end(binding, outputs):
@@ -243,7 +289,12 @@ def _drain(binding, outputs):
     fact = _settled_fact(settled)
     return route(
         outputs,
-        {"mut.done": (ended,), "esc.settled": (settled,), "ready.facts": (fact,), "dash.facts": (fact,)},
+        {
+            "mut.done": (ended,),
+            "esc.settled": (settled,),
+            "ready.mutation_settled_facts": (fact,),
+            "dash.facts": (fact,),
+        },
     )
 
 
@@ -277,7 +328,8 @@ def wire(net) -> None:
             mut.p.state,
             mut.p.work,
             esc.p.settled,
-            ready.p.facts,
+            ready.p.mutation_pending_facts,
+            ready.p.mutation_settled_facts,
             dash.p.facts,
         )
     )
@@ -298,7 +350,7 @@ def wire(net) -> None:
             mut.p.state,
             life.p.provisional,
             esc.p.settled,
-            ready.p.facts,
+            ready.p.mutation_settled_facts,
             dash.p.facts,
         )
     )
@@ -308,7 +360,7 @@ def wire(net) -> None:
         >> (
             mut.p.state,
             esc.p.settled,
-            ready.p.facts,
+            ready.p.mutation_settled_facts,
             dash.p.facts,
         )
     )
@@ -318,7 +370,7 @@ def wire(net) -> None:
         >> (
             mut.p.state,
             esc.p.settled,
-            ready.p.facts,
+            ready.p.mutation_settled_facts,
             dash.p.facts,
         )
     )
@@ -328,7 +380,7 @@ def wire(net) -> None:
         >> (
             mut.p.state,
             esc.p.settled,
-            ready.p.facts,
+            ready.p.fault_raised_facts,
             dash.p.facts,
         )
     )
@@ -340,7 +392,8 @@ def wire(net) -> None:
         >> (
             mut.p.state,
             mut.p.work,
-            ready.p.facts,
+            ready.p.mutation_pending_facts,
+            ready.p.fault_cleared_facts,
             dash.p.facts,
         )
     )
@@ -353,7 +406,7 @@ def wire(net) -> None:
         >> (
             mut.p.done,
             esc.p.settled,
-            ready.p.facts,
+            ready.p.mutation_settled_facts,
             dash.p.facts,
         )
     )

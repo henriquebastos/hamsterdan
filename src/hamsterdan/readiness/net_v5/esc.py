@@ -19,11 +19,15 @@ from hamsterdan.contracts.readiness_v5 import (
     ChecksFailure,
     CloseFact,
     EscMoved,
+    FaultClearedFact,
+    FaultClearedFactBody,
+    FaultRaisedFact,
     GateFact,
     Ladder,
     LadderEnded,
     MutationRequest,
     MutationSettled,
+    OperationFaultBody,
     RecoverFact,
     RerunFault,
     RerunLanded,
@@ -196,10 +200,11 @@ def _fold_rerun_landed(binding, outputs):
         # the landed fold consumed a fault entry: the settle CLEARS the
         # operation-keyed fault, so readiness never stays fail-closed
         # after the human's recovery actually succeeded
-        resolved = GateFact(
-            kind="fault", incarnation=0, body={"where": "rerun", "op": held["op"], "status": "resolved"}
+        resolved = FaultClearedFact(
+            incarnation=0,
+            body=FaultClearedFactBody(where="rerun", op=held["op"], status="resolved"),
         )
-        routes["ready.facts"] = (resolved,)
+        routes["ready.fault_cleared_facts"] = (resolved,)
         routes["dash.facts"] = (resolved,)
     if blocked is not None and out.disposition == "existing":
         # the provider held the rerun all along — the blocked failure
@@ -235,10 +240,11 @@ def _fold_rerun_moved(binding, outputs):
         mem = mem.validated_update(
             rerun_faults={k: v for k, v in mem.rerun_faults.items() if k != out.fingerprint},
         )
-        resolved = GateFact(
-            kind="fault", incarnation=0, body={"where": "rerun", "op": held["op"], "status": "resolved"}
+        resolved = FaultClearedFact(
+            incarnation=0,
+            body=FaultClearedFactBody(where="rerun", op=held["op"], status="resolved"),
         )
-        routes["ready.facts"] = (resolved,)
+        routes["ready.fault_cleared_facts"] = (resolved,)
         routes["dash.facts"] = (resolved,)
     routes["esc.ladder"] = (mem,)
     return route(outputs, routes)
@@ -268,10 +274,13 @@ def _fold_rerun_fault(binding, outputs):
     )
     # the operation identity keys the fault so the landed fold's
     # resolution can clear EXACTLY this entry in readiness
-    fact = GateFact(kind="fault", incarnation=0, body={"where": "rerun", "op": out.op, "reason": out.reason})
+    fact = FaultRaisedFact(
+        incarnation=0,
+        body=OperationFaultBody(where="rerun", op=out.op, reason=out.reason),
+    )
     return route(
         outputs,
-        {"esc.ladder": (ladder,), "ready.facts": (fact,), "dash.facts": (fact,)},
+        {"esc.ladder": (ladder,), "ready.fault_raised_facts": (fact,), "dash.facts": (fact,)},
     )
 
 
@@ -397,7 +406,7 @@ def wire(net) -> None:
         >> (
             esc.p.ladder,
             esc.p.failures,  # a recovery round replays the blocked failure
-            ready.p.facts,  # a recovery round's settle clears the fault
+            ready.p.fault_cleared_facts,  # a recovery round's settle clears the fault
             dash.p.facts,
         )
     )
@@ -407,7 +416,7 @@ def wire(net) -> None:
         >> (
             esc.p.ladder,
             ci.p.echo,
-            ready.p.facts,  # a moved recovery round's settle clears the fault
+            ready.p.fault_cleared_facts,  # a moved recovery round's settle clears the fault
             dash.p.facts,
         )
     )
@@ -416,7 +425,7 @@ def wire(net) -> None:
         >> esc.t.fold_rerun_fault(handler=petri_handler(_fold_rerun_fault))
         >> (
             esc.p.ladder,
-            ready.p.facts,
+            ready.p.fault_raised_facts,
             dash.p.facts,
         )
     )

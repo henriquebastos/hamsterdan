@@ -29,6 +29,12 @@ Paused, Candidate, Promoted, or Archived.
   Oracle-checkpointed at each experiment. Complete: for nets inside
   the enforced shardable profile, placement is deployment-only;
   conclusions remain candidate recommendations.
+- [ES-008 — Typed readiness decisions as production V5 topology](es8-typed-readiness-topology/index.md):
+  a promoted production experiment replacing readiness's open `GateFact`
+  dispatcher with specialized colors, places, and folds while retaining an
+  input-only filtered migration lane for interrupted histories. Behavioral and
+  cross-version recovery evidence is green; formerly implicit FIFO authority
+  and producer-causality rules are explicit topology.
 
 ## Archived
 

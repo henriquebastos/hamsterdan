@@ -1,7 +1,7 @@
 """Executable contract tests for the V5 readiness loop.
 
 The readiness loop owns the Snapshot baton — the sole all-gates
-projection — and consumes every sibling-mailed GateFact. It announces
+projection — and consumes each sibling-mailed typed decision fact. It announces
 exactly once per incarnation on the not-ready -> ready edge through an
 authority-fenced gate under the stable identity `ready:{head}:i{n}`.
 A stale state fact never rolls the projection back; mismatched
@@ -17,6 +17,7 @@ from harness import (
     comment,
     deliver,
     deliver_held,
+    drive,
     one,
     pump,
     release_one,
@@ -28,8 +29,23 @@ from harness import (
     world_of,
 )
 
-from hamsterdan.contracts.readiness_v5 import AWake, GateFact, Snapshot
-from hamsterdan.readiness.net_v5.readiness import _apply
+from hamsterdan.contracts.readiness_v5 import (
+    AWake,
+    FaultClearedFact,
+    FaultClearedFactBody,
+    FaultRaisedFact,
+    GateFact,
+    MutationPendingFact,
+    MutationPendingFactBody,
+    MutationSettled,
+    MutationSettledFact,
+    OperationFaultBody,
+    Snapshot,
+    StateFact,
+    StateFactBody,
+)
+from hamsterdan.readiness.net_v5 import build_net_v5
+from hamsterdan.readiness.net_v5.readiness import _apply_mutation_pending, _apply_mutation_settled, _apply_state
 
 
 def snap(engine) -> dict:
@@ -56,6 +72,107 @@ def go_ready(engine, world: dict, head: str = "h1", run_id: int = 1) -> None:
     see_head(engine, head)
     see_run(engine, head=head, run_id=run_id)
     see_human(engine)
+
+
+# -- decision topology -----------------------------------------------------
+
+
+def test_readiness_fact_kinds_are_explicit_topology() -> None:
+    built = build_net_v5()
+    places = {str(place) for place in built.net.places}
+    transitions = {str(transition) for transition in built.net.transitions}
+
+    fact_colors = {
+        "state": "StateFact",
+        "checks": "ChecksFact",
+        "review": "ReviewFact",
+        "findings": "FindingsFact",
+        "human": "HumanFact",
+        "mutation_pending": "MutationPendingFact",
+        "mutation_settled": "MutationSettledFact",
+        "fault_raised": "FaultRaisedFact",
+        "fault_cleared": "FaultClearedFact",
+    }
+    # The open envelope remains input-only for histories cut on the former
+    # mailbox. New production transitions emit only specialized colors.
+    assert "ready.facts" in places
+    assert {f"ready.{kind}_facts" for kind in fact_colors} <= places
+    assert {f"ready.fold_{kind}" for kind in fact_colors} <= transitions
+    assert {f"ready.migrate_{kind}" for kind in fact_colors} <= transitions
+    assert not any(str(arc.target) == "ready.facts" for arc in built.net.arcs)
+
+    place_colors = {str(path): place.color for path, place in built.net.places.items()}
+    for kind, color in fact_colors.items():
+        mailbox = f"ready.{kind}_facts"
+        fold = f"ready.fold_{kind}"
+        assert place_colors[mailbox] == color
+        assert any(
+            str(arc.source) == mailbox and str(arc.target) == fold and str(arc.mode) == "consume"
+            for arc in built.net.arcs
+        )
+
+
+def test_legacy_gate_fact_mailbox_migrates_every_supported_kind() -> None:
+    legacy = (
+        GateFact(
+            kind="state",
+            incarnation=1,
+            body={
+                "phase": "running",
+                "head": "h1",
+                "base": "b1",
+                "mergeable": True,
+                "policy": "p1",
+                "strict_base": True,
+                "base_current": True,
+            },
+        ),
+        GateFact(kind="checks", incarnation=1, body={"status": "success"}),
+        GateFact(kind="review", incarnation=1, body={"head": "h1", "status": "clear"}),
+        GateFact(kind="findings", incarnation=1, body={"head": "h1", "blocking": 0, "count": 0}),
+        GateFact(
+            kind="human",
+            incarnation=1,
+            body={"approval": True, "changes_requested": False, "unresolved": 0},
+        ),
+        GateFact(kind="mutation_pending", incarnation=1, body={"op": "change", "op_key": "mutation-a"}),
+        GateFact(
+            kind="mutation_settled",
+            incarnation=1,
+            body={
+                "op": "change",
+                "op_key": "mutation-a",
+                "outcome": "landed",
+                "incarnation": 1,
+                "fingerprint": "",
+            },
+        ),
+        GateFact(
+            kind="fault",
+            incarnation=0,
+            body={"where": "mutation", "op": "fault-a", "reason": "unknown"},
+        ),
+        GateFact(
+            kind="fault",
+            incarnation=0,
+            body={"where": "mutation", "op": "fault-b", "status": "resolved"},
+        ),
+    )
+    engine, _ = spawn(
+        initial_mail=tuple(("ready.facts", "GateFact", fact.dump()) for fact in legacy),
+    )
+
+    drive(engine)
+
+    state = snap(engine)
+    assert state["incarnation"] == 1
+    assert state["checks"] == "success"
+    assert state["review"] == "clear"
+    assert state["findings_blocking"] == 0
+    assert state["approval"] is True
+    assert state["pending"] == []
+    assert state["faults"] == {"mutation:fault-a": "unknown"}
+    assert tokens(engine, "ready.facts") == []
 
 
 # -- the projection and the not-ready -> ready edge ------------------------
@@ -201,19 +318,18 @@ class TestAnnounce:
         assert announcements(world) == ["ready:h1:i1"]
 
     def test_retained_state_without_base_evidence_fails_closed(self) -> None:
-        retained = GateFact(
-            kind="state",
+        retained = StateFact(
             incarnation=1,
-            body={
-                "phase": "running",
-                "head": "h1",
-                "base": "b1",
-                "mergeable": True,
-                "policy": "p1",
-            },
+            body=StateFactBody(
+                phase="running",
+                head="h1",
+                base="b1",
+                mergeable=True,
+                policy="p1",
+            ),
         )
 
-        applied = _apply(TestSettlementIdentity._snap(), retained)
+        applied = _apply_state(TestSettlementIdentity._snap(), retained)
 
         assert applied is not None
         assert applied.strict_base is True
@@ -400,35 +516,111 @@ class TestSettlementIdentity:
         )
 
     def test_an_old_settlement_cannot_clear_a_newer_same_kind_round(self) -> None:
-        pending_a = GateFact(kind="mutation_pending", incarnation=1, body={"op": "change", "op_key": self.KEY_A})
-        pending_b = GateFact(kind="mutation_pending", incarnation=1, body={"op": "change", "op_key": self.KEY_B})
-        settled_a = GateFact(
-            kind="mutation_settled",
+        pending_a = MutationPendingFact(
             incarnation=1,
-            body={"op": "change", "op_key": self.KEY_A, "outcome": "moved", "fingerprint": "", "incarnation": 1},
+            body=MutationPendingFactBody(op="change", op_key=self.KEY_A),
+        )
+        pending_b = MutationPendingFact(
+            incarnation=1,
+            body=MutationPendingFactBody(op="change", op_key=self.KEY_B),
+        )
+        settled_a = MutationSettledFact(
+            incarnation=1,
+            body=MutationSettled(
+                op="change",
+                op_key=self.KEY_A,
+                outcome="moved",
+                fingerprint="",
+                incarnation=1,
+            ),
         )
         # both orders respect per-round causality (pending(A) first);
         # they differ in whether A's settlement overtakes B's pending
-        for order in ((pending_a, settled_a, pending_b), (pending_a, pending_b, settled_a)):
+        for order in (
+            (
+                (_apply_mutation_pending, pending_a),
+                (_apply_mutation_settled, settled_a),
+                (_apply_mutation_pending, pending_b),
+            ),
+            (
+                (_apply_mutation_pending, pending_a),
+                (_apply_mutation_pending, pending_b),
+                (_apply_mutation_settled, settled_a),
+            ),
+        ):
             snap_ = self._snap()
-            for fact in order:
-                applied = _apply(snap_, fact)
+            for apply, fact in order:
+                applied = apply(snap_, fact)
                 snap_ = applied if applied is not None else snap_
-            assert snap_.pending == (self.KEY_B,), [f.body for f in order]
+            assert snap_.pending == (self.KEY_B,), [fact.body for _, fact in order]
 
     def test_the_pending_gate_holds_on_identity_not_display(self) -> None:
         # the snapshot's pending gate is an identity ledger: the display
         # op ("change") never keys it
-        pending = GateFact(kind="mutation_pending", incarnation=1, body={"op": "change", "op_key": self.KEY_A})
-        settled = GateFact(
-            kind="mutation_settled",
+        pending = MutationPendingFact(
             incarnation=1,
-            body={"op": "change", "op_key": self.KEY_A, "outcome": "landed", "fingerprint": "", "incarnation": 1},
+            body=MutationPendingFactBody(op="change", op_key=self.KEY_A),
         )
-        snap_ = _apply(self._snap(), pending)
+        settled = MutationSettledFact(
+            incarnation=1,
+            body=MutationSettled(
+                op="change",
+                op_key=self.KEY_A,
+                outcome="landed",
+                fingerprint="",
+                incarnation=1,
+            ),
+        )
+        snap_ = _apply_mutation_pending(self._snap(), pending)
         assert snap_ is not None and snap_.pending == (self.KEY_A,)
-        snap_ = _apply(snap_, settled)
+        snap_ = _apply_mutation_settled(snap_, settled)
         assert snap_ is not None and snap_.pending == ()
+
+    def test_same_drive_pending_folds_before_its_settlement(self) -> None:
+        pending = MutationPendingFact(
+            incarnation=0,
+            body=MutationPendingFactBody(op="change", op_key=self.KEY_A),
+        )
+        settled = MutationSettledFact(
+            incarnation=0,
+            body=MutationSettled(
+                op="change",
+                op_key=self.KEY_A,
+                outcome="landed",
+                fingerprint="",
+                incarnation=0,
+            ),
+        )
+        engine, _ = spawn(
+            initial_mail=(
+                ("ready.mutation_pending_facts", "MutationPendingFact", pending.dump()),
+                ("ready.mutation_settled_facts", "MutationSettledFact", settled.dump()),
+            ),
+        )
+
+        drive(engine)
+
+        assert snap(engine)["pending"] == []
+
+    def test_same_drive_recovery_resolution_folds_before_a_refault(self) -> None:
+        cleared = FaultClearedFact(
+            incarnation=0,
+            body=FaultClearedFactBody(where="mutation", op=self.KEY_A, status="resolved"),
+        )
+        raised = FaultRaisedFact(
+            incarnation=0,
+            body=OperationFaultBody(where="mutation", op=self.KEY_A, reason="still unknown"),
+        )
+        engine, _ = spawn(
+            initial_mail=(
+                ("ready.fault_cleared_facts", "FaultClearedFact", cleared.dump()),
+                ("ready.fault_raised_facts", "FaultRaisedFact", raised.dump()),
+            ),
+        )
+
+        drive(engine)
+
+        assert snap(engine)["faults"] == {f"mutation:{self.KEY_A}": "still unknown"}
 
 
 class TestIncarnations:
@@ -847,6 +1039,17 @@ class TestClose:
         # and mails the settle — readiness must absorb, never strand
         comment(engine, "c1", "change")
         comment(engine, "c2", "recover_publication", "ready:h1:i1")
-        assert tokens(engine, "ready.facts") == []
+        for mailbox in (
+            "state",
+            "checks",
+            "review",
+            "findings",
+            "human",
+            "mutation_pending",
+            "mutation_settled",
+            "fault_raised",
+            "fault_cleared",
+        ):
+            assert tokens(engine, f"ready.{mailbox}_facts") == []
         assert tokens(engine, "ready.recover") == []
         assert one(engine, "ready.done")["reason"] == "closed"

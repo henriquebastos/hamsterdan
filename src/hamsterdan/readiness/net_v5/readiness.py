@@ -1,8 +1,9 @@
 """The readiness loop: the all-gates advisory projection and announce.
 
 Owns the Snapshot baton — the sole readiness projection — and consumes
-every sibling-mailed GateFact. It never merges; it announces exactly
-once per incarnation on the not-ready -> ready edge, through an
+each sibling-mailed decision fact through its own typed mailbox. It
+never merges; it announces exactly once per incarnation on the
+not-ready -> ready edge, through an
 authority-fenced gate under the stable identity `ready:{head}:i{n}`.
 A stale state fact never rolls the projection back; a mismatched
 incarnation is inert (A1.4); announce-once is recorded on
@@ -10,8 +11,8 @@ ACKNOWLEDGMENT, per the terminal's incarnation (A1.6).
 
 The ready edge is a two-step decision: the fold that sees it emits a
 REVOCABLE candidate, and a separate `authorize` fold — inhibited while
-any sibling fact is still unfolded in `ready.facts` — re-derives the
-whole decision from the caught-up snapshot before minting the announce
+any typed sibling mailbox holds an unfolded fact — re-derives the whole
+decision from the caught-up snapshot before minting the announce
 request. A fact already mailed when the edge was seen (a queued
 mutation's pending, a sibling's fault) therefore always folds first and
 revokes a stale candidate; the announce request is never issued over an
@@ -29,7 +30,7 @@ into the terminal record so no token strands.
 from __future__ import annotations
 
 from petrus.impetus.dsl import arc, petri_handler
-from petrus.impetus.petrinet import NetPath, Token
+from petrus.impetus.petrinet import Cel, NetPath, Token
 
 from hamsterdan.contracts.readiness_v5 import (
     ABlocked,
@@ -40,11 +41,20 @@ from hamsterdan.contracts.readiness_v5 import (
     AnnounceCandidate,
     AnnounceReq,
     AWake,
+    ChecksFact,
     CloseFact,
+    FaultClearedFact,
+    FaultRaisedFact,
+    FindingsFact,
     GateFact,
+    HumanFact,
+    MutationPendingFact,
+    MutationSettledFact,
     ReadyEnded,
     RecoverFact,
+    ReviewFact,
     Snapshot,
+    StateFact,
 )
 from hamsterdan.readiness.net_v5.folding import revive, route, values
 
@@ -97,9 +107,9 @@ def _announce_open(snap: Snapshot) -> dict:
 def _authorize(binding, outputs):
     """Candidate -> announcing, from the CURRENT snapshot only.
 
-    Inhibited while `ready.facts` holds anything unfolded, so every
-    fact mailed before this instant has already folded. The decision is
-    re-derived whole — the candidate carries no authority worth
+    Inhibited while any typed fact mailbox holds anything unfolded, so
+    every fact mailed before this instant has already folded. The
+    decision is re-derived whole — the candidate carries no authority worth
     trusting; a snapshot a fact just invalidated simply drops it, and
     the next ready edge emits a fresh one."""
     _, snap = values(binding, AnnounceCandidate, Snapshot)
@@ -120,82 +130,174 @@ def _authorize(binding, outputs):
     return route(outputs, {"ready.snap": (held,), "ready.announce_req": (req,)})
 
 
-def _fault_key(body: dict) -> str:
-    return f"{body.get('where', '')}:{body.get('op', '')}"
+def _current(snap: Snapshot, incarnation: int) -> bool:
+    """A1.4: only global facts (incarnation 0) or current facts apply."""
+    return incarnation in (0, snap.incarnation)
 
 
-def _apply(snap: Snapshot, fact: GateFact) -> Snapshot | None:
-    """Pure fact application: the next snapshot, or None when the fact
-    is inert (stale, mismatched, or unknown) and must not reopen the
-    announce decision."""
-    kind, body = fact.kind, fact.body
-    if kind == "state":
-        if fact.incarnation < snap.incarnation:
-            # a STALE state fact must never roll the projection back
-            return None
-        if fact.incarnation != snap.incarnation:
-            # new authority: the per-incarnation gates reset; human
-            # review state persists — approvals and unresolved threads
-            # outlive a push until the provider says otherwise
-            snap = snap.validated_update(
-                incarnation=fact.incarnation,
-                checks="pending",
-                review="pending",
-                findings_blocking=0,
-                pending=(),
-            )
-        snap = snap.validated_update(
-            phase=body["phase"],
-            head=body["head"],
-            base=body["base"],
-            mergeable=body["mergeable"],
-            policy=body["policy"],
-            # A pre-DS4 retained state fact has no base-policy evidence;
-            # keep it readable but fail closed until host reconciliation.
-            strict_base=body.get("strict_base", True),
-            base_current=body.get("base_current", False),
-        )
-    elif fact.incarnation not in (0, snap.incarnation):
-        return None  # A1.4: mismatched facts are inert
-    elif kind == "checks":
-        snap = snap.validated_update(checks=body["status"])
-    elif kind == "review":
-        snap = snap.validated_update(review=body["status"])
-    elif kind == "findings":
-        snap = snap.validated_update(findings_blocking=body["blocking"])
-    elif kind == "human":
-        snap = snap.validated_update(
-            approval=body["approval"],
-            changes_requested=body["changes_requested"],
-            unresolved=body["unresolved"],
-        )
-    elif kind == "mutation_pending":
-        # the pending gate is an identity ledger (op_key), never the
-        # display op: a settlement must clear exactly ITS OWN round —
-        # two "change" comments look identical by op (CV17.DS2.0)
-        snap = snap.validated_update(pending=(*snap.pending, body["op_key"]))
-    elif kind == "mutation_settled":
-        snap = snap.validated_update(pending=tuple(k for k in snap.pending if k != body["op_key"]))
-    elif kind == "fault":
-        key = _fault_key(body)
-        if body.get("status") in ("resolved", "cancelled"):
-            # the owning loop settled or cancelled the retained
-            # operation: readiness never stays fail-closed after the
-            # recovery actually succeeded
-            snap = snap.validated_update(faults={k: v for k, v in snap.faults.items() if k != key})
-        else:
-            snap = snap.validated_update(faults={**snap.faults, key: body.get("reason", "")})
-    else:
+def _apply_state(snap: Snapshot, fact: StateFact) -> Snapshot | None:
+    if fact.incarnation < snap.incarnation:
+        # a STALE state fact must never roll the projection back
         return None
-    return snap
+    if fact.incarnation != snap.incarnation:
+        # new authority: the per-incarnation gates reset; human review
+        # state persists — approvals and unresolved threads outlive a push
+        snap = snap.validated_update(
+            incarnation=fact.incarnation,
+            checks="pending",
+            review="pending",
+            findings_blocking=0,
+            pending=(),
+        )
+    body = fact.body
+    return snap.validated_update(
+        phase=body.phase,
+        head=body.head,
+        base=body.base,
+        mergeable=body.mergeable,
+        policy=body.policy,
+        strict_base=body.strict_base,
+        base_current=body.base_current,
+    )
 
 
-def _fold_fact(binding, outputs):
-    fact, snap = values(binding, GateFact, Snapshot)
-    applied = _apply(snap, fact)
+def _apply_checks(snap: Snapshot, fact: ChecksFact) -> Snapshot | None:
+    return snap.validated_update(checks=fact.body.status) if _current(snap, fact.incarnation) else None
+
+
+def _apply_review(snap: Snapshot, fact: ReviewFact) -> Snapshot | None:
+    return snap.validated_update(review=fact.body.status) if _current(snap, fact.incarnation) else None
+
+
+def _apply_findings(snap: Snapshot, fact: FindingsFact) -> Snapshot | None:
+    return snap.validated_update(findings_blocking=fact.body.blocking) if _current(snap, fact.incarnation) else None
+
+
+def _apply_human(snap: Snapshot, fact: HumanFact) -> Snapshot | None:
+    if not _current(snap, fact.incarnation):
+        return None
+    return snap.validated_update(
+        approval=fact.body.approval,
+        changes_requested=fact.body.changes_requested,
+        unresolved=fact.body.unresolved,
+    )
+
+
+def _apply_mutation_pending(snap: Snapshot, fact: MutationPendingFact) -> Snapshot | None:
+    if not _current(snap, fact.incarnation):
+        return None
+    # the pending gate is an identity ledger (op_key), never the display
+    # op: a settlement must clear exactly ITS OWN round (CV17.DS2.0)
+    return snap.validated_update(pending=(*snap.pending, fact.body.op_key))
+
+
+def _apply_mutation_settled(snap: Snapshot, fact: MutationSettledFact) -> Snapshot | None:
+    if not _current(snap, fact.incarnation):
+        return None
+    return snap.validated_update(pending=tuple(key for key in snap.pending if key != fact.body.op_key))
+
+
+def _apply_fault_raised(snap: Snapshot, fact: FaultRaisedFact) -> Snapshot:
+    key = f"{fact.body.where}:{fact.body.op}"
+    return snap.validated_update(faults={**snap.faults, key: fact.body.reason})
+
+
+def _apply_fault_cleared(snap: Snapshot, fact: FaultClearedFact) -> Snapshot:
+    key = f"{fact.body.where}:{fact.body.op}"
+    return snap.validated_update(faults={name: reason for name, reason in snap.faults.items() if name != key})
+
+
+def _fold_applied(snap: Snapshot, applied: Snapshot | None, outputs):
     if applied is None:
         return route(outputs, {"ready.snap": (snap,)})
     return route(outputs, _announce_open(applied))
+
+
+def _fold_state(binding, outputs):
+    fact, snap = values(binding, StateFact, Snapshot)
+    return _fold_applied(snap, _apply_state(snap, fact), outputs)
+
+
+def _fold_checks(binding, outputs):
+    fact, snap = values(binding, ChecksFact, Snapshot)
+    return _fold_applied(snap, _apply_checks(snap, fact), outputs)
+
+
+def _fold_review(binding, outputs):
+    fact, snap = values(binding, ReviewFact, Snapshot)
+    return _fold_applied(snap, _apply_review(snap, fact), outputs)
+
+
+def _fold_findings(binding, outputs):
+    fact, snap = values(binding, FindingsFact, Snapshot)
+    return _fold_applied(snap, _apply_findings(snap, fact), outputs)
+
+
+def _fold_human(binding, outputs):
+    fact, snap = values(binding, HumanFact, Snapshot)
+    return _fold_applied(snap, _apply_human(snap, fact), outputs)
+
+
+def _fold_mutation_pending(binding, outputs):
+    fact, snap = values(binding, MutationPendingFact, Snapshot)
+    return _fold_applied(snap, _apply_mutation_pending(snap, fact), outputs)
+
+
+def _fold_mutation_settled(binding, outputs):
+    fact, snap = values(binding, MutationSettledFact, Snapshot)
+    return _fold_applied(snap, _apply_mutation_settled(snap, fact), outputs)
+
+
+def _fold_fault_raised(binding, outputs):
+    fact, snap = values(binding, FaultRaisedFact, Snapshot)
+    return _fold_applied(snap, _apply_fault_raised(snap, fact), outputs)
+
+
+def _fold_fault_cleared(binding, outputs):
+    fact, snap = values(binding, FaultClearedFact, Snapshot)
+    return _fold_applied(snap, _apply_fault_cleared(snap, fact), outputs)
+
+
+def _migrate_legacy(binding, outputs, fact_type, mailbox: str):
+    """Convert one pre-specialization envelope without deciding its kind."""
+    (fact,) = values(binding, GateFact)
+    return route(outputs, {mailbox: (revive(fact_type, fact.dump()),)})
+
+
+def _migrate_state(binding, outputs):
+    return _migrate_legacy(binding, outputs, StateFact, "ready.state_facts")
+
+
+def _migrate_checks(binding, outputs):
+    return _migrate_legacy(binding, outputs, ChecksFact, "ready.checks_facts")
+
+
+def _migrate_review(binding, outputs):
+    return _migrate_legacy(binding, outputs, ReviewFact, "ready.review_facts")
+
+
+def _migrate_findings(binding, outputs):
+    return _migrate_legacy(binding, outputs, FindingsFact, "ready.findings_facts")
+
+
+def _migrate_human(binding, outputs):
+    return _migrate_legacy(binding, outputs, HumanFact, "ready.human_facts")
+
+
+def _migrate_mutation_pending(binding, outputs):
+    return _migrate_legacy(binding, outputs, MutationPendingFact, "ready.mutation_pending_facts")
+
+
+def _migrate_mutation_settled(binding, outputs):
+    return _migrate_legacy(binding, outputs, MutationSettledFact, "ready.mutation_settled_facts")
+
+
+def _migrate_fault_raised(binding, outputs):
+    return _migrate_legacy(binding, outputs, FaultRaisedFact, "ready.fault_raised_facts")
+
+
+def _migrate_fault_cleared(binding, outputs):
+    return _migrate_legacy(binding, outputs, FaultClearedFact, "ready.fault_cleared_facts")
 
 
 def _ended(snap: Snapshot) -> ReadyEnded:
@@ -326,11 +428,47 @@ def _end(binding, outputs):
     return route(outputs, {"ready.done": (_ended(snap),)})
 
 
-def _drain_fact(binding, outputs):
+def _drain(binding, outputs, fact_type):
     # a sibling fact that lost the race with close (a post-close drain
     # settlement, a late resolution) is absorbed — never stranded
-    _, ended = values(binding, GateFact, ReadyEnded)
+    _, ended = values(binding, fact_type, ReadyEnded)
     return route(outputs, {"ready.done": (ended,)})
+
+
+def _drain_state(binding, outputs):
+    return _drain(binding, outputs, StateFact)
+
+
+def _drain_checks(binding, outputs):
+    return _drain(binding, outputs, ChecksFact)
+
+
+def _drain_review(binding, outputs):
+    return _drain(binding, outputs, ReviewFact)
+
+
+def _drain_findings(binding, outputs):
+    return _drain(binding, outputs, FindingsFact)
+
+
+def _drain_human(binding, outputs):
+    return _drain(binding, outputs, HumanFact)
+
+
+def _drain_mutation_pending(binding, outputs):
+    return _drain(binding, outputs, MutationPendingFact)
+
+
+def _drain_mutation_settled(binding, outputs):
+    return _drain(binding, outputs, MutationSettledFact)
+
+
+def _drain_fault_raised(binding, outputs):
+    return _drain(binding, outputs, FaultRaisedFact)
+
+
+def _drain_fault_cleared(binding, outputs):
+    return _drain(binding, outputs, FaultClearedFact)
 
 
 def _drain_recover(binding, outputs):
@@ -356,7 +494,18 @@ def _drain_wake(binding, outputs):
 def declare(s) -> None:
     """Declare the places this loop owns."""
     ready = s.ready
+    # Input-only compatibility place: interrupted histories created before
+    # the typed-mailbox promotion may retain a token at this exact path.
     ready.p.facts(GateFact)
+    ready.p.state_facts(StateFact)
+    ready.p.checks_facts(ChecksFact)
+    ready.p.review_facts(ReviewFact)
+    ready.p.findings_facts(FindingsFact)
+    ready.p.human_facts(HumanFact)
+    ready.p.mutation_pending_facts(MutationPendingFact)
+    ready.p.mutation_settled_facts(MutationSettledFact)
+    ready.p.fault_raised_facts(FaultRaisedFact)
+    ready.p.fault_cleared_facts(FaultClearedFact)
     ready.p.closed(CloseFact)
     ready.p.recover(RecoverFact)
     ready.p.wakes(AWake)
@@ -377,17 +526,145 @@ def wire(net) -> None:
     ready, dash = net.s.ready, net.s.dash
     net.t.on_announce_wake >> ready.p.wakes
 
-    (
-        (ready.p.facts, ready.p.snap)
-        >> ready.t.fold(handler=petri_handler(_fold_fact))
-        >> (
-            ready.p.snap,
-            ready.p.candidate,
-        )
+    # Pre-promotion GateFacts are a real same-type routing problem. Filtered
+    # migration branches preserve crash-cut replay while every new producer
+    # writes only the specialized places below.
+    legacy_state = Cel('kind == "state"')
+    legacy_fault_cleared = Cel(
+        'kind == "fault" && has(body.status) && (body.status == "resolved" || body.status == "cancelled")'
     )
-    # candidate -> announcing, ONLY while the mailbox is quiet: the
-    # inhibit arcs are loop-internal (readiness's own places), so every
-    # fact mailed before this instant has folded into the snapshot the
+    (
+        ready.p.facts
+        >> arc(filter=legacy_state)
+        >> ready.t.migrate_state(handler=petri_handler(_migrate_state))
+        >> ready.p.state_facts
+    )
+    (
+        ready.p.facts
+        >> arc(filter=Cel('kind == "checks"'))
+        >> ready.t.migrate_checks(handler=petri_handler(_migrate_checks))
+        >> ready.p.checks_facts
+    )
+    (
+        ready.p.facts
+        >> arc(filter=Cel('kind == "review"'))
+        >> ready.t.migrate_review(handler=petri_handler(_migrate_review))
+        >> ready.p.review_facts
+    )
+    (
+        ready.p.facts
+        >> arc(filter=Cel('kind == "findings"'))
+        >> ready.t.migrate_findings(handler=petri_handler(_migrate_findings))
+        >> ready.p.findings_facts
+    )
+    (
+        ready.p.facts
+        >> arc(filter=Cel('kind == "human"'))
+        >> ready.t.migrate_human(handler=petri_handler(_migrate_human))
+        >> ready.p.human_facts
+    )
+    (
+        ready.p.facts
+        >> arc(filter=Cel('kind == "mutation_pending"'))
+        >> ready.t.migrate_mutation_pending(handler=petri_handler(_migrate_mutation_pending))
+        >> ready.p.mutation_pending_facts
+    )
+    (
+        ready.p.facts
+        >> arc(filter=Cel('kind == "mutation_settled"'))
+        >> ready.t.migrate_mutation_settled(handler=petri_handler(_migrate_mutation_settled))
+        >> ready.p.mutation_settled_facts
+    )
+    (
+        ready.p.facts
+        >> arc(filter=Cel('kind == "fault" && (!has(body.status) || body.status == "faulted")'))
+        >> ready.t.migrate_fault_raised(handler=petri_handler(_migrate_fault_raised))
+        >> ready.p.fault_raised_facts
+    )
+    (
+        ready.p.facts
+        >> arc(filter=legacy_fault_cleared)
+        >> ready.t.migrate_fault_cleared(handler=petri_handler(_migrate_fault_cleared))
+        >> ready.p.fault_cleared_facts
+    )
+    for migration in (
+        ready.t.migrate_checks,
+        ready.t.migrate_review,
+        ready.t.migrate_findings,
+        ready.t.migrate_human,
+        ready.t.migrate_mutation_pending,
+        ready.t.migrate_mutation_settled,
+    ):
+        ready.p.facts >> arc.inhibit(filter=legacy_state) >> migration
+    ready.p.facts >> arc.inhibit(filter=Cel('kind == "mutation_pending"')) >> ready.t.migrate_mutation_settled
+    ready.p.facts >> arc.inhibit(filter=legacy_fault_cleared) >> ready.t.migrate_fault_raised
+    (
+        (ready.p.state_facts, ready.p.snap)
+        >> ready.t.fold_state(handler=petri_handler(_fold_state))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    (
+        (ready.p.checks_facts, ready.p.snap)
+        >> ready.t.fold_checks(handler=petri_handler(_fold_checks))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    (
+        (ready.p.review_facts, ready.p.snap)
+        >> ready.t.fold_review(handler=petri_handler(_fold_review))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    (
+        (ready.p.findings_facts, ready.p.snap)
+        >> ready.t.fold_findings(handler=petri_handler(_fold_findings))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    (
+        (ready.p.human_facts, ready.p.snap)
+        >> ready.t.fold_human(handler=petri_handler(_fold_human))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    (
+        (ready.p.mutation_pending_facts, ready.p.snap)
+        >> ready.t.fold_mutation_pending(handler=petri_handler(_fold_mutation_pending))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    (
+        (ready.p.mutation_settled_facts, ready.p.snap)
+        >> ready.t.fold_mutation_settled(handler=petri_handler(_fold_mutation_settled))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    (
+        (ready.p.fault_raised_facts, ready.p.snap)
+        >> ready.t.fold_fault_raised(handler=petri_handler(_fold_fault_raised))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    (
+        (ready.p.fault_cleared_facts, ready.p.snap)
+        >> ready.t.fold_fault_cleared(handler=petri_handler(_fold_fault_cleared))
+        >> (ready.p.snap, ready.p.candidate)
+    )
+    # Authority facts fold before incarnation-scoped evidence. The former
+    # shared FIFO guaranteed this ordering implicitly; the typed topology
+    # makes it explicit so a new head cannot make already-mailed checks,
+    # review, findings, human, or mutation evidence look mismatched.
+    incarnation_folds = (
+        ready.t.fold_checks,
+        ready.t.fold_review,
+        ready.t.fold_findings,
+        ready.t.fold_human,
+        ready.t.fold_mutation_pending,
+        ready.t.fold_mutation_settled,
+    )
+    for fold in incarnation_folds:
+        ready.p.state_facts >> arc.inhibit() >> fold
+    # Splitting the former FIFO must not erase producer causality. A pending
+    # identity exists before its settlement, and a recovery resolution exists
+    # before that same reopened operation can fault again in one drive.
+    ready.p.mutation_pending_facts >> arc.inhibit() >> ready.t.fold_mutation_settled
+    ready.p.fault_cleared_facts >> arc.inhibit() >> ready.t.fold_fault_raised
+    # candidate -> announcing, ONLY while every mailbox is quiet: the
+    # inhibit arcs are loop-internal (readiness's own places), so each
+    # fact mailed before this instant has folded into the snapshot that
     # authorization re-derives from — and a pending close wins outright
     (
         (ready.p.candidate, ready.p.snap)
@@ -397,7 +674,20 @@ def wire(net) -> None:
             ready.p.announce_req,
         )
     )
-    ready.p.facts >> arc.inhibit() >> ready.t.authorize
+    fact_mailboxes = (
+        ready.p.facts,
+        ready.p.state_facts,
+        ready.p.checks_facts,
+        ready.p.review_facts,
+        ready.p.findings_facts,
+        ready.p.human_facts,
+        ready.p.mutation_pending_facts,
+        ready.p.mutation_settled_facts,
+        ready.p.fault_raised_facts,
+        ready.p.fault_cleared_facts,
+    )
+    for mailbox in fact_mailboxes:
+        mailbox >> arc.inhibit() >> ready.t.authorize
     ready.p.closed >> arc.inhibit() >> ready.t.authorize
     (
         ready.p.announce_req
@@ -424,7 +714,8 @@ def wire(net) -> None:
             ready.p.announce_req,
         )
     )
-    ready.p.facts >> arc.inhibit() >> ready.t.wake_deferred
+    for mailbox in fact_mailboxes:
+        mailbox >> arc.inhibit() >> ready.t.wake_deferred
     ready.p.closed >> arc.inhibit() >> ready.t.wake_deferred
     (
         (ready.p.alanded, ready.p.snap)
@@ -476,7 +767,35 @@ def wire(net) -> None:
     ((ready.p.closed, ready.p.snap) >> ready.t.end(handler=petri_handler(_end)) >> (ready.p.snap, ready.p.done))
     # post-close drains: mail that lost the race with close is absorbed
     # by the retired loop's persistent done record, never stranded
-    ((ready.p.facts, ready.p.done) >> ready.t.drain_fact(handler=petri_handler(_drain_fact)) >> ready.p.done)
+    ((ready.p.state_facts, ready.p.done) >> ready.t.drain_state(handler=petri_handler(_drain_state)) >> ready.p.done)
+    ((ready.p.checks_facts, ready.p.done) >> ready.t.drain_checks(handler=petri_handler(_drain_checks)) >> ready.p.done)
+    ((ready.p.review_facts, ready.p.done) >> ready.t.drain_review(handler=petri_handler(_drain_review)) >> ready.p.done)
+    (
+        (ready.p.findings_facts, ready.p.done)
+        >> ready.t.drain_findings(handler=petri_handler(_drain_findings))
+        >> ready.p.done
+    )
+    ((ready.p.human_facts, ready.p.done) >> ready.t.drain_human(handler=petri_handler(_drain_human)) >> ready.p.done)
+    (
+        (ready.p.mutation_pending_facts, ready.p.done)
+        >> ready.t.drain_mutation_pending(handler=petri_handler(_drain_mutation_pending))
+        >> ready.p.done
+    )
+    (
+        (ready.p.mutation_settled_facts, ready.p.done)
+        >> ready.t.drain_mutation_settled(handler=petri_handler(_drain_mutation_settled))
+        >> ready.p.done
+    )
+    (
+        (ready.p.fault_raised_facts, ready.p.done)
+        >> ready.t.drain_fault_raised(handler=petri_handler(_drain_fault_raised))
+        >> ready.p.done
+    )
+    (
+        (ready.p.fault_cleared_facts, ready.p.done)
+        >> ready.t.drain_fault_cleared(handler=petri_handler(_drain_fault_cleared))
+        >> ready.p.done
+    )
     ((ready.p.recover, ready.p.done) >> ready.t.drain_recover(handler=petri_handler(_drain_recover)) >> ready.p.done)
     (
         (ready.p.candidate, ready.p.done)

@@ -282,21 +282,67 @@ class TestObservationRouting:
 
 
 class TestCensus:
-    def test_no_guards_no_reads_no_filters_every_place_owned(self) -> None:
+    def test_no_guards_no_reads_filters_only_legacy_migration_every_place_owned(self) -> None:
         built = build_net_v5()
         assert built.guards == {}
-        # The deliberate exceptions to all-consume are readiness's two
-        # authorization points. Both gate on ITS OWN fact/close mailbox
-        # quiescence through loop-internal inhibit arcs: neither a fresh
-        # request nor a deferred retry can race already-mailed revocation.
+        # The deliberate exceptions to all-consume make readiness ordering
+        # explicit: both authorization points require every typed mailbox
+        # plus close to be quiet, and incarnation-scoped facts wait for
+        # already-mailed state authority to fold first.
         exceptional = {(str(a.source), str(a.mode), str(a.target)) for a in built.net.arcs if str(a.mode) != "consume"}
-        assert exceptional == {
-            ("ready.facts", "inhibit", "ready.authorize"),
-            ("ready.closed", "inhibit", "ready.authorize"),
-            ("ready.facts", "inhibit", "ready.wake_deferred"),
-            ("ready.closed", "inhibit", "ready.wake_deferred"),
+        fact_mailboxes = {
+            "state",
+            "checks",
+            "review",
+            "findings",
+            "human",
+            "mutation_pending",
+            "mutation_settled",
+            "fault_raised",
+            "fault_cleared",
         }
-        assert all(getattr(a, "filter", None) is None for a in built.net.arcs)
+        authorization_points = {"authorize", "wake_deferred"}
+        expected = (
+            {
+                (f"ready.{mailbox}_facts", "inhibit", f"ready.{transition}")
+                for mailbox in fact_mailboxes
+                for transition in authorization_points
+            }
+            | {
+                (source, "inhibit", f"ready.{transition}")
+                for source in ("ready.facts", "ready.closed")
+                for transition in authorization_points
+            }
+            | {
+                ("ready.state_facts", "inhibit", f"ready.fold_{mailbox}")
+                for mailbox in fact_mailboxes
+                if mailbox not in {"state", "fault_raised", "fault_cleared"}
+            }
+            | {
+                ("ready.mutation_pending_facts", "inhibit", "ready.fold_mutation_settled"),
+                ("ready.fault_cleared_facts", "inhibit", "ready.fold_fault_raised"),
+            }
+            | {
+                ("ready.facts", "inhibit", f"ready.migrate_{mailbox}")
+                for mailbox in fact_mailboxes
+                if mailbox not in {"state", "fault_raised", "fault_cleared"}
+            }
+            | {
+                ("ready.facts", "inhibit", "ready.migrate_mutation_settled"),
+                ("ready.facts", "inhibit", "ready.migrate_fault_raised"),
+            }
+        )
+        assert exceptional == expected
+        filtered_arcs = [arc for arc in built.net.arcs if arc.filter is not None]
+        filtered = {(str(arc.source), str(arc.mode), str(arc.target)) for arc in filtered_arcs}
+        assert len(filtered_arcs) == 17
+        assert filtered == {
+            *(("ready.facts", "consume", f"ready.migrate_{mailbox}") for mailbox in fact_mailboxes),
+            *(("ready.facts", "inhibit", f"ready.migrate_{mailbox}") for mailbox in fact_mailboxes),
+        } - {
+            ("ready.facts", "inhibit", "ready.migrate_state"),
+            ("ready.facts", "inhibit", "ready.migrate_fault_cleared"),
+        }
         for place in built.net.places:
             owner = str(place).split(".", 1)
             assert len(owner) == 2 and owner[0], f"unowned place {place}"

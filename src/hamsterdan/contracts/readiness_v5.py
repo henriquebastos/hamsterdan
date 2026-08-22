@@ -21,6 +21,7 @@ from hamsterdan.contracts.readiness import WorkflowModel
 Phase = Literal["running", "quiescent", "terminal"]
 HeadRelation = Literal["new", "superseded", "confirmed", "resumed", "refreshed"]
 RunConclusion = Literal["queued", "in_progress", "success", "failure"]
+ChecksStatus = Literal["pending", "queued", "in_progress", "success", "failure"]
 ReviewStatus = Literal["pending", "clear", "blocking", "unable"]
 ReviewUnableCategory = Literal[
     "runtime_lifecycle",
@@ -323,6 +324,15 @@ class ProvisionalHead(WorkflowModel):
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class GateFact(WorkflowModel):
+    """Dashboard projection and legacy readiness-envelope fact.
+
+    Readiness decisions use the specialized fact colors below. The
+    dashboard deliberately retains this open projection envelope because
+    it records every concern event, including events that do not affect
+    readiness. The former readiness mailbox remains input-only so retained
+    pre-promotion tokens can migrate into their specialized colors.
+    """
+
     kind: str
     incarnation: int
     body: dict[str, Any]
@@ -421,6 +431,149 @@ class MutationSettled(WorkflowModel):
     outcome: Literal["landed", "declined", "moved", "faulted"]
     incarnation: int
     fingerprint: str
+
+
+# -- readiness decision facts ----------------------------------------------
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class StateFactBody:
+    phase: Phase
+    head: str
+    base: str
+    mergeable: bool
+    policy: str
+    strict_base: bool = True
+    base_current: bool = False
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class StateFact(WorkflowModel):
+    incarnation: int
+    body: StateFactBody
+    kind: Literal["state"] = "state"
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ChecksFactBody:
+    status: ChecksStatus
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ChecksFact(WorkflowModel):
+    incarnation: int
+    body: ChecksFactBody
+    kind: Literal["checks"] = "checks"
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewStatusFactBody:
+    head: str
+    status: ReviewStatus
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewUnableFactBody:
+    head: str
+    status: Literal["unable"]
+    category: ReviewUnableCategory
+
+
+type ReviewFactBody = ReviewStatusFactBody | ReviewUnableFactBody
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class ReviewFact(WorkflowModel):
+    incarnation: int
+    body: ReviewFactBody
+    kind: Literal["review"] = "review"
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class FindingsFactBody:
+    head: str
+    blocking: int
+    count: int
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class FindingsFact(WorkflowModel):
+    incarnation: int
+    body: FindingsFactBody
+    kind: Literal["findings"] = "findings"
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class HumanFactBody:
+    approval: bool
+    changes_requested: bool
+    unresolved: int
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class HumanFact(WorkflowModel):
+    incarnation: int
+    body: HumanFactBody
+    kind: Literal["human"] = "human"
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class MutationPendingFactBody:
+    op: str
+    op_key: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class MutationPendingFact(WorkflowModel):
+    incarnation: int
+    body: MutationPendingFactBody
+    kind: Literal["mutation_pending"] = "mutation_pending"
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class MutationSettledFact(WorkflowModel):
+    incarnation: int
+    body: MutationSettled
+    kind: Literal["mutation_settled"] = "mutation_settled"
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class PublicationFaultBody:
+    where: Literal["review"]
+    op: str
+    status: Literal["faulted"]
+    reason: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class OperationFaultBody:
+    where: Literal["mutation", "rerun"]
+    op: str
+    reason: str
+
+
+type FaultRaisedFactBody = PublicationFaultBody | OperationFaultBody
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class FaultRaisedFact(WorkflowModel):
+    incarnation: Literal[0]
+    body: FaultRaisedFactBody
+    kind: Literal["fault"] = "fault"
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class FaultClearedFactBody:
+    where: Literal["review", "mutation", "rerun"]
+    op: str
+    status: Literal["resolved", "cancelled"]
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class FaultClearedFact(WorkflowModel):
+    incarnation: Literal[0]
+    body: FaultClearedFactBody
+    kind: Literal["fault"] = "fault"
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
@@ -1188,10 +1341,10 @@ class AnnounceCandidate(WorkflowModel):
     The fold that sees the not-ready -> ready edge emits this sentinel;
     a separate authorization step re-derives the WHOLE decision from
     the snapshot as it stands at authorization time and is inhibited
-    while any sibling fact is still unfolded in `ready.facts`. A fact
-    already mailed when the edge was seen therefore always folds first
-    and revokes a stale candidate — the announce request itself is only
-    ever minted from a fully caught-up snapshot."""
+    while any sibling fact is still unfolded in a readiness mailbox. A
+    fact already mailed when the edge was seen therefore always folds
+    first and revokes a stale candidate — the announce request itself is
+    only ever minted from a fully caught-up snapshot."""
 
     incarnation: int
     head: str

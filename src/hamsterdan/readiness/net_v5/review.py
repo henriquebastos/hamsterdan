@@ -27,17 +27,25 @@ from hamsterdan.contracts.readiness_v5 import (
     CloseFact,
     DismissFact,
     EmptyReview,
-    GateFact,
+    FaultClearedFact,
+    FaultClearedFactBody,
+    FaultRaisedFact,
+    FindingsFact,
+    FindingsFactBody,
     HeadWork,
+    PublicationFaultBody,
     Publishable,
     RecoverFact,
     ReviewBlocked,
     ReviewEnded,
+    ReviewFact,
     ReviewFault,
     ReviewLanded,
     ReviewMemory,
     ReviewMoved,
     ReviewStatus,
+    ReviewStatusFactBody,
+    ReviewUnableFactBody,
     RoundDeferred,
     RoundMoved,
     RoundOpen,
@@ -66,8 +74,8 @@ def _status(findings, dismissed) -> ReviewStatus:
     return "blocking" if any(f["blocking"] for f in _live(findings, dismissed)) else "clear"
 
 
-def _review_fact(head: str, incarnation: int, status: ReviewStatus) -> GateFact:
-    return GateFact(kind="review", incarnation=incarnation, body={"head": head, "status": status})
+def _review_fact(head: str, incarnation: int, status: ReviewStatus) -> ReviewFact:
+    return ReviewFact(incarnation=incarnation, body=ReviewStatusFactBody(head=head, status=status))
 
 
 def _operation(subject: str, head: str, incarnation: int) -> str:
@@ -168,12 +176,11 @@ def _unable(binding, outputs):
     if out.head not in mem.reviewed:
         mem = mem.validated_update(reviewed=[*mem.reviewed, out.head])
     mem = mem.validated_update(status="unable")
-    fact = GateFact(
-        kind="review",
+    fact = ReviewFact(
         incarnation=out.incarnation,
-        body={"head": out.head, "status": "unable", "category": out.category},
+        body=ReviewUnableFactBody(head=out.head, status="unable", category=out.category),
     )
-    return route(outputs, {"review.memory": (mem,), "ready.facts": (fact,), "dash.facts": (fact,)})
+    return route(outputs, {"review.memory": (mem,), "ready.review_facts": (fact,), "dash.facts": (fact,)})
 
 
 def _round_moved(binding, outputs):
@@ -206,29 +213,47 @@ def _wake_deferred(binding, outputs):
     return route(outputs, {"review.round": (reopened,)})
 
 
-def _findings_fact(head: str, incarnation: int, findings, dismissed) -> GateFact:
+def _findings_fact(head: str, incarnation: int, findings, dismissed) -> FindingsFact:
     blocking = sum(1 for f in findings if f["blocking"] and f["id"] not in dismissed)
-    return GateFact(
-        kind="findings",
+    return FindingsFact(
         incarnation=incarnation,
-        body={"head": head, "blocking": blocking, "count": len(findings)},
+        body=FindingsFactBody(head=head, blocking=blocking, count=len(findings)),
     )
 
 
-def _settlement_facts(mem: ReviewMemory, head: str, incarnation: int) -> tuple[GateFact, ...]:
+def _settlement_facts(mem: ReviewMemory, head: str, incarnation: int) -> tuple[FindingsFact | ReviewFact, ...]:
     facts = (_findings_fact(head, incarnation, mem.findings, mem.dismissed),)
     if mem.status in ("clear", "blocking"):
         return (*facts, _review_fact(head, incarnation, mem.status))
     return facts
 
 
-def _resolution(pub: dict) -> GateFact | None:
+def _resolution(pub: dict) -> FaultClearedFact | None:
     """An operation-keyed resolution for a recovered faulted publication:
     the settle clears the fault so readiness never stays fail-closed
     after the human's recovery actually succeeded."""
     if pub.get("was") != "faulted":
         return None
-    return GateFact(kind="fault", incarnation=0, body={"where": "review", "op": pub["op"], "status": "resolved"})
+    return FaultClearedFact(
+        incarnation=0,
+        body=FaultClearedFactBody(where="review", op=pub["op"], status="resolved"),
+    )
+
+
+def _fact_routes(facts: tuple[FindingsFact | ReviewFact | FaultClearedFact, ...]) -> dict:
+    """Route each modeled review outcome to its explicit readiness mailbox
+    while preserving the existing open dashboard projection."""
+    routes: dict = {"dash.facts": facts}
+    findings = tuple(fact for fact in facts if isinstance(fact, FindingsFact))
+    reviews = tuple(fact for fact in facts if isinstance(fact, ReviewFact))
+    cleared = tuple(fact for fact in facts if isinstance(fact, FaultClearedFact))
+    if findings:
+        routes["ready.findings_facts"] = findings
+    if reviews:
+        routes["ready.review_facts"] = reviews
+    if cleared:
+        routes["ready.fault_cleared_facts"] = cleared
+    return routes
 
 
 def _fold_landed(binding, outputs):
@@ -242,7 +267,7 @@ def _fold_landed(binding, outputs):
     resolved = _resolution(prior.pub)
     if resolved is not None:
         facts = (*facts, resolved)
-    return route(outputs, {"review.memory": (mem,), "ready.facts": facts, "dash.facts": facts})
+    return route(outputs, {"review.memory": (mem,), **_fact_routes(facts)})
 
 
 def _fold_moved(binding, outputs):
@@ -255,7 +280,7 @@ def _fold_moved(binding, outputs):
     routes: dict = {"review.memory": (mem,)}
     resolved = _resolution(prior.pub)
     if resolved is not None:
-        routes["ready.facts"] = (resolved,)
+        routes["ready.fault_cleared_facts"] = (resolved,)
         routes["dash.facts"] = (resolved,)
     return route(outputs, routes)
 
@@ -279,7 +304,7 @@ def _fold_blocked(binding, outputs):
     resolved = _resolution(prior.pub)
     if resolved is not None:
         facts = (*facts, resolved)
-    return route(outputs, {"review.memory": (mem,), "ready.facts": facts, "dash.facts": facts})
+    return route(outputs, {"review.memory": (mem,), **_fact_routes(facts)})
 
 
 def _fold_fault(binding, outputs):
@@ -288,12 +313,16 @@ def _fold_fault(binding, outputs):
     # A2: Faulted retains the operation (the pending descriptor set at
     # publish time) plus the reason, so the human can rule
     mem = prior.validated_update(pub={**prior.pub, "phase": "faulted", "reason": out.reason})
-    fact = GateFact(
-        kind="fault",
+    fact = FaultRaisedFact(
         incarnation=0,
-        body={"where": "review", "op": prior.pub.get("op", ""), "status": "faulted", "reason": out.reason},
+        body=PublicationFaultBody(
+            where="review",
+            op=prior.pub.get("op", ""),
+            status="faulted",
+            reason=out.reason,
+        ),
     )
-    return route(outputs, {"review.memory": (mem,), "ready.facts": (fact,), "dash.facts": (fact,)})
+    return route(outputs, {"review.memory": (mem,), "ready.fault_raised_facts": (fact,), "dash.facts": (fact,)})
 
 
 def _fold_empty(binding, outputs):
@@ -304,7 +333,7 @@ def _fold_empty(binding, outputs):
         pub={"phase": "idle"},
     )
     facts = _settlement_facts(mem, out.head, out.incarnation)
-    return route(outputs, {"review.memory": (mem,), "ready.facts": facts, "dash.facts": facts})
+    return route(outputs, {"review.memory": (mem,), **_fact_routes(facts)})
 
 
 def _recover(binding, outputs):
@@ -334,7 +363,7 @@ def _recover(binding, outputs):
 def _dismiss(binding, outputs):
     fact, mem = values(binding, DismissFact, ReviewMemory)
     pub = mem.pub
-    fault_facts: tuple[GateFact, ...] = ()
+    fault_facts: tuple[FaultClearedFact, ...] = ()
     if pub.get("phase") in ("blocked", "faulted") and any(f["id"] == fact.finding_id for f in pub.get("findings", ())):
         # the human waved off a finding the retained operation carries:
         # CANCEL the operation (recovery goes inert) rather than rewrite
@@ -342,19 +371,22 @@ def _dismiss(binding, outputs):
         # stays for audit
         if pub["phase"] == "faulted":
             fault_facts = (
-                GateFact(kind="fault", incarnation=0, body={"where": "review", "op": pub["op"], "status": "cancelled"}),
+                FaultClearedFact(
+                    incarnation=0,
+                    body=FaultClearedFactBody(where="review", op=pub["op"], status="cancelled"),
+                ),
             )
         pub = {**pub, "phase": "cancelled"}
     dismissed = list(mem.dismissed) if fact.finding_id in mem.dismissed else [*mem.dismissed, fact.finding_id]
     updated = mem.validated_update(dismissed=dismissed, pub=pub)
     current = any(finding["id"] == fact.finding_id for finding in updated.findings)
-    facts: tuple[GateFact, ...] = fault_facts
+    facts: tuple[FindingsFact | ReviewFact | FaultClearedFact, ...] = fault_facts
     if current:
         facts = (_findings_fact(updated.head, updated.incarnation, updated.findings, updated.dismissed), *facts)
         if updated.status in ("clear", "blocking"):
             updated = updated.validated_update(status=_status(updated.findings, updated.dismissed))
             facts = (facts[0], _review_fact(updated.head, updated.incarnation, updated.status), *facts[1:])
-    return route(outputs, {"review.memory": (updated,), "ready.facts": facts, "dash.facts": facts})
+    return route(outputs, {"review.memory": (updated,), **_fact_routes(facts)})
 
 
 def _end(binding, outputs):
@@ -459,7 +491,7 @@ def wire(net) -> None:
         >> review.t.fold_unable(handler=petri_handler(_unable))
         >> (
             review.p.memory,
-            ready.p.facts,
+            ready.p.review_facts,
             dash.p.facts,
         )
     )
@@ -478,7 +510,9 @@ def wire(net) -> None:
         >> review.t.fold_landed(handler=petri_handler(_fold_landed))
         >> (
             review.p.memory,
-            ready.p.facts,
+            ready.p.findings_facts,
+            ready.p.review_facts,
+            ready.p.fault_cleared_facts,
             dash.p.facts,
         )
     )
@@ -487,7 +521,7 @@ def wire(net) -> None:
         >> review.t.fold_moved(handler=petri_handler(_fold_moved))
         >> (
             review.p.memory,
-            ready.p.facts,
+            ready.p.fault_cleared_facts,
             dash.p.facts,
         )
     )
@@ -496,7 +530,9 @@ def wire(net) -> None:
         >> review.t.fold_blocked(handler=petri_handler(_fold_blocked))
         >> (
             review.p.memory,
-            ready.p.facts,
+            ready.p.findings_facts,
+            ready.p.review_facts,
+            ready.p.fault_cleared_facts,
             dash.p.facts,
         )
     )
@@ -505,7 +541,7 @@ def wire(net) -> None:
         >> review.t.fold_fault(handler=petri_handler(_fold_fault))
         >> (
             review.p.memory,
-            ready.p.facts,
+            ready.p.fault_raised_facts,
             dash.p.facts,
         )
     )
@@ -514,7 +550,8 @@ def wire(net) -> None:
         >> review.t.fold_empty(handler=petri_handler(_fold_empty))
         >> (
             review.p.memory,
-            ready.p.facts,
+            ready.p.findings_facts,
+            ready.p.review_facts,
             dash.p.facts,
         )
     )
@@ -533,7 +570,9 @@ def wire(net) -> None:
         >> review.t.dismissal(handler=petri_handler(_dismiss))
         >> (
             review.p.memory,
-            ready.p.facts,
+            ready.p.findings_facts,
+            ready.p.review_facts,
+            ready.p.fault_cleared_facts,
             dash.p.facts,
         )
     )

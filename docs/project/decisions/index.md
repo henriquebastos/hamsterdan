@@ -12,3 +12,4 @@ settled direction by superseding its record explicitly rather than drifting.
 - [Lifecycle scopes close generations before canceling effects](records/2026-08-11T0000Z-lifecycle-scopes-close-generations-before-canceling-effects.md)
 - [V5 actor-loop parity is pursued as a parallel implementation (superseded)](records/2026-08-15T0430Z-v5-actor-loop-parity-is-pursued-as-a-parallel-implementation.md)
 - [Non-sharded V5 replaces the parallel production topology](records/2026-08-18T1425Z-non-sharded-v5-replaces-the-parallel-production-topology.md)
+- [V5 durable decisions are explicit topology](records/2026-08-22T0107Z-v5-durable-decisions-are-explicit-topology.md)

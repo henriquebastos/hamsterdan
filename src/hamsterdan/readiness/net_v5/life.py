@@ -17,9 +17,10 @@ from hamsterdan.contracts.readiness_v5 import (
     CloseSeen,
     CommentSeen,
     DraftSeen,
-    GateFact,
     HeadSeen,
     HeadWork,
+    HumanFact,
+    HumanFactBody,
     HumanSeen,
     IntentFact,
     LifeState,
@@ -29,25 +30,26 @@ from hamsterdan.contracts.readiness_v5 import (
     ReminderCycleStarted,
     RunSeen,
     RunWork,
+    StateFact,
+    StateFactBody,
 )
 from hamsterdan.readiness.net_v5.folding import route, values
 
 # -- folds ---------------------------------------------------------------
 
 
-def _state_fact(state: LifeState) -> GateFact:
-    return GateFact(
-        kind="state",
+def _state_fact(state: LifeState) -> StateFact:
+    return StateFact(
         incarnation=state.incarnation,
-        body={
-            "phase": state.phase,
-            "head": state.head,
-            "base": state.base,
-            "mergeable": state.mergeable,
-            "policy": state.policy,
-            "strict_base": state.strict_base,
-            "base_current": state.base_current,
-        },
+        body=StateFactBody(
+            phase=state.phase,
+            head=state.head,
+            base=state.base,
+            mergeable=state.mergeable,
+            policy=state.policy,
+            strict_base=state.strict_base,
+            base_current=state.base_current,
+        ),
     )
 
 
@@ -57,7 +59,7 @@ def _admitted_state_outputs(state: LifeState, work: HeadWork) -> dict:
         "life.state": (state,),
         "review.heads": (work,),
         "ci.heads": (work,),
-        "ready.facts": (fact,),
+        "ready.state_facts": (fact,),
         "dash.facts": (fact,),
     }
     if work.relation != "refreshed":
@@ -154,7 +156,7 @@ def _admit_draft(binding, outputs):
         outputs,
         {
             "life.state": (quiescent,),
-            "ready.facts": (fact,),
+            "ready.state_facts": (fact,),
             "dash.facts": (fact,),
             "rem.pauses": (
                 ReminderCyclePaused(
@@ -236,18 +238,17 @@ def _admit_human(binding, outputs):
     seen, state = values(binding, HumanSeen, LifeState)
     if state.phase == "terminal":
         return route(outputs, {"life.state": (state,)})
-    fact = GateFact(
-        kind="human",
+    fact = HumanFact(
         incarnation=state.incarnation,
-        body={
-            "approval": seen.approval,
-            "changes_requested": seen.changes_requested,
-            "unresolved": seen.unresolved,
-        },
+        body=HumanFactBody(
+            approval=seen.approval,
+            changes_requested=seen.changes_requested,
+            unresolved=seen.unresolved,
+        ),
     )
     return route(
         outputs,
-        {"life.state": (state,), "ready.facts": (fact,), "dash.facts": (fact,)},
+        {"life.state": (state,), "ready.human_facts": (fact,), "dash.facts": (fact,)},
     )
 
 
@@ -320,7 +321,7 @@ def wire(net) -> None:
             life.p.state,
             review.p.heads,
             ci.p.heads,
-            ready.p.facts,
+            ready.p.state_facts,
             dash.p.facts,
             rem.p.cycles,
         )
@@ -330,7 +331,7 @@ def wire(net) -> None:
         >> life.t.admit_draft(handler=petri_handler(_admit_draft))
         >> (
             life.p.state,
-            ready.p.facts,
+            ready.p.state_facts,
             dash.p.facts,
             rem.p.pauses,
         )
@@ -342,7 +343,7 @@ def wire(net) -> None:
             life.p.state,
             review.p.heads,
             ci.p.heads,
-            ready.p.facts,
+            ready.p.state_facts,
             dash.p.facts,
             rem.p.cycles,
         )
@@ -371,7 +372,7 @@ def wire(net) -> None:
         >> life.t.admit_human(handler=petri_handler(_admit_human))
         >> (
             life.p.state,
-            ready.p.facts,
+            ready.p.human_facts,
             dash.p.facts,
         )
     )
