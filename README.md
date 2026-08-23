@@ -2,24 +2,28 @@
 
 Hamsterdan is a GitHub-native PR-readiness application powered by
 [Petrus](https://github.com/henriquebastos/petrus). It coordinates durable
-review, Actions observation, human decisions, and guarded repository effects
-through one explicit Petri-net workflow.
+review, GitHub Actions observation, human decisions, guarded repository effects,
+and readiness advisories through one explicit Petri-net workflow.
 
-This repository is private during the first controlled validation. The first
-real deployment uses an HBNetwork-owned private GitHub App registration and a
-selected-repository installation in the HBNetwork sandbox organization. Source
-ownership, App registration ownership, installation ownership, and deployment
-state are intentionally separate.
+This repository remains private for the first production release. Source
+ownership, GitHub App registration, selected-repository installation, deployment
+state, and future open-source publication are separate boundaries.
 
 ## Status
 
-The standalone application and HBNetwork deployment are qualified. Live
-acceptance proves App-authored commits and comments, durable App webhook
-ingress, first-failure observation, exact bot-authorized rerun brokerage,
-second-attempt success, readiness publication, restart/remint recovery, and
-delivery deduplication on `HBNetwork/demo-pr-readiness`. The private source CI
-also passes against the exact public Petrus baseline without special dependency
-credentials.
+The private `0.1.0` candidate uses non-sharded V5 as its only runtime topology.
+The former production topology, runtime selector, and sharded prototype are not
+available. A stale selector or former/unlabeled durable state fails closed
+without mutation.
+
+The V5 route has accepted deterministic evidence across eleven semantic
+journeys and real GitHub evidence for clean green, transient-CI recovery, and a
+complete three-actor repair. The current candidate passes the local full gate.
+GitHub-hosted Actions is currently blocked before job start by the account's
+payment/spending state, so hosted CI is not claimed green for this candidate.
+The candidate host has not yet been launched; exact production-target selection
+and an explicitly approved monitoring proof remain under
+[CV19](docs/project/roadmap/cv19-private-v0-1-production/index.md).
 
 ## Architecture
 
@@ -29,7 +33,7 @@ credentials.
                        |
         +--------------+--------------+
         |              |              |
-   github_app        agents       readiness/net
+   github_app        agents    readiness/net_v5
         |              |              |
         +--------------+--------------+
                        |
@@ -37,76 +41,36 @@ credentials.
 ```
 
 `host` is the only concrete composition root. The sibling subsystems share
-neutral contracts but do not import one another. The host creates and drives
-public `petrus.engine.Engine` instances; the readiness Net decides work, and
-GitHub or agent providers perform typed Motus Activities.
-
-### One PR, outside in
+neutral contracts but do not import one another. GitHub and agent effects run as
+typed Motus Activities; GitHub credentials stay in the host and never enter an
+agent territory.
 
 The shortest maintainer path through one reconciliation is:
 
 ```text
-GitHub webhook / periodic sweep
-  -> HostService._activate_instance(instance, ...)
-  -> PrReadinessApplication.activate(trigger) -> None
-  -> PrReadinessHost.deliver(source, value, identity)
-  -> petrus.engine.Engine
-  -> readiness.net.topology.build_net(...)
-  -> exact Motus Activity request -> exact result
-  -> concern-specific transition
-  -> project_readiness(...) -> ReadinessSnapshot
+signed GitHub webhook / startup or periodic reconciliation
+  -> HostService custody and per-PR activation
+  -> PrReadinessV5Application
+  -> V5Runtime / petrus.engine.Engine
+  -> readiness.net_v5.topology
+  -> typed Motus Activity request and result
+  -> authority-fenced V5 fold and publication
 ```
 
-`src/hamsterdan/host/application.py` normalizes current provider facts and
-delivers only changed observations. `src/hamsterdan/host/runtime.py` opens or
-replays one durable Petrus History per PR, binds typed Activities, and exposes a
-derived snapshot. `src/hamsterdan/readiness/net/topology.py` is the workflow:
-follow it from typed ingress, through admission and concern folding, to
-conversation, publication, timers, lifecycle, and retirement.
+The V5 topology owns nine cohabited concern loops plus lifecycle control. Typed
+mailboxes and specialized readiness facts make durable alternatives explicit;
+current authority, external operation identity, and lookup-first recovery fence
+every effect. Each PR has an independent Engine and History. Durable webhook,
+Dispatch, timer, and runnable stores survive host reconstruction. Hamsterdan
+never merges.
 
-GitHub comment trust and exact-mention admission have one owner in
-`github_app.webhooks.admit_conversation`. Raw authenticated observations remain
-in durable webhook custody; an admissible comment crosses the host boundary as
-a strict `AdmittedConversation` containing only audit identity and
-mention-stripped text. The application binds current epoch/head and delivers it
-without reimplementing provider policy.
+Start with:
 
-The active marking is not one aggregate state-machine token. It contains one
-token for each independently owned concern:
-
-```python
-Authority          # generation, head/base/policy and repository identity
-ActionsState       # selected run, attempt, conclusion and rerun continuity
-ReviewState        # agent review, findings and dispositions
-HumanState         # approvals, conversations, mergeability and reminders
-MutationState      # change/repair operation and provisional-head continuity
-FindingPublicationState       # finding publication ownership
-ConversationPublicationState  # conversation operation and recovery ownership
-DashboardPublicationState     # dashboard projection and operation ownership
-ReadinessPublicationState     # readiness announcement ownership
-
-def project_readiness(
-    authority: Authority,
-    actions: ActionsState,
-    review: ReviewState,
-    human: HumanState,
-    mutation: MutationState,
-    finding_publication: FindingPublicationState,
-    conversation_publication: ConversationPublicationState,
-    dashboard_publication: DashboardPublicationState,
-    readiness_publication: ReadinessPublicationState,
-) -> ReadinessSnapshot: ...
-```
-
-Routine transitions read centralized `Authority` and consume only the concern
-they mutate. Full-cohort movement is reserved for generation and lifecycle
-boundaries. Dashboard currency is relational: a digest of current concern facts
-must equal the exact acknowledged projection. Dashboard/readiness failures move
-through one immutable logical Motus execution with classified durable retry;
-the Net retains exact operation ownership and current terminal acceptance.
-Explicit authorized mutation instructions execute directly; ambiguous
-instructions produce clarification without mutation. The host still fences
-every effect immediately before execution, and Hamsterdan never merges.
+- `src/hamsterdan/host/service.py` for runtime composition and custody;
+- `src/hamsterdan/host/v5/application.py` for provider-to-V5 reconciliation;
+- `src/hamsterdan/host/v5/runtime.py` for Engine, Dispatch, Worker, and recovery;
+- `src/hamsterdan/readiness/net_v5/topology.py` for the sole workflow; and
+- `src/hamsterdan/readiness/net_v5/gating.py` for typed Activity gates.
 
 ## Development
 
@@ -117,38 +81,42 @@ uv sync --frozen
 scripts/check full
 ```
 
-The Petrus dependency is pinned to the exact accepted revision recorded in the
-project references. Canonical environments never float on Petrus `main`, assume
-package publication, or depend on a local checkout.
+Petrus is pinned to an exact Git revision and is currently a private source
+dependency. Installation therefore requires a dedicated read-only
+`PETRUS_GITHUB_TOKEN`; it is build authority, not a host runtime credential.
+Orb setup presents it only through temporary Git askpass/config files and
+removes those files on every outcome. Canonical environments never float on
+Petrus `main`, assume package publication, or depend on a local checkout.
 
 ## Runtime ownership
 
 The host authenticates as the GitHub App, obtains one-hour installation tokens
 through GitHubKit, and narrows each operation client to one admitted repository.
-The App-owned webhook reaches the orb through a durable Amp relay; the relay
-forwards exact signed bytes to the host but has neither the webhook secret nor
-GitHub credentials. The host verifies, sanitizes, durably accepts, deduplicates,
-and asynchronously processes each delivery. Failed deliveries back off and
-eventually park; persisted PR Instances are reconciled on startup and every
-minute so a missed follow-up event does not strand active work.
+The App webhook reaches the orb through a durable Amp relay. The host verifies,
+sanitizes, durably accepts, deduplicates, and asynchronously processes each
+delivery. Persisted PR instances are reconciled on startup and periodically so
+a missed follow-up event does not strand active work.
+
+The existing private App is HBNetwork-owned and can be installed only on
+HBNetwork repositories. Another owner needs its own private App registration or
+a later deliberately public App contract.
 
 ## Operator qualification
 
-The production-owned, JSON-output demo CLI is available as
-`python -m hamsterdan.operator` or `scripts/hamsterdan-demo`. Start with the
-non-mutating `preflight`; scenario creation and broker preparation are explicit
-human operator actions and never merge, force-push, or bypass protection.
+The JSON-output operator CLI is available as `python -m hamsterdan.operator` or
+`scripts/hamsterdan-demo`. Start with the non-mutating `preflight`; scenario
+creation and broker preparation are explicit human actions and never merge,
+force-push, or bypass protection.
 
-The complete private App registration, supervised host, selected-repository
-installation, broker cutover, inspection, rotation, and isolated rollback
-sequence is in [the HBNetwork operator runbook](docs/operator/README.md). The
-accepted live portfolio is recorded in the project worklog; the tooling never
-turns a partial run into acceptance by itself.
+The private App registration, supervised host, selected-repository installation,
+broker cutover, inspection, rotation, and rollback sequence is in the
+[HBNetwork operator runbook](docs/operator/README.md). Do not start
+`hamsterdan-host` merely to inspect this candidate: existing durable webhook
+state may cause GitHub effects.
 
-## Demo video production
+## Demo video
 
-The reproducible Remotion studio under [`tools/demo-video`](tools/demo-video/)
-turns an accepted GitHub scenario into a guided presentation for first-time
-viewers. Its production guide preserves the narrative, layout, cadence,
-artifact, and QA contracts established by the PR47 hero video. Fresh Amp project
-orbs install the locked video environment and rendering tools automatically.
+The Remotion source under `tools/demo-video` preserves the accepted PR47
+presentation. It is secondary to production, is not a host launch prerequisite,
+and receives no additional browser download during orb setup. Whether to retain
+or remove the studio is deferred to the post-production open-source audit.

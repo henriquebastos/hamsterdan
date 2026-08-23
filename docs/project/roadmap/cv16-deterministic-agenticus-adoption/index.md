@@ -1,9 +1,9 @@
 ---
 code: CV16
 level: Value
-status: Active
-status_reason: Direct-key composition is qualified; a fresh live setup restart stopped at the final pre-push target read without remote mutation or provider authority
-updated: 2026-08-09
+status: Completed
+status_reason: CV17 PR61 subsequently proved the selected Pi route through coding, App-authored Git publication, exact CAS, lookup-first recovery, and readiness
+updated: 2026-08-23
 ---
 
 # CV16 — Deterministic Agenticus adoption
@@ -37,6 +37,14 @@ runtime lifecycle, and live qualification slices preserve the existing
 - Static Catalog compatibility is not installation or live-provider evidence.
 
 ## Current live checkpoint
+
+CV17's accepted PR61 journey supersedes this historical checkpoint as the
+current route evidence. It exercised the selected Pi native A2 route through a
+changed two-file coding result, host-owned Git object creation, exact ref CAS,
+repaired-head admission, operation-scoped lookup-first recovery, finding
+resolution, and readiness. CV16 is therefore complete; its earlier failed
+Anthropic and empty-target setup attempts remain below as historical evidence,
+not pending production direction.
 
 One bounded direct Anthropic API-key attempt selected the exact Pi native A2
 Local route and materialized authority once. The controlled coding candidate

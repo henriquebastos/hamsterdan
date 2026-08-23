@@ -1,10 +1,14 @@
 ---
-status: Thickening
+status: Paused
 opened: 2026-08-11
+paused: 2026-08-23
 navigator: Henrique
 ---
 
 # ES-003 — Workflow AST authoring model compiled to the Petri net
+
+This exploration is paused until after private v0.1 production qualification.
+Its experiments remain historical design evidence, not supported runtime code.
 
 ## Inquiry
 

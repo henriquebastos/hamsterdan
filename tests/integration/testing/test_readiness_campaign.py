@@ -22,11 +22,14 @@ from petrus.testing.dst import (
     ChoiceAuthority,
     Disposition,
     InvariantViolation,
+    ReplayResult,
+    ScenarioArtifact,
     encode_artifact,
     load_artifact,
 )
 from pydantic import JsonValue
 
+from hamsterdan.host.testing.readiness_coverage import CoverageRun, collect_readiness_coverage
 from hamsterdan.host.testing.readiness_world import (
     BASE,
     HEAD,
@@ -94,6 +97,17 @@ def _retain_failure_artifact(
         )
         return False
     return True
+
+
+def _covered_dimensions(artifact: ScenarioArtifact, replayed: ReplayResult) -> frozenset[str]:
+    report = collect_readiness_coverage((CoverageRun(artifact, replayed),))
+    assert report.blocked == {
+        "ci_rerun_repair",
+        "agent_terminal_fault_cuts",
+        "stale_rate_limited_reads",
+        "history_dispatch_fault_cuts",
+    }
+    return cast(frozenset[str], report.covered)
 
 
 def test_timeline_steps_one_disclosed_host_action(tmp_path: Path) -> None:
@@ -337,6 +351,7 @@ def _drain(timeline: ReadinessTimeline) -> None:
         timeline.step()
 
 
+@pytest.mark.timeout(60)
 @settings(
     max_examples=6,
     deadline=None,
@@ -477,6 +492,12 @@ def test_generated_authority_lifecycle_schedules_replay_exactly(
         assert replayed.disposition == Disposition.CONVERGED.value
         assert replayed.failure is None
         assert replayed.operations == operations
+        covered = _covered_dimensions(artifact, replayed)
+        assert {"authority_movement", "fair_convergence", "checker_activation", "exact_replay"} <= covered
+        if path != "active":
+            assert "lifecycle_movement" in covered
+        if "restart" in before or "restart" in after:
+            assert "crash_reconstruction" in covered
     except (BudgetExhausted, InvariantViolation) as error:
         _retain_failure_artifact(
             world,
@@ -668,6 +689,18 @@ def test_generated_reminder_timer_recovery_schedules_replay_exactly(
         assert replayed.disposition == Disposition.CONVERGED.value
         assert replayed.failure is None
         assert replayed.operations == operations
+        covered = _covered_dimensions(artifact, replayed)
+        assert {"crash_reconstruction", "fair_convergence", "checker_activation", "exact_replay"} <= covered
+        if path != "closed":
+            assert "timer_lifecycle" in covered
+        if path in {"new_head", "draft_resume", "closed"}:
+            assert "authority_movement" in covered
+        if path in {"draft_resume", "closed"}:
+            assert "lifecycle_movement" in covered
+        if response_lost:
+            assert "provider_response_loss" in covered
+        if redeliver:
+            assert "duplicate_delivery" in covered
     except (BudgetExhausted, InvariantViolation) as error:
         _retain_failure_artifact(
             world,
@@ -832,6 +865,21 @@ def test_generated_v5_git_publication_recovery_schedules_replay_exactly(
         assert replayed.disposition == Disposition.CONVERGED.value
         assert replayed.failure is None
         assert replayed.operations == operations
+        covered = _covered_dimensions(artifact, replayed)
+        assert {
+            "conversation_effect",
+            "coding_effect",
+            "git_mutation",
+            "fair_convergence",
+            "checker_activation",
+            "exact_replay",
+        } <= covered
+        if response_lost:
+            assert {"provider_response_loss", "git_ambiguity_recovery"} <= covered
+        if crash_cut != "none":
+            assert "crash_reconstruction" in covered
+        if redeliver:
+            assert "duplicate_delivery" in covered
     except (BudgetExhausted, InvariantViolation) as error:
         _retain_failure_artifact(
             world,

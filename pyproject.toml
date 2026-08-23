@@ -1,6 +1,6 @@
 [project]
 name = "hamsterdan"
-version = "0.0.0"
+version = "0.1.0"
 description = "Hamsterdan — a GitHub-native PR-readiness application powered by Petrus."
 readme = "README.md"
 requires-python = ">=3.14"

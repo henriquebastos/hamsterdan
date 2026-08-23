@@ -1,7 +1,7 @@
 # ES-005 — The design primer: consolidated learning for the design phase
 
-**Status:** Candidate — the consolidation of ES-001–ES-004 learning
-that matters for the future, 2026-08-14.
+**Status:** Paused — retained candidate design input after private v0.1,
+2026-08-23.
 **Sources:** everything that *earned trust* across
 [ES-001](../es1-petri-net-motus-boundary/index.md) (boundary
 ownership), [ES-002](../es2-imperative-expression-layer/index.md)

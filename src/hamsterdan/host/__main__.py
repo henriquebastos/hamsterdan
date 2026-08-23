@@ -16,11 +16,10 @@ from hamsterdan.github_app.config import ConfigurationError, HostConfig
 
 from .agenticus import AgentRouteStore, compose_agent, compose_agent_runner
 from .api import create_app
-from .binding import parse_instance_binding, preflight_topology
+from .binding import parse_instance_binding, preflight_v5_state
 from .pi_a2 import PiA2InstallationConfig, compose_owned_pi_a2
 from .pi_workspace import GitPiWorkspaceProvider
 from .service import HostService, QualificationFault
-from .topology import select_readiness_composition
 
 MAX_HISTORY_BYTES = 16 * 1024 * 1024
 MAX_BINDING_BYTES = 4096
@@ -225,8 +224,9 @@ def main() -> int:
                 )
             )
             return 0
-        readiness_composition = select_readiness_composition(os.getenv("HAMSTERDAN_READINESS_TOPOLOGY"))
-        preflight_topology(config.state_path, readiness_composition.topology)
+        if "HAMSTERDAN_READINESS_TOPOLOGY" in os.environ:
+            raise ValueError("HAMSTERDAN_READINESS_TOPOLOGY is retired; remove it to run the V5 topology")
+        preflight_v5_state(config.state_path)
         installation = PiA2InstallationConfig.from_environment(os.environ, state_path=config.state_path)
         agent = compose_agent(os.environ, provider=installation.provider, model=installation.model)
         route_store = AgentRouteStore(config.state_path / "agent-routes.sqlite3")
@@ -238,7 +238,6 @@ def main() -> int:
             agent_composition=agent,
             agent_routes=route_store,
             agent_runtime=pi_runtime,
-            readiness_composition=readiness_composition,
             workflow_path=os.getenv("HAMSTERDAN_WORKFLOW_PATH", ".github/workflows/ci.yml"),
             reminder_delay=float(os.getenv("HAMSTERDAN_REMINDER_SECONDS", "259200")),
             qualification_fault=QualificationFault.from_environment(),

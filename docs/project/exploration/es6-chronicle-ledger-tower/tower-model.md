@@ -203,8 +203,8 @@ outcome fan-out, and gates, the primitive set for the authoring layer
 shrinks accordingly, and blocks/combinators get re-derived from
 evidence instead of assumed.
 
-Comparison baseline: production
-[topology.py](../../../../src/hamsterdan/readiness/net/topology.py)
+Comparison baseline: former production
+`src/hamsterdan/readiness/net/topology.py` in pre-consolidation Git history
 (~30+ places, 94 read arcs measured in ES-004 AX5) and the ES-005
 [chapter 17](../es5-design-primer/17-hamsterdan-rebuild-brief.md)
 contract, which the layered nets must still honor clause by clause.

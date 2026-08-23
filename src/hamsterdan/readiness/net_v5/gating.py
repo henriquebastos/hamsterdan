@@ -53,7 +53,7 @@ from hamsterdan.contracts.readiness_v5 import (
 )
 
 _JSON = JsonPayloadConverter()
-_DURABLE_PUBLICATION_GATES = frozenset({"reply_gate", "dash_gate", "announce_gate"})
+DURABLE_PUBLICATION_GATES = frozenset({"reply_gate", "dash_gate", "announce_gate"})
 _DURABLE_PUBLICATION_POLICY = ExecutionPolicy(attempts=1)
 _IDENTIFIED_INLINE_GATES = frozenset({"review_agent", "publish_gate", "rerun_gate", "git_gate", "reminder_gate"})
 _IDENTIFIED_INLINE_POLICY = ExecutionPolicy(attempts=1)
@@ -278,7 +278,7 @@ def wire_gates(
     handlers: dict = dict(built.handlers)
     for transition, (name, variants) in gates.items():
         uri = built.net.handler_uri(NetPath(transition))
-        if name in _DURABLE_PUBLICATION_GATES:
+        if name in DURABLE_PUBLICATION_GATES:
             handler = DurablePublicationActivityHandler
         elif name in _IDENTIFIED_INLINE_GATES:
             handler = IdentifiedInlineActivityHandler

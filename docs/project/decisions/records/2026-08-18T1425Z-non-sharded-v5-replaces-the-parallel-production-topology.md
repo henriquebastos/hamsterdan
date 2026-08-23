@@ -1,7 +1,8 @@
 ---
-status: Decided
+status: Superseded
 raised: 2026-08-18
 decided: 2026-08-18
+superseded_by: 2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
 deciders:
   - Henrique (Navigator)
 supersedes:
@@ -12,6 +13,10 @@ related:
 ---
 
 # Non-sharded V5 replaces the parallel production topology
+
+> **Superseded 2026-08-23:** V5 remains the sole runtime, but the stricter
+> ruling removes the descriptor entirely, rejects every presence of the retired
+> selector, and refuses former or unlabeled durable roots without mutation.
 
 ## Decision
 

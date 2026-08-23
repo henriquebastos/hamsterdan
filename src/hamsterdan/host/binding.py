@@ -126,7 +126,6 @@ def _write_binding(path: Path, binding: InstanceBinding) -> None:
 
 def ensure_instance_binding(
     root: Path,
-    topology: TopologyIdentity,
     instance_id: str,
     repository: str,
     pull_request: int,
@@ -136,7 +135,7 @@ def ensure_instance_binding(
             "instance_id": instance_id,
             "pull_request": pull_request,
             "repository": repository,
-            "topology": topology,
+            "topology": "v5",
         }
     )
     _require_real_directory_ancestry(root)
@@ -148,12 +147,8 @@ def ensure_instance_binding(
             observed.instance_id,
             observed.repository,
             observed.pull_request,
-        ) != (topology, instance_id, repository, pull_request):
+        ) != ("v5", instance_id, repository, pull_request):
             raise RuntimeError("state root belongs to a different PR Instance or topology")
-        if observed.legacy:
-            if topology != "production":
-                raise RuntimeError("state root belongs to a different PR Instance or topology")
-            _write_binding(binding_path, expected)
         _require_regular_history(root / "history.jsonl")
         return expected
     history_path = root / "history.jsonl"
@@ -164,7 +159,7 @@ def ensure_instance_binding(
     return expected
 
 
-def preflight_topology(state_path: Path, topology: TopologyIdentity) -> None:
+def preflight_v5_state(state_path: Path) -> None:
     applications = state_path / "applications"
     if not applications.exists() and not applications.is_symlink():
         return
@@ -194,16 +189,8 @@ def preflight_topology(state_path: Path, topology: TopologyIdentity) -> None:
                     binding = read_instance_binding(binding_path)
                     if binding.instance_id != f"github:{installation}:{repository_id}:pr:{pull_request}":
                         raise ValueError
-                    if binding.topology != topology:
-                        raise RuntimeError("application state does not match the selected readiness topology")
-                    if binding.legacy:
-                        ensure_instance_binding(
-                            root,
-                            topology,
-                            binding.instance_id,
-                            binding.repository,
-                            binding.pull_request,
-                        )
+                    if binding.topology != "v5" or binding.legacy:
+                        raise RuntimeError("application state is not compatible with the V5 readiness topology")
     except RuntimeError:
         raise
     except OSError, ValueError:
@@ -215,6 +202,6 @@ __all__ = [
     "TopologyIdentity",
     "ensure_instance_binding",
     "parse_instance_binding",
-    "preflight_topology",
+    "preflight_v5_state",
     "read_instance_binding",
 ]

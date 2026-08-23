@@ -1,3 +1,5 @@
+"""End-to-end semantic scenarios for the sole V5 readiness topology."""
+
 from __future__ import annotations
 
 import base64
@@ -28,7 +30,6 @@ from hamsterdan.github_app.models import WireResponse
 from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.git_publish import GitPublishResult, GitReconciliation, HostGitPublisher, _git_environment
 from hamsterdan.host.service import HostService
-from hamsterdan.host.topology import PRODUCTION, V5, ReadinessComposition
 from hamsterdan.testing.readiness import (
     AuthorityClaim,
     AuthorityFacts,
@@ -769,7 +770,6 @@ class JourneyResult:
     provider_state: tuple[str, bool, bool, bool, str, str, str]
     initial_head: str
     initial_base: str
-    topology: str
     runner: ScenarioRunner
     run_attempt: int
     run_id: int
@@ -873,7 +873,6 @@ def signed(body: bytes, delivery: str, event: str = "pull_request") -> dict[str,
 def _run_journey(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
     *,
     rerun_conclusion: str | None,
     seeded_finding: bool = False,
@@ -978,7 +977,6 @@ def _run_journey(
         runner=runner,  # type: ignore[arg-type]
         agent_composition=agent_composition,
         agent_routes=routes,
-        readiness_composition=topology,
     )
     host.registry.reconcile(44, ((31, "owner/repo"),))
     delivery, body = str(uuid.uuid4()), envelope("opened" if draft_ready else "synchronize")
@@ -1012,7 +1010,7 @@ def _run_journey(
             before = external_state()
             processed = host.pump()
             application = host._apps[application_key]
-            if processed == 0 and before == external_state() and not topology.has_unresolved(application):
+            if processed == 0 and before == external_state() and not application.has_unresolved_publication():
                 return
         raise AssertionError("parity journey host did not converge")
 
@@ -1202,9 +1200,9 @@ def _run_journey(
     comments = tuple(dict(item) for item in provider.comments)
     application = host._apps[application_key]
     frozen = external_state()
-    assert not topology.has_unresolved(application)
+    assert not application.has_unresolved_publication()
     assert host.pump() == 0
-    assert not topology.has_unresolved(application) and external_state() == frozen
+    assert not application.has_unresolved_publication() and external_state() == frozen
     result = JourneyResult(
         custody_before,
         host.custody.status(delivery),
@@ -1225,7 +1223,6 @@ def _run_journey(
         ),
         initial_head,
         initial_base,
-        topology.topology,
         runner,
         provider.run_attempt,
         provider.run_id,
@@ -1277,89 +1274,78 @@ def _run_journey(
 def run_clean_green(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None)
+    return _run_journey(root, monkeypatch, rerun_conclusion=None)
 
 
 def run_first_attempt_flake(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion="success")
+    return _run_journey(root, monkeypatch, rerun_conclusion="success")
 
 
 def run_persistent_ci_regression(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion="failure")
+    return _run_journey(root, monkeypatch, rerun_conclusion="failure")
 
 
 def run_seeded_review_finding(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, seeded_finding=True)
+    return _run_journey(root, monkeypatch, rerun_conclusion=None, seeded_finding=True)
 
 
 def run_conversational_change(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, conversational_change=True)
+    return _run_journey(root, monkeypatch, rerun_conclusion=None, conversational_change=True)
 
 
 def run_agent_repair(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion="failure", agent_repair=True)
+    return _run_journey(root, monkeypatch, rerun_conclusion="failure", agent_repair=True)
 
 
 def run_hero_review(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, hero_review=True)
+    return _run_journey(root, monkeypatch, rerun_conclusion=None, hero_review=True)
 
 
 def run_draft_ready(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, draft_ready=True)
+    return _run_journey(root, monkeypatch, rerun_conclusion=None, draft_ready=True)
 
 
 def run_stale_base_update(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, update_base=True)
+    return _run_journey(root, monkeypatch, rerun_conclusion=None, update_base=True)
 
 
 def run_true_conflict_resolution(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, resolve_conflict=True)
+    return _run_journey(root, monkeypatch, rerun_conclusion=None, resolve_conflict=True)
 
 
 def run_collaboration_approval(
     root: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> JourneyResult:
-    return _run_journey(root, monkeypatch, topology, rerun_conclusion=None, collaboration=True)
+    return _run_journey(root, monkeypatch, rerun_conclusion=None, collaboration=True)
 
 
 def assert_public_clone(repository_url: str) -> None:
@@ -1367,7 +1353,7 @@ def assert_public_clone(repository_url: str) -> None:
 
 
 def clean_green_model_facts(result: JourneyResult) -> ReadinessFacts:
-    """Normalize only provider/agent facts; never inspect either topology."""
+    """Normalize only provider/agent facts; never inspect workflow internals."""
     state, draft, merged, mergeable, _mergeable_state, head, base = result.provider_state
     lifecycle = "merged" if merged else "draft" if draft else "closed" if state == "closed" else "active"
     authority = AuthorityClaim(
@@ -1588,14 +1574,11 @@ def assert_persistent_ci_regression(result: JourneyResult) -> None:
         for canary in (PRIVATE_KEY, WEBHOOK_SECRET, CLIENT_SECRET, INSTALLATION_TOKEN)
     )
     assert result.git_publications == ()
-    if result.topology == "v5":
-        [reconciliation] = result.git_reconciliations
-        assert reconciliation["expected_head"] == HEAD
-        assert reconciliation["base_head"] == BASE
-        assert reconciliation["merge_base"] is False
-        assert reconciliation["operation"] and reconciliation["payload_digest"]
-    else:
-        assert result.topology == "production" and result.git_reconciliations == ()
+    [reconciliation] = result.git_reconciliations
+    assert reconciliation["expected_head"] == HEAD
+    assert reconciliation["base_head"] == BASE
+    assert reconciliation["merge_base"] is False
+    assert reconciliation["operation"] and reconciliation["payload_digest"]
 
     dashboard_id = int(before_dashboard[0]["id"])
     assert dashboard[0]["id"] == dashboard_id
@@ -1741,11 +1724,7 @@ def assert_conversational_change(result: JourneyResult) -> None:
             ],
         )
     ]
-    if result.topology == "v5":
-        assert conversation_operation == (f"conversation:owner/repo:pr:7:delivery:{result.conversation_delivery_id}")
-    else:
-        assert result.topology == "production"
-        assert re.fullmatch(r"conversation:[0-9a-f]{64}", conversation_operation)
+    assert conversation_operation == (f"conversation:owner/repo:pr:7:delivery:{result.conversation_delivery_id}")
     assert conversation_attempt == 1
     assert_public_clone(repository_url)
 
@@ -1761,11 +1740,7 @@ def assert_conversational_change(result: JourneyResult) -> None:
     assert CHANGE_INSTRUCTION in json.dumps(coding.selected_work, sort_keys=True)
     assert coding.failure_evidence == [] and not coding.merge_base
     expected_v5_operation = f"push:comment:501:{HEAD}:i1"
-    if result.topology == "v5":
-        assert coding_operation == f"mutation:owner/repo:pr:7:{expected_v5_operation}"
-    else:
-        assert result.topology == "production"
-        assert re.fullmatch(r"change:[0-9a-f]{64}", coding_operation)
+    assert coding_operation == f"mutation:owner/repo:pr:7:{expected_v5_operation}"
     assert coding_attempt == 1
     assert_public_clone(repository_url)
     encoded_agent_work = json.dumps(
@@ -1789,18 +1764,13 @@ def assert_conversational_change(result: JourneyResult) -> None:
     assert published_result["status"] == "changed"
     assert published_result["changed_files"] == ["README.md"]
     assert published_result["diff"] == CHANGE_DIFF
-    if result.topology == "v5":
-        assert publication["operation"] == expected_v5_operation
-        [reconciliation] = result.git_reconciliations
-        assert reconciliation["expected_head"] == HEAD
-        assert reconciliation["base_head"] == BASE
-        assert reconciliation["merge_base"] is False
-        assert reconciliation["operation"] == publication["operation"]
-        assert reconciliation["payload_digest"] == publication["payload_digest"]
-    else:
-        assert result.topology == "production"
-        assert publication["operation"] == coding_operation
-        assert result.git_reconciliations == ()
+    assert publication["operation"] == expected_v5_operation
+    [reconciliation] = result.git_reconciliations
+    assert reconciliation["expected_head"] == HEAD
+    assert reconciliation["base_head"] == BASE
+    assert reconciliation["merge_base"] is False
+    assert reconciliation["operation"] == publication["operation"]
+    assert reconciliation["payload_digest"] == publication["payload_digest"]
 
     assert len(result.runner.reviews) == len(result.runner.review_results) == 2
     assert [request.head for _url, request, _operation, _attempt in result.runner.reviews] == [HEAD, NEW_HEAD]
@@ -1837,12 +1807,7 @@ def assert_conversational_change(result: JourneyResult) -> None:
     assert len(dashboard) == len(readiness) == 1
     dashboard_body = str(dashboard[0]["body"])
     assert NEW_HEAD in dashboard_body
-    if result.topology == "production":
-        assert "Generation: `2`" in dashboard_body
-        assert "Actions: **running**" in dashboard_body
-        assert "actions/runs/102" in dashboard_body
-    else:
-        assert "checks:{'status': 'in_progress'}" in dashboard_body
+    assert "checks:{'status': 'in_progress'}" in dashboard_body
     assert f"head={HEAD}" in str(readiness[0]["body"])
     assert NEW_HEAD not in str(readiness[0]["body"])
     assert not any("<!-- hamsterdan:finding " in str(item["body"]) for item in bot_comments)
@@ -1950,13 +1915,8 @@ def assert_agent_repair(result: JourneyResult) -> None:
     assert ("GET", "/repos/owner/repo/actions/runs/101/attempts/2/jobs?per_page=100") in result.provider_calls
     assert ("GET", "/repos/owner/repo/actions/runs/102/attempts/1/jobs?per_page=100") in result.provider_calls
 
-    if result.topology == "v5":
-        publication_operation = f"push:repair:L1:{FAILURE_FINGERPRINT}:{initial_head}:i1"
-        assert coding_operation == f"mutation:owner/repo:pr:7:{publication_operation}"
-    else:
-        assert result.topology == "production"
-        assert re.fullmatch(r"repair:[0-9a-f]{64}", coding_operation)
-        publication_operation = coding_operation
+    publication_operation = f"push:repair:L1:{FAILURE_FINGERPRINT}:{initial_head}:i1"
+    assert coding_operation == f"mutation:owner/repo:pr:7:{publication_operation}"
 
     [publication] = result.git_publications
     assert publication["operation"] == publication_operation
@@ -2050,12 +2010,8 @@ def assert_agent_repair(result: JourneyResult) -> None:
     assert FINDING_ID in str(findings[0]["body"]) and initial_head in str(findings[0]["body"])
     assert final_head in str(dashboard[0]["body"])
     assert f"head={final_head}" in str(readiness[0]["body"])
-    if result.topology == "production":
-        assert "Generation: `2`" in str(dashboard[0]["body"])
-        assert f"`{FINDING_ID}` resolved" in str(dashboard[0]["body"])
-    else:
-        assert f"findings:{{'blocking': 0, 'count': 0, 'head': '{final_head}'}}" in str(dashboard[0]["body"])
-        assert f"review:{{'head': '{final_head}', 'status': 'clear'}}" in str(dashboard[0]["body"])
+    assert f"findings:{{'blocking': 0, 'count': 0, 'head': '{final_head}'}}" in str(dashboard[0]["body"])
+    assert f"review:{{'head': '{final_head}', 'status': 'clear'}}" in str(dashboard[0]["body"])
     assert result.head_follow_up_comments_before is not None
     assert not any("<!-- hamsterdan:readiness " in str(item["body"]) for item in result.head_follow_up_comments_before)
     readiness_writes = [
@@ -2133,49 +2089,28 @@ def assert_hero_review(result: JourneyResult) -> None:
     for finding in HERO_FINDINGS:
         body = next(str(item["body"]) for item in finding_effects if str(finding["id"]) in str(item["body"]))
         assert all(str(finding[field]) in body for field in ("title", "body", "evidence", "path", "line"))
-    if result.topology == "production":
-        assert len(finding_effects) == len(result.review_comments) == 3
-        parent_operations: set[str] = set()
-        for finding, effect_operation in zip(HERO_FINDINGS, operations, strict=True):
-            match = re.fullmatch(rf"(finding:[0-9a-f]{{64}}):{re.escape(str(finding['id']))}", effect_operation)
-            assert match is not None
-            parent_operations.add(match.group(1))
-        assert len(parent_operations) == 1
-        assert [(item["commit_id"], item["path"], item["line"], item["side"]) for item in result.review_comments] == [
-            (HEAD, "scenario-fixtures/hero_review/gate.py", 10, "RIGHT"),
-            (HEAD, "scenario-fixtures/hero_review/gate.py", 16, "RIGHT"),
-            (HEAD, "scenario-fixtures/hero_review/cache.py", 11, "RIGHT"),
-        ]
-        ttl_body, approval_body, cache_body = (str(item["body"]) for item in result.review_comments)
-        assert "```suggestion\ntimedelta(seconds=ttl_seconds)\n```" in ttl_body
-        assert "```suggestion" not in approval_body
-        assert (
-            f"[`scenario-fixtures/hero_review/cache.py:6`](https://github.com/owner/repo/blob/{HEAD}/"
-            "scenario-fixtures/hero_review/cache.py#L6)"
-        ) in cache_body
-    else:
-        assert result.topology == "v5" and len(finding_effects) == 1 and result.review_comments == ()
-        assert operations == (f"findings:{HEAD}:i1",)
-        [body] = [str(item["body"]) for item in finding_effects]
-        sections = {}
-        for section in body.split("\n### `")[1:]:
-            finding_id, separator, remainder = section.partition("`")
-            assert separator and finding_id not in sections
-            sections[finding_id] = remainder
-        assert tuple(sections) == tuple(str(finding["id"]) for finding in HERO_FINDINGS)
-        for finding in HERO_FINDINGS:
-            section = sections[str(finding["id"])]
-            assert all(str(finding[field]) in section for field in ("title", "body", "evidence"))
-            assert "**blocking** · severity: **high**" in section
-            assert f"Primary location: `{finding['path']}:{finding['line']}`" in section
-            if finding["id"] == "F-ttl-unit":
-                assert "Suggested change:\n```suggestion\ntimedelta(seconds=ttl_seconds)\n```" in section
-            else:
-                assert "Suggested change:" not in section
-            if finding["id"] == "F-cache-key":
-                assert "Related locations:\n- `scenario-fixtures/hero_review/cache.py:6`" in section
-            else:
-                assert "Related locations:" not in section
+    assert len(finding_effects) == 1 and result.review_comments == ()
+    assert operations == (f"findings:{HEAD}:i1",)
+    [body] = [str(item["body"]) for item in finding_effects]
+    sections = {}
+    for section in body.split("\n### `")[1:]:
+        finding_id, separator, remainder = section.partition("`")
+        assert separator and finding_id not in sections
+        sections[finding_id] = remainder
+    assert tuple(sections) == tuple(str(finding["id"]) for finding in HERO_FINDINGS)
+    for finding in HERO_FINDINGS:
+        section = sections[str(finding["id"])]
+        assert all(str(finding[field]) in section for field in ("title", "body", "evidence"))
+        assert "**blocking** · severity: **high**" in section
+        assert f"Primary location: `{finding['path']}:{finding['line']}`" in section
+        if finding["id"] == "F-ttl-unit":
+            assert "Suggested change:\n```suggestion\ntimedelta(seconds=ttl_seconds)\n```" in section
+        else:
+            assert "Suggested change:" not in section
+        if finding["id"] == "F-cache-key":
+            assert "Related locations:\n- `scenario-fixtures/hero_review/cache.py:6`" in section
+        else:
+            assert "Related locations:" not in section
 
     dashboard_body = str(dashboard[0]["body"])
     assert HEAD in dashboard_body and "blocking" in dashboard_body
@@ -2318,10 +2253,7 @@ def _assert_base_mutation(
         "explicit": True,
         "confidence": 1.0,
     }
-    if result.topology == "v5":
-        assert conversation_operation == f"conversation:owner/repo:pr:7:delivery:{result.conversation_delivery_id}"
-    else:
-        assert result.topology == "production" and re.fullmatch(r"conversation:[0-9a-f]{64}", conversation_operation)
+    assert conversation_operation == f"conversation:owner/repo:pr:7:delivery:{result.conversation_delivery_id}"
     assert conversation_attempt == 1
 
     assert result.runner.codes == len(result.runner.code_calls) == len(result.runner.code_results) == 1
@@ -2365,12 +2297,8 @@ def _assert_base_mutation(
     )
 
     expected_v5_operation = f"push:comment:501:{initial_head}:i1"
-    if result.topology == "v5":
-        assert coding_operation == f"mutation:owner/repo:pr:7:{expected_v5_operation}"
-        publication_operation = expected_v5_operation
-    else:
-        assert re.fullmatch(r"change:[0-9a-f]{64}", coding_operation)
-        publication_operation = coding_operation
+    assert coding_operation == f"mutation:owner/repo:pr:7:{expected_v5_operation}"
+    publication_operation = expected_v5_operation
     [publication] = result.git_publications
     assert publication["operation"] == publication_operation
     assert publication["expected_head"] == initial_head
@@ -2481,9 +2409,7 @@ def _assert_base_mutation(
     dashboard_body = str(dashboard["body"])
     assert final_head in dashboard_body
     assert "base_current': True" in dashboard_body or "Base current: True" in dashboard_body
-    if conflicted and result.topology == "production":
-        assert "Mergeable: True" in dashboard_body and "Conflict: False" in dashboard_body
-    elif conflicted:
+    if conflicted:
         final_state = next(
             line for line in dashboard_body.splitlines() if line.startswith("state:") and final_head in line
         )
@@ -2507,21 +2433,11 @@ def assert_collaboration_approval(result: JourneyResult) -> None:
     assert len(phase.dashboards) == 5
     assert phase.readiness_counts == (0, 0, 0, 0, 1)
     initial, requested, changes, approved, resolved = phase.dashboards
-    if result.topology == "production":
-        assert "Waiting for: human review" in initial
-        assert "Review requested: True" in requested and "Waiting for: human review" in requested
-        assert "Waiting for: requested changes" in changes and "Unresolved conversations: 1" in changes
-        assert "Human approved: True" in approved and "Waiting for: conversation resolution" in approved
-        assert "Human approved: True" in resolved
-        assert "Distinct approval: True" in resolved and "Unresolved conversations: 0" in resolved
-        assert "Readiness: **ready**" in resolved
-    else:
-        assert result.topology == "v5"
-        assert "human:{'approval': False, 'changes_requested': False, 'unresolved': 0}" in initial
-        assert "human:{'approval': False, 'changes_requested': False, 'unresolved': 0}" in requested
-        assert "human:{'approval': False, 'changes_requested': True, 'unresolved': 1}" in changes
-        assert "human:{'approval': True, 'changes_requested': False, 'unresolved': 1}" in approved
-        assert "human:{'approval': True, 'changes_requested': False, 'unresolved': 0}" in resolved
+    assert "human:{'approval': False, 'changes_requested': False, 'unresolved': 0}" in initial
+    assert "human:{'approval': False, 'changes_requested': False, 'unresolved': 0}" in requested
+    assert "human:{'approval': False, 'changes_requested': True, 'unresolved': 1}" in changes
+    assert "human:{'approval': True, 'changes_requested': False, 'unresolved': 1}" in approved
+    assert "human:{'approval': True, 'changes_requested': False, 'unresolved': 0}" in resolved
 
     assert result.custody_before == "pending" and result.custody_after == "terminal"
     assert result.custody_counts == {"terminal": 5}
@@ -2557,108 +2473,86 @@ def assert_collaboration_approval(result: JourneyResult) -> None:
     assert len(result.runner.reviews) == result.quiescent_review_count
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_clean_green_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    result = run_clean_green(tmp_path / topology.topology, monkeypatch, topology)
+    result = run_clean_green(tmp_path, monkeypatch)
 
     assert_clean_green(result)
     assert ReadinessModel().evaluate(clean_green_model_facts(result)).disposition == "ready"
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_first_attempt_flake_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_first_attempt_flake(run_first_attempt_flake(tmp_path / topology.topology, monkeypatch, topology))
+    assert_first_attempt_flake(run_first_attempt_flake(tmp_path, monkeypatch))
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_persistent_ci_regression_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_persistent_ci_regression(run_persistent_ci_regression(tmp_path / topology.topology, monkeypatch, topology))
+    assert_persistent_ci_regression(run_persistent_ci_regression(tmp_path, monkeypatch))
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_seeded_review_finding_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_seeded_review_finding(run_seeded_review_finding(tmp_path / topology.topology, monkeypatch, topology))
+    assert_seeded_review_finding(run_seeded_review_finding(tmp_path, monkeypatch))
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_conversational_change_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_conversational_change(run_conversational_change(tmp_path / topology.topology, monkeypatch, topology))
+    assert_conversational_change(run_conversational_change(tmp_path, monkeypatch))
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_agent_repair_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_agent_repair(run_agent_repair(tmp_path / topology.topology, monkeypatch, topology))
+    assert_agent_repair(run_agent_repair(tmp_path, monkeypatch))
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_hero_review_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    first = run_hero_review(tmp_path / topology.topology / "first", monkeypatch, topology)
-    second = run_hero_review(tmp_path / topology.topology / "second", monkeypatch, topology)
+    first = run_hero_review(tmp_path / "first", monkeypatch)
+    second = run_hero_review(tmp_path / "second", monkeypatch)
     assert_hero_review(first)
     assert_hero_review(second)
     assert first.runner.reviews[0][2] == second.runner.reviews[0][2]
     assert finding_operations(first) == finding_operations(second)
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_draft_ready_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_draft_ready(run_draft_ready(tmp_path / topology.topology, monkeypatch, topology))
+    assert_draft_ready(run_draft_ready(tmp_path, monkeypatch))
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_stale_base_update_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_stale_base_update(run_stale_base_update(tmp_path / topology.topology, monkeypatch, topology))
+    assert_stale_base_update(run_stale_base_update(tmp_path, monkeypatch))
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_true_conflict_resolution_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_true_conflict_resolution(run_true_conflict_resolution(tmp_path / topology.topology, monkeypatch, topology))
+    assert_true_conflict_resolution(run_true_conflict_resolution(tmp_path, monkeypatch))
 
 
-@pytest.mark.parametrize("topology", [PRODUCTION, V5], ids=["production", "v5"])
 def test_collaboration_approval_user_journey(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    topology: ReadinessComposition,
 ) -> None:
-    assert_collaboration_approval(run_collaboration_approval(tmp_path / topology.topology, monkeypatch, topology))
+    assert_collaboration_approval(run_collaboration_approval(tmp_path, monkeypatch))

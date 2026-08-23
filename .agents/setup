@@ -6,6 +6,9 @@ export LC_ALL=C
 MAX_PRIVATE_BYTES=65536
 RUNTIME=.amp/runtime
 SYSTEM_GH=/usr/bin/gh
+if [[ ! -x "$SYSTEM_GH" ]]; then
+    SYSTEM_GH="$HOME/.local/bin/gh"
+fi
 
 demo_author_hosts="${GITHUB_DEMO_AUTHOR_HOSTS:-}"
 demo_reviewer_hosts="${GITHUB_DEMO_REVIEWER_HOSTS:-}"
@@ -14,10 +17,12 @@ github_webhook_secret="${GITHUB_APP_WEBHOOK_SECRET:-}"
 anthropic_key="${ANTHROPIC_AGENT_API_KEY:-${ANTHROPIC_API_KEY:-}}"
 openai_key="${OPENAI_AGENT_API_KEY:-${OPENAI_API_KEY:-}}"
 openrouter_key="${OPENROUTER_AGENT_API_KEY:-${OPENROUTER_API_KEY:-}}"
+petrus_github_token="${PETRUS_GITHUB_TOKEN:-}"
 unset GITHUB_DEMO_AUTHOR_HOSTS GITHUB_DEMO_REVIEWER_HOSTS
 unset GITHUB_APP_PRIVATE_KEY_PEM GITHUB_APP_WEBHOOK_SECRET
 unset ANTHROPIC_AGENT_API_KEY ANTHROPIC_API_KEY
 unset OPENAI_AGENT_API_KEY OPENAI_API_KEY OPENROUTER_AGENT_API_KEY OPENROUTER_API_KEY
+unset PETRUS_GITHUB_TOKEN
 
 pi_provider=""
 pi_model=""
@@ -93,6 +98,49 @@ install_private_file() {
     verify_private_file "$path"
 }
 
+sync_private_petrus_dependency() {
+    local auth_root token_file askpass_file config_file status
+    [[ -n "$petrus_github_token" ]] || {
+        echo "==> PETRUS_GITHUB_TOKEN is required to install the private Petrus dependency" >&2
+        return 1
+    }
+    (( ${#petrus_github_token} <= MAX_PRIVATE_BYTES )) || fail
+    auth_root="$(mktemp -d "$RUNTIME/.petrus-git-auth.XXXXXX")"
+    chmod 0700 "$auth_root"
+    token_file="$auth_root/token"
+    askpass_file="$auth_root/askpass"
+    config_file="$auth_root/config"
+    cleanup_petrus_auth() {
+        rm -rf -- "$auth_root"
+    }
+    trap cleanup_petrus_auth EXIT
+    install -m 0600 /dev/null "$token_file"
+    printf '%s' "$petrus_github_token" > "$token_file"
+    unset petrus_github_token
+    cat > "$askpass_file" <<EOF
+#!/usr/bin/env bash
+case "\${1:-}" in
+    *Username*) printf '%s\\n' x-access-token ;;
+    *Password*) cat '$PWD/$token_file'; printf '\\n' ;;
+    *) exit 1 ;;
+esac
+EOF
+    chmod 0700 "$askpass_file"
+    cat > "$config_file" <<EOF
+[core]
+    askPass = $PWD/$askpass_file
+[credential "https://github.com/henriquebastos/petrus"]
+    username = x-access-token
+EOF
+    chmod 0600 "$config_file"
+    status=0
+    GIT_CONFIG_GLOBAL="$PWD/$config_file" GIT_CONFIG_SYSTEM=/dev/null \
+        GIT_TERMINAL_PROMPT=0 uv sync --frozen || status=$?
+    cleanup_petrus_auth
+    trap - EXIT
+    return "$status"
+}
+
 retire_identity() {
     local root="$1"
     [[ ! -L "$root" ]] || fail
@@ -124,11 +172,11 @@ verify_identity() {
     local root="$1"
     local expected="$2"
     local observed
-    [[ "$expected" =~ ^[A-Za-z0-9-]{1,39}$ ]] || fail
+    [[ "$expected" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
     verify_private_file "$root/gh/hosts.yml"
     [[ -x "$SYSTEM_GH" && ! -L "$SYSTEM_GH" ]] || fail
-    observed="$(/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" XDG_CONFIG_HOME="$PWD/$root" "$SYSTEM_GH" api user --jq .login)"
-    [[ "$observed" = "$expected" ]] || fail
+    observed="$(/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" XDG_CONFIG_HOME="$PWD/$root" "$SYSTEM_GH" api user --jq .login)" || return 1
+    [[ "$observed" = "$expected" ]]
 }
 
 assert_private_directory .amp
@@ -136,8 +184,24 @@ assert_private_directory "$RUNTIME"
 retire_managed_file "$RUNTIME/hamsterdan.env"
 retire_managed_file "$RUNTIME/readiness-topology"
 
-install_identity "$RUNTIME/gh-demo-author" "$demo_author_hosts"
-install_identity "$RUNTIME/gh-demo-reviewer" "$demo_reviewer_hosts"
+if [[ -n "$demo_author_hosts" && -n "$demo_reviewer_hosts" \
+    && -n "${GITHUB_DEMO_AUTHOR_LOGIN:-}" && -n "${GITHUB_DEMO_REVIEWER_LOGIN:-}" \
+    && "$GITHUB_DEMO_AUTHOR_LOGIN" != "$GITHUB_DEMO_REVIEWER_LOGIN" ]]; then
+    install_identity "$RUNTIME/gh-demo-author" "$demo_author_hosts"
+    install_identity "$RUNTIME/gh-demo-reviewer" "$demo_reviewer_hosts"
+    if verify_identity "$RUNTIME/gh-demo-author" "$GITHUB_DEMO_AUTHOR_LOGIN" \
+        && verify_identity "$RUNTIME/gh-demo-reviewer" "$GITHUB_DEMO_REVIEWER_LOGIN"; then
+        echo "==> Optional demo identities verified"
+    else
+        retire_identity "$RUNTIME/gh-demo-author"
+        retire_identity "$RUNTIME/gh-demo-reviewer"
+        echo "==> Optional demo identities are not valid and were not retained"
+    fi
+else
+    retire_identity "$RUNTIME/gh-demo-author"
+    retire_identity "$RUNTIME/gh-demo-reviewer"
+    echo "==> Optional demo identities are not configured"
+fi
 install_private_file "$RUNTIME/github-app.pem" "$github_app_key"
 install_private_file "$RUNTIME/webhook-secret" "$github_webhook_secret"
 retire_managed_file "$RUNTIME/anthropic-api-key"
@@ -158,7 +222,7 @@ export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 echo "==> Syncing the locked Hamsterdan environment"
-uv sync --frozen
+sync_private_petrus_dependency
 
 missing_media_tools=()
 if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
@@ -177,7 +241,6 @@ echo "==> Syncing the locked demo-video environment"
 (
     cd tools/demo-video
     bun install --frozen-lockfile
-    bunx remotion browser ensure
     bunx playwright install --with-deps chromium
 )
 
@@ -192,7 +255,6 @@ pi_node="$pi_prefix/node_modules/node/bin/node"
 
 runtime_ready=true
 for name in \
-    GITHUB_DEMO_AUTHOR_LOGIN GITHUB_DEMO_REVIEWER_LOGIN \
     GITHUB_APP_ID GITHUB_APP_SLUG GITHUB_APP_CLIENT_ID \
     GITHUB_INSTALLATION_ACCOUNT_ID GITHUB_INSTALLATION_ACCOUNT_LOGIN \
     GITHUB_INSTALLATION_REPOSITORIES READINESS_WORKFLOW_PATH READINESS_REMINDER_SECONDS; do
@@ -201,8 +263,6 @@ for name in \
     fi
 done
 for path in \
-    "$RUNTIME/gh-demo-author/gh/hosts.yml" \
-    "$RUNTIME/gh-demo-reviewer/gh/hosts.yml" \
     "$RUNTIME/github-app.pem" "$RUNTIME/webhook-secret" "$RUNTIME/agent-api-key"; do
     if [[ ! -f "$path" || -L "$path" ]]; then
         runtime_ready=false
@@ -214,9 +274,6 @@ if [[ "$runtime_ready" != true ]]; then
     exit 0
 fi
 
-verify_identity "$RUNTIME/gh-demo-author" "$GITHUB_DEMO_AUTHOR_LOGIN"
-verify_identity "$RUNTIME/gh-demo-reviewer" "$GITHUB_DEMO_REVIEWER_LOGIN"
-[[ "$GITHUB_DEMO_AUTHOR_LOGIN" != "$GITHUB_DEMO_REVIEWER_LOGIN" ]] || fail
 retire_identity "$RUNTIME/gh-henriquebastos"
 retire_identity "$RUNTIME/gh-crisbastos"
 

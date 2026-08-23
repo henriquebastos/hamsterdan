@@ -15,8 +15,6 @@ from typing import Any, Literal, cast
 
 from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimeHost
 from petrus.motus.activity import Activity, ActivityDefinition, ActivityError
-from petrus.motus.dispatch import LocalDispatch
-from petrus.motus.worker import Worker
 
 from hamsterdan.agents import AgentProtocolError, AgentRunner
 from hamsterdan.contracts.readiness import AdmittedConversation
@@ -27,12 +25,13 @@ from hamsterdan.github_app.models import GitHubBoundaryError, Transport
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubGraphQL, GitHubKitTransport
 from hamsterdan.github_app.webhooks import Observation, WebhookCustody, admit_conversation
+from hamsterdan.readiness.net_v5.gating import DURABLE_PUBLICATION_GATES
 
 from .agenticus import AgentComposition, AgentRouteStore, RoutedAgentRunner
-from .binding import preflight_topology, read_instance_binding
+from .binding import preflight_v5_state, read_instance_binding
 from .protocol import ReadinessApplication
 from .runnable import RunnableIndex
-from .topology import V5, ReadinessComposition
+from .v5.application import PrReadinessV5Application
 
 LOG = logging.getLogger("hamsterdan.host")
 _FAULT_BOUNDARIES = frozenset({"agent", "comment"})
@@ -155,7 +154,7 @@ class HostService:
         agent_composition: AgentComposition,
         agent_routes: AgentRouteStore,
         agent_runtime: PiA2RuntimeHost | None = None,
-        readiness_composition: ReadinessComposition = V5,
+        application_factory: Callable[..., ReadinessApplication] = PrReadinessV5Application,
         workflow_path: str = ".github/workflows/ci.yml",
         reminder_delay: float = 259200,
         poll_interval: float = 0.25,
@@ -166,8 +165,8 @@ class HostService:
     ) -> None:
         self.config = config
         self.root = config.state_path
-        self.readiness_composition = readiness_composition
-        preflight_topology(self.root, readiness_composition.topology)
+        self.application_factory = application_factory
+        preflight_v5_state(self.root)
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.clients = clients or GitHubAppClients(config, metadata_hook=self._request_metadata)
         self.registry = InstallationRegistry(
@@ -195,15 +194,10 @@ class HostService:
         self._pump_lock = threading.Lock()
         self._scheduler_errors: dict[str, str] = {}
         self.runnable = RunnableIndex(self.root / "runnable.sqlite3", clock=self._clock)
-        dispatch_path = self.root / "activity-dispatch.sqlite3"
-        self.activity_worker: Worker | None = None
-        if readiness_composition.topology == "production":
-            provider = LocalDispatch(dispatch_path, instance="host-worker").worker(("publication",))
-            self.activity_worker = Worker(provider, {}, resolver=self._resolve_activity)
-        self._dispatch_path = dispatch_path
+        self._dispatch_path = self.root / "activity-dispatch.sqlite3"
 
     def _resolve_activity(self, instance: str, name: str):
-        if name not in self.readiness_composition.durable_activity_names:
+        if name not in DURABLE_PUBLICATION_GATES:
             return None
         match = _INSTANCE_PATTERN.fullmatch(instance)
         if match is None:
@@ -227,7 +221,7 @@ class HostService:
         *,
         acquire_lock: bool = False,
     ) -> Activity | None:
-        if name not in self.readiness_composition.durable_activity_names:
+        if name not in DURABLE_PUBLICATION_GATES:
             return None
         match = _INSTANCE_PATTERN.fullmatch(instance)
         if match is None:
@@ -240,7 +234,7 @@ class HostService:
 
                 def invoke() -> object:
                     if self.registry.route(key[0], key[1]) is None:
-                        return self.readiness_composition.inactive_result(name, invocation, implementation)
+                        return PrReadinessV5Application.inactive_activity_result(name, invocation, implementation)
                     return implementation(invocation, context=context)
 
                 try:
@@ -320,7 +314,8 @@ class HostService:
                 except OSError, ValueError, RuntimeError:
                     raise RuntimeError("inactive route has no strict durable binding") from None
                 if (
-                    binding.topology != self.readiness_composition.topology
+                    binding.topology != "v5"
+                    or binding.legacy
                     or binding.instance_id != instance
                     or binding.pull_request != pull_request_number
                     or (root / "history.jsonl").is_symlink()
@@ -352,7 +347,7 @@ class HostService:
                     )
                 ),
             )
-            application = self.readiness_composition.application_factory(
+            application = self.application_factory(
                 root,
                 f"github:{installation_id}:{repository_id}:pr:{pull_request_number}",
                 authority,
@@ -530,7 +525,7 @@ class HostService:
                 application = self._apps[key]
                 # V5 publications use per-instance queues. Never claim
                 # one while that PR has unresolved inbox custody;
-                # unrelated V5 instances and production continue.
+                # unrelated PR instances continue.
                 if self.custody.has_pending(subject=key):
                     continue
                 with self._locks[key]:
@@ -538,12 +533,10 @@ class HostService:
                     processed += completed
                     if completed:
                         self._record_posture(instance, application.settle())
-            if self.activity_worker is not None:
-                processed += self.activity_worker.run_available(limit=limit - processed)
             # Repair locally generated terminals which did not execute through
             # the resolver. The durable Dispatch/History remain authoritative.
             for instance, key in tuple(self._instances.items()):
-                if self.readiness_composition.has_unresolved(self._apps[key]):
+                if self._apps[key].has_unresolved_publication():
                     self.runnable.wake(instance, self._clock(), "dispatch-repair", "unresolved-publication")
             return processed
 
@@ -590,9 +583,7 @@ class HostService:
                     if completed:
                         self._record_posture(instance, application.settle())
                         return completed
-            if self.activity_worker is None:
-                return 0
-            return self.activity_worker.run_available(limit=1)
+            return 0
 
     def subject_state(self, installation: int, repository: int, pull_request: int) -> dict[str, object] | None:
         """Return detached application state for one loaded PR subject."""
@@ -609,9 +600,7 @@ class HostService:
         return {
             "pending_custody": bool(self.custody.pending(limit=1)),
             "runnable_due": self.runnable.next_due(),
-            "unresolved_activity": any(
-                self.readiness_composition.has_unresolved(application) for application in self._apps.values()
-            ),
+            "unresolved_activity": any(application.has_unresolved_publication() for application in self._apps.values()),
             "unloaded_application": any(path not in loaded_roots for path in persisted),
         }
 
@@ -718,7 +707,7 @@ class HostService:
                             if activation_error is None:
                                 activation_error = error
                             break
-                    if activation_error is not None or not self.readiness_composition.drain_pending_before_settle:
+                    if activation_error is not None:
                         break
                     arrived = tuple(
                         item for item in self.custody.pending(limit=1000, subject=key) if item.delivery_id not in seen
@@ -781,8 +770,6 @@ class HostService:
             applications = tuple(self._apps.values())
         for application in applications:
             application.stop_durable_activities()
-        if self.activity_worker is not None:
-            self.activity_worker.stop()
 
     def health(self) -> dict[str, object]:
         return {
@@ -834,12 +821,6 @@ class HostService:
                     self.settle_terminals_for_shutdown()
                 except Exception as error:  # noqa: BLE001 -- remaining resources still require closure
                     failure = error
-            try:
-                if self.activity_worker is not None:
-                    self.activity_worker.close()
-            except Exception as error:  # noqa: BLE001 -- remaining resources still require closure
-                if failure is None:
-                    failure = error
         runtime = () if self.agent_runtime is None else (self.agent_runtime,)
         for resource in (
             *self._apps.values(),
@@ -858,6 +839,5 @@ class HostService:
         self._apps.clear()
         self._locks.clear()
         self._instances.clear()
-        self.activity_worker = None
         if failure is not None:
             raise failure

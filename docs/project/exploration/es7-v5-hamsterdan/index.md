@@ -1,8 +1,8 @@
 # ES-007 — The complete V5 Hamsterdan: cohabited, then sharded
 
-**Status:** complete, 2026-08-15 (all AX0–AX4 done and
-oracle-approved; conclusions remain candidate recommendations for the
-Navigator).
+**Status:** Promoted, 2026-08-23. AX0–AX4 completed and supplied the V5
+model promoted through CV17 and the sole-runtime decision. The sharded assembly
+remains unselected historical evidence, not a runtime option.
 **Navigator seed:** after ES-006 AX6/AX7 (actor loops, cohabitation),
 build the decision-grade three-way comparison: production untouched ·
 a complete V5 net · the same loops sharded across instances. The deep

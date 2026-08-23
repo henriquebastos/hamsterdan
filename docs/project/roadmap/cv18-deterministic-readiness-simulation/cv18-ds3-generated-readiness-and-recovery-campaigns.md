@@ -1,9 +1,9 @@
 ---
 code: CV18.DS3
 level: Delivery Story
-status: Active
-status_reason: Generated V5 authority/lifecycle, reminder-timer, and Git ambiguity recovery now replay exactly; broader vocabulary, checker coverage, and operations remain
-updated: 2026-08-19
+status: Paused
+status_reason: The accepted bounded campaigns and strict semantic coverage report are retained; broader adapters and combinations are deferred until after private v0.1
+updated: 2026-08-23
 related:
   - index.md
   - cv18-ds2-deterministic-host-and-provider-fault-world.md
@@ -138,8 +138,8 @@ constructor seam.
 
 This remains bounded generated evidence, not broad campaign completion.
 Retry schedules, repeated/overlapping time advances, remaining DS1 fault
-adapters, wider checker properties, semantic coverage reporting, and
-operational campaign retention remain active DS3/DS4 work. The timer result is
+adapters, wider checker properties, semantic coverage expansion, and
+operational campaign retention remain paused post-v0.1 DS3/DS4 work. The timer result is
 specifically bounded to the World-owned exact-delay drive: it does not claim
 arbitrary extra time advances while reminder work is intentionally left
 pending.

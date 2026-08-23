@@ -112,6 +112,7 @@ printf %s 108842540 | amp secrets set GITHUB_INSTALLATION_ACCOUNT_ID --project -
 printf %s HBNetwork | amp secrets set GITHUB_INSTALLATION_ACCOUNT_LOGIN --project --env --data-file -
 printf %s 1316665126:HBNetwork/demo-pr-readiness | \
   amp secrets set GITHUB_INSTALLATION_REPOSITORIES --project --env --data-file -
+# Optional qualification-only human identities:
 printf %s henriquebastos | amp secrets set GITHUB_DEMO_AUTHOR_LOGIN --project --env --data-file -
 printf %s crisbastos | amp secrets set GITHUB_DEMO_REVIEWER_LOGIN --project --env --data-file -
 printf %s .github/workflows/ci.yml | \
@@ -119,21 +120,35 @@ printf %s .github/workflows/ci.yml | \
 printf %s 259200 | amp secrets set READINESS_REMINDER_SECONDS --project --env --data-file -
 ```
 
-Store the author and reviewer `gh` `hosts.yml` documents as project secrets
-`GITHUB_DEMO_AUTHOR_HOSTS` and `GITHUB_DEMO_REVIEWER_HOSTS`. Store the direct
-agent-provider key as project secret `ANTHROPIC_AGENT_API_KEY`; a personal
-`ANTHROPIC_API_KEY` is only a fallback. Role names are deliberate: changing the
-people later changes project settings, not source code.
+Store the App private key and webhook secret as described above. Store exactly
+one qualified direct agent-provider key as project secret
+`ANTHROPIC_AGENT_API_KEY`, `OPENAI_AGENT_API_KEY`, or
+`OPENROUTER_AGENT_API_KEY`; ambient personal keys are fallback inputs to setup,
+not runtime configuration. The pinned Petrus source repository is currently
+private, so orb installation also requires a dedicated project secret named
+`PETRUS_GITHUB_TOKEN` with read-only repository access. It is temporary build
+authority and must not be an App, provider, demo-human, or host runtime token.
 
-On each new orb, `.agents/setup` consumes and removes those secret variables
-from installer environments, verifies the two exact distinct GitHub logins
-through `/usr/bin/gh` in an otherwise empty environment, installs the pinned Pi
-runtime, and creates ignored owned `0600` files plus
+The two demo-human identities are optional and do not gate production setup.
+Only for the controlled three-actor fixture, set both login variables above and
+store their `gh` `hosts.yml` documents as `GITHUB_DEMO_AUTHOR_HOSTS` and
+`GITHUB_DEMO_REVIEWER_HOSTS`. Setup accepts the pair only when both exact,
+distinct logins validate; otherwise it retires both identity roots while still
+allowing a fully configured App/provider runtime. Role names are deliberate:
+changing the people later changes project settings, not source code.
+
+On each new orb, `.agents/setup` consumes and removes secret variables from
+installer environments. It installs the private Petrus pin through temporary
+mode-restricted Git askpass/config files and removes that authority on every
+outcome. If the optional demo pair is complete, it verifies both logins through
+the trusted preinstalled GitHub CLI while bypassing PATH-precedence wrappers.
+It then installs the pinned Pi runtime and creates ignored owned `0600` files plus
 `.amp/runtime/hamsterdan.env`. That generated file contains paths and public
 configuration, never secret values. Missing or unsafe authority removes stale
 launch configuration and leaves the source workspace usable but the host
-unstartable. Secret-setting changes apply to new orbs; do not copy values
-through chat to retrofit an existing orb.
+unstartable. Demo identity absence alone does not remove valid launch
+configuration. Secret-setting changes apply to new orbs; use the orb's supported
+process restart rather than copying values through chat.
 
 GitHub assigned this registration the slug `hamster-dan`, so its bot login is
 `hamster-dan[bot]` and its exact public mention is `@hamster-dan`. Trusted PR
@@ -160,6 +175,11 @@ production topology after every setup:
 scripts/hamsterdan-host validate
 amp orb services ensure
 ```
+
+`amp orb services ensure` starts the supervised host. On a root with retained
+webhook custody, startup can process GitHub work and cause App effects. Run the
+non-mutating `validate` step first and obtain the required deployment approval
+before starting a production candidate.
 
 The former `scripts/hamsterdan-host topology ...` switch is retired and fails
 closed. Setup removes its stale private selector. Existing topology-labeled
@@ -226,18 +246,22 @@ scripts/hamsterdan-demo inspect --pr <hero-number> --expect-hero-review --expect
 ```
 
 Qualification orbs receive the two human operator sessions from the role-based
-Amp project secrets. `.agents/setup` writes them only to ignored, mode-`0700`
+Amp project secrets when that optional pair is configured. `.agents/setup`
+writes them only to ignored, mode-`0700`
 identity roots under `.amp/runtime/`, with mode-`0600` files. Human commands
 must bypass Amp's injected `gh` wrapper and select one identity explicitly:
 
 ```sh
+GH_BIN=/usr/bin/gh
+[[ -x "$GH_BIN" ]] || GH_BIN="$HOME/.local/bin/gh"
+
 # Author/operator
 /usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" \
-  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-demo-author" /usr/bin/gh api user
+  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-demo-author" "$GH_BIN" api user
 
 # Distinct reviewer
 /usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" \
-  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-demo-reviewer" /usr/bin/gh api user
+  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-demo-reviewer" "$GH_BIN" api user
 ```
 
 Never print, copy into source, or pass either session into the host or agent

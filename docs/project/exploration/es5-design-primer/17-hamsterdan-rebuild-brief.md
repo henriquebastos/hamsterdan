@@ -223,8 +223,8 @@ fragments: ≈1.1 arcs/node, fan-in nowhere.
    passes one gate with an operation identity; staleness by epoch
    comparison, never by checking; the agent never holds credentials.
 4. Count `arcs/(P+T)` — near 1 means state isn't spread.
-5. Compare against production
-   ([topology.py](../../../../src/hamsterdan/readiness/net/topology.py))
+5. Compare against the former production
+   `src/hamsterdan/readiness/net/topology.py` in pre-consolidation Git history
    and ES-004's divergence sweep
    ([ax5](../es4-hamsterdan-experience-specification/experiments/ax5-divergence-sweep.md)),
    which classified all 94 production read arcs — your net should need

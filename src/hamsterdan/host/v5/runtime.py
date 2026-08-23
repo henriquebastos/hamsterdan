@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
@@ -19,8 +20,15 @@ from petrus.impetus.history import (
 from petrus.impetus.history_store import JsonlHistoryStore
 from petrus.impetus.petrinet import Binding, NetPath, Token
 from petrus.impetus.selection import SelectionPipeline, SelectionProposal, SelectionState
-from petrus.motus.activity import Activity, ActivityDefinition
-from petrus.motus.dispatch import InlineDispatch, LocalDispatch
+from petrus.motus.activity import Activity, ActivityDefinition, ActivityInvocation
+from petrus.motus.dispatch import (
+    CancellableDispatch,
+    CancellationDisposition,
+    CancellationInstruction,
+    Dispatch,
+    InlineDispatch,
+    LocalDispatch,
+)
 from petrus.motus.worker import Worker
 from pydantic import TypeAdapter, ValidationError
 
@@ -35,15 +43,13 @@ from hamsterdan.contracts.readiness_v5 import (
     TimerDue,
 )
 from hamsterdan.host.protocol import DurableActivityResolver
-from hamsterdan.host.runtime import CompositeDispatch
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.ingress import IngressEntry
 from hamsterdan.host.v5.timers import V5TimerStore
 from hamsterdan.readiness.net_v5 import build_net_v5, seed_marking
-from hamsterdan.readiness.net_v5.gating import wire_gates
+from hamsterdan.readiness.net_v5.gating import DURABLE_PUBLICATION_GATES, wire_gates
 from hamsterdan.readiness.net_v5.topology import DERIVED, GATES
 
-_DURABLE_ACTIVITIES = frozenset({"reply_gate", "dash_gate", "announce_gate"})
 _INGRESS_FOLDS = {
     "on_head": (NetPath("life.heads"), NetPath("life.admit_head")),
     "on_draft": (NetPath("life.drafts"), NetPath("life.admit_draft")),
@@ -65,6 +71,27 @@ def _terminal_occurrences(records: tuple[object, ...]) -> set[int]:
         for record in records
         if isinstance(record, (ActivityCompleted, ActivityFailed, ActivityTerminalQuarantined))
     }
+
+
+@dataclass(frozen=True)
+class _CompositeDispatch:
+    """Route V5 publication Activities durably and collect every result."""
+
+    inline: Dispatch
+    durable: Dispatch
+
+    def dispatch(self, occurrence: int, invocation: ActivityInvocation) -> None:
+        target = self.durable if invocation.activity in DURABLE_PUBLICATION_GATES else self.inline
+        target.dispatch(occurrence, invocation)
+
+    def collect(self) -> Sequence[tuple[int, object]]:
+        return (*self.inline.collect(), *self.durable.collect())
+
+    def cancel(self, instruction: CancellationInstruction) -> CancellationDisposition:
+        target = self.durable if instruction.invocation.activity in DURABLE_PUBLICATION_GATES else self.inline
+        if not isinstance(target, CancellableDispatch):
+            raise TypeError("scope-managed Activity target does not support cancellation")
+        return target.cancel(instruction)
 
 
 class _V5EnginePolicy:
@@ -144,9 +171,9 @@ class V5Runtime:
             durable = LocalDispatch(
                 dispatch_path,
                 instance=instance,
-                activity_queues={name: _durable_queue(instance) for name in _DURABLE_ACTIVITIES},
+                activity_queues={name: _durable_queue(instance) for name in DURABLE_PUBLICATION_GATES},
             )
-            return CompositeDispatch(inline, durable, _DURABLE_ACTIVITIES)
+            return _CompositeDispatch(inline, durable)
 
         history_path = root / "history.jsonl"
 
@@ -182,7 +209,7 @@ class V5Runtime:
         durable_worker = None
         if dispatch_path is not None:
             provider = LocalDispatch(dispatch_path, instance=instance).worker((_durable_queue(instance),))
-            activities = {name: definitions[name] for name in _DURABLE_ACTIVITIES}
+            activities = {name: definitions[name] for name in DURABLE_PUBLICATION_GATES}
             resolver = None
             if durable_activity_resolver is not None:
 
@@ -377,7 +404,7 @@ class V5Runtime:
         return any(
             isinstance(record, ActivityRequested)
             and record.occurrence not in terminal
-            and record.activity in _DURABLE_ACTIVITIES
+            and record.activity in DURABLE_PUBLICATION_GATES
             for record in records
         )
 

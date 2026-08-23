@@ -1,10 +1,14 @@
 ---
-status: Thickening
+status: Paused
 opened: 2026-08-12
+paused: 2026-08-23
 navigator: Henrique
 ---
 
 # ES-004 — Hamsterdan experience specification and subnet decomposition
+
+This exploration is paused until after private v0.1 production qualification.
+Its experiments remain historical design evidence, not supported runtime code.
 
 ## Inquiry
 

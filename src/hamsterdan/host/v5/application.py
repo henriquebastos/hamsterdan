@@ -4,16 +4,26 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
-from petrus.motus.activity import ActivityDefinition, activity
+from petrus.motus.activity import ActivityDefinition, ActivityInvocation, activity
 
 from hamsterdan.agents.protocol import AgentProtocolError, AgentRunner, ConversationRequest
 from hamsterdan.contracts.readiness import AdmittedConversation
-from hamsterdan.contracts.readiness_v5 import AWake, CommentSeen, RoundWake
+from hamsterdan.contracts.readiness_v5 import (
+    ABlocked,
+    AnnounceReq,
+    AWake,
+    CommentSeen,
+    DashBlocked,
+    DashReq,
+    ReplyBlocked,
+    ReplyReq,
+    RoundWake,
+)
 from hamsterdan.github_app.effects import CommentPublisher, CommentRerunBroker, EffectFault
 from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import GitHubBoundaryError
@@ -168,7 +178,6 @@ class PrReadinessV5Application:
         try:
             ensure_instance_binding(
                 self.root,
-                "v5",
                 self.instance_id,
                 self.authority.repository,
                 self.authority.pr_number,
@@ -440,6 +449,39 @@ class PrReadinessV5Application:
 
     def activity(self, name: str):
         return self._runtime().activity(name)
+
+    @staticmethod
+    def inactive_activity_result(
+        name: str,
+        invocation: ActivityInvocation,
+        definition: ActivityDefinition | None,
+    ) -> object:
+        if definition is None or definition.declaration.name != name or invocation.activity != name:
+            raise ValueError("V5 publication invocation has no matching Activity definition")
+        if not isinstance(invocation.input, Mapping) or set(invocation.input) != set(definition.parameters):
+            raise ValueError("V5 publication invocation has malformed parameters")
+        [(parameter, annotation)] = definition.parameters.items()
+        encoded_work = cast(Mapping[str, object], invocation.input)[parameter]
+        work = definition.converter.decode(encoded_work, annotation)
+        if name == "reply_gate" and isinstance(work, ReplyReq):
+            result: object = ReplyBlocked(id=work.id, text=work.text)
+        elif name == "dash_gate" and isinstance(work, DashReq):
+            result = DashBlocked(
+                entries=work.entries,
+                digest=work.digest,
+                desired_entries=work.desired_entries,
+                desired_digest=work.desired_digest,
+            )
+        elif name == "announce_gate" and isinstance(work, AnnounceReq):
+            result = ABlocked(
+                incarnation=work.incarnation,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+            )
+        else:
+            raise ValueError("V5 publication invocation has no inactive result")
+        return definition.converter.encode(result, definition.result)
 
     def has_unresolved_publication(self) -> bool:
         return self._runtime().has_unresolved_publication()

@@ -76,6 +76,8 @@ webhook is inactive, preserving rollback without a dual writer.
 
 ## Version intent
 
-Remain at private `0.0.0` during delivery. Qualifying a `0.1.0` application
-candidate requires the complete real-GitHub acceptance portfolio and separate
-Navigator approval; no package or App publication is implied.
+The project remained at private `0.0.0` during initial delivery. After the
+complete CV17 real-GitHub acceptance portfolio and the Navigator's production
+consolidation approval, CV19 establishes a private `0.1.0` application
+candidate. No package, public repository, Marketplace, or App publication is
+implied.

@@ -1,9 +1,9 @@
 ---
 code: CV18.DS4
 level: Delivery Story
-status: Planned
-status_reason: Generated readiness simulation has no CI cadence, failure-retention protocol, or explicit qualification boundary with real GitHub and process evidence
-updated: 2026-08-17
+status: Paused
+status_reason: Campaign operations are deliberately deferred until after private v0.1 production qualification
+updated: 2026-08-23
 related:
   - index.md
   - cv18-ds3-generated-readiness-and-recovery-campaigns.md

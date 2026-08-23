@@ -1,12 +1,22 @@
 ---
 code: CV16.DS11
 level: Delivery Story
-status: Qualified Locally
-status_reason: Deterministic gates pass; a fresh restart stopped at the final pre-push target read without remote mutation or provider authority
-updated: 2026-08-09
+status: Completed
+status_reason: CV17 PR61 subsequently exercised this selected route through changed-result admission, App-authored Git publication, exact CAS, recovery, and readiness
+updated: 2026-08-23
 ---
 
 # CV16.DS11 — Host composition and operation-route custody
+
+## Resolution
+
+CV17's accepted PR61 production journey supplied the live proof that this story
+was missing: the selected Pi native A2 route returned a changed result, the host
+created and published Git objects under App authority, exact ref CAS advanced
+the branch, lookup-first recovery found the accepted operation without a second
+write, and the repaired head reached readiness. DS11 is complete. The earlier
+Anthropic and disposable-target attempts remain historical evidence below and
+do not authorize or require another qualification attempt.
 
 ## Scope
 

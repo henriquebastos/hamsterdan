@@ -23,8 +23,8 @@ def test_only_host_composes_agent_and_github_siblings() -> None:
             others = {"agents", "github_app", "readiness"} - {sibling}
             assert not any(name.startswith(f"hamsterdan.{other}") for other in others for name in imports)
 
-    imports = set().union(*(_imports(path) for path in (source / "host").glob("*.py")))
-    assert {"hamsterdan.agents", "hamsterdan.github_app.gateway", "hamsterdan.readiness.net"} <= imports
+    imports = set().union(*(_imports(path) for path in (source / "host").rglob("*.py")))
+    assert {"hamsterdan.agents", "hamsterdan.github_app.gateway", "hamsterdan.readiness.net_v5"} <= imports
     assert not any(name.startswith("examples") for name in imports)
 
     for path in source.rglob("*.py"):

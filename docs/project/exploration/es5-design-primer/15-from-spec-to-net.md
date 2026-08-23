@@ -207,7 +207,8 @@ built = net.build()
 
 At this scale the two columns cost similar lines — the difference is
 *what is checked*, not what is typed. The gap widens with size:
-production's net ([topology.py](../../../../src/hamsterdan/readiness/net/topology.py))
+the former production `src/hamsterdan/readiness/net/topology.py`, retained in
+pre-consolidation Git history,
 writes every place, arc, guard, and read-arc by hand, and nothing
 verifies its exits are total or its names consistent.
 

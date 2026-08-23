@@ -27,7 +27,7 @@ this series as prior art.
 3. Petrus is frozen at the pinned baseline
    `3b41f19aa68ed228e68324f7c6888371f805b560`. Experiments lower only onto
    the existing public surface. Evidence that suggests a Petrus runtime
-   change goes into the [Petrus speculation ledger](petrus-speculation.md)
+   change goes into the [Petrus speculation ledger](../petrus-speculation.md)
    as analysis, never into an experiment's implementation.
 4. Prior ES-002 evidence binds the series: first use the smallest existing
    Petrus expression that says the truth directly; a new surface must

@@ -41,9 +41,10 @@ from hamsterdan.agents.protocol import (
     _REVIEW_RESULT_FIELDS,
     _validate_result,
 )
-from hamsterdan.contracts.readiness import ChangeRequest, Intent
-from hamsterdan.host.activities import PrReadinessActivities
-from hamsterdan.host.git_publish import GitPublishResult
+from hamsterdan.contracts.readiness_v5 import DeclinedM, MutWork, Pushed
+from hamsterdan.host.git_publish import GitPublishResult, GitReconciliation
+from hamsterdan.host.v5.claim import CurrentClaim
+from hamsterdan.host.v5.mutation import V5MutationGate
 
 HEAD, BASE = "a" * 40, "b" * 40
 URL = "https://example.invalid/owner/repo.git"
@@ -105,8 +106,29 @@ def coding_request() -> CodingRequest:
     return CodingRequest("change", "owner/repo", 7, 2, HEAD, BASE, "hamsterdan/change/one")
 
 
+def mutation_work(operation: str) -> MutWork:
+    return MutWork(
+        op="change",
+        op_key=operation,
+        head=HEAD,
+        base=BASE,
+        policy="policy",
+        incarnation=2,
+        lineage="",
+        kind="change",
+        instruction="apply the bounded change",
+        run_id=0,
+        attempt=0,
+    )
+
+
+def mutation_agent_operation(operation: str) -> str:
+    return f"mutation:owner/repo:pr:7:{operation}"
+
+
 def activity_coding_result(operation: str, *, status: str = "unchanged", head: str = HEAD) -> dict[str, object]:
     changed = status == "changed"
+    request = V5MutationGate.request("owner/repo", 7, mutation_work(operation))
     return {
         "kind": "change",
         "repository": "owner/repo",
@@ -114,7 +136,7 @@ def activity_coding_result(operation: str, *, status: str = "unchanged", head: s
         "epoch": 2,
         "head": head,
         "base": BASE,
-        "ref": f"hamsterdan/change/{operation[-16:]}",
+        "ref": request.ref,
         "status": status,
         "reproduction_status": "not_attempted",
         "diff": "untrusted" if changed else "",
@@ -129,6 +151,9 @@ class ActivityPublisher:
         self.calls = 0
         self.result = None
 
+    def reconcile(self, **kwargs):
+        return GitReconciliation("absent", HEAD)
+
     def publish(self, result, **kwargs):
         self.calls += 1
         self.result = result
@@ -136,17 +161,17 @@ class ActivityPublisher:
 
 
 def run_coding_activity(subject: PiNativeRunner, runtime: Runtime, operation: str):
+    del runtime
     publisher = ActivityPublisher()
-    activities = object.__new__(PrReadinessActivities)
-    activities.repository = "owner/repo"
-    activities.pr_number = 7
-    activities.public_clone_url = URL
-    activities.current = None
-    activities.current_fence = lambda *args: None
-    activities.runner = subject
-    activities.git_publisher = publisher
-    work = ChangeRequest(2, HEAD, operation, BASE, "policy", Intent(2, HEAD, "change", "digest", True, True))
-    return activities.change(work), publisher
+    gate = V5MutationGate(
+        repository="owner/repo",
+        pull_request=7,
+        runner=subject,
+        publisher=publisher,
+        public_clone_url=URL,
+        claim=lambda: CurrentClaim("running", 2, HEAD, BASE, "policy"),
+    )
+    return gate.git_gate(mutation_work(operation)), publisher
 
 
 @pytest.mark.parametrize(
@@ -730,7 +755,7 @@ def test_coding_activity_retains_each_adapter_admission_failure_without_retry_or
         head="c" * 40 if case == "correlation" else HEAD,
     )
     operation = Operation(
-        operation_id,
+        mutation_agent_operation(operation_id),
         outcome=TurnOutcome.FAILED if case == "runtime" else TurnOutcome.COMPLETED,
     )
     subject, runtime = runner(output, operation)
@@ -741,10 +766,8 @@ def test_coding_activity_retains_each_adapter_admission_failure_without_retry_or
 
     effect, publisher = run_coding_activity(subject, runtime, operation_id)
 
-    assert not effect.ok
-    assert effect.agent_result_category == category
-    assert effect.agent_cleanup_category == ""
-    assert effect.publication_category == ""
+    assert isinstance(effect, DeclinedM)
+    assert effect.category == category.value
     assert len(runtime.started) == 1
     assert publisher.calls == 0
 
@@ -760,25 +783,28 @@ def test_coding_activity_retains_valid_nonmutation_outcome_without_retry_or_publ
     status: str, category: AgentResultCategory
 ) -> None:
     operation_id = f"change:admission-{status}"
-    subject, runtime = runner(activity_coding_result(operation_id, status=status), Operation(operation_id))
+    subject, runtime = runner(
+        activity_coding_result(operation_id, status=status), Operation(mutation_agent_operation(operation_id))
+    )
 
     effect, publisher = run_coding_activity(subject, runtime, operation_id)
 
-    assert not effect.ok
-    assert effect.agent_result_category == category
-    assert effect.agent_cleanup_category == ""
+    assert isinstance(effect, DeclinedM)
+    assert effect.category == category.value
     assert len(runtime.started) == 1
     assert publisher.calls == 0
 
 
 def test_coding_activity_passes_accepted_changed_result_to_existing_publisher() -> None:
     operation_id = "change:admission-changed"
-    subject, runtime = runner(activity_coding_result(operation_id, status="changed"), Operation(operation_id))
+    subject, runtime = runner(
+        activity_coding_result(operation_id, status="changed"), Operation(mutation_agent_operation(operation_id))
+    )
 
     effect, publisher = run_coding_activity(subject, runtime, operation_id)
 
-    assert effect.ok
-    assert effect.agent_result_category == "" and effect.agent_cleanup_category == ""
+    assert isinstance(effect, Pushed)
+    assert effect.new_head == "c" * 40
     assert publisher.calls == 1
     assert publisher.result is not None
     assert publisher.result.diff == "canonical diff"
@@ -788,14 +814,15 @@ def test_coding_activity_passes_accepted_changed_result_to_existing_publisher() 
 
 def test_operation_cleanup_failure_cannot_overwrite_first_output_admission_cause() -> None:
     operation_id = "change:admission-cleanup"
-    subject, runtime = runner(activity_coding_result(operation_id), Operation(operation_id, clean=False))
+    subject, runtime = runner(
+        activity_coding_result(operation_id), Operation(mutation_agent_operation(operation_id), clean=False)
+    )
     runtime.output = "not-json private model prose"
 
     effect, publisher = run_coding_activity(subject, runtime, operation_id)
 
-    assert not effect.ok
-    assert effect.agent_result_category == AgentResultCategory.OUTPUT_SCHEMA
-    assert effect.agent_cleanup_category == AgentCleanupCategory.UNVERIFIED
+    assert isinstance(effect, DeclinedM)
+    assert effect.category == AgentResultCategory.OUTPUT_SCHEMA.value
     assert publisher.calls == 0
     assert len(runtime.started) == 1
 
@@ -814,7 +841,9 @@ def test_agent_failure_categories_are_closed_and_first_cause_is_one_shot() -> No
 
 def test_workspace_preparation_and_cleanup_failure_retains_both_closed_causes() -> None:
     operation_id = "change:admission-preparation"
-    runtime = Runtime(Operation(operation_id), json.dumps(activity_coding_result(operation_id)))
+    runtime = Runtime(
+        Operation(mutation_agent_operation(operation_id)), json.dumps(activity_coding_result(operation_id))
+    )
 
     class FailedWorkspaces:
         @contextmanager
@@ -827,8 +856,8 @@ def test_workspace_preparation_and_cleanup_failure_retains_both_closed_causes() 
 
     effect, publisher = run_coding_activity(subject, runtime, operation_id)
 
-    assert effect.agent_result_category == AgentResultCategory.WORKSPACE_RECONCILIATION
-    assert effect.agent_cleanup_category == AgentCleanupCategory.UNVERIFIED
+    assert isinstance(effect, DeclinedM)
+    assert effect.category == AgentResultCategory.WORKSPACE_RECONCILIATION.value
     assert runtime.started == []
     assert publisher.calls == 0
 

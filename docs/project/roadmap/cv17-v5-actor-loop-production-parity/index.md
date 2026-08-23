@@ -3,10 +3,15 @@ code: CV17
 level: Value
 status: Completed
 status_reason: The Navigator accepted the deterministic parity portfolio and durable clean-green, transient-CI recovery, and complete three-actor GitHub campaign
-updated: 2026-08-17
+updated: 2026-08-23
 ---
 
 # CV17 — V5 actor-loop production parity
+
+CV17 preserves its acceptance-time parallel-comparison framing below. The
+subsequent sole-runtime decision promoted non-sharded V5 and removed both the
+former production runtime and topology selection; that later ruling does not
+rewrite or reopen CV17's evidence.
 
 ## Intent
 

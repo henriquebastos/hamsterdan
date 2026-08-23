@@ -11,6 +11,7 @@ REVIEWER_SECRET = "reviewer-session-canary"
 APP_SECRET = "app-private-key-canary"
 OPENAI_SECRET = "openai-provider-canary"
 WEBHOOK_SECRET = "webhook-secret-canary"
+PETRUS_SECRET = "petrus-install-token-canary"
 PROVIDER_SECRET = "anthropic-provider-canary"
 
 
@@ -31,8 +32,23 @@ def _sandbox(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     home.mkdir()
     shutil.copy2(ROOT / ".agents" / "setup", workspace / ".agents" / "setup")
     shutil.copy2(ROOT / "scripts" / "hamsterdan-host", workspace / "scripts" / "hamsterdan-host")
-    for name in ("uv", "bun", "bunx", "ffmpeg", "ffprobe", "montage"):
+    for name in ("bun", "bunx", "ffmpeg", "ffprobe", "montage"):
         _executable(binaries / name)
+    _executable(
+        binaries / "uv",
+        """#!/bin/sh
+set -eu
+test "${GIT_TERMINAL_PROMPT:-}" = 0
+test "${GIT_CONFIG_SYSTEM:-}" = /dev/null
+test -f "${GIT_CONFIG_GLOBAL:?}"
+grep -F 'henriquebastos/petrus' "$GIT_CONFIG_GLOBAL" >/dev/null
+askpass=$(sed -n 's/^    askPass = //p' "$GIT_CONFIG_GLOBAL")
+test -x "$askpass"
+test "$($askpass 'Username for https://github.com')" = x-access-token
+test "$($askpass 'Password for https://github.com')" = "$PETRUS_GITHUB_TOKEN_EXPECTED"
+printf used > "$UV_AUTH_BOUNDARY_MARKER"
+""",
+    )
     _executable(
         binaries / "npm",
         """#!/bin/sh
@@ -59,8 +75,10 @@ EOF
 chmod 755 "$prefix/node_modules/node/bin/node"
 """,
     )
+    user_gh = home / ".local" / "bin" / "gh"
+    user_gh.parent.mkdir(parents=True)
     _executable(
-        binaries / "system-gh",
+        user_gh,
         """#!/bin/sh
 case "$XDG_CONFIG_HOME" in
     */gh-demo-author) printf '%s\\n' author ;;
@@ -70,7 +88,7 @@ esac
 """,
     )
     setup = workspace / ".agents" / "setup"
-    setup.write_text(setup.read_text().replace("SYSTEM_GH=/usr/bin/gh", f"SYSTEM_GH={binaries / 'system-gh'}"))
+    setup.write_text(setup.read_text().replace("SYSTEM_GH=/usr/bin/gh", f"SYSTEM_GH={tmp_path / 'missing-gh'}"))
     _executable(
         binaries / "gh",
         f"""#!/bin/sh
@@ -99,6 +117,9 @@ exit 91
         "GITHUB_INSTALLATION_REPOSITORIES": "1316665126:HBNetwork/demo-pr-readiness",
         "READINESS_WORKFLOW_PATH": ".github/workflows/ci.yml",
         "READINESS_REMINDER_SECONDS": "259200",
+        "PETRUS_GITHUB_TOKEN": PETRUS_SECRET,
+        "PETRUS_GITHUB_TOKEN_EXPECTED": PETRUS_SECRET,
+        "UV_AUTH_BOUNDARY_MARKER": str(tmp_path / "uv-auth-boundary"),
     }
     return workspace, environment
 
@@ -126,6 +147,9 @@ def test_setup_materializes_complete_role_based_runtime_without_disclosure(tmp_p
     result = _run(workspace, environment)
 
     assert result.returncode == 0, result.stdout
+    assert PETRUS_SECRET not in result.stdout
+    assert Path(environment["UV_AUTH_BOUNDARY_MARKER"]).read_text() == "used"
+    assert not list((workspace / ".amp" / "runtime").glob(".petrus-git-auth.*"))
     assert not any(
         secret in result.stdout
         for secret in (AUTHOR_SECRET, REVIEWER_SECRET, APP_SECRET, WEBHOOK_SECRET, PROVIDER_SECRET, OPENAI_SECRET)
@@ -194,7 +218,7 @@ def test_setup_selects_openrouter_only_after_higher_priority_providers(tmp_path:
     assert "HAMSTERDAN_PI_MODEL=anthropic/claude-sonnet-4.5" in configuration
 
 
-def test_setup_role_verification_bypasses_a_path_precedence_gh_wrapper(tmp_path: Path) -> None:
+def test_setup_role_verification_uses_orb_user_gh_without_accepting_a_path_wrapper(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
 
     result = _run(workspace, environment)
@@ -203,7 +227,41 @@ def test_setup_role_verification_bypasses_a_path_precedence_gh_wrapper(tmp_path:
     assert not (Path(environment["PATH"].split(":", 1)[0]) / "gh-wrapper-called").exists()
     setup = (ROOT / ".agents" / "setup").read_text()
     assert "SYSTEM_GH=/usr/bin/gh" in setup
+    assert 'SYSTEM_GH="$HOME/.local/bin/gh"' in setup
     assert '$(/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin"' in setup
+
+
+def test_setup_does_not_make_optional_demo_identities_a_production_prerequisite(tmp_path: Path) -> None:
+    workspace, environment = _sandbox(tmp_path)
+    for name in (
+        "GITHUB_DEMO_AUTHOR_HOSTS",
+        "GITHUB_DEMO_REVIEWER_HOSTS",
+        "GITHUB_DEMO_AUTHOR_LOGIN",
+        "GITHUB_DEMO_REVIEWER_LOGIN",
+    ):
+        environment.pop(name)
+
+    result = _run(workspace, environment)
+
+    assert result.returncode == 0, result.stdout
+    runtime = workspace / ".amp" / "runtime"
+    assert (runtime / "hamsterdan.env").is_file()
+    assert not (runtime / "gh-demo-author").exists()
+    assert not (runtime / "gh-demo-reviewer").exists()
+
+
+def test_setup_retires_mismatched_demo_identity_without_blocking_production(tmp_path: Path) -> None:
+    workspace, environment = _sandbox(tmp_path)
+    environment["GITHUB_DEMO_REVIEWER_LOGIN"] = "different-reviewer"
+
+    result = _run(workspace, environment)
+
+    assert result.returncode == 0, result.stdout
+    assert "Optional demo identities are not valid and were not retained" in result.stdout
+    runtime = workspace / ".amp" / "runtime"
+    assert (runtime / "hamsterdan.env").is_file()
+    assert not (runtime / "gh-demo-author").exists()
+    assert not (runtime / "gh-demo-reviewer").exists()
 
 
 def test_setup_removes_stale_launch_and_managed_authority_when_inputs_disappear(tmp_path: Path) -> None:
@@ -243,6 +301,21 @@ def test_setup_invalidates_launch_before_external_installer_failure(tmp_path: Pa
 
     assert result.returncode == 17
     assert not (workspace / ".amp" / "runtime" / "hamsterdan.env").exists()
+    assert not list((workspace / ".amp" / "runtime").glob(".petrus-git-auth.*"))
+
+
+def test_setup_requires_dedicated_petrus_auth_before_dependency_or_runtime_success(tmp_path: Path) -> None:
+    workspace, environment = _sandbox(tmp_path)
+    environment.pop("PETRUS_GITHUB_TOKEN")
+
+    result = _run(workspace, environment)
+
+    assert result.returncode != 0
+    assert "PETRUS_GITHUB_TOKEN is required" in result.stdout
+    assert not Path(environment["UV_AUTH_BOUNDARY_MARKER"]).exists()
+    runtime = workspace / ".amp" / "runtime"
+    assert not (runtime / "hamsterdan.env").exists()
+    assert not list(runtime.glob(".petrus-git-auth.*"))
 
 
 def test_setup_refuses_symlinked_role_root_without_touching_outside_file(tmp_path: Path) -> None:
@@ -266,6 +339,14 @@ def test_service_requires_an_owned_private_regular_runtime_environment() -> None
 
     assert "scripts/hamsterdan-host" in service
     assert "hamsterdan.env" not in service
+
+
+def test_setup_keeps_locked_media_checks_without_remotion_browser_download() -> None:
+    setup = (ROOT / ".agents" / "setup").read_text()
+
+    assert "bun install --frozen-lockfile" in setup
+    assert "bunx playwright install --with-deps chromium" in setup
+    assert "remotion browser ensure" not in setup
 
 
 def test_host_launcher_strips_setup_and_ambient_provider_authority(tmp_path: Path) -> None:

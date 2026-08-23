@@ -1,9 +1,9 @@
 ---
 code: CV18
 level: Value
-status: Active
-status_reason: DS1 and DS2 are accepted; DS3 now has generated authority, lifecycle, timer, and Git mutation ambiguity recovery evidence and remains active for broader semantic coverage
-updated: 2026-08-19
+status: Paused
+status_reason: Accepted DS1-DS3 evidence is retained; broader simulation and campaign operations are deferred until after private v0.1 production qualification
+updated: 2026-08-23
 related:
   - ../cv17-v5-actor-loop-production-parity/index.md
   - ../../../../tests/unit/readiness/net_v5/harness.py
@@ -146,7 +146,7 @@ readiness policy never enter Petrus.
    non-sharded V5 production host; remaining named cut adapters move with its
    generated dimensions.
 3. [CV18.DS3 — Generated readiness and recovery campaigns](cv18-ds3-generated-readiness-and-recovery-campaigns.md)
-   is active. Bounded Hypothesis state machines now generate one-step V5 host
+   is paused after an accepted bounded slice. Hypothesis state machines generate one-step V5 host
    progress, duplicate delivery, effect ambiguity, abrupt reconstruction, and
    authority lifecycle/head movement. A focused reminder campaign additionally
    crosses durable timer arm/maturity/acknowledgement, accepted-but-response-lost
@@ -155,10 +155,11 @@ readiness policy never enter Petrus.
    modeled ref acceptance, lost proof, `FaultM`, reconstruction, exact
    human-authorized lookup-first recovery, and `Pushed` without a second CAS.
    Successful schedules and shrunk checker and resource counterexamples replay
-   exactly. Broader targeted profiles, remaining fault adapters, semantic
-   coverage, and campaign operations remain.
+   exactly. The accepted semantic coverage report records both witnessed and
+   blocked dimensions. Broader targeted profiles and remaining adapters are
+   post-v0.1 reliability work, not private-release blockers.
 4. [CV18.DS4 — Campaign operations and real-boundary confidence](cv18-ds4-campaign-operations-and-real-boundary-confidence.md)
-   establishes bounded PR/scheduled campaigns and preserves real GitHub,
+   is paused before implementation. It would establish bounded PR/scheduled campaigns and preserve real GitHub,
    process, persistence, and provider evidence as distinct complementary gates.
 
 ## Done condition

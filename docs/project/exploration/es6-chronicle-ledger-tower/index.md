@@ -1,6 +1,7 @@
 # ES-006 — The chronicle/ledger tower: layered net decomposition
 
-**Status:** Thickening, 2026-08-14.
+**Status:** Paused until after private v0.1 production qualification,
+2026-08-23.
 **Navigator seed:** the three-step conversation that produced the tower
 model (context carrying → staleness by existence → the
 speculation/commitment boundary), captured in

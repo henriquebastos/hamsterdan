@@ -17,7 +17,7 @@ import uuid
 import weakref
 from collections import Counter
 from contextlib import closing
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Self, cast
 
@@ -50,7 +50,6 @@ from hamsterdan.github_app.config import HostConfig
 from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
 from hamsterdan.host.service import HostService
-from hamsterdan.host.topology import V5
 from hamsterdan.host.v5.application import PrReadinessV5Application
 from hamsterdan.testing.readiness import (
     AuthorityClaim,
@@ -281,15 +280,13 @@ class ReadinessScenarioProfile:
             kwargs["mutation_publisher"] = ModeledGitPublisher(self.truth, context_holder)
             return PrReadinessV5Application(*args, **kwargs)
 
-        readiness_composition = replace(V5, application_factory=application_factory)
-
         host = HostService(
             _config(self.root),
             clients=cast(Any, ProviderClients()),
             runner=cast(Any, AgentRunner(self.truth)),
             agent_composition=agent_composition,
             agent_routes=routes,
-            readiness_composition=readiness_composition,
+            application_factory=application_factory,
             reminder_delay=REMINDER_DELAY,
             clock=lambda: float(context.now()),
             transport_factory=transport_factory,

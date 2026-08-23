@@ -25,7 +25,8 @@
 The AX0 baseline (actions failure/rerun/repair) contains **no genuine
 AND-parallel section**, so labeling it "parallel" would have faked the
 AX11 requirement. AX11 instead uses the real **conversation-intent**
-fragment of [`topology.py`](../../../../../src/hamsterdan/readiness/net/topology.py):
+fragment of the former `src/hamsterdan/readiness/net/topology.py`, retained in
+pre-consolidation Git history:
 
 - the classification activity bridge (~line 1229);
 - `_unpack_intents` (handler lines 189–203, wiring 1489–1491);
