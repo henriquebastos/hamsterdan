@@ -94,6 +94,11 @@ improvement candidates.
 - [Git-ambiguity recovery journey](git-ambiguity-recovery-journey.md) traces one
   accepted-but-unproven branch update through durable `FaultM`, host restart,
   head-first admission, explicit operation-scoped recovery, and final readiness.
+- [Candidate review](candidate-review.md) applies the deletion test across all
+  three journeys. It retains the current production module seams, rejects broad
+  reorganization, and presents three correctness/operator candidates, two
+  test-locality candidates, and one maintainer-navigation candidate for
+  Navigator ruling.
 - [RS-019 — Improve V5 test reading locality](../../workbench/rs-019-improve-v5-test-reading-locality.md)
   captures two parked Change Requests from the candidate review: state the
   head-first ambiguity blocker directly and replace the positional 38-field
@@ -102,6 +107,17 @@ improvement candidates.
   captures the committed destructive-History-loss finding as a separate parked
   correctness refinement. Its crash-safe discriminator and operator disposition
   remain intentionally undesigned.
+- [RS-021 — Fence inline V5 Activities after route revocation](../../workbench/rs-021-fence-inline-v5-activities-after-route-revocation.md),
+  [RS-022 — Retain mutation ambiguity until recovery terminates](../../workbench/rs-022-retain-mutation-fault-until-recovery-terminates.md),
+  and [RS-023 — Inspect current V5 Activity identities](../../workbench/rs-023-inspect-current-v5-activity-identities.md)
+  capture the candidate review's three correctness and operator findings with
+  explicit evidence, correctness obligations, validation seeds, and parked pull
+  state.
+- [RS-024 — Give import architecture rules one test owner](../../workbench/rs-024-consolidate-import-architecture-rules.md),
+  [RS-025 — Make the current V5 maintainer route explicit](../../workbench/rs-025-make-v5-maintainer-route-explicit.md),
+  and [RS-026 — Clarify full-gate build ownership](../../workbench/rs-026-clarify-full-gate-build-ownership.md)
+  capture the remaining actionable locality, terminology, navigation, and
+  validation findings. All Change Requests are parked.
 - The focused clean-green and agent-repair semantic journeys pass. The fixed Git
   recovery and late pending-head race pass together, and the generated Git
   recovery campaign passes its four anchors plus five deterministic examples.
@@ -112,8 +128,12 @@ improvement candidates.
 - The Navigator completed the second and third journey teach-backs. The third
   established Activity occurrence versus logical operation recovery,
   lookup-before-authority ordering, and incarnation-safe late pending-head
-  settlement. All terminology, navigation, locality, and correctness signals
-  remain exploratory until candidate review.
+  settlement.
+- Candidate review found no evidence for broad production reorganization. The
+  Navigator ruled that every actionable finding must be captured for later
+  sessions while ES-009 remains dedicated to human learning. RS-021 through
+  RS-026 now own those findings, all Change Requests remain parked, and no
+  implementation story is pulled.
 
 ## Candidate gate
 

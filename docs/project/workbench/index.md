@@ -11,6 +11,24 @@ existing Hamsterdan capability outside the delivery roadmap.
 - [RS-020 — Fail closed on missing canonical History](rs-020-fail-closed-on-missing-canonical-history.md):
   the ES-009 destructive-History-loss finding is parked pending a crash-safe
   discriminator and operator disposition.
+- [RS-021 — Fence inline V5 Activities after route revocation](rs-021-fence-inline-v5-activities-after-route-revocation.md):
+  preserve lookup-first settlement while preventing new inline agent or provider
+  effects after installation or repository admission is revoked.
+- [RS-022 — Retain mutation ambiguity until recovery terminates](rs-022-retain-mutation-fault-until-recovery-terminates.md):
+  keep readiness fail-closed while a replacement mutation-recovery Activity
+  lacks a known terminal.
+- [RS-023 — Inspect current V5 Activity identities](rs-023-inspect-current-v5-activity-identities.md):
+  make the read-only operator inventory understand every current V5 operation
+  identity without exposing payloads.
+- [RS-024 — Give import architecture rules one test owner](rs-024-consolidate-import-architecture-rules.md):
+  consolidate partially overlapping source-import scanners under the
+  relative-aware architecture test.
+- [RS-025 — Make the current V5 maintainer route explicit](rs-025-make-v5-maintainer-route-explicit.md):
+  capture guided journey links, current History and test-layer documentation,
+  operation-settlement naming, and semantic Git-loss vocabulary.
+- [RS-026 — Clarify full-gate build ownership](rs-026-clarify-full-gate-build-ownership.md):
+  decide whether the full gate deliberately leaves `dist/` or should let the
+  distribution test own its single build.
 
 ## Active
 

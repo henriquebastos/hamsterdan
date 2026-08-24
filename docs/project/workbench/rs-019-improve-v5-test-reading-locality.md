@@ -29,7 +29,8 @@ scenario harness or changing the production workflow.
 In scope:
 
 - one direct intermediate-state assertion in the fixed Git-ambiguity World test;
-- keyword construction for the existing `JourneyResult`; and
+- keyword construction for the existing `DraftPhase`, `StaleBasePhase`,
+  `CollaborationPhase`, and `JourneyResult` aggregates; and
 - focused validation of the affected semantic and recovery tests.
 
 Out of scope:
@@ -94,20 +95,25 @@ Status: Parked
 
 Context:
 
-`tests/integration/host/test_readiness_scenarios.py::_run_journey` constructs the
-38-field `JourneyResult` positionally. Reviewers must match constructor position
-to dataclass position when tracing any of the eleven semantic journeys.
+`tests/integration/host/test_readiness_scenarios.py::_run_journey` constructs
+`DraftPhase`, `StaleBasePhase`, `CollaborationPhase`, and the 38-field
+`JourneyResult` positionally. Reviewers must match constructor position to
+dataclass position when tracing any of the eleven semantic journeys. The largest
+risk is `JourneyResult`, but all four aggregates have the same locality failure.
 
 Requested change:
 
-Replace the one positional `JourneyResult(...)` construction with explicit
-keyword arguments. Preserve the dataclass, captured values, assertions, scenario
-branches, and production behavior.
+Replace the positional `DraftPhase(...)`, `StaleBasePhase(...)`,
+`CollaborationPhase(...)`, and `JourneyResult(...)` constructions with explicit
+keyword arguments. Preserve the dataclasses, captured values, assertions,
+scenario branches, and production behavior.
 
 Expected leverage:
 
-Each captured value becomes locally attributable at the construction boundary,
-and future field changes cannot silently shift neighboring arguments.
+Each captured value becomes locally attributable at its construction boundary,
+and future field changes cannot silently shift neighboring arguments. One
+consistent construction rule is easier to review than treating only the largest
+aggregate differently.
 
 Likely files:
 
