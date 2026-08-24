@@ -76,6 +76,26 @@ improvement candidates.
    schedules without invoking a real provider.
 5. Present the route for Navigator teach-back before candidate review.
 
+## Fourth experiment — reminder-timer recovery
+
+1. Trace a running PR which lacks qualifying human readiness from reminder
+   eligibility through one durable timer arm.
+2. Distinguish canonical timer commands and History facts from the reconstructible
+   timer database and disposable runnable wake index.
+3. Follow restart before and after timer maturity, including how the host restores
+   posture and delivers one timer wake without treating wall-clock time as
+   workflow truth.
+4. Trace the stable reminder operation through lookup-first publication recovery,
+   current recipients, moved authority, and a lost provider response.
+5. Exercise focused timer reconstruction and generated reminder schedules without
+   launching the host or invoking a real provider, then present the route for
+   Navigator teach-back.
+
+Concrete scenario: approval is still missing when a reminder becomes eligible.
+The host arms the reminder, restarts before the deadline, reconstructs timer
+custody from intact canonical History, reaches maturity, and proves that exactly
+one reminder operation lands even if the provider response is lost.
+
 ## Current evidence
 
 - [Baseline](baseline.md) records repository shape, test-surface taxonomy, the
@@ -134,6 +154,10 @@ improvement candidates.
   sessions while ES-009 remains dedicated to human learning. RS-021 through
   RS-026 now own those findings, all Change Requests remain parked, and no
   implementation story is pulled.
+- The Navigator selected reminder-timer recovery as the fourth learning
+  experiment for a new session. The experiment is planned above but has not
+  started; no source, test, runtime, provider, or Workbench change is authorized
+  by that selection.
 
 ## Candidate gate
 
