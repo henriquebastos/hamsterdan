@@ -90,6 +90,7 @@ canonical History remains an operator data-loss concern, but normal startup does
 not consistently detect and fence the missing-file case.
 
 This is an evidence-backed architecture and correctness finding. On 2026-08-24,
-the Navigator kept it in ES-009 and chose to continue the broader codebase tour
-before exploring a repair. A repair design and delivery classification remain
-outside this record until a later candidate gate.
+the Navigator first kept it in ES-009 to continue the broader codebase tour, then
+captured it as the separate parked
+[RS-020 correctness refinement](../../workbench/rs-020-fail-closed-on-missing-canonical-history.md).
+No repair design or implementation is pulled.

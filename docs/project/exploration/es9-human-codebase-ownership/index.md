@@ -51,6 +51,31 @@ improvement candidates.
 5. Present the map as a guided reading route and ask the Navigator to explain the
    journey back before forming architecture candidates.
 
+## Second experiment — automatic agent repair
+
+1. Trace repeated exact-head CI failure through the rerun-once escalation ladder.
+2. Follow the typed repair through mutation serialization, credential-free agent
+   execution, host-derived patch admission, Git object publication, and exact ref
+   compare-and-swap.
+3. Distinguish a landed branch mutation from later admission of the repaired head
+   as a new workflow generation.
+4. Inspect lookup-first recovery, test composition, and navigation cost without
+   launching a host or invoking a real provider.
+5. Present the route for Navigator teach-back before forming improvement
+   candidates.
+
+## Third experiment — ambiguous Git publication recovery
+
+1. Trace an accepted exact ref update whose response and immediate proof are
+   unavailable.
+2. Distinguish automatic redispatch of an unterminated Activity occurrence from
+   explicit human recovery after durable `FaultM`.
+3. Admit the provider head before recovery and inspect how global fault state,
+   stale per-incarnation facts, and the `from_head` fence converge.
+4. Exercise the fixed World recovery, sharp lifecycle race, and generated crash
+   schedules without invoking a real provider.
+5. Present the route for Navigator teach-back before candidate review.
+
 ## Current evidence
 
 - [Baseline](baseline.md) records repository shape, test-surface taxonomy, the
@@ -62,13 +87,33 @@ improvement candidates.
 - [Missing canonical History finding](history-loss-finding.md) distinguishes
   process reconstruction from destructive History loss and records the current
   trigger-dependent fresh-start behavior.
-- The focused clean-green semantic journey passes. The wider Python suite reports
-  1,092 passes and 14 setup-test failures with one common precondition failure:
-  GNU `stat -c` is unavailable on macOS. Bun-dependent checks could not start
-  because `bun` is unavailable in the current shell.
-- The architecture inspection has produced evidence-backed friction signals, but
-  they remain exploratory until the Navigator completes the first journey
-  teach-back and reviews the interpretations.
+- [Agent-repair journey](agent-repair-journey.md) traces automatic repair from
+  failed rerun evidence through one exact branch update, repaired-head admission,
+  resolved review lineage, and readiness. It also distinguishes this typed
+  `repair` rung from a human-requested `change`.
+- [Git-ambiguity recovery journey](git-ambiguity-recovery-journey.md) traces one
+  accepted-but-unproven branch update through durable `FaultM`, host restart,
+  head-first admission, explicit operation-scoped recovery, and final readiness.
+- [RS-019 — Improve V5 test reading locality](../../workbench/rs-019-improve-v5-test-reading-locality.md)
+  captures two parked Change Requests from the candidate review: state the
+  head-first ambiguity blocker directly and replace the positional 38-field
+  `JourneyResult` construction with keyword arguments. The story is not pulled.
+- [RS-020 — Fail closed on missing canonical History](../../workbench/rs-020-fail-closed-on-missing-canonical-history.md)
+  captures the committed destructive-History-loss finding as a separate parked
+  correctness refinement. Its crash-safe discriminator and operator disposition
+  remain intentionally undesigned.
+- The focused clean-green and agent-repair semantic journeys pass. The fixed Git
+  recovery and late pending-head race pass together, and the generated Git
+  recovery campaign passes its four anchors plus five deterministic examples.
+  The wider Python suite reports 1,092 passes and 14 setup-test failures with one
+  common precondition failure: GNU `stat -c` is unavailable on macOS.
+  Bun-dependent checks could not start because `bun` is unavailable in the
+  current shell.
+- The Navigator completed the second and third journey teach-backs. The third
+  established Activity occurrence versus logical operation recovery,
+  lookup-before-authority ordering, and incarnation-safe late pending-head
+  settlement. All terminology, navigation, locality, and correctness signals
+  remain exploratory until candidate review.
 
 ## Candidate gate
 

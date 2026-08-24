@@ -3,6 +3,15 @@
 The Workbench holds Refinement Stories and Change Requests for caring for
 existing Hamsterdan capability outside the delivery roadmap.
 
+## Candidate, not pulled
+
+- [RS-019 — Improve V5 test reading locality](rs-019-improve-v5-test-reading-locality.md):
+  two ES-009 test-maintainability requests are parked without implementation
+  authorization.
+- [RS-020 — Fail closed on missing canonical History](rs-020-fail-closed-on-missing-canonical-history.md):
+  the ES-009 destructive-History-loss finding is parked pending a crash-safe
+  discriminator and operator disposition.
+
 ## Active
 
 None.
