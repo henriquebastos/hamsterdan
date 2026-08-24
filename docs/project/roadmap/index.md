@@ -6,9 +6,10 @@ belongs in each item's own metadata; this index routes to current owners.
 ## Active
 
 - [CV19 — Private v0.1 production](cv19-private-v0-1-production/index.md): the
-  V5-only candidate is locally qualified. Exact target-repository selection,
-  approved supervised launch, one bounded monitoring proof, and private release
-  history remain.
+  V5-only OCI candidate builds and verifies locally. Registry publication,
+  exe.dev service qualification, exact target-repository selection, approved
+  supervised launch, one bounded monitoring proof, and private release history
+  remain.
 
 ## Paused until after private v0.1
 

@@ -1,0 +1,20 @@
+name: OCI image candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image candidate
+        env:
+          PETRUS_GITHUB_TOKEN: ${{ secrets.PETRUS_GITHUB_TOKEN }}
+        run: python deployment/release.py build
+      - name: Verify image candidate
+        run: python deployment/release.py verify

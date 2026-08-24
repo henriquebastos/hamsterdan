@@ -26,14 +26,20 @@ def _sandbox(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     home = tmp_path / "home"
     (workspace / ".agents").mkdir(parents=True)
     (workspace / ".amp").mkdir()
+    (workspace / "deployment" / "pi").mkdir(parents=True)
     (workspace / "scripts").mkdir()
     (workspace / "tools" / "demo-video").mkdir(parents=True)
     binaries.mkdir()
     home.mkdir()
     shutil.copy2(ROOT / ".agents" / "setup", workspace / ".agents" / "setup")
+    shutil.copy2(ROOT / "deployment" / "pi" / "package.json", workspace / "deployment" / "pi" / "package.json")
+    shutil.copy2(
+        ROOT / "deployment" / "pi" / "package-lock.json", workspace / "deployment" / "pi" / "package-lock.json"
+    )
     shutil.copy2(ROOT / "scripts" / "hamsterdan-host", workspace / "scripts" / "hamsterdan-host")
     for name in ("bun", "bunx", "ffmpeg", "ffprobe", "montage"):
         _executable(binaries / name)
+    _executable(binaries / "docker")
     _executable(
         binaries / "uv",
         """#!/bin/sh
@@ -53,6 +59,7 @@ printf used > "$UV_AUTH_BOUNDARY_MARKER"
         binaries / "npm",
         """#!/bin/sh
 set -eu
+test "$1" = ci
 while [ "$#" -gt 0 ]; do
     if [ "$1" = "--prefix" ]; then
         prefix="$2"
@@ -61,6 +68,8 @@ while [ "$#" -gt 0 ]; do
     fi
     shift
 done
+test -f "$prefix/package.json"
+test -f "$prefix/package-lock.json"
 root="$prefix/node_modules/@earendil-works/pi-coding-agent"
 mkdir -p "$root/dist" "$prefix/node_modules/node/bin"
 : > "$root/dist/cli.js"
@@ -347,6 +356,14 @@ def test_setup_keeps_locked_media_checks_without_remotion_browser_download() -> 
     assert "bun install --frozen-lockfile" in setup
     assert "bunx playwright install --with-deps chromium" in setup
     assert "remotion browser ensure" not in setup
+
+
+def test_setup_installs_pi_from_the_release_lockfile() -> None:
+    setup = (ROOT / ".agents" / "setup").read_text()
+
+    assert "deployment/pi/package-lock.json" in setup
+    assert 'npm ci --prefix "$PI_PREFIX"' in setup
+    assert "npm install --prefix" not in setup
 
 
 def test_host_launcher_strips_setup_and_ambient_provider_authority(tmp_path: Path) -> None:

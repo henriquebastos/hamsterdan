@@ -42,7 +42,7 @@ only-include = ["src/hamsterdan"]
 packages = ["src/hamsterdan"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "deployment/tests"]
 timeout = 30
 markers = [
     "real_provider_acceptance: opt-in tests that may invoke authenticated external provider clients",

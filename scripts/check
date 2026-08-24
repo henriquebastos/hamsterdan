@@ -4,9 +4,9 @@ set -euo pipefail
 profile="${1:-full}"
 case "$profile" in
     quick)
-        uv run --frozen ruff check src tests
-        uv run --frozen ruff format --check src tests
-        uv run --frozen ty check src
+        uv run --frozen ruff check src tests deployment
+        uv run --frozen ruff format --check src tests deployment
+        uv run --frozen ty check src deployment
         ;;
     full)
         "$0" quick

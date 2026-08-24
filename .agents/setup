@@ -245,12 +245,14 @@ echo "==> Syncing the locked demo-video environment"
 )
 
 echo "==> Installing the qualified Pi runtime"
-pi_prefix="$PWD/$RUNTIME/pi-install"
-npm install --silent --no-audit --no-fund --prefix "$pi_prefix" \
-    node@22.19.0 @earendil-works/pi-coding-agent@0.83.0
-pi_package="$pi_prefix/node_modules/@earendil-works/pi-coding-agent"
+PI_PREFIX="$PWD/$RUNTIME/pi-install"
+assert_private_directory "$PI_PREFIX"
+install -m 0600 deployment/pi/package.json "$PI_PREFIX/package.json"
+install -m 0600 deployment/pi/package-lock.json "$PI_PREFIX/package-lock.json"
+npm ci --prefix "$PI_PREFIX" --silent --no-audit --no-fund
+pi_package="$PI_PREFIX/node_modules/@earendil-works/pi-coding-agent"
 pi_cli="$pi_package/dist/cli.js"
-pi_node="$pi_prefix/node_modules/node/bin/node"
+pi_node="$PI_PREFIX/node_modules/node/bin/node"
 [[ -f "$pi_cli" && -f "$pi_package/dist/index.js" && -x "$pi_node" ]] || fail
 
 runtime_ready=true

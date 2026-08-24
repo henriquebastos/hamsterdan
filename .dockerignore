@@ -1,0 +1,10 @@
+**
+!deployment/Containerfile
+!deployment/pi/
+!deployment/pi/package-lock.json
+!deployment/pi/package.json
+!pyproject.toml
+!README.md
+!src/
+!src/**
+!uv.lock

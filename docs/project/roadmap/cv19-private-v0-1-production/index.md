@@ -2,8 +2,8 @@
 code: CV19
 level: Value
 status: Active
-status_reason: The V5-only candidate is locally qualified; exact target-repository selection, approved launch, one controlled monitoring proof, and private release history remain
-updated: 2026-08-23
+status_reason: The V5-only OCI candidate now builds and verifies locally; registry publication, exe.dev service qualification, exact target selection, approved launch, and one controlled monitoring proof remain
+updated: 2026-08-24
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
 ---
@@ -29,12 +29,19 @@ open-source release.
   project-scoped `PETRUS_GITHUB_TOKEN`; it removes temporary Git authority after
   installation. Production runtime setup does not require the optional demo
   human identities.
+- One deployment-owned command now builds and verifies the same pinned
+  `linux/amd64` OCI image locally or through a manual GitHub Actions adapter.
+  The verified image runs the V5 host as an unprivileged user with the locked
+  Python, Pi, Node, and Petrus dependencies and writable durable-state custody.
+  Dirty candidates fail the release boundary. GHCR publication and exe.dev
+  service provisioning remain separate, unqualified slices.
 - The existing private GitHub App is HBNetwork-owned and can be installed only
   for repositories owned by HBNetwork. The production target repository has not
   yet been named.
-- The host has not been launched from this candidate. Launch can process durable
-  webhook state and cause GitHub effects, so it requires a separate explicit
-  Navigator approval after target selection and validation.
+- The host has not been launched from the OCI candidate or exercised on an
+  exe.dev VM. Launch can process durable webhook state and cause GitHub effects,
+  so it requires a separate explicit Navigator approval after target selection
+  and validation.
 
 ## Done condition
 

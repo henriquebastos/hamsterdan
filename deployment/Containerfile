@@ -1,0 +1,70 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+
+FROM node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90 AS pi
+WORKDIR /opt/hamsterdan/pi
+COPY deployment/pi/package.json deployment/pi/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+FROM ghcr.io/astral-sh/uv:0.12.5@sha256:e85be844203885286c60ffad8a858d48afb6c5a5c237ca0e67f12e74b8f174b1 AS uv
+
+FROM python:3.14.7-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS build
+COPY --from=uv /uv /uvx /usr/local/bin/
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/hamsterdan
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN --mount=type=secret,id=petrus_github_token,required=true <<'SHELL'
+set -eu
+auth="$(mktemp -d)"
+cleanup() { rm -rf "$auth"; }
+trap cleanup EXIT
+cat > "$auth/askpass" <<'ASKPASS'
+#!/bin/sh
+case "${1:-}" in
+    *Username*) printf '%s\n' x-access-token ;;
+    *Password*) cat /run/secrets/petrus_github_token; printf '\n' ;;
+    *) exit 1 ;;
+esac
+ASKPASS
+chmod 0700 "$auth/askpass"
+cat > "$auth/gitconfig" <<GITCONFIG
+[core]
+    askPass = $auth/askpass
+[credential "https://github.com/henriquebastos/petrus"]
+    username = x-access-token
+GITCONFIG
+chmod 0600 "$auth/gitconfig"
+GIT_CONFIG_GLOBAL="$auth/gitconfig" GIT_CONFIG_SYSTEM=/dev/null GIT_TERMINAL_PROMPT=0 \
+    UV_COMPILE_BYTECODE=1 uv sync --frozen --no-dev --no-editable
+SHELL
+
+FROM python:3.14.7-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS runtime
+ARG SOURCE_REVISION
+ARG SOURCE_VERSION
+ARG SOURCE_CREATED
+LABEL org.opencontainers.image.created="${SOURCE_CREATED}" \
+      org.opencontainers.image.description="GitHub-native PR-readiness application powered by Petrus" \
+      org.opencontainers.image.revision="${SOURCE_REVISION}" \
+      org.opencontainers.image.source="https://github.com/henriquebastos/hamsterdan" \
+      org.opencontainers.image.title="Hamsterdan" \
+      org.opencontainers.image.version="${SOURCE_VERSION}"
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends ca-certificates git \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 hamsterdan \
+    && useradd --uid 10001 --gid hamsterdan --home-dir /nonexistent --shell /usr/sbin/nologin hamsterdan \
+    && install --directory --owner hamsterdan --group hamsterdan --mode 0700 /var/lib/hamsterdan
+WORKDIR /opt/hamsterdan
+COPY --from=build --chown=hamsterdan:hamsterdan /opt/hamsterdan/.venv ./.venv
+COPY --from=pi --chown=hamsterdan:hamsterdan /opt/hamsterdan/pi ./pi
+ENV PATH="/opt/hamsterdan/.venv/bin:${PATH}" \
+    HAMSTERDAN_PI_CLI_PATH="/opt/hamsterdan/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" \
+    HAMSTERDAN_PI_NODE_PATH="/opt/hamsterdan/pi/node_modules/node/bin/node" \
+    HAMSTERDAN_PI_PACKAGE_ROOT="/opt/hamsterdan/pi/node_modules/@earendil-works/pi-coding-agent" \
+    HAMSTERDAN_STATE_PATH="/var/lib/hamsterdan"
+USER hamsterdan
+EXPOSE 8000
+ENTRYPOINT ["/opt/hamsterdan/.venv/bin/python", "-m", "hamsterdan.host"]
+CMD ["serve", "--host", "0.0.0.0", "--port", "8000"]
