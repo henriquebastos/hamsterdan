@@ -6,6 +6,10 @@ Paused, Candidate, Promoted, or Archived.
 
 ## Active
 
+- [ES-010: Composable Hamsterdan architecture](es10-composable-hamsterdan-architecture/index.md):
+  separate pure workflow definition, effectful readiness execution, trusted host
+  supervision, provider adapters, and Hamsterdan-owned compositional deterministic
+  simulation before proposing a new Capability Value.
 - [ES-009 — Human ownership of the Hamsterdan codebase](es9-human-codebase-ownership/index.md):
   learn the current V5 system through vertical journeys, review its module depth
   and correctness from evidence, and form bounded improvement candidates.
