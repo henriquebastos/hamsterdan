@@ -91,10 +91,11 @@ improvement candidates.
    launching the host or invoking a real provider, then present the route for
    Navigator teach-back.
 
-Concrete scenario: approval is still missing when a reminder becomes eligible.
-The host arms the reminder, restarts before the deadline, reconstructs timer
-custody from intact canonical History, reaches maturity, and proves that exactly
-one reminder operation lands even if the provider response is lost.
+Concrete scenario: an active PR has no requested reviewer when its lifecycle-driven
+reminder becomes eligible. The host arms the reminder, restarts before the
+deadline, reconstructs timer custody from intact canonical History, reaches
+maturity, and proves that exactly one reminder operation lands even if the
+provider response is lost.
 
 ## Current evidence
 
@@ -114,15 +115,20 @@ one reminder operation lands even if the provider response is lost.
 - [Git-ambiguity recovery journey](git-ambiguity-recovery-journey.md) traces one
   accepted-but-unproven branch update through durable `FaultM`, host restart,
   head-first admission, explicit operation-scoped recovery, and final readiness.
+- [Reminder-timer recovery journey](reminder-timer-recovery-journey.md) traces a
+  lifecycle-driven reminder through one persistent timer command, canonical
+  maturity, reconstructible custody, disposable wakes, lookup-first publication,
+  host restart, and the next cycle.
 - [Candidate review](candidate-review.md) applies the deletion test across all
   three journeys. It retains the current production module seams, rejects broad
   reorganization, and presents three correctness/operator candidates, two
   test-locality candidates, and one maintainer-navigation candidate for
   Navigator ruling.
 - [RS-019 — Improve V5 test reading locality](../../workbench/rs-019-improve-v5-test-reading-locality.md)
-  captures two parked Change Requests from the candidate review: state the
-  head-first ambiguity blocker directly and replace the positional 38-field
-  `JourneyResult` construction with keyword arguments. The story is not pulled.
+  captures three parked Change Requests from the candidate review: state the
+  head-first ambiguity blocker directly, replace positional shared journey
+  aggregates with keyword arguments, and make two reminder tests name the cuts
+  they actually exercise. The story is not pulled.
 - [RS-020 — Fail closed on missing canonical History](../../workbench/rs-020-fail-closed-on-missing-canonical-history.md)
   captures the committed destructive-History-loss finding as a separate parked
   correctness refinement. Its crash-safe discriminator and operator disposition
@@ -138,26 +144,33 @@ one reminder operation lands even if the provider response is lost.
   and [RS-026 — Clarify full-gate build ownership](../../workbench/rs-026-clarify-full-gate-build-ownership.md)
   capture the remaining actionable locality, terminology, navigation, and
   validation findings. All Change Requests are parked.
+- [RS-027 — Define reminder eligibility and stopping policy](../../workbench/rs-027-define-reminder-eligibility-and-stopping-policy.md)
+  records that current reminders are lifecycle-driven while product intent does
+  not yet say whether every active PR or only a human-blocked PR should receive
+  them. Its policy decision is parked.
 - The focused clean-green and agent-repair semantic journeys pass. The fixed Git
   recovery and late pending-head race pass together, and the generated Git
   recovery campaign passes its four anchors plus five deterministic examples.
-  The wider Python suite reports 1,092 passes and 14 setup-test failures with one
-  common precondition failure: GNU `stat -c` is unavailable on macOS.
-  Bun-dependent checks could not start because `bun` is unavailable in the
-  current shell.
-- The Navigator completed the second and third journey teach-backs. The third
-  established Activity occurrence versus logical operation recovery,
-  lookup-before-authority ordering, and incarnation-safe late pending-head
-  settlement.
+  The reminder experiment passes 59 focused Net, timer, host, World, gate, and
+  publisher tests plus one generated campaign with four anchors and five
+  deterministic examples. The wider baseline Python suite reports 1,092 passes
+  and 14 setup-test failures with one common precondition failure: GNU `stat -c`
+  is unavailable on macOS. Bun-dependent checks could not start because `bun`
+  is unavailable in the current shell.
+- The Navigator completed the second, third, and fourth journey teach-backs. The
+  fourth established reconstructible wakes versus the unacknowledged-arm
+  fail-closed boundary, `TimerDue` in History as workflow truth,
+  operation-scoped reminder settlement across heads, and lifecycle rather than
+  approval control of reminder cycles.
 - Candidate review found no evidence for broad production reorganization. The
   Navigator ruled that every actionable finding must be captured for later
   sessions while ES-009 remains dedicated to human learning. RS-021 through
   RS-026 now own those findings, all Change Requests remain parked, and no
   implementation story is pulled.
-- The Navigator selected reminder-timer recovery as the fourth learning
-  experiment for a new session. The experiment is planned above but has not
-  started; no source, test, runtime, provider, or Workbench change is authorized
-  by that selection.
+- The fourth experiment found no evidence for production reorganization. The
+  Navigator accepted the learning evidence and approved two parked follow-ups:
+  test-evidence naming under RS-019 and the reminder eligibility policy question
+  under RS-027. No implementation story is pulled.
 
 ## Candidate gate
 

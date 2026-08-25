@@ -1,8 +1,9 @@
 # ES-009 candidate review
 
-Captured 2026-08-24 from `main` at `33494f1`. This review compares the
-clean-green, automatic-repair, and Git-ambiguity journeys. It separates modules
-that earn their depth from friction that may justify Refinement.
+Captured 2026-08-24 from `main` at `33494f1` and extended at `1546b11` after the
+reminder-timer journey. This review compares the clean-green, automatic-repair,
+Git-ambiguity, and reminder-recovery journeys. It separates modules that earn
+their depth from friction that may justify Refinement.
 
 No candidate is pulled by this document. Production behavior, test behavior,
 package contents, and operator behavior remain unchanged.
@@ -20,13 +21,15 @@ all Change Requests remain parked:
 - [RS-023](../../workbench/rs-023-inspect-current-v5-activity-identities.md)
   owns current V5 operator inspection;
 - [RS-019](../../workbench/rs-019-improve-v5-test-reading-locality.md)
-  owns the amended semantic-journey locality changes;
+  owns the amended semantic-journey and reminder-evidence locality changes;
 - [RS-024](../../workbench/rs-024-consolidate-import-architecture-rules.md)
   owns import-rule test consolidation;
 - [RS-025](../../workbench/rs-025-make-v5-maintainer-route-explicit.md)
   owns the maintainer route, current terminology, and local documentation; and
 - [RS-026](../../workbench/rs-026-clarify-full-gate-build-ownership.md)
-  owns the full-gate build contract.
+  owns the full-gate build contract; and
+- [RS-027](../../workbench/rs-027-define-reminder-eligibility-and-stopping-policy.md)
+  owns the reminder eligibility and stopping-policy question.
 
 [RS-020](../../workbench/rs-020-fail-closed-on-missing-canonical-history.md)
 continues to own destructive canonical-History loss. Retired pre-V5 source and
@@ -56,9 +59,10 @@ one of these modules would move its invariants into a caller with a different
 responsibility. Large files on the three journeys are navigation signals, not
 proof that their modules are shallow.
 
-The review found three correctness or operator candidates, two test-locality
-candidates, and a small maintainer-navigation candidate. Other signals remain
-deferred or rejected below.
+The initial review found three correctness or operator candidates, two
+test-locality candidates, and a small maintainer-navigation candidate. The
+fourth journey added one test-evidence locality request and one product-policy
+question. Other signals remain deferred or rejected below.
 
 ## Candidate 1: fence inline Activities after route revocation
 
@@ -247,6 +251,12 @@ The review found the same positional-construction problem in `DraftPhase`,
 Extending the second Change Request to name all four aggregate constructions
 would give the test module one consistent rule without redesigning the harness.
 
+The reminder-timer journey added a third parked request under RS-019. The fixed
+World resolves its lost provider response before the later host crash, while a
+reminder-loop repeated-maturity test stops at the exact-clock guard before a
+second lookup. Their names should distinguish response recovery, terminal-loss
+recovery, timer reconstruction, and stale maturity suppression.
+
 The candidate remains test-only. Splitting the 2,500-line semantic journey file
 is not justified by the deletion test.
 
@@ -298,6 +308,37 @@ A bounded documentation and terminology refinement could:
 
 These are separable Change Requests. They should not be used to rename durable
 V5 colors or operation identities.
+
+## Candidate 7: define reminder eligibility and stopping policy
+
+### Finding
+
+Current V5 reminder eligibility follows lifecycle rather than human readiness.
+An active head starts a recurring timer; draft pauses it; ready-for-review
+resumes it; close ends it. Human approval and readiness publication do not enter
+the reminder loop.
+
+Concrete scenario: the deterministic World requires zero approvals, has no
+requested reviewer, and publishes readiness. Timer maturity still asks the
+author to assign a reviewer and arms the next timer. Existing product documents
+do not state whether every active PR should receive this cadence or whether a
+named human-readiness blocker should control it.
+
+### Candidate boundary
+
+Require a product ruling before changing or blessing the behavior. If the
+lifecycle policy is retained, document it and characterize ready and approved
+PRs directly. If eligibility becomes blocker-driven, name the exact facts and
+cover cancellation, resumption, stale maturity, response loss, and head movement
+without moving policy into host timer custody or provider rendering.
+
+Likely files depend on the ruling. The behavior owner remains the readiness Net;
+`V5TimerStore` remains a policy-free custody adapter.
+
+### Assessment
+
+This is a product-policy candidate, not evidence of a shallow module or an
+immediate production defect. RS-027 captures it without pulling implementation.
 
 ## Deferred signals
 
@@ -382,6 +423,11 @@ PYTHONDONTWRITEBYTECODE=1 uv run --frozen pytest -q -p no:cacheprovider \
 ```
 
 Result: 35 passed in 6.32 seconds.
+
+The reminder-timer extension executed 59 focused Net, timer, application, host,
+World, gate, and publisher tests plus the generated reminder campaign. All 60
+passed. The campaign completed in 17.49 seconds with one Hypothesis warning that
+the recursion limit changed during execution.
 
 A separate read-only harness reproduction held the replacement `git_gate` after
 head-first recovery admission and observed incarnation 2 marked announced before

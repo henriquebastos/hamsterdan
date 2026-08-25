@@ -29,6 +29,9 @@ existing Hamsterdan capability outside the delivery roadmap.
 - [RS-026 — Clarify full-gate build ownership](rs-026-clarify-full-gate-build-ownership.md):
   decide whether the full gate deliberately leaves `dist/` or should let the
   distribution test own its single build.
+- [RS-027 — Define reminder eligibility and stopping policy](rs-027-define-reminder-eligibility-and-stopping-policy.md):
+  decide whether reminders follow every active PR lifecycle or only named human
+  readiness blockers before changing or documenting the visible behavior.
 
 ## Active
 

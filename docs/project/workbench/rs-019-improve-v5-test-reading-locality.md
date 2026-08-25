@@ -10,13 +10,15 @@ source: ../exploration/es9-human-codebase-ownership/index.md
 ## Existing field to refine
 
 Hamsterdan's V5 semantic journeys and deterministic recovery World already prove
-important behavior. ES-009 found two places where the evidence is harder to read
-than the behavior requires:
+important behavior. ES-009 found three areas where the evidence is harder to
+read than the behavior requires:
 
 - the Git-ambiguity World relies on continuous independent-checker parity rather
-  than directly asserting its pivotal intermediate state; and
+  than directly asserting its pivotal intermediate state;
 - the shared semantic-journey harness constructs a 38-field `JourneyResult`
-  positionally.
+  positionally; and
+- two reminder tests name lookup or cross-restart ambiguity that their bodies do
+  not exercise at that exact cut.
 
 These are test-maintainability concerns. Production behavior, topology, durable
 contracts, provider effects, and operator behavior remain unchanged.
@@ -30,7 +32,9 @@ In scope:
 
 - one direct intermediate-state assertion in the fixed Git-ambiguity World test;
 - keyword construction for the existing `DraftPhase`, `StaleBasePhase`,
-  `CollaborationPhase`, and `JourneyResult` aggregates; and
+  `CollaborationPhase`, and `JourneyResult` aggregates;
+- reminder test names and assertions which identify the exercised recovery cut;
+  and
 - focused validation of the affected semantic and recovery tests.
 
 Out of scope:
@@ -126,10 +130,58 @@ uv run --frozen pytest -q tests/integration/host/test_readiness_scenarios.py
 scripts/check quick
 ```
 
+### CR-003 — Make reminder recovery tests name their exercised cuts
+
+Status: Parked
+
+Context:
+
+`tests/integration/testing/test_readiness_world.py::test_real_host_recovers_one_ambiguous_reminder_after_timer_maturity_and_crash`
+models an accepted reminder with a lost response, but `CommentPublisher` finds
+the immediately visible marker and returns `existing` before the World crash.
+The later restart proves timer and host reconstruction after recovery rather
+than unresolved reminder ambiguity across restart.
+
+`tests/unit/readiness/net_v5/test_reminders_loop.py::TestMaturity::test_a_repeated_maturity_reconciles_lookup_first`
+delivers the old maturity after the first fold has advanced the clock to the
+next timer. The exact-clock guard makes that fact inert before another
+`reminder_gate` lookup. Focused gate, publisher, and inline-restart tests own the
+lookup-first claim.
+
+Requested change:
+
+Rename or sharpen these two tests so each name states its actual cut. Preserve
+the fixed World's response-loss, reconstruction, checker, and replay evidence.
+Preserve the reminder-loop test's repeated-maturity and single-effect evidence.
+Do not duplicate the existing cross-head and lost-terminal lookup portfolios.
+
+Expected leverage:
+
+A reader can distinguish provider-response recovery, Activity-terminal recovery,
+timer reconstruction, and stale maturity suppression without following helper
+calls into the modeled provider or Activity ledger.
+
+Likely files:
+
+- `tests/integration/testing/test_readiness_world.py`
+- `tests/unit/readiness/net_v5/test_reminders_loop.py`
+
+Validation seed:
+
+```sh
+uv run --frozen pytest -q \
+  tests/integration/testing/test_readiness_world.py::test_real_host_recovers_one_ambiguous_reminder_after_timer_maturity_and_crash \
+  tests/unit/readiness/net_v5/test_reminders_loop.py::TestMaturity
+uv run --frozen pytest -q \
+  tests/unit/readiness/net_v5/test_inline_recovery.py::test_reminder_reconciles_before_claim_and_recipient_reads_after_two_lost_terminals \
+  tests/unit/github_app/test_github.py::test_operation_scoped_reminder_reconciles_presence_only_across_a_head_move
+scripts/check quick
+```
+
 ## Pull state
 
-This candidate is captured but not pulled. Both Change Requests are parked. No
-implementation, test mutation, production change, commit, or release scope is
+This candidate is captured but not pulled. All three Change Requests are parked.
+No implementation, test mutation, production change, commit, or release scope is
 authorized by this record.
 
 A future Navigator may pull the whole Refinement Story, select one Change Request
