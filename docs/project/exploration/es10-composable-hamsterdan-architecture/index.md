@@ -923,7 +923,25 @@ records the ruled module ledger, the single facade cycle, the mixed-owner list
 (nine modules), the `contracts/readiness.py` live-surface finding (four names,
 ~93% residue), and both required path traces by owner. The import-graph tool
 lives at [experiments/tools/import_graph.py](experiments/tools/import_graph.py).
-The next session is S2 (experiment 2, workflow value ownership); its primary
-inputs are the S1 record's `contracts/readiness_v5.py` group map and residue
-findings. Checkpoint R1 (Navigator rules the ownership and value maps) follows
-S2.
+
+S2 is complete: [experiments/02-value-ownership.md](experiments/02-value-ownership.md)
+maps all 116 vocabulary names plus the four live retired names to one defining
+owner and target import path each. Headline findings: the neutral residue in
+`contracts` is empty (`WorkflowModel` is workflow mechanism,
+`AdmittedConversation` is a `github_app` provider value, the retired
+`ChangeResult`/`RepairResult` pair dies); the proposed
+`observations`/`facts`/`activities` decomposition is acyclic and deep with one
+added `workflow/values.py`; batons, sentinels, and terminal records are
+loop-owned; and the class-name/token-color namespace is a durable interface
+with named string-coupled readers. The trace tool lives at
+[experiments/tools/value_trace.py](experiments/tools/value_trace.py).
+
+Phase A is complete and checkpoint R1 is ruled: the Navigator accepted the S1
+ownership map and the S2 value map, including the empty `contracts` residue,
+`AdmittedConversation` moving to `github_app` with the `WorkflowModel` base
+dropped, loop-owned batons with an explicit token-class registry replacing
+`vars(_colors)` discovery, and the added `workflow/values.py`. Phase B may
+begin: S3 (workflow package shape) and S4 (ports and adapter matrix) read the
+ruled Phase A records and may run as parallel threads. S3's open items from S2
+are the explicit token-class registry, the `GateFact` rename with legacy-lane
+deletion, and the `publication_qualification` record shape (deferred to S6).
