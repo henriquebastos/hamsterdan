@@ -1,0 +1,5 @@
+# Non-blocking structural practice audits. Import architecture remains owned by tests/test_architecture.py.
+ruleDirs:
+  - audit-rules
+testConfigs:
+  - testDir: audit-rule-tests

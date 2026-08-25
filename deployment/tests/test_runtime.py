@@ -207,6 +207,7 @@ def test_runtime_playbook_installs_an_inactive_exact_image_service_and_validates
     assert "Publish the validated installation configuration atomically" in configuration
     assert "configuration_publication.changed and service_before.stdout == 'active'" in configuration
     assert "current configuration and service are unchanged" in configuration
+    assert "ansible_python_interpreter: /usr/bin/python3" in configuration
     assert "127.0.0.1:8000:8000" in unit
     assert "{{ candidate_image_id }}" in unit
     assert "--pull=never" in unit

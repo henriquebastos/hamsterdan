@@ -11,3 +11,4 @@ an item only when debt should outlive one story's review notes.
 - [DS11 publication observation resolved; exact-target cleanup externally deferred](items/ds11-live-publication-and-repository-cleanup.md)
 - [Readiness DST composition split resolved through generated use](items/readiness-dst-composition-must-split-before-campaign-expansion.md)
 - [exe.dev default exeuntu image cannot be pinned](items/exe-dev-default-exeuntu-image-cannot-be-pinned.md)
+- [Non-blocking quality audit baseline remains unresolved](items/non-blocking-quality-audit-baseline-remains-unresolved.md)

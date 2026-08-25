@@ -1,0 +1,2 @@
+# Keep dependency resolution reproducible across developer environments.
+exclude-newer = "2026-08-15T10:57:40Z"

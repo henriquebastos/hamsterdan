@@ -1,0 +1,8 @@
+id: reflective-contract-access
+valid:
+  - loop.GATES
+  - loop.gates()
+invalid:
+  - getattr(loop, "GATES")
+  - getattr(loop, "GATES", {})
+  - setattr(loop, "GATES", {})

@@ -9,8 +9,8 @@ An operator may run the code with one App registration, host deployment,
 secrets, and durable state. The accepted first-release direction admits a
 configured portfolio of installation accounts and repositories without SaaS
 accounts or an administration UI. The executable host and operator tooling now
-implement that restart-applied portfolio locally; the currently installed
-exe.dev runtime still predates it.
+implement that restart-applied portfolio, and the owned inactive exe.dev
+runtime has qualified the same tracked configuration-only operation.
 
 ## Settled architecture
 
@@ -69,10 +69,12 @@ is installed but disabled and inactive; no container or application listener
 exists. Restart-applied configuration for multiple installation accounts and
 repositories is accepted locally: the host validates one complete tracked
 snapshot, atomically reconciles all routes before workers start, and the VM
-operation can apply only that file without an image deployment. The next
-movement is to commit a clean candidate, qualify and provision that exact image
-inactive on exe.dev, and exercise the configuration-only path there. Launch
-still requires explicit approval because durable webhook state can cause GitHub
+operation applies only that file without an image deployment. Clean commit
+`7df4426` and its exact image now qualify idempotently on `hamsterdan-prod`;
+changed and unchanged configuration-only applications both preserved the
+disabled and inactive service posture. The next movement is an explicitly
+approved supervised launch and one bounded monitoring proof. Launch still
+requires explicit approval because durable webhook state can cause GitHub
 effects.
 
 The pinned Petrus source dependency is currently private. Orb installation uses

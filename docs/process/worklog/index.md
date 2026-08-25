@@ -100,4 +100,7 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-23 — V5-only private v0.1 candidate qualified locally](entries/2026-08-23T2203Z-v5-only-private-v0-1-candidate-qualified-locally.md)
 - [2026-08-25 — Exact OCI candidate qualified on exe.dev without launch](entries/2026-08-25T0003Z-exe-dev-candidate-qualified.md)
 - [2026-08-25 — Inactive exe.dev runtime custody validated](entries/2026-08-25T1042Z-inactive-exe-dev-runtime-validated.md)
+- [2026-08-25 — Engineering feedback and conventions aligned](entries/2026-08-25T1052Z-engineering-feedback-and-conventions-aligned.md)
+- [2026-08-25 — Broad quality evidence established without new commit gates](entries/2026-08-25T1135Z-broad-quality-evidence-established.md)
 - [2026-08-25 — Restart-applied installation portfolio accepted locally](entries/2026-08-25T1230Z-restart-applied-installation-portfolio-accepted-locally.md)
+- [2026-08-25 — Restart-applied installation portfolio qualified on exe.dev](entries/2026-08-25T1332Z-restart-applied-installation-portfolio-qualified-on-exe-dev.md)

@@ -2,7 +2,7 @@
 code: CV19
 level: Value
 status: Active
-status_reason: Restart-applied multi-installation configuration and configuration-only VM application are accepted locally; exact clean-candidate exe.dev qualification, approved launch, and one controlled monitoring proof remain
+status_reason: Exact clean-candidate runtime and restart-applied configuration-only operation qualify inactive on exe.dev; approved launch and one controlled monitoring proof remain
 updated: 2026-08-25
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
@@ -37,7 +37,7 @@ open-source release.
   Python, Pi, Node, and Petrus dependencies and writable durable-state custody.
   Dirty candidates fail the release boundary. GHCR publication remains a
   separate, unqualified slice.
-- The exact clean candidate from commit `b97c7a9` is loaded on the owned
+- The exact clean candidate from commit `7df4426` is loaded on the owned
   `hamsterdan-prod` exe.dev VM after archive SHA-256 verification. The VM is
   fenced by exact name, `hamsterdan` tag, two CPUs, 4 GiB RAM, 20 GiB disk,
   reported exeuntu image, and fingerprint-pinned SSH. Remote host CLI, package,
@@ -61,13 +61,14 @@ open-source release.
 - The VM operation can prevalidate and atomically publish only that tracked
   configuration with the currently installed exact image. It neither rebuilds
   nor transfers an image, changes the systemd unit, rotates secrets, nor changes
-  infrastructure; it restarts only a service that was already active. This
-  behavior is accepted locally but is not yet installed or qualified on
-  `hamsterdan-prod`, whose disabled runtime remains pinned to the older clean
-  candidate. Live reload remains deferred.
-- Launch can process durable webhook state and cause GitHub effects, so it still
-  requires separate explicit Navigator approval after exact clean-candidate VM
-  qualification.
+  infrastructure; it restarts only a service that was already active. The real
+  operation validated the App, one installation account, and one repository on
+  `hamsterdan-prod`. A changed publication and the restored tracked snapshot
+  both preserved the disabled and inactive posture; the final unchanged repeat
+  reported `changed=0`. Live reload remains deferred.
+- Although inactive VM qualification is complete, launch can process durable
+  webhook state and cause GitHub effects, so it still requires separate explicit
+  Navigator approval.
 
 ## Done condition
 

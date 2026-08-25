@@ -4,7 +4,11 @@ Exploratory Stories preserve meaningful uncertainty before it becomes Delivery.
 Each story owns an `index.md` under `es<N>-<slug>/` and uses one of: Thickening,
 Paused, Candidate, Promoted, or Archived.
 
-No exploration is active during private v0.1 production qualification.
+## Active
+
+- [ES-009 — Human ownership of the Hamsterdan codebase](es9-human-codebase-ownership/index.md):
+  learn the current V5 system through vertical journeys, review its module depth
+  and correctness from evidence, and form bounded improvement candidates.
 
 ## Promoted
 
