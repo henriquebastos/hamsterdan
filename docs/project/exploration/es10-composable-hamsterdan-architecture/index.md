@@ -945,3 +945,26 @@ begin: S3 (workflow package shape) and S4 (ports and adapter matrix) read the
 ruled Phase A records and may run as parallel threads. S3's open items from S2
 are the explicit token-class registry, the `GateFact` rename with legacy-lane
 deletion, and the `publication_qualification` record shape (deferred to S6).
+
+S3 is complete: [experiments/03-workflow-shape.md](experiments/03-workflow-shape.md)
+records the target `workflow` tree, import graph, and public seam. Headline
+findings: gate declaration — today triplicated across loop `GATES` tuples,
+activity return unions, and `gating.py` handler chains — unifies into one
+workflow-owned `MANIFEST` of `GateDeclaration`s in `workflow/activities.py`;
+`gating.py` stays whole as a workflow module (revised S1 verdict — its imports
+are all allowed Petrus defining modules, and effectful execution already lives
+in `runtime.py`); the public seam is defining-module imports with no facade,
+and stepping is deliberately absent (Petrus `Engine.advance()` composed by
+readiness or simulation; the contract is S7's scope); the cycle dies under two
+AST-checkable rules (no initializer re-exports, no `from package import
+module`); all nine loops keep their depth. S3's open items are closed:
+hydration needs no registry (by requested type against arc-stamped color)
+while the composer owns an explicit `TOKEN_CLASSES` registry aggregated from
+per-module `TOKENS` exports with build-time validation; `GateFact` renames to
+`DashboardEvent` with `dash.facts` → `dash.events`, and deleting the legacy
+`ready.facts` lane makes the replacement workflow CEL-free. The executable
+structural prototype lives at
+[experiments/spikes/03-workflow-shape/](experiments/spikes/03-workflow-shape/)
+(three proofs pass: structure, workflow-only decision run on a real Engine,
+loud registry failure). `publication_qualification` remains deferred to S6.
+S4 reads only the ruled Phase A records and may run in parallel; S5 needs S4.
