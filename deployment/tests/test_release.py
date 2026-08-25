@@ -113,3 +113,15 @@ def test_verify_checks_the_built_image_identity_and_manifest_version(
         "/opt/hamsterdan/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" in command for command in captures
     )
     assert any(command[-1] == "test -w /var/lib/hamsterdan" for command in commands)
+
+
+def test_verify_command_accepts_and_reports_a_repository_relative_manifest(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = Path("dist/deployment/revision/release.json")
+    monkeypatch.chdir(release.ROOT)
+    monkeypatch.setattr(release, "verify", lambda path: path)
+    monkeypatch.setattr(release.sys, "argv", ["release.py", "verify", "--manifest", str(manifest)])
+
+    assert release.main() == 0
+    assert capsys.readouterr().out == f"{manifest}\n"

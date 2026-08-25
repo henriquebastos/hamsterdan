@@ -36,8 +36,8 @@ from hamsterdan.contracts.readiness_v5 import (
     ReplyFault,
     ReplyReq,
 )
-from hamsterdan.github_app.config import HostConfig
-from hamsterdan.github_app.models import RegistrationInventory, WireResponse
+from hamsterdan.github_app.config import AccountConfig, HostConfig
+from hamsterdan.github_app.models import InstallationInventory, RegistrationInventory, WireResponse
 from hamsterdan.github_app.webhooks import Observation
 from hamsterdan.host import __main__ as host_main
 from hamsterdan.host.__main__ import inspect_instance
@@ -229,14 +229,14 @@ class Application:
         self.closed += 1
 
 
-def config(root: Path) -> HostConfig:
+def config(
+    root: Path, repositories: tuple[tuple[int, str], ...] = ((31, "owner/one"), (32, "owner/two"))
+) -> HostConfig:
     return HostConfig(
         app_id=17,
         app_slug="hamsterdan-test",
         client_id="Iv1.client-secret-looking",
-        account_id=23,
-        account_login="Owner",
-        allowed_repositories=frozenset({(31, "owner/one"), (32, "owner/two")}),
+        accounts=(AccountConfig(23, "Owner", repositories),),
         state_path=root,
         private_key="private-key-secret",
         webhook_secret="hook-secret",
@@ -258,8 +258,13 @@ def service(
         agent_routes=routes,
         application_factory=factory,
     )
-    result.registry.reconcile(44, ((31, "owner/one"), (32, "owner/two")))
+    result.registry.reconcile((InstallationInventory(44, 23, ((31, "owner/one"), (32, "owner/two"))),))
     return result
+
+
+def activate_repositories(host: HostService, repositories: tuple[tuple[int, str], ...]) -> None:
+    assert host.registry.installation("created", 44, 23)
+    assert host.registry.repositories("added", 44, 23, repositories)
 
 
 def agent_custody(root: Path):
@@ -324,7 +329,7 @@ def test_agent_route_is_claimed_from_explicit_execution_identity_before_start(tm
         agent_routes=routes,
         application_factory=Application,
     )
-    host.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(host, ((31, "owner/one"),))
     app = host._application(44, 31, 7)
     routed = app.args[3]
 
@@ -1107,7 +1112,7 @@ def test_default_composition_opens_the_real_v5_application_and_labeled_history(t
         agent_composition=composition,
         agent_routes=routes,
     )
-    host.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(host, ((31, "owner/one"),))
 
     application = host._application(44, 31, 7)
 
@@ -1133,7 +1138,7 @@ def test_selected_v5_routes_custodied_webhook_into_identified_history_before_ack
         agent_composition=composition,
         agent_routes=routes,
     )
-    host.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(host, ((31, "owner/one"),))
     delivery, body = str(uuid.uuid4()), envelope()
     receipt = host.custody.receive(
         signed(body, delivery).items() | {("content-length", str(len(body)))},
@@ -1234,7 +1239,7 @@ def test_selected_v5_stages_authority_that_arrives_during_normalization_before_r
         agent_composition=composition,
         agent_routes=routes,
     )
-    host.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(host, ((31, "owner/one"),))
     first_delivery, first_body = str(uuid.uuid4()), envelope()
     host.custody.receive(
         signed(first_body, first_delivery).items() | {("content-length", str(len(first_body)))},
@@ -1286,7 +1291,7 @@ def test_selected_v5_restart_replays_settled_webhook_after_death_before_acknowle
         agent_composition=composition,
         agent_routes=routes,
     )
-    first.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(first, ((31, "owner/one"),))
     delivery, body = str(uuid.uuid4()), envelope()
     receipt = first.custody.receive(
         signed(body, delivery).items() | {("content-length", str(len(body)))},
@@ -1352,7 +1357,7 @@ def test_selected_v5_restart_replays_settled_webhook_after_death_before_acknowle
         agent_composition=composition,
         agent_routes=routes,
     )
-    second.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(second, ((31, "owner/one"),))
     try:
         assert second.sweep("startup") == 1
         assert second.custody.status(delivery) == "terminal"
@@ -1385,7 +1390,7 @@ def test_selected_v5_sweep_reconciliation_reuses_unchanged_identity_and_advances
         agent_composition=composition,
         agent_routes=routes,
     )
-    host.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(host, ((31, "owner/one"),))
     application = host._application(44, 31, 7)
 
     assert host.sweep("startup") == 1
@@ -1423,7 +1428,7 @@ def test_selected_v5_sweep_reconciliation_reuses_unchanged_identity_and_advances
         agent_composition=composition,
         agent_routes=routes,
     )
-    restarted.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(restarted, ((31, "owner/one"),))
     assert restarted.sweep("startup") == 1
     reopened = restarted._apps[(44, 31, 7)]
     after_restart = tuple(
@@ -1459,7 +1464,7 @@ def test_selected_v5_restart_rebuilds_timer_after_crash_before_runnable_hint(
         reminder_delay=10,
     )
     first.runnable._clock = lambda: clock_us[0] / 1_000_000
-    first.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(first, ((31, "owner/one"),))
     first._application(44, 31, 7)
     assert first.sweep("startup") == 1
     assert first.runnable.count() == 1
@@ -1503,7 +1508,7 @@ def test_selected_v5_restart_rebuilds_timer_after_crash_before_runnable_hint(
         reminder_delay=10,
     )
     second.runnable._clock = lambda: clock_us[0] / 1_000_000
-    second.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(second, ((31, "owner/one"),))
     try:
         assert second.sweep("startup") == 1
         assert second.runnable.count() == 1
@@ -1988,12 +1993,12 @@ def test_sweep_failure_on_one_pr_does_not_block_another(tmp_path: Path) -> None:
 
 
 def registration_clients(repositories: tuple[tuple[int, str], ...] = ((31, "owner/one"), (32, "owner/two"))) -> Clients:
-    return Clients(registration=RegistrationInventory(44, repositories))
+    return Clients(registration=RegistrationInventory((InstallationInventory(44, 23, repositories),)))
 
 
-def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_path: Path) -> None:
+def test_restart_applies_one_complete_configuration_and_removes_former_selection(tmp_path: Path) -> None:
     composition, routes = agent_custody(tmp_path)
-    host = HostService(
+    first = HostService(
         config(tmp_path),
         clients=registration_clients(),
         runner=object(),
@@ -2001,11 +2006,27 @@ def test_startup_reconciles_exact_registration_and_removes_former_selection(tmp_
         agent_routes=routes,
         application_factory=Application,
     )
-    assert host.reconcile_registration()["admitted_repositories"] == 2
-    assert host.registry.route(44, 32) is not None
-    host.clients = registration_clients(((31, "owner/one"),))
-    assert host.reconcile_registration()["admitted_repositories"] == 1
-    assert host.registry.route(44, 32) is None
+    assert first.reconcile_registration()["admitted_repositories"] == 2
+    assert first.registry.route(44, 32) is not None
+    first.close()
+
+    composition, routes = agent_custody(tmp_path)
+    second = HostService(
+        config(tmp_path, ((31, "owner/one"),)),
+        clients=registration_clients(((31, "owner/one"),)),
+        runner=object(),
+        agent_composition=composition,
+        agent_routes=routes,
+        application_factory=Application,
+    )
+    assert second.reconcile_registration() == {
+        "app_id": 17,
+        "app_slug": "hamsterdan-test",
+        "reconciled_installations": 1,
+        "admitted_repositories": 1,
+    }
+    assert second.registry.route(44, 32) is None
+    second.close()
 
 
 def test_registration_failure_preserves_the_current_registry_and_host_identity(tmp_path: Path) -> None:
@@ -2023,7 +2044,7 @@ def test_registration_failure_preserves_the_current_registry_and_host_identity(t
 
     with pytest.raises(RuntimeError, match="inventory is malformed"):
         host.reconcile_registration()
-    assert host.installation_id == 44
+    assert host.installation_ids == frozenset({44})
     assert host.registry.route(44, 31) is not None
     assert host.registry.route(44, 32) is not None
 
@@ -2047,7 +2068,7 @@ def test_host_service_uses_one_injected_clock_and_transport_factory(tmp_path: Pa
         clock=clock,
         transport_factory=transport_factory,
     )
-    host.registry.reconcile(44, ((31, "owner/one"),))
+    activate_repositories(host, ((31, "owner/one"),))
 
     host._application(44, 31, 7)
     host.runnable.wake("github:44:31:pr:7", clock(), "test", "clock")

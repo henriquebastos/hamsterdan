@@ -258,8 +258,7 @@ pi_node="$PI_PREFIX/node_modules/node/bin/node"
 runtime_ready=true
 for name in \
     GITHUB_APP_ID GITHUB_APP_SLUG GITHUB_APP_CLIENT_ID \
-    GITHUB_INSTALLATION_ACCOUNT_ID GITHUB_INSTALLATION_ACCOUNT_LOGIN \
-    GITHUB_INSTALLATION_REPOSITORIES READINESS_WORKFLOW_PATH READINESS_REMINDER_SECONDS; do
+    READINESS_WORKFLOW_PATH READINESS_REMINDER_SECONDS; do
     if [[ -z "${!name:-}" ]]; then
         runtime_ready=false
     fi
@@ -282,9 +281,6 @@ retire_identity "$RUNTIME/gh-crisbastos"
 [[ "$GITHUB_APP_ID" =~ ^[1-9][0-9]*$ ]] || fail
 [[ "$GITHUB_APP_SLUG" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || fail
 [[ "$GITHUB_APP_CLIENT_ID" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || fail
-[[ "$GITHUB_INSTALLATION_ACCOUNT_ID" =~ ^[1-9][0-9]*$ ]] || fail
-[[ "$GITHUB_INSTALLATION_ACCOUNT_LOGIN" =~ ^[A-Za-z0-9-]{1,39}$ ]] || fail
-[[ "$GITHUB_INSTALLATION_REPOSITORIES" =~ ^[1-9][0-9]*:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(,[1-9][0-9]*:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)*$ ]] || fail
 [[ "$READINESS_WORKFLOW_PATH" =~ ^[A-Za-z0-9_./-]+$ ]] || fail
 [[ "$READINESS_REMINDER_SECONDS" =~ ^[1-9][0-9]*$ ]] || fail
 
@@ -293,6 +289,7 @@ assert_private_directory "$state_path"
 for path in "$RUNTIME/github-app.pem" "$RUNTIME/webhook-secret" "$RUNTIME/agent-api-key"; do
     verify_private_file "$path"
 done
+[[ -f deployment/config/installations.toml && ! -L deployment/config/installations.toml ]] || fail
 
 temporary="$(mktemp "$RUNTIME/.hamsterdan-env.XXXXXX")"
 chmod 0600 "$temporary"
@@ -300,9 +297,7 @@ chmod 0600 "$temporary"
     printf 'HAMSTERDAN_GITHUB_APP_ID=%s\n' "$GITHUB_APP_ID"
     printf 'HAMSTERDAN_GITHUB_APP_SLUG=%s\n' "$GITHUB_APP_SLUG"
     printf 'HAMSTERDAN_GITHUB_CLIENT_ID=%s\n' "$GITHUB_APP_CLIENT_ID"
-    printf 'HAMSTERDAN_GITHUB_ACCOUNT_ID=%s\n' "$GITHUB_INSTALLATION_ACCOUNT_ID"
-    printf 'HAMSTERDAN_GITHUB_ACCOUNT_LOGIN=%s\n' "$GITHUB_INSTALLATION_ACCOUNT_LOGIN"
-    printf 'HAMSTERDAN_ALLOWED_REPOSITORIES=%s\n' "$GITHUB_INSTALLATION_REPOSITORIES"
+    printf 'HAMSTERDAN_GITHUB_INSTALLATIONS_FILE=%s\n' "$PWD/deployment/config/installations.toml"
     printf 'HAMSTERDAN_STATE_PATH=%s\n' "$state_path"
     printf 'HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE=%s\n' "$PWD/$RUNTIME/github-app.pem"
     printf 'HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE=%s\n' "$PWD/$RUNTIME/webhook-secret"

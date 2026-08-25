@@ -16,8 +16,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from hamsterdan.github_app.auth import APP_EVENTS, APP_PERMISSIONS, GitHubAppClients, RequestMetadata
-from hamsterdan.github_app.config import ConfigurationError, HostConfig
-from hamsterdan.github_app.models import GitHubBoundaryError
+from hamsterdan.github_app.config import AccountConfig, ConfigurationError, HostConfig
+from hamsterdan.github_app.models import GitHubBoundaryError, InstallationInventory
 from hamsterdan.github_app.routing import InstallationRegistry
 from hamsterdan.github_app.transport import GitHubKitTransport
 from hamsterdan.github_app.webhooks import (
@@ -36,6 +36,31 @@ def secret(path: Path, value: bytes) -> Path:
     return path
 
 
+def installation_config(path: Path, *, second_account: bool = False) -> Path:
+    value = """
+[[accounts]]
+id = 23
+login = "Owner"
+repositories = [
+  "31:Owner/One",
+  "32:Owner/Two",
+]
+"""
+    if second_account:
+        value += """
+
+[[accounts]]
+id = 24
+login = "Other-Owner"
+repositories = [
+  "33:Other-Owner/Three",
+]
+"""
+    path.write_text(value)
+    path.chmod(0o600)
+    return path
+
+
 def environment(tmp_path: Path) -> dict[str, str]:
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
         serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
@@ -44,9 +69,7 @@ def environment(tmp_path: Path) -> dict[str, str]:
         "HAMSTERDAN_GITHUB_APP_ID": "17",
         "HAMSTERDAN_GITHUB_APP_SLUG": "hamsterdan-test",
         "HAMSTERDAN_GITHUB_CLIENT_ID": "Iv1.explicit",
-        "HAMSTERDAN_GITHUB_ACCOUNT_ID": "23",
-        "HAMSTERDAN_GITHUB_ACCOUNT_LOGIN": "Owner",
-        "HAMSTERDAN_ALLOWED_REPOSITORIES": "31:Owner/One,32:Owner/Two",
+        "HAMSTERDAN_GITHUB_INSTALLATIONS_FILE": str(installation_config(tmp_path / "installations.toml")),
         "HAMSTERDAN_STATE_PATH": str(tmp_path / "state.db"),
         "HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE": str(secret(tmp_path / "key", key)),
         "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE": str(secret(tmp_path / "hook", b"hook-secret")),
@@ -123,12 +146,66 @@ def test_config_accepts_only_explicit_secure_secret_files_and_is_redacted(tmp_pa
     env = environment(tmp_path)
     config = HostConfig.from_environment(env)
     assert config.app_id == 17 and config.bot_login == "hamsterdan-test[bot]"
-    assert config.allowed_repositories == frozenset({(31, "owner/one"), (32, "owner/two")})
+    assert tuple((account.account_id, account.account_login) for account in config.accounts) == ((23, "Owner"),)
+    assert config.accounts[0].repositories == ((31, "owner/one"), (32, "owner/two"))
     assert "hook-secret" not in repr(config) and "PRIVATE KEY" not in repr(config)
     with pytest.raises(AttributeError):
         config.app_id = 18
     env["GITHUB_APP_ID"] = "999"
     assert HostConfig.from_environment(env).app_id == 17
+
+
+def test_config_accepts_multiple_installation_accounts_as_one_snapshot(tmp_path: Path) -> None:
+    env = environment(tmp_path)
+    env["HAMSTERDAN_GITHUB_INSTALLATIONS_FILE"] = str(
+        installation_config(tmp_path / "multiple-installations.toml", second_account=True)
+    )
+
+    config = HostConfig.from_environment(env)
+
+    assert tuple(account.account_id for account in config.accounts) == (23, 24)
+    assert config.accounts[1].repositories == ((33, "other-owner/three"),)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "accounts = [",
+        "unknown = true",
+        '[[accounts]]\nid = 23\nlogin = "Owner"\nrepositories = []\n',
+        '[[accounts]]\nid = 23\nlogin = "Owner"\nrepositories = ["31:Other/repo"]\n',
+        (
+            '[[accounts]]\nid = 23\nlogin = "Owner"\nrepositories = ["31:Owner/one"]\n'
+            '[[accounts]]\nid = 23\nlogin = "Other"\nrepositories = ["32:Other/two"]\n'
+        ),
+    ],
+)
+def test_config_rejects_malformed_installation_snapshots_without_disclosure(tmp_path: Path, content: str) -> None:
+    env = environment(tmp_path)
+    path = tmp_path / "invalid-installations.toml"
+    path.write_text(content + "\n# configuration-leak-canary")
+    path.chmod(0o600)
+    env["HAMSTERDAN_GITHUB_INSTALLATIONS_FILE"] = str(path)
+
+    with pytest.raises(ConfigurationError) as failure:
+        HostConfig.from_environment(env)
+
+    assert "configuration-leak-canary" not in str(failure.value)
+
+
+@pytest.mark.parametrize("failure", ["symlink", "writable"])
+def test_config_rejects_unsafe_installation_file_custody(tmp_path: Path, failure: str) -> None:
+    env = environment(tmp_path)
+    path = Path(env["HAMSTERDAN_GITHUB_INSTALLATIONS_FILE"])
+    if failure == "symlink":
+        target = installation_config(tmp_path / "installation-target.toml")
+        path.unlink()
+        path.symlink_to(target)
+    else:
+        path.chmod(0o622)
+
+    with pytest.raises(ConfigurationError, match="GitHub installations file"):
+        HostConfig.from_environment(env)
 
 
 @pytest.mark.parametrize("failure", ["symlink", "directory", "permissions", "empty", "oversized", "invalid"])
@@ -234,16 +311,73 @@ def test_registration_inventory_validates_provider_contract_before_returning_por
     with GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients:
         inventory = clients.registration_inventory(config)
 
-    assert (inventory.installation_id, inventory.repositories) == (
-        44,
-        ((31, "owner/one"), (32, "owner/two")),
-    )
+    assert inventory.installations == (InstallationInventory(44, 23, ((31, "owner/one"), (32, "owner/two"))),)
     assert calls == [
         "/app",
         "/app/installations",
         "/app/installations/44/access_tokens",
         "/installation/repositories",
     ]
+
+
+def test_registration_inventory_validates_multiple_accounts_before_returning_one_snapshot(tmp_path: Path) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/app":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 17,
+                    "client_id": "Iv1.explicit",
+                    "slug": "hamsterdan-test",
+                    "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    "events": sorted(APP_EVENTS),
+                },
+            )
+        if request.url.path == "/app/installations":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 44,
+                        "account": {"id": 23, "login": "Owner"},
+                        "suspended_at": None,
+                        "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    },
+                    {
+                        "id": 45,
+                        "account": {"id": 24, "login": "Other-Owner"},
+                        "suspended_at": None,
+                        "permissions": APP_PERMISSIONS | {"metadata": "read"},
+                    },
+                ],
+            )
+        if request.url.path.endswith("/access_tokens"):
+            installation_id = request.url.path.split("/")[3]
+            return httpx.Response(
+                201,
+                json={"token": f"installation-{installation_id}", "expires_at": "2099-01-01T00:00:00Z"},
+            )
+        if request.headers.get("authorization") == "token installation-44":
+            repositories = [{"id": 31, "full_name": "owner/one"}, {"id": 32, "full_name": "owner/two"}]
+        elif request.headers.get("authorization") == "token installation-45":
+            repositories = [{"id": 33, "full_name": "other-owner/three"}]
+        else:
+            raise AssertionError(request.headers)
+        return httpx.Response(200, json={"total_count": len(repositories), "repositories": repositories})
+
+    values = environment(tmp_path)
+    values["HAMSTERDAN_GITHUB_INSTALLATIONS_FILE"] = str(
+        installation_config(tmp_path / "multiple-installations.toml", second_account=True)
+    )
+    config = HostConfig.from_environment(values)
+
+    with GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients:
+        inventory = clients.registration_inventory(config)
+
+    assert inventory.installations == (
+        InstallationInventory(44, 23, ((31, "owner/one"), (32, "owner/two"))),
+        InstallationInventory(45, 24, ((33, "other-owner/three"),)),
+    )
 
 
 @pytest.mark.parametrize(
@@ -454,12 +588,21 @@ def test_registration_follows_provider_next_link_even_after_a_short_page(tmp_pat
             )
         return httpx.Response(
             200,
-            json={"total_count": 1, "repositories": [{"id": 31, "full_name": "owner/one"}]},
+            json={
+                "total_count": 2,
+                "repositories": [
+                    {"id": 31, "full_name": "owner/one"},
+                    {"id": 32, "full_name": "owner/two"},
+                ],
+            },
         )
 
     config = HostConfig.from_environment(environment(tmp_path))
     with GitHubAppClients(config, transport=httpx.MockTransport(handler)) as clients:
-        assert clients.registration_inventory(config).repositories == ((31, "owner/one"),)
+        assert clients.registration_inventory(config).installations[0].repositories == (
+            (31, "owner/one"),
+            (32, "owner/two"),
+        )
     assert installation_queries == ["per_page=100", "per_page=100&page=2"]
 
 
@@ -639,7 +782,8 @@ def test_streamed_gateway_reads_body_before_context_local_client_closes(tmp_path
 
 def registry(tmp_path: Path) -> InstallationRegistry:
     return InstallationRegistry(
-        tmp_path / "routing.db", account_id=23, allowed_repositories=frozenset({(31, "owner/one"), (32, "owner/two")})
+        tmp_path / "routing.db",
+        accounts=(AccountConfig(23, "Owner", ((31, "owner/one"), (32, "owner/two"))),),
     )
 
 
@@ -657,6 +801,40 @@ def test_routing_lifecycle_multiple_repositories_and_malformed_or_unknown_are_in
     assert not routes.repositories("added", 999, 23, ((31, "owner/one"),))
     assert not routes.repositories("added", 44, 23, ((-1, "bad"),))
     assert routes.installation("deleted", 44, 23) and routes.route(44, 32) is None
+
+
+def test_routing_reconciles_multiple_installations_atomically_and_fences_removed_routes(tmp_path: Path) -> None:
+    routes = InstallationRegistry(
+        tmp_path / "multiple-routing.db",
+        accounts=(
+            AccountConfig(23, "Owner", ((31, "owner/one"),)),
+            AccountConfig(24, "Other-Owner", ((33, "other-owner/three"),)),
+        ),
+    )
+    inventory = (
+        InstallationInventory(44, 23, ((31, "owner/one"),)),
+        InstallationInventory(45, 24, ((33, "other-owner/three"),)),
+    )
+
+    assert routes.reconcile(inventory) == 2
+    assert routes.route(44, 31) is not None
+    assert routes.route(45, 33) is not None
+    assert not routes.installation("deleted", 45, 23)
+    assert not routes.installation("created", 45, 23)
+    assert routes.route(45, 33) is not None
+    with pytest.raises(ValueError, match="every configured repository"):
+        routes.reconcile((inventory[0], InstallationInventory(45, 24, ())))
+    assert routes.route(44, 31) is not None
+    assert routes.route(45, 33) is not None
+    routes.close()
+
+    reduced = InstallationRegistry(
+        tmp_path / "multiple-routing.db",
+        accounts=(AccountConfig(23, "Owner", ((31, "owner/one"),)),),
+    )
+    assert reduced.reconcile((inventory[0],)) == 1
+    assert reduced.route(44, 31) is not None
+    assert reduced.route(45, 33) is None
 
 
 def signed_headers(body: bytes, event: str, delivery: str | None = None) -> list[tuple[str, str]]:

@@ -25,8 +25,8 @@ from hamsterdan.agents.protocol import (
     ReviewResult,
     _validate_result,
 )
-from hamsterdan.github_app.config import HostConfig
-from hamsterdan.github_app.models import WireResponse
+from hamsterdan.github_app.config import AccountConfig, HostConfig
+from hamsterdan.github_app.models import InstallationInventory, WireResponse
 from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.git_publish import GitPublishResult, GitReconciliation, HostGitPublisher, _git_environment
 from hamsterdan.host.service import HostService
@@ -804,9 +804,7 @@ def config(root: Path) -> HostConfig:
         app_id=17,
         app_slug="hamsterdan-test",
         client_id=CLIENT_SECRET,
-        account_id=23,
-        account_login="Owner",
-        allowed_repositories=frozenset({(31, "owner/repo")}),
+        accounts=(AccountConfig(23, "Owner", ((31, "owner/repo"),)),),
         state_path=root,
         private_key=PRIVATE_KEY,
         webhook_secret=WEBHOOK_SECRET,
@@ -978,7 +976,7 @@ def _run_journey(
         agent_composition=agent_composition,
         agent_routes=routes,
     )
-    host.registry.reconcile(44, ((31, "owner/repo"),))
+    host.registry.reconcile((InstallationInventory(44, 23, ((31, "owner/repo"),)),))
     delivery, body = str(uuid.uuid4()), envelope("opened" if draft_ready else "synchronize")
     receipt = host.custody.receive(signed(body, delivery).items(), body)
     assert receipt.disposition == "accepted"

@@ -2,7 +2,7 @@
 code: CV19
 level: Value
 status: Active
-status_reason: The exact V5-only candidate and inactive HBNetwork runtime custody qualify idempotently on exe.dev; restart-applied multi-installation configuration, registry publication, approved launch, and one controlled monitoring proof remain
+status_reason: Restart-applied multi-installation configuration and configuration-only VM application are accepted locally; exact clean-candidate exe.dev qualification, approved launch, and one controlled monitoring proof remain
 updated: 2026-08-25
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
@@ -52,13 +52,22 @@ open-source release.
   image ID is installed, disabled, and inactive. It would bind only to loopback;
   no Hamsterdan container or application listener exists. Repeated runtime
   provisioning reports `changed=0`.
-- The Navigator accepted one operator-controlled App registration with multiple
-  installation accounts and repositories as restart-applied configuration,
-  without SaaS accounts or an administration UI. The executable host still
-  supports one account; generalizing startup validation and atomic route
-  reconciliation is the next pre-launch slice. Live reload remains deferred.
+- The executable host now accepts one strict tracked configuration snapshot for
+  multiple installation accounts and repositories under one App registration.
+  Startup validates the complete provider portfolio before atomically replacing
+  every route; removed routes immediately lose authority while existing durable
+  application and webhook state remains fenced. Orb setup reads the tracked file
+  directly.
+- The VM operation can prevalidate and atomically publish only that tracked
+  configuration with the currently installed exact image. It neither rebuilds
+  nor transfers an image, changes the systemd unit, rotates secrets, nor changes
+  infrastructure; it restarts only a service that was already active. This
+  behavior is accepted locally but is not yet installed or qualified on
+  `hamsterdan-prod`, whose disabled runtime remains pinned to the older clean
+  candidate. Live reload remains deferred.
 - Launch can process durable webhook state and cause GitHub effects, so it still
-  requires separate explicit Navigator approval after the configuration slice.
+  requires separate explicit Navigator approval after exact clean-candidate VM
+  qualification.
 
 ## Done condition
 

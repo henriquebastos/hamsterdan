@@ -14,12 +14,10 @@ RUNTIME_DIRECTORY = "runtime"
 ENVIRONMENT = "hamsterdan.env"
 MAX_BYTES = 64 * 1024
 REQUIRED = {
-    "HAMSTERDAN_ALLOWED_REPOSITORIES",
-    "HAMSTERDAN_GITHUB_ACCOUNT_ID",
-    "HAMSTERDAN_GITHUB_ACCOUNT_LOGIN",
     "HAMSTERDAN_GITHUB_APP_ID",
     "HAMSTERDAN_GITHUB_APP_SLUG",
     "HAMSTERDAN_GITHUB_CLIENT_ID",
+    "HAMSTERDAN_GITHUB_INSTALLATIONS_FILE",
     "HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE",
     "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE",
     "HAMSTERDAN_PI_API_KEY_FILE",
@@ -150,7 +148,12 @@ def main() -> None:
         qualification_fault = os.getenv("HAMSTERDAN_QUALIFICATION_FAULT")
         if qualification_fault:
             environment["HAMSTERDAN_QUALIFICATION_FAULT"] = qualification_fault
-        environment.update(_parse(_read(runtime, ENVIRONMENT)))
+        configured = _parse(_read(runtime, ENVIRONMENT))
+        if configured["HAMSTERDAN_GITHUB_INSTALLATIONS_FILE"] != os.path.abspath(
+            os.path.join("deployment", "config", "installations.toml")
+        ):
+            _fail()
+        environment.update(configured)
     finally:
         os.close(runtime)
     host_arguments = arguments or ("serve", "--host", "0.0.0.0", "--port", port)

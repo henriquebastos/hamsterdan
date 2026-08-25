@@ -169,9 +169,7 @@ class HostService:
         preflight_v5_state(self.root)
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.clients = clients or GitHubAppClients(config, metadata_hook=self._request_metadata)
-        self.registry = InstallationRegistry(
-            self.root / "routes.sqlite3", account_id=config.account_id, allowed_repositories=config.allowed_repositories
-        )
+        self.registry = InstallationRegistry(self.root / "routes.sqlite3", accounts=config.accounts)
         _, secret = config._credentials()
         self._clock = time.time if clock is None else clock
         self._application_clock = clock
@@ -184,7 +182,7 @@ class HostService:
         self.workflow_path, self.reminder_delay, self.poll_interval = workflow_path, reminder_delay, poll_interval
         self.sweep_interval = sweep_interval
         self.qualification_fault = qualification_fault
-        self.installation_id: int | None = None
+        self.installation_ids: frozenset[int] = frozenset()
         self._apps: dict[tuple[int, int, int], ReadinessApplication] = {}
         self._locks: dict[tuple[int, int, int], threading.Lock] = {}
         self._stop = asyncio.Event()
@@ -280,12 +278,12 @@ class HostService:
 
     def reconcile_registration(self) -> dict[str, object]:
         inventory = self.clients.registration_inventory(self.config)
-        count = self.registry.reconcile(inventory.installation_id, inventory.repositories)
-        self.installation_id = inventory.installation_id
+        count = self.registry.reconcile(inventory.installations)
+        self.installation_ids = frozenset(item.installation_id for item in inventory.installations)
         return {
             "app_id": self.config.app_id,
             "app_slug": self.config.app_slug,
-            "installation_id": inventory.installation_id,
+            "reconciled_installations": len(inventory.installations),
             "admitted_repositories": count,
         }
 
@@ -774,7 +772,11 @@ class HostService:
     def health(self) -> dict[str, object]:
         return {
             "status": "degraded" if self._scheduler_errors else "ok",
-            "installation_reconciled": self.installation_id is not None,
+            "installations": {
+                "configured": len(self.config.accounts),
+                "reconciled": len(self.installation_ids),
+                "active": self.registry.active_installation_count(),
+            },
             "active_repositories": self.registry.active_count(),
             "applications": len(self._apps),
             "inbox": self.custody.counts(),

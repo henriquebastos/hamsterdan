@@ -8,8 +8,9 @@ HBNetwork owns the first private GitHub App used for real-provider validation.
 An operator may run the code with one App registration, host deployment,
 secrets, and durable state. The accepted first-release direction admits a
 configured portfolio of installation accounts and repositories without SaaS
-accounts or an administration UI; the executable host still implements the
-older single-account boundary pending CV19's next slice.
+accounts or an administration UI. The executable host and operator tooling now
+implement that restart-applied portfolio locally; the currently installed
+exe.dev runtime still predates it.
 
 ## Settled architecture
 
@@ -65,10 +66,14 @@ archive and image identity qualify idempotently on the owned `hamsterdan-prod`
 exe.dev VM. Private runtime custody validates the HBNetwork App installation and
 `HBNetwork/demo-pr-readiness` from the exact image. The exact-image systemd unit
 is installed but disabled and inactive; no container or application listener
-exists. Before launch, startup configuration and registration reconciliation
-must generalize from one account to the accepted restart-applied portfolio of
-multiple installation accounts and repositories. Launch still requires
-explicit approval because durable webhook state can cause GitHub effects.
+exists. Restart-applied configuration for multiple installation accounts and
+repositories is accepted locally: the host validates one complete tracked
+snapshot, atomically reconciles all routes before workers start, and the VM
+operation can apply only that file without an image deployment. The next
+movement is to commit a clean candidate, qualify and provision that exact image
+inactive on exe.dev, and exercise the configuration-only path there. Launch
+still requires explicit approval because durable webhook state can cause GitHub
+effects.
 
 The pinned Petrus source dependency is currently private. Orb installation uses
 a dedicated project-scoped `PETRUS_GITHUB_TOKEN`, removes temporary Git

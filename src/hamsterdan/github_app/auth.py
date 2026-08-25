@@ -11,8 +11,8 @@ from githubkit import GitHub
 from githubkit.auth import AppAuthStrategy
 from githubkit.cache import MemCacheStrategy
 
-from .config import HostConfig
-from .models import GitHubBoundaryError, RegistrationInventory
+from .config import AccountConfig, HostConfig
+from .models import GitHubBoundaryError, InstallationInventory, RegistrationInventory
 from .transport import GitHubKitTransport
 
 MAX_INVENTORY_PAGES = 20
@@ -130,7 +130,7 @@ class GitHubAppClients:
         return self._clients[key]
 
     def registration_inventory(self, config: HostConfig) -> RegistrationInventory:
-        """Validate one configured App registration and read its selected repository portfolio."""
+        """Validate one App registration and every configured installation account."""
         app_transport = GitHubKitTransport(self.app)
         app_response = app_transport.request("GET", "/app")
         if app_response.status != 200:
@@ -173,15 +173,22 @@ class GitHubAppClients:
                 break
         else:
             raise RuntimeError("GitHub installation inventory exceeds the bounded pagination limit")
+        inventory = tuple(self._account_inventory(account, installations) for account in config.accounts)
+        installation_ids = {item.installation_id for item in inventory}
+        if len(installation_ids) != len(inventory):
+            raise RuntimeError("configured installation identity is ambiguous")
+        return RegistrationInventory(inventory)
+
+    def _account_inventory(self, account: AccountConfig, installations: list[dict[str, Any]]) -> InstallationInventory:
         matches = [
             item
             for item in installations
             if isinstance(item, dict)
             and isinstance(item.get("account"), dict)
             and type(item["account"].get("id")) is int
-            and item["account"]["id"] == config.account_id
+            and item["account"]["id"] == account.account_id
             and type(item["account"].get("login")) is str
-            and item["account"]["login"].casefold() == config.account_login.casefold()
+            and item["account"]["login"].casefold() == account.account_login.casefold()
         ]
         if len(matches) != 1:
             raise RuntimeError("configured installation account is missing or ambiguous")
@@ -227,7 +234,10 @@ class GitHubAppClients:
             {item[1].casefold() for item in normalized}
         ) != len(normalized):
             raise RuntimeError("selected repository inventory is inconsistent")
-        return RegistrationInventory(installation_id, normalized)
+        observed = {(item[0], item[1].casefold()) for item in normalized}
+        if not set(account.repositories).issubset(observed):
+            raise RuntimeError("configured repositories are unavailable from the installation")
+        return InstallationInventory(installation_id, account.account_id, normalized)
 
     def close(self) -> None:
         if self._closed:

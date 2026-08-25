@@ -1,4 +1,4 @@
-"""Durable admission routing for one installation account."""
+"""Durable admission routing for configured installation accounts."""
 
 from __future__ import annotations
 
@@ -6,6 +6,9 @@ import sqlite3
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+
+from .config import AccountConfig
+from .models import InstallationInventory
 
 
 @dataclass(frozen=True)
@@ -17,9 +20,8 @@ class Route:
 
 
 class InstallationRegistry:
-    def __init__(self, path: Path, *, account_id: int, allowed_repositories: frozenset[tuple[int, str]]) -> None:
-        self._account_id = account_id
-        self._allowed = dict(allowed_repositories)
+    def __init__(self, path: Path, *, accounts: tuple[AccountConfig, ...]) -> None:
+        self._allowed = {account.account_id: dict(account.repositories) for account in accounts}
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._lock = threading.RLock()
         self._db.executescript("""
@@ -32,10 +34,24 @@ class InstallationRegistry:
         """)
 
     def installation(self, action: str, installation_id: int, account_id: int) -> bool:
-        if not self._valid_id(installation_id) or not self._valid_id(account_id) or account_id != self._account_id:
+        if not self._valid_id(installation_id) or not self._valid_id(account_id) or account_id not in self._allowed:
             return False
         with self._lock, self._db:
+            existing = self._db.execute(
+                "SELECT account_id FROM installations WHERE installation_id=?", (installation_id,)
+            ).fetchone()
+            if existing is not None and existing[0] != account_id:
+                return False
             if action in {"created", "unsuspend", "new_permissions_accepted"}:
+                self._db.execute(
+                    "DELETE FROM repositories WHERE installation_id IN "
+                    "(SELECT installation_id FROM installations WHERE account_id=? AND installation_id<>?)",
+                    (account_id, installation_id),
+                )
+                self._db.execute(
+                    "DELETE FROM installations WHERE account_id=? AND installation_id<>?",
+                    (account_id, installation_id),
+                )
                 self._db.execute(
                     "INSERT INTO installations VALUES (?, ?, 1) ON CONFLICT(installation_id) DO UPDATE SET account_id=excluded.account_id, active=1",
                     (installation_id, account_id),
@@ -46,7 +62,11 @@ class InstallationRegistry:
                     (installation_id, account_id),
                 )
             elif action == "deleted":
-                self._db.execute("DELETE FROM repositories WHERE installation_id=?", (installation_id,))
+                self._db.execute(
+                    "DELETE FROM repositories WHERE installation_id IN "
+                    "(SELECT installation_id FROM installations WHERE installation_id=? AND account_id=?)",
+                    (installation_id, account_id),
+                )
                 self._db.execute(
                     "DELETE FROM installations WHERE installation_id=? AND account_id=?", (installation_id, account_id)
                 )
@@ -61,14 +81,15 @@ class InstallationRegistry:
             action not in {"added", "removed"}
             or not self._valid_id(installation_id)
             or not self._valid_id(account_id)
-            or account_id != self._account_id
-            or not self._installation_exists(installation_id)
+            or account_id not in self._allowed
             or any(not self._valid_repository(item) for item in repositories)
         ):
             return False
         with self._lock, self._db:
+            if not self._installation_exists(installation_id, account_id):
+                return False
             for repository_id, full_name in repositories:
-                admitted_name = self._allowed.get(repository_id)
+                admitted_name = self._allowed[account_id].get(repository_id)
                 if action == "added" and admitted_name == full_name.lower():
                     self._db.execute(
                         "INSERT INTO repositories VALUES (?, ?, ?, 1) ON CONFLICT(installation_id, repository_id) DO UPDATE SET full_name=excluded.full_name, active=1",
@@ -98,45 +119,74 @@ class InstallationRegistry:
             and all(part and part.strip() == part for part in full_name.split("/"))
         )
 
-    def _installation_exists(self, installation_id: int) -> bool:
+    def _installation_exists(self, installation_id: int, account_id: int) -> bool:
         row = self._db.execute(
-            "SELECT 1 FROM installations WHERE installation_id=? AND account_id=?", (installation_id, self._account_id)
+            "SELECT 1 FROM installations WHERE installation_id=? AND account_id=?", (installation_id, account_id)
         ).fetchone()
         return row is not None
 
     def route(self, installation_id: int, repository_id: int) -> Route | None:
-        row = self._db.execute(
-            "SELECT i.account_id, r.full_name FROM installations i JOIN repositories r USING (installation_id) WHERE i.installation_id=? AND r.repository_id=? AND i.active=1 AND r.active=1",
-            (installation_id, repository_id),
-        ).fetchone()
+        with self._lock:
+            row = self._db.execute(
+                "SELECT i.account_id, r.full_name FROM installations i JOIN repositories r USING (installation_id) "
+                "WHERE i.installation_id=? AND r.repository_id=? AND i.active=1 AND r.active=1",
+                (installation_id, repository_id),
+            ).fetchone()
         return None if row is None else Route(installation_id, row[0], repository_id, row[1])
 
-    def reconcile(self, installation_id: int, repositories: tuple[tuple[int, str], ...]) -> int:
-        """Atomically replace the selected, configured repository portfolio."""
-        admitted = tuple(
-            item
-            for item in repositories
-            if self._valid_repository(item) and self._allowed.get(item[0]) == item[1].lower()
-        )
-        with self._lock, self._db:
-            self._db.execute(
-                "INSERT INTO installations VALUES (?, ?, 1) ON CONFLICT(installation_id) DO UPDATE SET account_id=excluded.account_id,active=1",
-                (installation_id, self._account_id),
+    def reconcile(self, installations: tuple[InstallationInventory, ...]) -> int:
+        """Atomically replace every configured installation and repository route."""
+        if (
+            len({item.installation_id for item in installations}) != len(installations)
+            or len({item.account_id for item in installations}) != len(installations)
+            or {item.account_id for item in installations} != self._allowed.keys()
+        ):
+            raise ValueError("registration inventory does not match configured accounts")
+        admitted: list[tuple[int, int, int, str]] = []
+        for installation in installations:
+            if not self._valid_id(installation.installation_id):
+                raise ValueError("registration inventory is malformed")
+            observed = {
+                repository_id: full_name.lower()
+                for repository_id, full_name in installation.repositories
+                if self._valid_repository((repository_id, full_name))
+            }
+            allowed = self._allowed[installation.account_id]
+            if any(observed.get(repository_id) != full_name for repository_id, full_name in allowed.items()):
+                raise ValueError("registration inventory does not contain every configured repository")
+            admitted.extend(
+                (installation.installation_id, installation.account_id, repository_id, full_name)
+                for repository_id, full_name in allowed.items()
             )
-            self._db.execute("DELETE FROM repositories WHERE installation_id=?", (installation_id,))
+        with self._lock, self._db:
+            self._db.execute("DELETE FROM repositories")
+            self._db.execute("DELETE FROM installations")
+            self._db.executemany(
+                "INSERT INTO installations VALUES (?, ?, 1)",
+                ((item.installation_id, item.account_id) for item in installations),
+            )
             self._db.executemany(
                 "INSERT INTO repositories VALUES (?, ?, ?, 1)",
-                ((installation_id, rid, name.lower()) for rid, name in admitted),
+                (
+                    (installation_id, repository_id, full_name)
+                    for installation_id, _, repository_id, full_name in admitted
+                ),
             )
-            self._db.execute("DELETE FROM repositories WHERE installation_id<>?", (installation_id,))
-            self._db.execute("DELETE FROM installations WHERE installation_id<>?", (installation_id,))
         return len(admitted)
 
     def active_count(self) -> int:
-        row = self._db.execute(
-            "SELECT count(*) FROM repositories r JOIN installations i USING(installation_id) WHERE r.active=1 AND i.active=1"
-        ).fetchone()
+        with self._lock:
+            row = self._db.execute(
+                "SELECT count(*) FROM repositories r JOIN installations i USING(installation_id) "
+                "WHERE r.active=1 AND i.active=1"
+            ).fetchone()
+        return int(row[0])
+
+    def active_installation_count(self) -> int:
+        with self._lock:
+            row = self._db.execute("SELECT count(*) FROM installations WHERE active=1").fetchone()
         return int(row[0])
 
     def close(self) -> None:
-        self._db.close()
+        with self._lock:
+            self._db.close()

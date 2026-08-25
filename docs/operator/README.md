@@ -45,9 +45,9 @@ later under **Advanced → Make public**. A public App could then be installed b
 multiple organizations. The accepted self-hosted contract uses one App
 registration across an operator-configured portfolio of installation accounts
 and repositories, applied first by supervised restart without SaaS accounts or
-an administration UI. The executable host still supports one account, so do not
-change this App's visibility or add another installation until that next runtime
-slice is qualified and the provider change is separately approved.
+an administration UI. Changing this App's visibility or installing it on
+another account remains a separately approved provider action; editing runtime
+configuration alone does not create a GitHub installation.
 
 Configure exactly this repository-permission/event contract (no organization or
 account permissions):
@@ -104,17 +104,13 @@ webhook security: <https://docs.github.com/en/webhooks/using-webhooks/validating
 
 ## 2. Configure and install
 
-Configure the public registration and policy values as Amp project environment
-variables. These current HBNetwork values are not credentials:
+Configure the public App registration and policy values as Amp project
+environment variables. These current HBNetwork values are not credentials:
 
 ```sh
 printf %s 4452953 | amp secrets set GITHUB_APP_ID --project --env --data-file -
 printf %s hamster-dan | amp secrets set GITHUB_APP_SLUG --project --env --data-file -
 printf %s Iv23liKF36r9YtMkGf0m | amp secrets set GITHUB_APP_CLIENT_ID --project --env --data-file -
-printf %s 108842540 | amp secrets set GITHUB_INSTALLATION_ACCOUNT_ID --project --env --data-file -
-printf %s HBNetwork | amp secrets set GITHUB_INSTALLATION_ACCOUNT_LOGIN --project --env --data-file -
-printf %s 1316665126:HBNetwork/demo-pr-readiness | \
-  amp secrets set GITHUB_INSTALLATION_REPOSITORIES --project --env --data-file -
 # Optional qualification-only human identities:
 printf %s henriquebastos | amp secrets set GITHUB_DEMO_AUTHOR_LOGIN --project --env --data-file -
 printf %s crisbastos | amp secrets set GITHUB_DEMO_REVIEWER_LOGIN --project --env --data-file -
@@ -122,6 +118,25 @@ printf %s .github/workflows/ci.yml | \
   amp secrets set READINESS_WORKFLOW_PATH --project --env --data-file -
 printf %s 259200 | amp secrets set READINESS_REMINDER_SECONDS --project --env --data-file -
 ```
+
+Installation accounts and repositories live in the tracked
+`deployment/config/installations.toml`, not project environment variables. Each
+`[[accounts]]` block names one GitHub account by stable ID and expected login;
+its repository lines name stable repository IDs and expected full names. Edit
+that file to change routing authority. Orb setup records its path in the
+generated runtime environment, so an orb restart reads the edited tracked file
+directly. The VM configuration-only command validates and applies it without
+rebuilding or redeploying the application:
+
+```sh
+uv run --frozen python deployment/runtime.py configure \
+  --file deployment/config/installations.toml
+```
+
+The App must already be installed on every listed account with access to every
+listed repository. The current private App is installable only on HBNetwork;
+changing its visibility or installing it on another account remains a separate
+operator-approved GitHub action.
 
 Store the App private key and webhook secret as described above. Store exactly
 one qualified direct agent-provider key as project secret

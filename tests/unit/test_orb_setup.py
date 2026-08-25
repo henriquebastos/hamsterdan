@@ -26,12 +26,17 @@ def _sandbox(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     home = tmp_path / "home"
     (workspace / ".agents").mkdir(parents=True)
     (workspace / ".amp").mkdir()
+    (workspace / "deployment" / "config").mkdir(parents=True)
     (workspace / "deployment" / "pi").mkdir(parents=True)
     (workspace / "scripts").mkdir()
     (workspace / "tools" / "demo-video").mkdir(parents=True)
     binaries.mkdir()
     home.mkdir()
     shutil.copy2(ROOT / ".agents" / "setup", workspace / ".agents" / "setup")
+    shutil.copy2(
+        ROOT / "deployment" / "config" / "installations.toml",
+        workspace / "deployment" / "config" / "installations.toml",
+    )
     shutil.copy2(ROOT / "deployment" / "pi" / "package.json", workspace / "deployment" / "pi" / "package.json")
     shutil.copy2(
         ROOT / "deployment" / "pi" / "package-lock.json", workspace / "deployment" / "pi" / "package-lock.json"
@@ -121,9 +126,6 @@ exit 91
         "GITHUB_APP_ID": "4452953",
         "GITHUB_APP_SLUG": "hamster-dan",
         "GITHUB_APP_CLIENT_ID": "Iv23liKF36r9YtMkGf0m",
-        "GITHUB_INSTALLATION_ACCOUNT_ID": "108842540",
-        "GITHUB_INSTALLATION_ACCOUNT_LOGIN": "HBNetwork",
-        "GITHUB_INSTALLATION_REPOSITORIES": "1316665126:HBNetwork/demo-pr-readiness",
         "READINESS_WORKFLOW_PATH": ".github/workflows/ci.yml",
         "READINESS_REMINDER_SECONDS": "259200",
         "PETRUS_GITHUB_TOKEN": PETRUS_SECRET,
@@ -179,13 +181,14 @@ def test_setup_materializes_complete_role_based_runtime_without_disclosure(tmp_p
     assert _private(launch)
     configuration = launch.read_text()
     assert "HAMSTERDAN_GITHUB_APP_ID=4452953" in configuration
-    assert "HAMSTERDAN_GITHUB_ACCOUNT_LOGIN=HBNetwork" in configuration
-    assert "HAMSTERDAN_ALLOWED_REPOSITORIES=1316665126:HBNetwork/demo-pr-readiness" in configuration
+    assert "HAMSTERDAN_GITHUB_INSTALLATIONS_FILE=" in configuration
     assert "HAMSTERDAN_PI_PROVIDER=anthropic" in configuration
     assert "HAMSTERDAN_PI_MODEL=claude-sonnet-4-5" in configuration
     assert "HAMSTERDAN_PI_API_KEY_FILE=" in configuration
     assert "HAMSTERDAN_READINESS_TOPOLOGY" not in configuration
     assert not any(secret in configuration for secret in expected.values())
+    assert str(workspace / "deployment/config/installations.toml") in configuration
+    assert not (runtime / "installations.toml").exists()
     assert not (runtime / "gh-henriquebastos").exists()
     assert not (runtime / "gh-crisbastos").exists()
 
@@ -510,12 +513,10 @@ def test_host_launcher_rejects_the_retired_parallel_topology_switch(tmp_path: Pa
 
 
 REQUIRED_LAUNCH_NAMES = {
-    "HAMSTERDAN_ALLOWED_REPOSITORIES",
-    "HAMSTERDAN_GITHUB_ACCOUNT_ID",
-    "HAMSTERDAN_GITHUB_ACCOUNT_LOGIN",
     "HAMSTERDAN_GITHUB_APP_ID",
     "HAMSTERDAN_GITHUB_APP_SLUG",
     "HAMSTERDAN_GITHUB_CLIENT_ID",
+    "HAMSTERDAN_GITHUB_INSTALLATIONS_FILE",
     "HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE",
     "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE",
     "HAMSTERDAN_PI_API_KEY_FILE",

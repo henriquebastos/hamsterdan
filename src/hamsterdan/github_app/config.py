@@ -3,11 +3,21 @@
 from __future__ import annotations
 
 import os
+import re
 import stat
+import tomllib
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 
 MAX_SECRET_BYTES = 64 * 1024
+_ACCOUNT_LOGIN = re.compile(r"[A-Za-z0-9-]{1,39}")
+_REPOSITORY_NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+_RETIRED_INSTALLATION_ENVIRONMENT = {
+    "HAMSTERDAN_ALLOWED_REPOSITORIES",
+    "HAMSTERDAN_GITHUB_ACCOUNT_ID",
+    "HAMSTERDAN_GITHUB_ACCOUNT_LOGIN",
+}
 
 
 class ConfigurationError(ValueError):
@@ -42,7 +52,7 @@ def _slug(value: str | None) -> str:
     return slug
 
 
-def _secret_file(value: str | None, label: str) -> str:
+def _bounded_file(value: str | None, label: str, *, forbidden_mode: int) -> bytes:
     if not value:
         raise ConfigurationError(f"{label} file is missing")
     path = Path(value)
@@ -50,7 +60,7 @@ def _secret_file(value: str | None, label: str) -> str:
         info = path.lstat()
         if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
             raise ConfigurationError(f"{label} file is not a regular file")
-        if info.st_mode & 0o077:
+        if info.st_mode & forbidden_mode:
             raise ConfigurationError(f"{label} file permissions are too broad")
         if not 0 < info.st_size <= MAX_SECRET_BYTES:
             raise ConfigurationError(f"{label} file size is not admitted")
@@ -68,6 +78,11 @@ def _secret_file(value: str | None, label: str) -> str:
         raise ConfigurationError(f"{label} file cannot be read safely") from None
     if not raw or len(raw) > MAX_SECRET_BYTES:
         raise ConfigurationError(f"{label} file size is not admitted")
+    return raw
+
+
+def _secret_file(value: str | None, label: str) -> str:
+    raw = _bounded_file(value, label, forbidden_mode=0o077)
     try:
         secret = raw.decode("utf-8").strip()
     except UnicodeDecodeError:
@@ -77,15 +92,85 @@ def _secret_file(value: str | None, label: str) -> str:
     return secret
 
 
+@dataclass(frozen=True)
+class AccountConfig:
+    account_id: int
+    account_login: str
+    repositories: tuple[tuple[int, str], ...]
+
+
+def _repository(value: object, *, account_login: str) -> tuple[int, str]:
+    if not isinstance(value, str):
+        raise ConfigurationError("installation repositories are malformed")
+    try:
+        identifier_text, full_name = value.split(":", 1)
+    except ValueError:
+        raise ConfigurationError("installation repositories are malformed") from None
+    identifier = _positive_decimal(identifier_text, "repository id")
+    if (
+        _REPOSITORY_NAME.fullmatch(full_name) is None
+        or full_name.split("/", 1)[0].casefold() != account_login.casefold()
+    ):
+        raise ConfigurationError("installation repositories are malformed")
+    return identifier, full_name.casefold()
+
+
+def installation_accounts(path: str | Path) -> tuple[AccountConfig, ...]:
+    """Read one strict, complete installation configuration snapshot."""
+    raw = _bounded_file(str(path), "GitHub installations", forbidden_mode=0o022)
+    try:
+        document = tomllib.loads(raw.decode("utf-8"))
+    except UnicodeDecodeError, tomllib.TOMLDecodeError:
+        raise ConfigurationError("GitHub installations file is malformed") from None
+    if set(document) != {"accounts"} or not isinstance(document["accounts"], list) or not document["accounts"]:
+        raise ConfigurationError("GitHub installations file is malformed")
+
+    accounts: list[AccountConfig] = []
+    account_ids: set[int] = set()
+    account_logins: set[str] = set()
+    repository_ids: set[int] = set()
+    repository_names: set[str] = set()
+    for value in document["accounts"]:
+        if not isinstance(value, dict) or set(value) != {"id", "login", "repositories"}:
+            raise ConfigurationError("GitHub installations file is malformed")
+        account_id, account_login, raw_repositories = value["id"], value["login"], value["repositories"]
+        if (
+            type(account_id) is not int
+            or account_id <= 0
+            or not isinstance(account_login, str)
+            or _ACCOUNT_LOGIN.fullmatch(account_login) is None
+            or not isinstance(raw_repositories, list)
+            or not raw_repositories
+        ):
+            raise ConfigurationError("GitHub installations file is malformed")
+        canonical_login = account_login.casefold()
+        if account_id in account_ids or canonical_login in account_logins:
+            raise ConfigurationError("GitHub installation accounts are duplicated")
+        repositories = tuple(sorted(_repository(item, account_login=account_login) for item in raw_repositories))
+        current_ids = {item[0] for item in repositories}
+        current_names = {item[1] for item in repositories}
+        if (
+            len(current_ids) != len(repositories)
+            or len(current_names) != len(repositories)
+            or current_ids & repository_ids
+            or current_names & repository_names
+        ):
+            raise ConfigurationError("GitHub installation repositories are duplicated")
+        account_ids.add(account_id)
+        account_logins.add(canonical_login)
+        repository_ids.update(current_ids)
+        repository_names.update(current_names)
+        accounts.append(AccountConfig(account_id, account_login, repositories))
+    return tuple(sorted(accounts, key=lambda item: item.account_id))
+
+
 class HostConfig:
     """Immutable host-owned configuration; credential repr is always redacted."""
 
     app_id: int
     app_slug: str
     client_id: str
-    account_id: int
-    account_login: str
-    allowed_repositories: frozenset[tuple[int, str]]
+    accounts: tuple[AccountConfig, ...]
     state_path: Path
     _private_key: str
     _webhook_secret: str
@@ -95,9 +180,7 @@ class HostConfig:
         "_locked",
         "_private_key",
         "_webhook_secret",
-        "account_id",
-        "account_login",
-        "allowed_repositories",
+        "accounts",
         "app_id",
         "app_slug",
         "client_id",
@@ -110,9 +193,7 @@ class HostConfig:
         app_id: int,
         app_slug: str,
         client_id: str,
-        account_id: int,
-        account_login: str,
-        allowed_repositories: frozenset[tuple[int, str]],
+        accounts: tuple[AccountConfig, ...],
         state_path: Path,
         private_key: str,
         webhook_secret: str,
@@ -120,9 +201,7 @@ class HostConfig:
         object.__setattr__(self, "app_id", app_id)
         object.__setattr__(self, "app_slug", app_slug.casefold())
         object.__setattr__(self, "client_id", client_id)
-        object.__setattr__(self, "account_id", account_id)
-        object.__setattr__(self, "account_login", account_login)
-        object.__setattr__(self, "allowed_repositories", allowed_repositories)
+        object.__setattr__(self, "accounts", accounts)
         object.__setattr__(self, "state_path", state_path)
         object.__setattr__(self, "_private_key", private_key)
         object.__setattr__(self, "_webhook_secret", webhook_secret)
@@ -136,19 +215,8 @@ class HostConfig:
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] | None = None) -> HostConfig:
         env = os.environ if environment is None else environment
-        repositories: set[tuple[int, str]] = set()
-        raw = env.get("HAMSTERDAN_ALLOWED_REPOSITORIES", "")
-        for entry in raw.split(","):
-            try:
-                repository_id, full_name = entry.strip().split(":", 1)
-            except ValueError:
-                raise ConfigurationError("allowed repositories are malformed") from None
-            identifier = _positive_decimal(repository_id, "repository id")
-            if full_name.count("/") != 1 or not full_name.isascii() or not full_name.isprintable():
-                raise ConfigurationError("repository name is malformed")
-            repositories.add((identifier, full_name.lower()))
-        if not repositories:
-            raise ConfigurationError("allowed repositories are missing")
+        if _RETIRED_INSTALLATION_ENVIRONMENT & env.keys():
+            raise ConfigurationError("retired single-account configuration is present")
         state_path = Path(env.get("HAMSTERDAN_STATE_PATH", ""))
         if not str(state_path) or state_path == Path("."):
             raise ConfigurationError("state path is missing")
@@ -156,9 +224,7 @@ class HostConfig:
             app_id=_positive_decimal(env.get("HAMSTERDAN_GITHUB_APP_ID"), "App id"),
             app_slug=_slug(env.get("HAMSTERDAN_GITHUB_APP_SLUG")),
             client_id=_identifier(env.get("HAMSTERDAN_GITHUB_CLIENT_ID"), "client id"),
-            account_id=_positive_decimal(env.get("HAMSTERDAN_GITHUB_ACCOUNT_ID"), "account id"),
-            account_login=_identifier(env.get("HAMSTERDAN_GITHUB_ACCOUNT_LOGIN"), "account login"),
-            allowed_repositories=frozenset(repositories),
+            accounts=installation_accounts(env.get("HAMSTERDAN_GITHUB_INSTALLATIONS_FILE", "")),
             state_path=state_path,
             private_key=_secret_file(env.get("HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE"), "private key"),
             webhook_secret=_secret_file(env.get("HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE"), "webhook secret"),
@@ -173,7 +239,7 @@ class HostConfig:
 
     def __repr__(self) -> str:
         return (
-            f"HostConfig(app_id={self.app_id!r}, app_slug={self.app_slug!r}, client_id=<redacted>, account_id={self.account_id!r}, "
-            f"account_login={self.account_login!r}, allowed_repositories={self.allowed_repositories!r}, "
+            f"HostConfig(app_id={self.app_id!r}, app_slug={self.app_slug!r}, client_id=<redacted>, "
+            f"accounts={self.accounts!r}, "
             f"state_path={self.state_path!r}, credentials=<redacted>)"
         )

@@ -6,14 +6,12 @@
   vars:
     ansible_python_interpreter: /usr/bin/python3
     runtime_root: /etc/hamsterdan
+    runtime_config: /etc/hamsterdan/config
     runtime_secrets: /etc/hamsterdan/secrets
     runtime_state: /var/lib/hamsterdan
     runtime_unit: /etc/systemd/system/hamsterdan.service
-    managed_runtime_files:
-      - source: "{{ runtime_environment }}"
-        destination: "{{ runtime_root }}/hamsterdan.env"
-        owner: root
-        group: root
+    runtime_image_identity: /etc/hamsterdan/image-id
+    managed_secret_files:
       - source: "{{ runtime_github_private_key }}"
         destination: "{{ runtime_secrets }}/github-app.pem"
         owner: "10001"
@@ -37,6 +35,7 @@
           - candidate_image_id is match('^sha256:[0-9a-f]{64}$')
           - expected_app_id | int > 0
           - expected_app_slug is match('^[a-z0-9]+(-[a-z0-9]+)*$')
+          - expected_installation_count | int > 0
           - expected_repository_count | int > 0
 
     - name: Verify the exact candidate image remains loaded
@@ -90,6 +89,9 @@
         - path: "{{ runtime_root }}"
           owner: root
           mode: "0700"
+        - path: "{{ runtime_config }}"
+          owner: root
+          mode: "0755"
         - path: "{{ runtime_secrets }}"
           owner: "10001"
           mode: "0700"
@@ -117,6 +119,9 @@
         - path: "{{ runtime_root }}"
           owner: root
           mode: "0700"
+        - path: "{{ runtime_config }}"
+          owner: root
+          mode: "0755"
         - path: "{{ runtime_secrets }}"
           owner: "10001"
           mode: "0700"
@@ -124,22 +129,22 @@
           owner: "10001"
           mode: "0700"
 
-    - name: Inspect existing managed runtime files
+    - name: Inspect existing managed secret files
       ansible.builtin.stat:
         path: "{{ item.destination }}"
         follow: false
-      loop: "{{ managed_runtime_files }}"
-      register: managed_runtime_before
+      loop: "{{ managed_secret_files }}"
+      register: managed_secrets_before
       no_log: true
 
-    - name: Refuse unsafe existing managed runtime files
+    - name: Refuse unsafe existing managed secret files
       ansible.builtin.assert:
         that:
           - not item.stat.exists or (item.stat.isreg and not item.stat.islnk)
-      loop: "{{ managed_runtime_before.results }}"
+      loop: "{{ managed_secrets_before.results }}"
       no_log: true
 
-    - name: Probe whether existing runtime custody matches the supplied authority
+    - name: Probe whether existing secret custody matches the supplied authority
       ansible.builtin.copy:
         src: "{{ item.source }}"
         dest: "{{ item.destination }}"
@@ -147,20 +152,20 @@
         group: "{{ item.group }}"
         mode: "0600"
         force: true
-      loop: "{{ managed_runtime_files }}"
+      loop: "{{ managed_secret_files }}"
       check_mode: true
-      register: managed_runtime_probe
+      register: managed_secrets_probe
       no_log: true
 
-    - name: Refuse implicit runtime authority replacement
+    - name: Refuse implicit secret authority replacement
       ansible.builtin.assert:
         that:
-          - not managed_runtime_before.results[item].stat.exists or not managed_runtime_probe.results[item].changed
+          - not managed_secrets_before.results[item].stat.exists or not managed_secrets_probe.results[item].changed
         fail_msg: Existing runtime authority differs; rotation requires a separate operation.
-      loop: "{{ range(0, managed_runtime_files | length) | list }}"
+      loop: "{{ range(0, managed_secret_files | length) | list }}"
       no_log: true
 
-    - name: Install previously absent runtime custody
+    - name: Install previously absent secret custody
       ansible.builtin.copy:
         src: "{{ item.source }}"
         dest: "{{ item.destination }}"
@@ -168,11 +173,79 @@
         group: "{{ item.group }}"
         mode: "0600"
         force: false
-      loop: "{{ managed_runtime_files }}"
+      loop: "{{ managed_secret_files }}"
       no_log: true
 
-    - name: Validate App and selected-repository authority without launching
+    - name: Inspect replaceable runtime configuration paths
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: false
+      loop:
+        - "{{ runtime_root }}/hamsterdan.env"
+        - "{{ runtime_config }}/installations.toml"
+        - "{{ runtime_image_identity }}"
+      register: runtime_configuration_before
+
+    - name: Refuse unsafe replaceable runtime configuration paths
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists or (item.stat.isreg and not item.stat.islnk)
+      loop: "{{ runtime_configuration_before.results }}"
+
+    - name: Validate App and complete installation authority without launching
       block:
+        - name: Create a staged candidate configuration directory
+          ansible.builtin.tempfile:
+            state: directory
+            path: "{{ runtime_root }}"
+            prefix: .candidate-configuration-
+          register: staged_config
+          changed_when: false
+
+        - name: Make staged candidate configuration readable by the image user
+          ansible.builtin.file:
+            path: "{{ staged_config.path }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          changed_when: false
+
+        - name: Stage the candidate environment
+          ansible.builtin.copy:
+            src: "{{ runtime_environment }}"
+            dest: "{{ staged_config.path }}/hamsterdan.env"
+            owner: root
+            group: root
+            mode: "0600"
+          changed_when: false
+
+        - name: Stage the installation configuration
+          ansible.builtin.copy:
+            src: "{{ runtime_installations }}"
+            dest: "{{ staged_config.path }}/installations.toml"
+            owner: root
+            group: root
+            mode: "0644"
+          changed_when: false
+
+        - name: Create isolated candidate validation state
+          ansible.builtin.tempfile:
+            state: directory
+            path: /var/lib
+            prefix: hamsterdan-candidate-
+          register: validation_state
+          changed_when: false
+
+        - name: Give the image user isolated candidate validation-state custody
+          ansible.builtin.file:
+            path: "{{ validation_state.path }}"
+            state: directory
+            owner: "10001"
+            group: "10001"
+            mode: "0700"
+          changed_when: false
+
         - name: Run the exact candidate validation command
           ansible.builtin.command:
             argv:
@@ -185,9 +258,10 @@
               - --security-opt=no-new-privileges
               - --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=268435456,mode=0700,uid=10001,gid=10001
               - --env-file
-              - "{{ runtime_root }}/hamsterdan.env"
-              - --mount=type=bind,source=/var/lib/hamsterdan,target=/var/lib/hamsterdan
-              - --mount=type=bind,source=/etc/hamsterdan/secrets,target=/run/secrets/hamsterdan,readonly
+              - "{{ staged_config.path }}/hamsterdan.env"
+              - --mount=type=bind,source={{ validation_state.path }},target=/var/lib/hamsterdan
+              - --mount=type=bind,source={{ runtime_secrets }},target=/run/secrets/hamsterdan,readonly
+              - --mount=type=bind,source={{ staged_config.path }},target=/run/config/hamsterdan,readonly
               - "{{ candidate_image_id }}"
               - validate
           register: runtime_validation
@@ -198,20 +272,70 @@
             that:
               - (runtime_validation.stdout | from_json).app_id == expected_app_id | int
               - (runtime_validation.stdout | from_json).app_slug == expected_app_slug
-              - (runtime_validation.stdout | from_json).installation_id | int > 0
+              - (runtime_validation.stdout | from_json).reconciled_installations == expected_installation_count | int
               - (runtime_validation.stdout | from_json).admitted_repositories == expected_repository_count | int
       rescue:
-        - name: Remove runtime files first introduced by the failed validation
+        - name: Remove secrets first introduced by the failed validation
           ansible.builtin.file:
-            path: "{{ managed_runtime_files[item].destination }}"
+            path: "{{ managed_secret_files[item].destination }}"
             state: absent
-          when: not managed_runtime_before.results[item].stat.exists
-          loop: "{{ range(0, managed_runtime_files | length) | list }}"
+          when: not managed_secrets_before.results[item].stat.exists
+          loop: "{{ range(0, managed_secret_files | length) | list }}"
           no_log: true
+
+        - name: Remove failed staged candidate configuration
+          ansible.builtin.file:
+            path: "{{ staged_config.path }}"
+            state: absent
+          when: staged_config is defined and staged_config.path is defined
+
+        - name: Remove failed isolated candidate validation state
+          ansible.builtin.file:
+            path: "{{ validation_state.path }}"
+            state: absent
+          when: validation_state is defined and validation_state.path is defined
 
         - name: Report bounded validation failure
           ansible.builtin.fail:
             msg: Runtime validation failed; the service remains inactive.
+
+    - name: Publish the validated runtime environment atomically
+      ansible.builtin.copy:
+        src: "{{ staged_config.path }}/hamsterdan.env"
+        remote_src: true
+        dest: "{{ runtime_root }}/hamsterdan.env"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Publish the validated installation configuration atomically
+      ansible.builtin.copy:
+        src: "{{ staged_config.path }}/installations.toml"
+        remote_src: true
+        dest: "{{ runtime_config }}/installations.toml"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Record the installed exact image identity
+      ansible.builtin.copy:
+        content: "{{ candidate_image_id }}\n"
+        dest: "{{ runtime_image_identity }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Remove staged candidate configuration
+      ansible.builtin.file:
+        path: "{{ staged_config.path }}"
+        state: absent
+      changed_when: false
+
+    - name: Remove isolated candidate validation state
+      ansible.builtin.file:
+        path: "{{ validation_state.path }}"
+        state: absent
+      changed_when: false
 
     - name: Inspect the existing service unit path
       ansible.builtin.stat:

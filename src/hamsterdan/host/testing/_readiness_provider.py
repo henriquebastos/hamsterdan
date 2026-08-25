@@ -14,7 +14,7 @@ from pydantic import JsonValue
 
 from hamsterdan.agents import AgentProtocolError, CodingResult, ConversationResult, ReviewResult
 from hamsterdan.github_app.config import HostConfig
-from hamsterdan.github_app.models import GitHubBoundaryError, RegistrationInventory, WireResponse
+from hamsterdan.github_app.models import GitHubBoundaryError, InstallationInventory, RegistrationInventory, WireResponse
 from hamsterdan.host.git_publish import (
     GitPublishError,
     GitPublishResult,
@@ -699,7 +699,7 @@ class ProviderClients:
 
     def registration_inventory(self, config: HostConfig) -> RegistrationInventory:
         del config
-        return RegistrationInventory(44, ((31, "owner/repo"),))
+        return RegistrationInventory((InstallationInventory(44, 23, ((31, "owner/repo"),)),))
 
     def close(self) -> None:
         pass

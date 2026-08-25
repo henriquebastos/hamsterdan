@@ -1,0 +1,220 @@
+---
+- name: Apply Hamsterdan installation configuration without redeploying
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    runtime_root: /etc/hamsterdan
+    runtime_config: /etc/hamsterdan/config
+    runtime_environment: /etc/hamsterdan/hamsterdan.env
+    runtime_installations_file: /etc/hamsterdan/config/installations.toml
+    runtime_image_identity: /etc/hamsterdan/image-id
+    runtime_secrets: /etc/hamsterdan/secrets
+
+  tasks:
+    - name: Validate target and configuration expectations
+      ansible.builtin.assert:
+        that:
+          - ansible_system == 'Linux'
+          - ansible_architecture == 'x86_64'
+          - expected_installation_count | int > 0
+          - expected_repository_count | int > 0
+
+    - name: Inspect installed runtime custody
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+        follow: false
+      loop:
+        - path: "{{ runtime_root }}"
+          kind: directory
+        - path: "{{ runtime_config }}"
+          kind: directory
+        - path: "{{ runtime_secrets }}"
+          kind: directory
+        - path: "{{ runtime_environment }}"
+          kind: file
+        - path: "{{ runtime_installations_file }}"
+          kind: file
+        - path: "{{ runtime_image_identity }}"
+          kind: file
+        - path: /etc/systemd/system/hamsterdan.service
+          kind: file
+      register: runtime_custody
+
+    - name: Require safe installed runtime custody
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - not item.stat.islnk
+          - (item.item.kind == 'directory' and item.stat.isdir) or (item.item.kind == 'file' and item.stat.isreg)
+      loop: "{{ runtime_custody.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+
+    - name: Read the installed exact image identity
+      ansible.builtin.slurp:
+        path: "{{ runtime_image_identity }}"
+      register: runtime_image
+
+    - name: Normalize the installed exact image identity
+      ansible.builtin.set_fact:
+        installed_image_id: "{{ runtime_image.content | b64decode | trim }}"
+
+    - name: Require a valid installed image identity
+      ansible.builtin.assert:
+        that:
+          - installed_image_id is match('^sha256:[0-9a-f]{64}$')
+
+    - name: Verify the installed exact image remains loaded
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - inspect
+          - "{{ installed_image_id }}"
+      register: installed_candidate
+      changed_when: false
+
+    - name: Require the loaded image identity to match
+      ansible.builtin.assert:
+        that:
+          - (installed_candidate.stdout | from_json)[0].Id == installed_image_id
+
+    - name: Inspect service activity before configuration
+      ansible.builtin.command: systemctl is-active hamsterdan.service
+      register: service_before
+      changed_when: false
+      failed_when: false
+
+    - name: Refuse transitional service activity
+      ansible.builtin.assert:
+        that:
+          - service_before.stdout in ['active', 'inactive', 'failed', 'unknown']
+
+    - name: Stage and validate the complete configuration snapshot
+      block:
+        - name: Create a private staged configuration directory
+          ansible.builtin.tempfile:
+            state: directory
+            path: "{{ runtime_root }}"
+            prefix: .configuration-
+          register: staged_config
+          changed_when: false
+
+        - name: Make the staged configuration readable by the image user
+          ansible.builtin.file:
+            path: "{{ staged_config.path }}"
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+          changed_when: false
+
+        - name: Stage the proposed installation configuration
+          ansible.builtin.copy:
+            src: "{{ runtime_installations }}"
+            dest: "{{ staged_config.path }}/installations.toml"
+            owner: root
+            group: root
+            mode: "0644"
+          changed_when: false
+
+        - name: Create isolated validation state
+          ansible.builtin.tempfile:
+            state: directory
+            path: /var/lib
+            prefix: hamsterdan-configuration-
+          register: validation_state
+          changed_when: false
+
+        - name: Give the image user isolated validation-state custody
+          ansible.builtin.file:
+            path: "{{ validation_state.path }}"
+            state: directory
+            owner: "10001"
+            group: "10001"
+            mode: "0700"
+          changed_when: false
+
+        - name: Validate every configured installation and repository
+          ansible.builtin.command:
+            argv:
+              - docker
+              - run
+              - --rm
+              - --pull=never
+              - --read-only
+              - --cap-drop=ALL
+              - --security-opt=no-new-privileges
+              - --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=268435456,mode=0700,uid=10001,gid=10001
+              - --env-file
+              - "{{ runtime_environment }}"
+              - --mount=type=bind,source={{ validation_state.path }},target=/var/lib/hamsterdan
+              - --mount=type=bind,source={{ runtime_secrets }},target=/run/secrets/hamsterdan,readonly
+              - --mount=type=bind,source={{ staged_config.path }},target=/run/config/hamsterdan,readonly
+              - "{{ installed_image_id }}"
+              - validate
+          register: configuration_validation
+          changed_when: false
+
+        - name: Require complete configuration validation evidence
+          ansible.builtin.assert:
+            that:
+              - (configuration_validation.stdout | from_json).reconciled_installations == expected_installation_count | int
+              - (configuration_validation.stdout | from_json).admitted_repositories == expected_repository_count | int
+      rescue:
+        - name: Remove failed staged configuration
+          ansible.builtin.file:
+            path: "{{ staged_config.path }}"
+            state: absent
+          when: staged_config is defined and staged_config.path is defined
+
+        - name: Remove failed isolated validation state
+          ansible.builtin.file:
+            path: "{{ validation_state.path }}"
+            state: absent
+          when: validation_state is defined and validation_state.path is defined
+
+        - name: Report bounded configuration validation failure
+          ansible.builtin.fail:
+            msg: Installation configuration validation failed; the current configuration and service are unchanged.
+
+    - name: Publish the validated installation configuration atomically
+      ansible.builtin.copy:
+        src: "{{ staged_config.path }}/installations.toml"
+        remote_src: true
+        dest: "{{ runtime_installations_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: configuration_publication
+
+    - name: Remove staged configuration
+      ansible.builtin.file:
+        path: "{{ staged_config.path }}"
+        state: absent
+      changed_when: false
+
+    - name: Remove isolated validation state
+      ansible.builtin.file:
+        path: "{{ validation_state.path }}"
+        state: absent
+      changed_when: false
+
+    - name: Restart only an already active service after a configuration change
+      ansible.builtin.systemd_service:
+        name: hamsterdan.service
+        state: restarted
+      when: configuration_publication.changed and service_before.stdout == 'active'
+
+    - name: Inspect final service activity
+      ansible.builtin.command: systemctl is-active hamsterdan.service
+      register: service_after
+      changed_when: false
+      failed_when: false
+
+    - name: Preserve prior service activation posture
+      ansible.builtin.assert:
+        that:
+          - (service_before.stdout == 'active' and service_after.stdout == 'active') or
+            (service_before.stdout != 'active' and service_after.stdout != 'active')

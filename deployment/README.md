@@ -16,7 +16,10 @@ Hamsterdan service.
 - `deployment/deploy.py` exports a verified clean candidate and drives
   `deployment/ansible/candidate.yml` over fingerprint-pinned SSH.
 - `deployment/runtime.py` transfers temporary private runtime inputs and drives
-  `deployment/ansible/runtime.yml` against an already qualified image.
+  initial provisioning or configuration-only application against the owned VM.
+- `deployment/config/installations.toml` is the tracked authority allow-list of
+  GitHub installation accounts and repositories. It is runtime configuration,
+  not an image input.
 - `.github/workflows/image.yml` is a manual CI adapter over the same commands.
   CI does not contain a second build implementation.
 
@@ -116,6 +119,7 @@ Select the exact previously qualified manifest:
 
 ```shell
 uv run --frozen python deployment/runtime.py \
+  provision \
   --manifest dist/deployment/<revision>/release.json
 ```
 
@@ -128,11 +132,35 @@ exact image ID. The unit is disabled and inactive, binds only to
 read-only as its unprivileged user with all capabilities dropped. A repeated run
 with the same inputs must report `changed=0`.
 
-The current executable boundary still accepts one installation account and the
-provisioner refuses changed runtime inputs. The accepted next slice replaces
-that limit with one restart-applied configuration portfolio containing multiple
-installation accounts and repositories. Until that slice qualifies, do not
-manually replace files under `/etc/hamsterdan`.
+## Apply installation configuration without redeploying
+
+Add or remove account blocks and repository lines in
+`deployment/config/installations.toml`, then apply only that file:
+
+```shell
+uv run --frozen python deployment/runtime.py configure \
+  --file deployment/config/installations.toml
+```
+
+This command does not build, transfer, or replace an OCI image; change the
+systemd unit; rotate secrets; or alter VM infrastructure. It uses the exact
+currently installed image to validate the complete proposed file against the
+App registration, every configured installation, and every configured
+repository in isolated temporary state. A validation failure before publication
+leaves the current file and service untouched. Success atomically replaces only
+`/etc/hamsterdan/config/installations.toml`; an active service restarts, while
+an inactive service remains inactive. A repeated unchanged application reports
+`changed=0` and does not restart the service.
+
+If publication succeeds but an active service cannot restart, the validated new
+file remains installed and the service fails closed; the command reports failure
+instead of restoring an older authority snapshot. Correct or restore the tracked
+file, reapply it, and inspect the service before attempting another restart.
+
+Directly replacing the VM file and running `systemctl restart hamsterdan` uses
+the same startup contract, but the configuration command is the reproducible
+route: the tracked file remains the source of truth and malformed or
+provider-invalid input cannot replace the working copy.
 
 ## CI and publication boundary
 

@@ -46,7 +46,8 @@ from petrus.testing.dst import (
 )
 from pydantic import JsonValue
 
-from hamsterdan.github_app.config import HostConfig
+from hamsterdan.github_app.config import AccountConfig, HostConfig
+from hamsterdan.github_app.models import InstallationInventory
 from hamsterdan.host.agenticus import AgentRouteStore, compose_agent
 from hamsterdan.host.api import create_app
 from hamsterdan.host.service import HostService
@@ -291,7 +292,7 @@ class ReadinessScenarioProfile:
             clock=lambda: float(context.now()),
             transport_factory=transport_factory,
         )
-        host.registry.reconcile(44, ((31, "owner/repo"),))
+        host.registry.reconcile((InstallationInventory(44, 23, ((31, "owner/repo"),)),))
         generation = _Generation(host, TestClient(create_app(host, reconcile_startup=False)), context_holder)
         return GenerationStart(generation, tuple(self._followups(generation, context)))
 
@@ -1470,9 +1471,7 @@ def _config(root: Path) -> HostConfig:
         app_id=17,
         app_slug="hamsterdan-test",
         client_id="readiness-world-client",
-        account_id=23,
-        account_login="Owner",
-        allowed_repositories=frozenset({(31, "owner/repo")}),
+        accounts=(AccountConfig(23, "Owner", ((31, "owner/repo"),)),),
         state_path=root,
         private_key="readiness-world-private-key",
         webhook_secret=WEBHOOK_SECRET,

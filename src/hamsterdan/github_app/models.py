@@ -21,9 +21,15 @@ class RerunRefusedError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class RegistrationInventory:
+class InstallationInventory:
     installation_id: int
+    account_id: int
     repositories: tuple[tuple[int, str], ...]
+
+
+@dataclass(frozen=True)
+class RegistrationInventory:
+    installations: tuple[InstallationInventory, ...]
 
 
 @dataclass(frozen=True)

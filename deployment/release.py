@@ -311,7 +311,10 @@ def main() -> int:
         else:
             path = arguments.manifest or manifest_path()
             path = verify(path)
-        print(path.relative_to(ROOT))
+        display_path = path.resolve()
+        if display_path.is_relative_to(ROOT):
+            display_path = display_path.relative_to(ROOT)
+        print(display_path)
         return 0
     except ReleaseError as error:
         print(f"release refused: {error}", file=sys.stderr)
