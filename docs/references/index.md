@@ -13,6 +13,12 @@
 
 ## Petrus provenance
 
+- Engineering-convention and feedback-interface comparison:
+  `henriquebastos/petrus@39eac9d39a8050541db2d4b11c12ab967f9492b9`,
+  inspected from the sibling checkout on 2026-08-24. Hamsterdan adapted reusable
+  boundary, durability, Activity, retry, testing, and command-interface practice;
+  Petrus's internal package graph, exact structural rules, mutation targets,
+  complexity baseline, and test seeds were not adopted as Hamsterdan policy.
 - Historical Petrus namespace migration and accepted application dependency:
   `henriquebastos/petrus@cd1187e44926d6a80e4a3538ad79762618d32a8b`,
   inspected 2026-08-01.

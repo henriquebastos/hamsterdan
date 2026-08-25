@@ -98,3 +98,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-19 — V5 semantic coverage accounting accepted](entries/2026-08-19T0849Z-v5-semantic-coverage-accounting-accepted.md)
 - [2026-08-22 — V5 typed readiness topology promoted](entries/2026-08-22T0116Z-v5-typed-readiness-topology-promoted.md)
 - [2026-08-23 — V5-only private v0.1 candidate qualified locally](entries/2026-08-23T2203Z-v5-only-private-v0-1-candidate-qualified-locally.md)
+- [2026-08-25 — Engineering feedback and conventions aligned](entries/2026-08-25T1052Z-engineering-feedback-and-conventions-aligned.md)

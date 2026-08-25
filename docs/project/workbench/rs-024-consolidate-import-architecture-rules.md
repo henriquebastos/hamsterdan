@@ -1,6 +1,8 @@
 ---
-status: Candidate
+status: Completed
 captured: 2026-08-24
+pulled: 2026-08-24
+completed: 2026-08-25
 navigator: Henrique
 source: ../exploration/es9-human-codebase-ownership/candidate-review.md
 ---
@@ -39,7 +41,7 @@ relationships merely to test them.
 
 ### CR-001 — Consolidate repository import scans and preserve every rule
 
-Status: Parked
+Status: Done
 
 Likely files:
 
@@ -57,6 +59,13 @@ Validation seeds:
 
 ## Pull state
 
-This candidate is captured but not pulled. No test consolidation, production
-import, architecture decision, commit, or release action is authorized by this
-record. ES-009 remains a learning session.
+The Navigator pulled this Refinement Story as the prerequisite to strengthening
+the repository quality gate. Import-direction rules now have one relative-aware
+owner in `tests/test_architecture.py`; the credential-free agent request-field
+assertion remains in the host unit area.
+
+Focused architecture and check-command validation passed 16 tests. The default
+and path-scoped quick profiles passed, including 10 architecture checks.
+Independent review found one dropped positive composition assertion, missing
+`contracts` protection, broad module-prefix matching, and weak command-interface
+coverage; all four findings were corrected and revalidated. The Navigator accepted the result on 2026-08-25.

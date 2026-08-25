@@ -1,23 +1,62 @@
 #!/usr/bin/env bash
+# One deterministic feedback interface for agents and humans.
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+export UV_FROZEN=1
+
+usage() {
+    cat <<'EOF'
+usage: scripts/check quick [PATH ...]
+       scripts/check full
+
+quick  lint and format-check Python PATHs, type-check production source, and enforce architecture rules
+full   quick checks plus Bun checks, distribution build, and the routine Python suite
+EOF
+}
+
+quick() {
+    local paths=("$@")
+    if ((${#paths[@]} == 0)); then
+        paths=(src tests)
+    fi
+    uv run ruff check "${paths[@]}"
+    uv run ruff format --check "${paths[@]}"
+    uv run ty check src
+    uv run pytest -q tests/test_architecture.py
+}
+
+full() {
+    if (($# != 0)); then
+        printf 'scripts/check full does not accept paths\n' >&2
+        return 2
+    fi
+    quick
+    bun test ./tests/amp_webhook_relay.test.ts
+    (cd tools/demo-video && bun run check)
+    rm -rf dist
+    uv build
+    uv run pytest -q -m "not real_provider_acceptance"
+}
+
 profile="${1:-full}"
+if (($# != 0)); then
+    shift
+fi
+
 case "$profile" in
     quick)
-        uv run --frozen ruff check src tests
-        uv run --frozen ruff format --check src tests
-        uv run --frozen ty check src
+        quick "$@"
         ;;
     full)
-        "$0" quick
-        bun test ./tests/amp_webhook_relay.test.ts
-        (cd tools/demo-video && bun run check)
-        rm -rf dist
-        uv build
-        uv run --frozen pytest -q -m "not real_provider_acceptance"
+        full "$@"
+        ;;
+    -h|--help)
+        usage
         ;;
     *)
-        echo "usage: scripts/check [quick|full]" >&2
+        usage >&2
         exit 2
         ;;
 esac

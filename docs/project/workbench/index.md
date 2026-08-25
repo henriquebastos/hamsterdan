@@ -20,9 +20,7 @@ existing Hamsterdan capability outside the delivery roadmap.
 - [RS-023 — Inspect current V5 Activity identities](rs-023-inspect-current-v5-activity-identities.md):
   make the read-only operator inventory understand every current V5 operation
   identity without exposing payloads.
-- [RS-024 — Give import architecture rules one test owner](rs-024-consolidate-import-architecture-rules.md):
-  consolidate partially overlapping source-import scanners under the
-  relative-aware architecture test.
+
 - [RS-025 — Make the current V5 maintainer route explicit](rs-025-make-v5-maintainer-route-explicit.md):
   capture guided journey links, current History and test-layer documentation,
   operation-settlement naming, and semantic Git-loss vocabulary.
@@ -39,6 +37,11 @@ None.
 
 ## Closed
 
+- [RS-028 — Align engineering feedback with Petrus practice](rs-028-align-engineering-feedback-with-petrus.md):
+  adapted reusable conventions and made the maintained quality command bounded,
+  path-aware, frozen, self-describing, and architecture-aware.
+- [RS-024 — Give import architecture rules one test owner](rs-024-consolidate-import-architecture-rules.md):
+  consolidated import-direction enforcement under one relative-aware test owner.
 - [RS-001 — Make the PR-readiness Net explicit and maintainable](rs-001-explicit-maintainable-readiness-net.md)
 - [RS-002 — Move Activity execution mechanics into Motus](rs-002-motus-owned-activity-execution.md)
 - [RS-003 — Introduce first-class lifecycle scopes](rs-003-first-class-lifecycle-scopes.md)

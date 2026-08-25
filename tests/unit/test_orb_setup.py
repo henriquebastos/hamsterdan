@@ -3,7 +3,12 @@ from __future__ import annotations
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Orb setup requires the GNU/Linux command set")
 
 ROOT = Path(__file__).parents[2]
 AUTHOR_SECRET = "author-session-canary"
