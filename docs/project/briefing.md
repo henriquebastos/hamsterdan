@@ -58,11 +58,12 @@ after private production qualification.
 ## Current movement
 
 [CV19](roadmap/cv19-private-v0-1-production/index.md) owns the private `0.1.0`
-production checkpoint. The candidate is V5-only and locally green. The exact
-target repository is not selected, the candidate host has not been launched,
-and launch requires explicit approval because durable webhook state can cause
-GitHub effects. The existing App is HBNetwork-owned and therefore can monitor
-only an HBNetwork repository.
+production checkpoint. The V5-only candidate is locally green and its exact
+archive and image identity qualify idempotently on the owned `hamsterdan-prod`
+exe.dev VM. No service or host process is configured. The exact target
+repository is not selected, and launch requires explicit approval because
+durable webhook state can cause GitHub effects. The existing App is
+HBNetwork-owned and therefore can monitor only an HBNetwork repository.
 
 The pinned Petrus source dependency is currently private. Orb installation uses
 a dedicated project-scoped `PETRUS_GITHUB_TOKEN`, removes temporary Git

@@ -1,0 +1,156 @@
+---
+- name: Qualify one exact Hamsterdan candidate without starting it
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    remote_candidate_directory: "/opt/hamsterdan/candidates/{{ candidate_revision }}"
+    remote_candidate_archive: "{{ remote_candidate_directory }}/candidate.tar.gz"
+
+  tasks:
+    - name: Validate target and candidate inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_system == 'Linux'
+          - ansible_architecture == 'x86_64'
+          - candidate_revision is match('^[0-9a-f]{40}$')
+          - candidate_image == 'hamsterdan:sha-' + candidate_revision
+          - candidate_image_id is match('^sha256:[0-9a-f]{64}$')
+          - candidate_archive_sha256 is match('^[0-9a-f]{64}$')
+          - candidate_version | length > 0
+
+    - name: Verify Docker is available
+      ansible.builtin.command: docker version
+      changed_when: false
+
+    - name: Create the candidate custody directory
+      ansible.builtin.file:
+        path: "{{ remote_candidate_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Transfer the exact candidate archive
+      ansible.builtin.copy:
+        src: "{{ candidate_archive }}"
+        dest: "{{ remote_candidate_archive }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Verify the transferred archive checksum
+      ansible.builtin.command: "sha256sum {{ remote_candidate_archive }}"
+      register: remote_archive_checksum
+      changed_when: false
+
+    - name: Require the transferred archive checksum to match
+      ansible.builtin.assert:
+        that:
+          - remote_archive_checksum.stdout.split()[0] == candidate_archive_sha256
+
+    - name: Inspect an existing image with the candidate name
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - inspect
+          - "{{ candidate_image }}"
+      register: candidate_before_load
+      changed_when: false
+      failed_when: false
+
+    - name: Refuse to replace a different image with the same candidate name
+      ansible.builtin.assert:
+        that:
+          - (candidate_before_load.stdout | from_json)[0].Id == candidate_image_id
+        fail_msg: The candidate image name already points at a different image.
+      when: candidate_before_load.rc == 0
+
+    - name: Load the candidate archive when the exact image is absent
+      ansible.builtin.command: "docker image load --input {{ remote_candidate_archive }}"
+      when: candidate_before_load.rc != 0
+      changed_when: true
+
+    - name: Inspect the loaded candidate
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - inspect
+          - "{{ candidate_image }}"
+      register: candidate_after_load
+      changed_when: false
+
+    - name: Require the loaded image identity to match
+      ansible.builtin.assert:
+        that:
+          - (candidate_after_load.stdout | from_json)[0].Id == candidate_image_id
+
+    - name: Verify the Hamsterdan host command
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - "{{ candidate_image }}"
+          - --help
+      changed_when: false
+
+    - name: Read the Hamsterdan package version
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --entrypoint
+          - /opt/hamsterdan/.venv/bin/python
+          - "{{ candidate_image }}"
+          - -c
+          - "from importlib.metadata import version; print(version('hamsterdan'))"
+      register: hamsterdan_version
+      changed_when: false
+
+    - name: Require the Hamsterdan package version to match
+      ansible.builtin.assert:
+        that:
+          - hamsterdan_version.stdout == candidate_version
+
+    - name: Verify the Node runtime
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --entrypoint
+          - /opt/hamsterdan/pi/node_modules/node/bin/node
+          - "{{ candidate_image }}"
+          - --version
+      changed_when: false
+
+    - name: Verify the Pi runtime
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --entrypoint
+          - /opt/hamsterdan/pi/node_modules/node/bin/node
+          - "{{ candidate_image }}"
+          - /opt/hamsterdan/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js
+          - --version
+      changed_when: false
+
+    - name: Verify writable durable-state ownership
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - --rm
+          - --entrypoint
+          - /bin/sh
+          - "{{ candidate_image }}"
+          - -c
+          - test -w /var/lib/hamsterdan
+      changed_when: false

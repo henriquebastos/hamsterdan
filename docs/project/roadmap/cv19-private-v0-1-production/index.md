@@ -2,10 +2,11 @@
 code: CV19
 level: Value
 status: Active
-status_reason: The V5-only OCI candidate now builds and verifies locally; registry publication, exe.dev service qualification, exact target selection, approved launch, and one controlled monitoring proof remain
-updated: 2026-08-24
+status_reason: The exact V5-only OCI candidate now qualifies idempotently on the owned exe.dev VM without launch; registry publication, service configuration, exact target selection, approved launch, and one controlled monitoring proof remain
+updated: 2026-08-25
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
+  - ../../debt/items/exe-dev-default-exeuntu-image-cannot-be-pinned.md
 ---
 
 # CV19 — Private v0.1 production
@@ -33,15 +34,23 @@ open-source release.
   `linux/amd64` OCI image locally or through a manual GitHub Actions adapter.
   The verified image runs the V5 host as an unprivileged user with the locked
   Python, Pi, Node, and Petrus dependencies and writable durable-state custody.
-  Dirty candidates fail the release boundary. GHCR publication and exe.dev
-  service provisioning remain separate, unqualified slices.
+  Dirty candidates fail the release boundary. GHCR publication remains a
+  separate, unqualified slice.
+- The exact clean candidate from commit `b97c7a9` is loaded on the owned
+  `hamsterdan-prod` exe.dev VM after archive SHA-256 verification. The VM is
+  fenced by exact name, `hamsterdan` tag, two CPUs, 4 GiB RAM, 20 GiB disk,
+  reported exeuntu image, and fingerprint-pinned SSH. Remote host CLI, package,
+  Node, Pi, image identity, and writable-state checks pass; a repeated
+  qualification reports `changed=0`. The accepted exeuntu base-image pinning
+  limit is carried by the linked debt item.
 - The existing private GitHub App is HBNetwork-owned and can be installed only
   for repositories owned by HBNetwork. The production target repository has not
   yet been named.
-- The host has not been launched from the OCI candidate or exercised on an
-  exe.dev VM. Launch can process durable webhook state and cause GitHub effects,
-  so it requires a separate explicit Navigator approval after target selection
-  and validation.
+- The OCI candidate has been exercised on exe.dev only through no-effects
+  qualification commands. No service, application port, GitHub credential, or
+  host process was configured. Launch can process durable webhook state and
+  cause GitHub effects, so it requires a separate explicit Navigator approval
+  after target selection and validation.
 
 ## Done condition
 

@@ -18,6 +18,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "ansible-core>=2.19,<2.20",
     "build>=1.5,<2",
     "httpx>=0.28,<1",
     "httpx2>=2.9,<3",
