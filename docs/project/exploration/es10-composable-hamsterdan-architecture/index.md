@@ -166,6 +166,50 @@ runtime or source compatibility requirement. A new decision should supersede
 current V5-only durable-state policy rather than silently rewriting the old
 record.
 
+### Replacement tree and delivery sequencing
+
+The Navigator ruled that the new architecture is built as a parallel
+replacement tree rather than an in-place migration:
+
+- New production code lives under `src/hamsterdan2` with its tests under
+  `tests2`, using the final inner package names (`workflow`, `readiness`,
+  `host`, `github_app`, `agents`, `contracts`, `simulation`).
+- `src/hamsterdan` is frozen except for production fixes while the replacement
+  is built.
+- When `src/hamsterdan2` fully replaces the current behavior, one cutover
+  excludes `src/hamsterdan` and renames `src/hamsterdan2` to `src/hamsterdan`
+  and `tests2` to `tests`.
+- CV19's supervised launch does not happen before ES-010. Should any launch
+  precede the cutover, the private single-operator deployment's durable state
+  may be reset at cutover; no migration, alias, or dual-reader work exists in
+  any ES-010 candidate.
+
+### Replacement-tree quality gate
+
+The frozen tree keeps its current non-blocking audit posture until deletion.
+The replacement tree is a strict blocking surface from its first slice:
+
+- `scripts/check` treats `src/hamsterdan2` and `tests2` as blocking for the
+  full Ruff rule surface, formatting, `ty`, ast-grep structural rules, and
+  cyclomatic complexity with `max-complexity = 4`.
+- A function above complexity 4 requires a per-function `noqa: C901` with a
+  one-line justification, reviewed at slice review. Engineering convention 17
+  continues to govern the frozen tree until deletion.
+- Replacement-tree tests are behavioral: they assert public behavior and its
+  reason, not helper decomposition. Collaborators arrive through owned typed
+  ports as injected strict fakes; `unittest.mock` and monkeypatching remain
+  available only at seams the module does not own.
+- The test taxonomy names four layers — behavioral unit, integration at real
+  seams, deterministic simulation per module and composed, and journey
+  acceptance — with deterministic simulation as the first-class correctness
+  owner and the others as correspondence evidence. Each delivery slice states
+  which layers it adds.
+- the engineering style contract (Hamsterdan Python style contract) owns extracting the Navigator's
+  Python style preferences into checkable rules, review conventions, and free
+  taste. Its ruled contract should exist before the first code-writing
+  replacement slice so `src/hamsterdan2` is written in that style from line
+  one. the engineering style contract runs in parallel with Phases A and B below.
+
 ### Target ownership hypothesis
 
 ```text
@@ -469,6 +513,63 @@ scope:
 
 CV18 remains historical accepted evidence. ES-010 may replace its architecture
 without preserving profile or artifact compatibility.
+
+## Session plan
+
+Each experiment below runs as one independent session or thread. A session is
+safe alone because its inputs are durable records, its output is one durable
+record, and it ends at a green state or a Navigator ruling. No session needs
+another session's transcript.
+
+Session mechanics:
+
+- Each session begins by reading this index and the prior experiment records it
+  names as inputs, nothing else.
+- Each experiment writes one record under `experiments/` in this directory,
+  named `<NN>-<slug>.md`.
+- Each session ends by updating the "Current state" section of this index so
+  the next session starts from the index alone.
+- Spike code lives under this exploration directory, never under `src/`.
+  Every session is non-production and leaves the repository green wherever it
+  stops.
+- A Navigator ruling checkpoint (R1–R4) closes each phase. A later session must
+  not silently bypass an unruled checkpoint.
+
+```text
+Phase A: Evidence (read-only)
+  S1  Exp 1  ownership + deletion map      -> experiments/01-ownership-map.md
+  S2  Exp 2  workflow value ownership      -> experiments/02-value-ownership.md
+  R1: Navigator rules the ownership and value maps.
+
+Phase B: Interface design
+  S3  Exp 3  workflow package shape        -> experiments/03-workflow-shape.md
+  S4  Exp 4  ports + adapter matrix        -> experiments/04-ports-adapters.md
+  S5  Exp 5  readiness execution tree      -> experiments/05-readiness-tree.md
+  S6  Exp 6  host narrowing                -> experiments/06-host-narrowing.md
+  R2: Navigator rules the target trees.
+
+Phase C: Stepping
+  S7  Exp 7  bounded-step contract         -> experiments/07-step-contract.md
+  S8  Exp 8  driver mechanism spike        -> experiments/08-driver-spike.md
+  R3: driver mechanism ruled; promote a decision record only if warranted.
+
+Phase D: Simulation
+  S9   Exp 9  simulation runtime           -> experiments/09-simulation-runtime.md
+  S10x Exp 10 local module simulations     -> experiments/10-<module>-simulation.md
+  S11  Exp 11 whole-Hamsterdan composition -> experiments/11-composition.md
+  R4: Navigator rules the simulation design.
+
+Phase E: Candidate
+  S12  Exp 12 rules, delivery graph, CV proposal -> candidate gate ruling
+```
+
+Inputs: S1 and S2 read only current source and this index. S3 and S4 both read
+only the ruled Phase A records and may run as parallel threads. S5 needs S4;
+S6 needs S5. S7 needs the ruled Phase B trees; S8 needs S7. S9 needs S7 and the
+R3 ruling. Exp 10 fans out per module (workflow, readiness, GitHub, agents,
+host) once S9 fixes the runtime interface; those threads are parallel. S11
+needs every Exp 10 record. S12 needs everything ruled plus the engineering style contract style
+contract.
 
 ## Exploration experiments
 
@@ -807,8 +908,13 @@ ES-010 may become a Delivery candidate only when it has:
 
 ## Current state
 
-The Navigator accepted the initial direction in a read-only architecture session.
-No production, test, configuration, runtime-state, or historical-record change
-was authorized. This index is the first durable exploration artifact. The next
-session should begin with experiment 1 rather than turning the target tree above
-into an unreviewed rename plan.
+The Navigator accepted the initial direction in a read-only architecture session
+and, in a second planning session, ruled the replacement-tree strategy
+(`src/hamsterdan2` with one final cutover rename), the strict replacement-tree
+quality gate including `max-complexity = 4`, the behavioral dependency-injection
+test preference, the four-layer test taxonomy with deterministic simulation
+first-class, and the ES-010/CV19 sequencing. The same session added the session
+plan above and opened the engineering style contract for the Python style contract in a parallel
+thread. No production, test, configuration, runtime-state, or historical-record
+change was authorized. The next session should begin with S1 (experiment 1)
+rather than turning the target tree above into an unreviewed rename plan.

@@ -80,3 +80,8 @@ quality gate when one clear test owner can enforce it.
     focused refactoring candidate or a narrow documented exception for a
     cohesive parser, state machine, workflow fold, or lifecycle operation. Until
     RS-030 classifies the existing baseline, `C901` remains a non-blocking audit.
+18. Prefer composition and dependency injection over patching. Pass
+    collaborators through owned typed ports and inject strict fakes in tests.
+    `unittest.mock` and monkeypatching remain available at seams the module
+    does not own, but a test that can receive its collaborator should receive
+    it.
