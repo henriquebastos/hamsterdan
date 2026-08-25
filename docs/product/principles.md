@@ -13,6 +13,8 @@
 5. **Effects are explainable and recoverable.** Identity, correlation, fencing,
    and lookup-first recovery matter more than pretending distributed effects are
    exactly-once.
-6. **Earn generality.** First prove one organization-owned private instance and
-   selected repositories; defer tenant platforms and policy machinery until a
-   real second operating shape requires them.
+6. **Configuration is not tenancy.** One operator-controlled instance may admit
+   multiple GitHub installation accounts and repositories through validated
+   configuration without user accounts, billing, or an administration UI.
+   Start with supervised restart; add live reload only after its atomic authority
+   replacement semantics are proven necessary.

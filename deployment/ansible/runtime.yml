@@ -1,0 +1,277 @@
+---
+- name: Provision and validate an inactive Hamsterdan runtime
+  hosts: all
+  gather_facts: true
+  become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    runtime_root: /etc/hamsterdan
+    runtime_secrets: /etc/hamsterdan/secrets
+    runtime_state: /var/lib/hamsterdan
+    runtime_unit: /etc/systemd/system/hamsterdan.service
+    managed_runtime_files:
+      - source: "{{ runtime_environment }}"
+        destination: "{{ runtime_root }}/hamsterdan.env"
+        owner: root
+        group: root
+      - source: "{{ runtime_github_private_key }}"
+        destination: "{{ runtime_secrets }}/github-app.pem"
+        owner: "10001"
+        group: "10001"
+      - source: "{{ runtime_webhook_secret }}"
+        destination: "{{ runtime_secrets }}/webhook-secret"
+        owner: "10001"
+        group: "10001"
+      - source: "{{ runtime_agent_key }}"
+        destination: "{{ runtime_secrets }}/agent-api-key"
+        owner: "10001"
+        group: "10001"
+
+  tasks:
+    - name: Validate target and runtime inputs
+      ansible.builtin.assert:
+        that:
+          - ansible_system == 'Linux'
+          - ansible_architecture == 'x86_64'
+          - candidate_revision is match('^[0-9a-f]{40}$')
+          - candidate_image_id is match('^sha256:[0-9a-f]{64}$')
+          - expected_app_id | int > 0
+          - expected_app_slug is match('^[a-z0-9]+(-[a-z0-9]+)*$')
+          - expected_repository_count | int > 0
+
+    - name: Verify the exact candidate image remains loaded
+      ansible.builtin.command:
+        argv:
+          - docker
+          - image
+          - inspect
+          - "{{ candidate_image_id }}"
+      register: runtime_candidate
+      changed_when: false
+
+    - name: Require the loaded candidate identity to match
+      ansible.builtin.assert:
+        that:
+          - (runtime_candidate.stdout | from_json)[0].Id == candidate_image_id
+
+    - name: Inspect the service state before provisioning
+      ansible.builtin.command: systemctl is-active hamsterdan.service
+      register: service_before
+      changed_when: false
+      failed_when: false
+
+    - name: Refuse to alter an active runtime
+      ansible.builtin.assert:
+        that:
+          - service_before.stdout in ['inactive', 'failed', 'unknown']
+        fail_msg: The Hamsterdan service must be inactive before runtime provisioning.
+
+    - name: Inspect exact-name running containers
+      ansible.builtin.command:
+        argv:
+          - docker
+          - ps
+          - --quiet
+          - --filter
+          - name=^/hamsterdan$
+      register: running_container_before
+      changed_when: false
+
+    - name: Refuse a separately owned running container
+      ansible.builtin.assert:
+        that:
+          - running_container_before.stdout == ''
+
+    - name: Inspect runtime directories
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+        follow: false
+      loop:
+        - path: "{{ runtime_root }}"
+          owner: root
+          mode: "0700"
+        - path: "{{ runtime_secrets }}"
+          owner: "10001"
+          mode: "0700"
+        - path: "{{ runtime_state }}"
+          owner: "10001"
+          mode: "0700"
+      register: runtime_directories_before
+
+    - name: Refuse unsafe existing runtime directories
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists or (item.stat.isdir and not item.stat.islnk)
+      loop: "{{ runtime_directories_before.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+
+    - name: Create private runtime directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.owner }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ runtime_root }}"
+          owner: root
+          mode: "0700"
+        - path: "{{ runtime_secrets }}"
+          owner: "10001"
+          mode: "0700"
+        - path: "{{ runtime_state }}"
+          owner: "10001"
+          mode: "0700"
+
+    - name: Inspect existing managed runtime files
+      ansible.builtin.stat:
+        path: "{{ item.destination }}"
+        follow: false
+      loop: "{{ managed_runtime_files }}"
+      register: managed_runtime_before
+      no_log: true
+
+    - name: Refuse unsafe existing managed runtime files
+      ansible.builtin.assert:
+        that:
+          - not item.stat.exists or (item.stat.isreg and not item.stat.islnk)
+      loop: "{{ managed_runtime_before.results }}"
+      no_log: true
+
+    - name: Probe whether existing runtime custody matches the supplied authority
+      ansible.builtin.copy:
+        src: "{{ item.source }}"
+        dest: "{{ item.destination }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "0600"
+        force: true
+      loop: "{{ managed_runtime_files }}"
+      check_mode: true
+      register: managed_runtime_probe
+      no_log: true
+
+    - name: Refuse implicit runtime authority replacement
+      ansible.builtin.assert:
+        that:
+          - not managed_runtime_before.results[item].stat.exists or not managed_runtime_probe.results[item].changed
+        fail_msg: Existing runtime authority differs; rotation requires a separate operation.
+      loop: "{{ range(0, managed_runtime_files | length) | list }}"
+      no_log: true
+
+    - name: Install previously absent runtime custody
+      ansible.builtin.copy:
+        src: "{{ item.source }}"
+        dest: "{{ item.destination }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "0600"
+        force: false
+      loop: "{{ managed_runtime_files }}"
+      no_log: true
+
+    - name: Validate App and selected-repository authority without launching
+      block:
+        - name: Run the exact candidate validation command
+          ansible.builtin.command:
+            argv:
+              - docker
+              - run
+              - --rm
+              - --pull=never
+              - --read-only
+              - --cap-drop=ALL
+              - --security-opt=no-new-privileges
+              - --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=268435456,mode=0700,uid=10001,gid=10001
+              - --env-file
+              - "{{ runtime_root }}/hamsterdan.env"
+              - --mount=type=bind,source=/var/lib/hamsterdan,target=/var/lib/hamsterdan
+              - --mount=type=bind,source=/etc/hamsterdan/secrets,target=/run/secrets/hamsterdan,readonly
+              - "{{ candidate_image_id }}"
+              - validate
+          register: runtime_validation
+          changed_when: false
+
+        - name: Require exact App and repository validation evidence
+          ansible.builtin.assert:
+            that:
+              - (runtime_validation.stdout | from_json).app_id == expected_app_id | int
+              - (runtime_validation.stdout | from_json).app_slug == expected_app_slug
+              - (runtime_validation.stdout | from_json).installation_id | int > 0
+              - (runtime_validation.stdout | from_json).admitted_repositories == expected_repository_count | int
+      rescue:
+        - name: Remove runtime files first introduced by the failed validation
+          ansible.builtin.file:
+            path: "{{ managed_runtime_files[item].destination }}"
+            state: absent
+          when: not managed_runtime_before.results[item].stat.exists
+          loop: "{{ range(0, managed_runtime_files | length) | list }}"
+          no_log: true
+
+        - name: Report bounded validation failure
+          ansible.builtin.fail:
+            msg: Runtime validation failed; the service remains inactive.
+
+    - name: Inspect the existing service unit path
+      ansible.builtin.stat:
+        path: "{{ runtime_unit }}"
+        follow: false
+      register: runtime_unit_before
+
+    - name: Refuse an unsafe existing service unit path
+      ansible.builtin.assert:
+        that:
+          - not runtime_unit_before.stat.exists or (runtime_unit_before.stat.isreg and not runtime_unit_before.stat.islnk)
+
+    - name: Install the exact-image service unit after validation
+      ansible.builtin.template:
+        src: templates/hamsterdan.service.j2
+        dest: "{{ runtime_unit }}"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Apply the systemd reload before inspecting the unit
+      ansible.builtin.meta: flush_handlers
+
+    - name: Keep the validated service disabled
+      ansible.builtin.systemd_service:
+        name: hamsterdan.service
+        enabled: false
+
+    - name: Inspect final service activity
+      ansible.builtin.command: systemctl is-active hamsterdan.service
+      register: service_after
+      changed_when: false
+      failed_when: false
+
+    - name: Inspect final service enablement
+      ansible.builtin.command: systemctl is-enabled hamsterdan.service
+      register: enablement_after
+      changed_when: false
+      failed_when: false
+
+    - name: Inspect final exact-name running containers
+      ansible.builtin.command:
+        argv:
+          - docker
+          - ps
+          - --quiet
+          - --filter
+          - name=^/hamsterdan$
+      register: running_container_after
+      changed_when: false
+
+    - name: Require an installed but inactive runtime
+      ansible.builtin.assert:
+        that:
+          - service_after.stdout == 'inactive'
+          - enablement_after.stdout == 'disabled'
+          - running_container_after.stdout == ''
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true

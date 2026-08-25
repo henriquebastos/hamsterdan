@@ -42,9 +42,12 @@ authoritative: <https://docs.github.com/en/apps/creating-github-apps/registering
 A private App can be installed only on its owner, so this HBNetwork-owned App is
 correct for the HBNetwork sandbox. GitHub permits changing an App's visibility
 later under **Advanced → Make public**. A public App could then be installed by
-multiple organizations. Hamsterdan intentionally runs one installation account
-per deployment today; another organization can either operate its own private
-App instance or wait for a future multi-account/public deployment contract.
+multiple organizations. The accepted self-hosted contract uses one App
+registration across an operator-configured portfolio of installation accounts
+and repositories, applied first by supervised restart without SaaS accounts or
+an administration UI. The executable host still supports one account, so do not
+change this App's visibility or add another installation until that next runtime
+slice is qualified and the provider change is separately approved.
 
 Configure exactly this repository-permission/event contract (no organization or
 account permissions):

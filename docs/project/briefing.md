@@ -5,9 +5,11 @@ separate application project, not a Petrus component or runtime identity.
 
 The source project lives in the private `henriquebastos/hamsterdan` repository.
 HBNetwork owns the first private GitHub App used for real-provider validation.
-An organization may operate the code with its own App registration,
-installation, host deployment, secrets, and durable state, subject to the
-current single-account deployment contract.
+An operator may run the code with one App registration, host deployment,
+secrets, and durable state. The accepted first-release direction admits a
+configured portfolio of installation accounts and repositories without SaaS
+accounts or an administration UI; the executable host still implements the
+older single-account boundary pending CV19's next slice.
 
 ## Settled architecture
 
@@ -60,10 +62,13 @@ after private production qualification.
 [CV19](roadmap/cv19-private-v0-1-production/index.md) owns the private `0.1.0`
 production checkpoint. The V5-only candidate is locally green and its exact
 archive and image identity qualify idempotently on the owned `hamsterdan-prod`
-exe.dev VM. No service or host process is configured. The exact target
-repository is not selected, and launch requires explicit approval because
-durable webhook state can cause GitHub effects. The existing App is
-HBNetwork-owned and therefore can monitor only an HBNetwork repository.
+exe.dev VM. Private runtime custody validates the HBNetwork App installation and
+`HBNetwork/demo-pr-readiness` from the exact image. The exact-image systemd unit
+is installed but disabled and inactive; no container or application listener
+exists. Before launch, startup configuration and registration reconciliation
+must generalize from one account to the accepted restart-applied portfolio of
+multiple installation accounts and repositories. Launch still requires
+explicit approval because durable webhook state can cause GitHub effects.
 
 The pinned Petrus source dependency is currently private. Orb installation uses
 a dedicated project-scoped `PETRUS_GITHUB_TOKEN`, removes temporary Git

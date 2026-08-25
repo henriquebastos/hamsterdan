@@ -1,0 +1,17 @@
+[Unit]
+Description=Hamsterdan GitHub App host ({{ candidate_revision }})
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+ExecStartPre=-/usr/bin/docker rm hamsterdan
+ExecStart=/usr/bin/docker run --rm --name hamsterdan --pull=never --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=268435456,mode=0700,uid=10001,gid=10001 --env-file /etc/hamsterdan/hamsterdan.env --mount=type=bind,source=/var/lib/hamsterdan,target=/var/lib/hamsterdan --mount=type=bind,source=/etc/hamsterdan/secrets,target=/run/secrets/hamsterdan,readonly --publish=127.0.0.1:8000:8000 {{ candidate_image_id }} serve --host 0.0.0.0 --port 8000
+ExecStop=/usr/bin/docker stop --time 30 hamsterdan
+
+[Install]
+WantedBy=multi-user.target

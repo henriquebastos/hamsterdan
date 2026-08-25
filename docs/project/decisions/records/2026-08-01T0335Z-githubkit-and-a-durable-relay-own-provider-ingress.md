@@ -4,6 +4,8 @@ raised: 2026-08-01
 decided: 2026-08-01
 deciders:
   - Henrique (Navigator)
+superseded_in_part_by:
+  - 2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
 related:
   - CV1.DS1
 ---

@@ -2,10 +2,11 @@
 code: CV19
 level: Value
 status: Active
-status_reason: The exact V5-only OCI candidate now qualifies idempotently on the owned exe.dev VM without launch; registry publication, service configuration, exact target selection, approved launch, and one controlled monitoring proof remain
+status_reason: The exact V5-only candidate and inactive HBNetwork runtime custody qualify idempotently on exe.dev; restart-applied multi-installation configuration, registry publication, approved launch, and one controlled monitoring proof remain
 updated: 2026-08-25
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
+  - ../../decisions/records/2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
   - ../../debt/items/exe-dev-default-exeuntu-image-cannot-be-pinned.md
 ---
 
@@ -43,27 +44,33 @@ open-source release.
   Node, Pi, image identity, and writable-state checks pass; a repeated
   qualification reports `changed=0`. The accepted exeuntu base-image pinning
   limit is carried by the linked debt item.
-- The existing private GitHub App is HBNetwork-owned and can be installed only
-  for repositories owned by HBNetwork. The production target repository has not
-  yet been named.
-- The OCI candidate has been exercised on exe.dev only through no-effects
-  qualification commands. No service, application port, GitHub credential, or
-  host process was configured. Launch can process durable webhook state and
-  cause GitHub effects, so it requires a separate explicit Navigator approval
-  after target selection and validation.
+- The first production target is `HBNetwork/demo-pr-readiness`. Private App
+  registration, installation, required permissions/events, and the one admitted
+  repository validate from inside the exact candidate on exe.dev.
+- Private environment, App key, webhook secret, agent key, and durable state now
+  have mode- and owner-checked VM custody. A systemd unit pinned to the exact
+  image ID is installed, disabled, and inactive. It would bind only to loopback;
+  no Hamsterdan container or application listener exists. Repeated runtime
+  provisioning reports `changed=0`.
+- The Navigator accepted one operator-controlled App registration with multiple
+  installation accounts and repositories as restart-applied configuration,
+  without SaaS accounts or an administration UI. The executable host still
+  supports one account; generalizing startup validation and atomic route
+  reconciliation is the next pre-launch slice. Live reload remains deferred.
+- Launch can process durable webhook state and cause GitHub effects, so it still
+  requires separate explicit Navigator approval after the configuration slice.
 
 ## Done condition
 
-1. The Navigator reviews and accepts the V5-only candidate and names the exact
-   `OWNER/REPOSITORY` to monitor.
-2. The App registration and selected-repository installation match that target,
-   and `scripts/hamsterdan-host validate` passes without starting the host.
-3. The Navigator explicitly authorizes the supervised production launch and one
+1. The accepted restart-applied configuration admits multiple installation
+   accounts and repositories, validates one complete provider portfolio, and
+   atomically reconciles it before workers start.
+2. The Navigator explicitly authorizes the supervised production launch and one
    bounded controlled monitoring journey.
-4. Webhook ingress, current-head observation, App ownership, durable custody,
+3. Webhook ingress, current-head observation, App ownership, durable custody,
    restart posture, and absence of duplicate or unresolved effects are
    inspected for that journey.
-5. Accepted history is committed and pushed, the private `v0.1.0` release/tag is
+4. Accepted history is committed and pushed, the private `v0.1.0` release/tag is
    separately authorized and created, and deployment recovery/rollback facts
    are recorded without credentials.
 
@@ -74,5 +81,7 @@ open-source release.
   intact.
 - Public repository visibility, package publication, Marketplace publication,
   or claims that the repository is ready for external contributors.
+- Live configuration reload and support for several App registrations in one
+  process.
 - The detailed open-source audit, owned by the linked debt item after this
   production checkpoint.

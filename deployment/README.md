@@ -1,8 +1,9 @@
 # Hamsterdan deployment
 
-This directory owns the deployment axis. It builds one `linux/amd64` OCI image
-and can qualify that exact image on the owned exe.dev VM. Qualification does not
-configure or start a running Hamsterdan service.
+This directory owns the deployment axis. It builds one `linux/amd64` OCI image,
+qualifies that exact image on the owned exe.dev VM, and provisions private
+runtime custody for no-launch App validation. No deployment command starts the
+Hamsterdan service.
 
 ## Release contract
 
@@ -14,6 +15,8 @@ configure or start a running Hamsterdan service.
   `hamsterdan`-tagged exe.dev VM.
 - `deployment/deploy.py` exports a verified clean candidate and drives
   `deployment/ansible/candidate.yml` over fingerprint-pinned SSH.
+- `deployment/runtime.py` transfers temporary private runtime inputs and drives
+  `deployment/ansible/runtime.yml` against an already qualified image.
 - `.github/workflows/image.yml` is a manual CI adapter over the same commands.
   CI does not contain a second build implementation.
 
@@ -100,6 +103,36 @@ report `changed=0`. SSH host keys are accepted only when they match exe.dev's
 
 This qualification creates no systemd unit, opens no application port, sends no
 GitHub credential, and does not start the Hamsterdan host.
+
+## Provision and validate an inactive runtime
+
+Runtime provisioning consumes the same role-named App, installation,
+repository, readiness, and agent-provider inputs used by `.agents/setup`, plus
+the exe.dev API and SSH inputs above. Values remain in temporary controller
+files and private VM files; secret values do not enter Ansible arguments or the
+generated environment file.
+
+Select the exact previously qualified manifest:
+
+```shell
+uv run --frozen python deployment/runtime.py \
+  --manifest dist/deployment/<revision>/release.json
+```
+
+The playbook refuses an active service or separately running exact-name
+container. It validates the App registration, required permissions and events,
+configured installation, and selected repositories from a hardened one-shot
+container. Only after validation does it install a systemd unit pinned to the
+exact image ID. The unit is disabled and inactive, binds only to
+`127.0.0.1:8000` when separately authorized to start, and runs the image
+read-only as its unprivileged user with all capabilities dropped. A repeated run
+with the same inputs must report `changed=0`.
+
+The current executable boundary still accepts one installation account and the
+provisioner refuses changed runtime inputs. The accepted next slice replaces
+that limit with one restart-applied configuration portfolio containing multiple
+installation accounts and repositories. Until that slice qualifies, do not
+manually replace files under `/etc/hamsterdan`.
 
 ## CI and publication boundary
 
