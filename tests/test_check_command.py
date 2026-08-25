@@ -62,7 +62,7 @@ def test_check_script_is_valid_shell_and_describes_maintained_profiles() -> None
     assert "export UV_FROZEN=1" in script
     assert "tests/test_architecture.py" in script
     assert "--forbid-skips" in script
-    assert "-n 4 --dist loadscope" in script
+    assert "-n 4 --dist load --maxschedchunk=1" in script
     assert "ruff check src tests --select C901" in script
     assert "ast-grep scan" in script
     assert "mutmut run" in script

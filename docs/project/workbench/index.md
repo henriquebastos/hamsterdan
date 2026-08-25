@@ -49,6 +49,9 @@ None.
 
 ## Closed
 
+- [RS-034 — Distribute slow tests across routine workers](rs-034-distribute-slow-tests-across-workers.md):
+  replaced module-scoped batching with one-test chunks, preserving all routine
+  evidence while reducing measured local wall time by 27.4% to 39.4%.
 - [RS-029 — Broaden non-blocking quality evidence](rs-029-broaden-non-blocking-quality-evidence.md):
   added randomized parallel and release tests plus non-blocking audit and
   mutation profiles, with unresolved findings retained as accepted debt.

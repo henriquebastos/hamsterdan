@@ -60,7 +60,7 @@ full() {
     (cd tools/demo-video && bun run check)
     rm -rf dist
     uv build
-    routine_tests 1729 -n 4 --dist loadscope --durations=20 --durations-min=0.5
+    routine_tests 1729 -n 4 --dist load --maxschedchunk=1 --durations=20 --durations-min=0.5
 }
 
 release() {
