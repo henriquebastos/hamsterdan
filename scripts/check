@@ -6,14 +6,34 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export UV_FROZEN=1
 
+ROUTINE_TESTS="not real_provider_acceptance"
+if [[ "$(uname -s)" != "Linux" ]]; then
+    ROUTINE_TESTS="$ROUTINE_TESTS and not linux_orb_setup"
+fi
+
 usage() {
     cat <<'EOF'
 usage: scripts/check quick [PATH ...]
        scripts/check full
+       scripts/check release
+       scripts/check audit
+       scripts/check mutation
 
-quick  lint and format-check Python PATHs, type-check production source, and enforce architecture rules
-full   quick checks plus Bun checks, distribution build, and the routine Python suite
+quick     lint and format-check Python PATHs, type-check production source, and enforce architecture rules
+full      quick, Bun, build, and fixed-seed randomized routine tests on four workers
+release   full plus one additional fixed-seed serial routine test run
+audit     report repository lint, complexity, and structural findings; fail only on a broken probe
+mutation  report curated pure-semantic mutants without a score threshold; fail only on a broken probe
 EOF
+}
+
+reject_paths() {
+    local profile="$1"
+    shift
+    if (($# != 0)); then
+        printf 'scripts/check %s does not accept paths\n' "$profile" >&2
+        return 2
+    fi
 }
 
 quick() {
@@ -27,17 +47,78 @@ quick() {
     uv run pytest -q tests/test_architecture.py
 }
 
+routine_tests() {
+    local seed="$1"
+    shift
+    uv run pytest -q "$@" --randomly-seed="$seed" --forbid-skips -m "$ROUTINE_TESTS"
+}
+
 full() {
-    if (($# != 0)); then
-        printf 'scripts/check full does not accept paths\n' >&2
-        return 2
-    fi
+    reject_paths full "$@" || return
     quick
     bun test ./tests/amp_webhook_relay.test.ts
     (cd tools/demo-video && bun run check)
     rm -rf dist
     uv build
-    uv run pytest -q -m "not real_provider_acceptance"
+    routine_tests 1729 -n 4 --dist loadscope --durations=20 --durations-min=0.5
+}
+
+release() {
+    reject_paths release "$@" || return
+    full
+    routine_tests 20260825 --durations=20 --durations-min=0.5
+}
+
+report_findings() {
+    local label="$1"
+    shift
+    local status=0
+    "$@" || status=$?
+    case "$status" in
+        0)
+            printf 'audit passed: %s\n' "$label"
+            ;;
+        1)
+            printf 'audit reported findings: %s\n' "$label"
+            ;;
+        *)
+            printf 'audit probe failed (%s): %s\n' "$status" "$label" >&2
+            return "$status"
+            ;;
+    esac
+}
+
+require_probe() {
+    local label="$1"
+    shift
+    if "$@"; then
+        printf 'audit passed: %s\n' "$label"
+    else
+        local status=$?
+        printf 'audit probe failed (%s): %s\n' "$status" "$label" >&2
+        return "$status"
+    fi
+}
+
+audit() {
+    reject_paths audit "$@" || return
+    report_findings "repository-wide Ruff" uv run ruff check .
+    report_findings "repository-wide formatting" uv run ruff format --check .
+    report_findings "maintained cyclomatic complexity" \
+        uv run ruff check src tests --select C901 --config lint.mccabe.max-complexity=10
+    require_probe "ast-grep rule fixtures" uv run ast-grep test --skip-snapshot-tests
+    report_findings "ast-grep structural practices" uv run ast-grep scan
+}
+
+mutation() {
+    reject_paths mutation "$@" || return
+    if uv run mutmut run --max-children 1; then
+        printf 'mutation probe completed: curated V5 rerun semantics\n'
+    else
+        local status=$?
+        printf 'mutation probe failed (%s): curated V5 rerun semantics\n' "$status" >&2
+        return "$status"
+    fi
 }
 
 profile="${1:-full}"
@@ -51,6 +132,15 @@ case "$profile" in
         ;;
     full)
         full "$@"
+        ;;
+    release)
+        release "$@"
+        ;;
+    audit)
+        audit "$@"
+        ;;
+    mutation)
+        mutation "$@"
         ;;
     -h|--help)
         usage

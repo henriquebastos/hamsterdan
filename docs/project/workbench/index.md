@@ -5,6 +5,18 @@ existing Hamsterdan capability outside the delivery roadmap.
 
 ## Candidate, not pulled
 
+- [RS-030 — Review the maintained complexity baseline](rs-030-review-maintained-complexity-baseline.md):
+  classify 47 non-blocking `C901` findings before choosing refactorings,
+  exceptions, or any tighter gate.
+- [RS-031 — Review reflective V5 loop assembly](rs-031-review-reflective-v5-loop-assembly.md):
+  decide whether optional `GATES` and `DERIVED` exports should become explicit or
+  receive one narrow structural-audit exception.
+- [RS-032 — Strengthen V5 rerun reason evidence](rs-032-strengthen-v5-rerun-reason-evidence.md):
+  classify three surviving pure reason-projection mutants before adding only
+  contract-relevant assertions.
+- [RS-033 — Fail fast on toolchain version drift](rs-033-fail-fast-on-toolchain-version-drift.md):
+  check exact full-gate tool versions before expensive Bun, browser, build, or
+  test work begins.
 - [RS-019 — Improve V5 test reading locality](rs-019-improve-v5-test-reading-locality.md):
   two ES-009 test-maintainability requests are parked without implementation
   authorization.
@@ -37,6 +49,9 @@ None.
 
 ## Closed
 
+- [RS-029 — Broaden non-blocking quality evidence](rs-029-broaden-non-blocking-quality-evidence.md):
+  added randomized parallel and release tests plus non-blocking audit and
+  mutation profiles, with unresolved findings retained as accepted debt.
 - [RS-028 — Align engineering feedback with Petrus practice](rs-028-align-engineering-feedback-with-petrus.md):
   adapted reusable conventions and made the maintained quality command bounded,
   path-aware, frozen, self-describing, and architecture-aware.

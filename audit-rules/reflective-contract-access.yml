@@ -1,0 +1,13 @@
+id: reflective-contract-access
+language: python
+severity: error
+message: Closed contract and readiness code should use direct attributes unless a reviewed dynamic boundary requires reflection.
+note: This is a non-blocking audit; classify intentional dynamic boundaries rather than suppressing them silently.
+files:
+  - src/hamsterdan/contracts/**/*.py
+  - src/hamsterdan/readiness/**/*.py
+rule:
+  any:
+    - pattern: getattr($OBJECT, $ATTRIBUTE)
+    - pattern: getattr($OBJECT, $ATTRIBUTE, $DEFAULT)
+    - pattern: setattr($OBJECT, $ATTRIBUTE, $VALUE)

@@ -10,3 +10,4 @@ an item only when debt should outlive one story's review notes.
 - [Pi A2 workspace archive application resolved](items/pi-a2-workspace-archives-lack-safe-host-tree-application.md)
 - [DS11 publication observation resolved; exact-target cleanup externally deferred](items/ds11-live-publication-and-repository-cleanup.md)
 - [Readiness DST composition split resolved through generated use](items/readiness-dst-composition-must-split-before-campaign-expansion.md)
+- [Non-blocking quality audit baseline remains unresolved](items/non-blocking-quality-audit-baseline-remains-unresolved.md)

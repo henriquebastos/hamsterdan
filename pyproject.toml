@@ -18,12 +18,16 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "ast-grep-cli>=0.44.0",
     "build>=1.5,<2",
     "httpx>=0.28,<1",
     "httpx2>=2.9,<3",
     "hypothesis>=6,<7",
+    "mutmut==3.6.0",
     "pytest>=8.3",
+    "pytest-randomly>=4,<5",
     "pytest-timeout>=2.4,<3",
+    "pytest-xdist>=3.8,<4",
     "ruff>=0.8",
     "ty==0.0.63",
 ]
@@ -42,12 +46,25 @@ only-include = ["src/hamsterdan"]
 packages = ["src/hamsterdan"]
 
 [tool.pytest.ini_options]
+addopts = "--randomly-seed=1729"
 testpaths = ["tests"]
 timeout = 30
 markers = [
     "real_provider_acceptance: opt-in tests that may invoke authenticated external provider clients",
+    "linux_orb_setup: tests that exercise the GNU/Linux Orb command contract",
 ]
+
+[tool.mutmut]
+source_paths = ["src/hamsterdan"]
+only_mutate = ["src/hamsterdan/host/v5/rerun.py"]
+pytest_add_cli_args = ["-o", "addopts=", "-q"]
+pytest_add_cli_args_test_selection = ["tests/unit/host/test_v5_rerun.py"]
+timeout_multiplier = 5
+timeout_constant = 0.2
 
 [tool.ruff]
 line-length = 120
 target-version = "py314"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

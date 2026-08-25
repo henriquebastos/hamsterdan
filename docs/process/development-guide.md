@@ -11,19 +11,36 @@ Python 3.14 is managed with uv.
 - Static feedback: `scripts/check quick`
 - Path-scoped static feedback: `scripts/check quick PATH [PATH ...]`
 - Checkpoint confidence: `scripts/check full`
+- Release confidence: `scripts/check release`
+- Non-blocking broad findings: `scripts/check audit`
+- Non-blocking curated mutation evidence: `scripts/check mutation`
 
 The quick profile lints and format-checks maintained Python paths, type-checks
 all production source, and runs the fast architecture contract. Its default
 paths are `src` and `tests`; historical executable Exploration remains outside
 the maintained lint surface. The full profile accepts no paths and adds Bun,
-TypeScript, distribution-build, and routine Python-suite evidence.
+TypeScript, distribution-build, and routine Python-suite evidence. Routine tests
+use deterministic random seed 1729 on four xdist workers and fail on any selected
+skip. `release` repeats the routine suite serially with seed 20260825.
+
+`audit` reports repository-wide Ruff and formatting, maintained-code complexity,
+and ast-grep practice findings. Exit 1 means findings and remains non-blocking;
+a missing tool, invalid configuration, or other broken probe still fails the
+profile. `mutation` has no score threshold, but a broken baseline or tool still
+fails. Neither profile belongs to quick, full, release, or commit acceptance;
+record useful findings in the Workbench or debt ledger instead of repairing them
+opportunistically.
 
 Orb setup tests exercise the exact GNU/Linux command contract used by the orb,
-including GNU `stat`. Pytest skips that module on BSD and other non-Linux hosts;
-the Linux orb and hosted CI run it.
+including GNU `stat`. Direct pytest reports platform skips on BSD and other
+non-Linux hosts; full and release deselect the marked module before strict skip
+handling. The Linux orb and hosted CI run it.
 
 Routine commands run frozen and must not rewrite `uv.lock`. A dependency change
-is deliberate and includes the lockfile.
+is deliberate and includes the lockfile. This repository fixes the resolver
+cutoff in `uv.toml`; use
+`env -u UV_FROZEN uv lock --exclude-newer 2026-08-15T10:57:40Z` after an approved
+dependency edit so ambient uv policy cannot move the cutoff.
 
 ## TDD and verification
 

@@ -19,6 +19,9 @@
   boundary, durability, Activity, retry, testing, and command-interface practice;
   Petrus's internal package graph, exact structural rules, mutation targets,
   complexity baseline, and test seeds were not adopted as Hamsterdan policy.
+  RS-029 later adopted compatible generic tool versions for ast-grep, mutmut,
+  pytest-randomly, and pytest-xdist while defining Hamsterdan-owned rules,
+  targets, seeds, and non-blocking audit semantics.
 - Historical Petrus namespace migration and accepted application dependency:
   `henriquebastos/petrus@cd1187e44926d6a80e4a3538ad79762618d32a8b`,
   inspected 2026-08-01.

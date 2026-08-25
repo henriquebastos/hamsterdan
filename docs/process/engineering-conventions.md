@@ -75,3 +75,8 @@ quality gate when one clear test owner can enforce it.
     environment, timing or memory evidence, observed failures, and relevant
     ordering or cache caveats. An architectural improvement alone is not a
     throughput claim.
+17. Production functions should ordinarily have cyclomatic complexity at most
+    10. Values from 11 through 15 require review; values above 15 require a
+    focused refactoring candidate or a narrow documented exception for a
+    cohesive parser, state machine, workflow fold, or lifecycle operation. Until
+    RS-030 classifies the existing baseline, `C901` remains a non-blocking audit.

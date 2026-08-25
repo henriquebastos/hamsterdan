@@ -8,7 +8,10 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="Orb setup requires the GNU/Linux command set")
+pytestmark = [
+    pytest.mark.linux_orb_setup,
+    pytest.mark.skipif(sys.platform != "linux", reason="Orb setup requires the GNU/Linux command set"),
+]
 
 ROOT = Path(__file__).parents[2]
 AUTHOR_SECRET = "author-session-canary"
