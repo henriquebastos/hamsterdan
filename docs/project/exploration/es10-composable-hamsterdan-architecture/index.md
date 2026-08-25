@@ -916,5 +916,14 @@ test preference, the four-layer test taxonomy with deterministic simulation
 first-class, and the ES-010/CV19 sequencing. The same session added the session
 plan above and opened the engineering style contract for the Python style contract in a parallel
 thread. No production, test, configuration, runtime-state, or historical-record
-change was authorized. The next session should begin with S1 (experiment 1)
-rather than turning the target tree above into an unreviewed rename plan.
+change was authorized.
+
+S1 is complete: [experiments/01-ownership-map.md](experiments/01-ownership-map.md)
+records the ruled module ledger, the single facade cycle, the mixed-owner list
+(nine modules), the `contracts/readiness.py` live-surface finding (four names,
+~93% residue), and both required path traces by owner. The import-graph tool
+lives at [experiments/tools/import_graph.py](experiments/tools/import_graph.py).
+The next session is S2 (experiment 2, workflow value ownership); its primary
+inputs are the S1 record's `contracts/readiness_v5.py` group map and residue
+findings. Checkpoint R1 (Navigator rules the ownership and value maps) follows
+S2.
