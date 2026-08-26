@@ -986,8 +986,9 @@ not share the full authority fence used by findings and readiness announcement.
 The candidate method sets are capability-signature pseudocode, not a direction
 to implement Python `Protocol` interfaces; concrete injection form remains owned
 by the ruled the engineering style contract style contract. the engineering style contract is required before the first
-replacement code-writing slice and S12, not before S4 acceptance or S5. S5 may
-proceed from the accepted S4 record; checkpoint R2 remains unruled.
+replacement code-writing slice and S12, not before S4 acceptance or S5. At S4
+acceptance, checkpoint R2 remained unruled and S5 could proceed from the
+accepted S4 record.
 
 S5 is complete and accepted by the Navigator:
 [experiments/05-readiness-tree.md](experiments/05-readiness-tree.md) records the
@@ -1005,8 +1006,8 @@ define that custody/revocation seam, stop host agent-route repair from decoding
 workflow History, place process-wide discovery and the deferred
 `publication_qualification` concern, and preserve bounded independent PR
 progress. S4's review-failure and deliberately unfenced-publication tensions
-remain open beside these S5 handoffs for checkpoint R2. S6 may proceed from the
-accepted S5 record; checkpoint R2 remains unruled.
+remained open beside these S5 handoffs for checkpoint R2. At S5 acceptance, R2
+remained unruled and S6 could proceed from the accepted S5 record.
 
 S6 is complete and accepted by the Navigator:
 [experiments/06-host-narrowing.md](experiments/06-host-narrowing.md) records the
@@ -1025,4 +1026,18 @@ atomic setup qualification moves beside operator support, and the unconsumed
 historical `PublicationQualification` record dies in the replacement tree.
 S4's review-evidence and deliberately weaker publication-fencing questions,
 plus the exact readiness-owned outcome for queued publication after route
-revocation, remain visible for checkpoint R2. R2 remains unruled.
+revocation, were carried into checkpoint R2 below.
+
+Phase B is complete and checkpoint R2 is ruled: the Navigator accepted the S3
+workflow tree, S4 ports and adapter matrix, S5 readiness tree, S6 host tree,
+their dependency direction, and the host-to-readiness lifecycle seam. Exhausted
+review provider-evidence failure becomes a typed workflow terminal rather than
+remaining an opaque Motus execution failure. Reply, reminder, and dashboard
+publication retain their operation-specific safeguards without silently
+inheriting the full exact-head/base/policy fence used by findings and readiness
+announcement. A queued publication encountering route revocation retains its
+typed blocked outcome, but readiness creates that outcome from workflow
+declaration and host lifecycle evidence; host never decodes Activity work or
+manufactures a workflow terminal. These are architecture rulings, not
+production-change authorization. S7 may now define the bounded-step contract
+from the ruled Phase B trees; S8 still requires S7.
