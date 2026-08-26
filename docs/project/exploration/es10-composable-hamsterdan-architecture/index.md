@@ -967,4 +967,24 @@ structural prototype lives at
 [experiments/spikes/03-workflow-shape/](experiments/spikes/03-workflow-shape/)
 (three proofs pass: structure, workflow-only decision run on a real Engine,
 loud registry failure). `publication_qualification` remains deferred to S6.
-S4 reads only the ruled Phase A records and may run in parallel; S5 needs S4.
+S4 is complete and accepted by the Navigator:
+[experiments/04-ports-adapters.md](experiments/04-ports-adapters.md) records the
+eight readiness capability groups and the operation-level adapter matrix.
+Headline findings: readiness receives typed workflow Activity implementations,
+not broad GitHub or agent ports; the five comment publications stay together
+behind distinct typed methods, rerun stays separate because it owns the final
+pre-request evidence cut, review request storage moves to readiness custody,
+and mutation remains one Activity while coding and Git publication stay
+independently replaceable adapters. Authority combines the durable readiness
+grant with fresh provider evidence; timer command ordering, persistence,
+reconstruction, acknowledgements, and maturity belong to readiness custody,
+with only the clock and construction inputs supplied by host. Port values carry
+no GitHubKit, HTTP, credentials, Pi runtime, Petrus runtime, or simulation truth.
+Two questions remain visible for R2: review provider-evidence failure currently
+has no typed workflow terminal, and reply/reminder/dashboard intentionally do
+not share the full authority fence used by findings and readiness announcement.
+The candidate method sets are capability-signature pseudocode, not a direction
+to implement Python `Protocol` interfaces; concrete injection form remains owned
+by the ruled the engineering style contract style contract. the engineering style contract is required before the first
+replacement code-writing slice and S12, not before S4 acceptance or S5. S5 may
+proceed from the accepted S4 record; checkpoint R2 remains unruled.
