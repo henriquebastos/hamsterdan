@@ -988,3 +988,22 @@ to implement Python `Protocol` interfaces; concrete injection form remains owned
 by the ruled the engineering style contract style contract. the engineering style contract is required before the first
 replacement code-writing slice and S12, not before S4 acceptance or S5. S5 may
 proceed from the accepted S4 record; checkpoint R2 remains unruled.
+
+S5 is complete and accepted by the Navigator:
+[experiments/05-readiness-tree.md](experiments/05-readiness-tree.md) records the
+target `readiness` tree and one-PR execution route. Headline findings: most of
+`host/v5` becomes the deep readiness execution package, split into one-PR
+application sequencing, Petrus runtime adaptation, authority, reconstructible
+custody, and operation-specific effects; `host/git_publish.py` moves to the Git
+effect, while `host/pi_workspace.py` belongs with the agent adapter rather than
+readiness. The current host application protocol, durable-Activity resolver,
+host Activity-name lookup, inactive-result synthesis, and V5 compatibility
+bindings are false topology-neutral abstractions and do not survive. The current
+ingress store's direct queries against the host webhook `inbox` reveal a missing
+host-to-readiness lifecycle seam, not a ninth S4 effect capability. S6 must
+define that custody/revocation seam, stop host agent-route repair from decoding
+workflow History, place process-wide discovery and the deferred
+`publication_qualification` concern, and preserve bounded independent PR
+progress. S4's review-failure and deliberately unfenced-publication tensions
+remain open beside these S5 handoffs for checkpoint R2. S6 may proceed from the
+accepted S5 record; checkpoint R2 remains unruled.
