@@ -1060,3 +1060,19 @@ first-load reconciliation can repair multiple retained occurrences before one
 normal action, and current Worker execution combines claim, effect, and
 terminal report. R3 remains unruled. S8 may now begin its driver-mechanism spike
 from the accepted S7 contract.
+
+S8 is complete and accepted by the Navigator:
+[experiments/08-driver-spike.md](experiments/08-driver-spike.md) compares an
+explicit step loop, a data trampoline, and a generator over one retained-state
+model of all 31 S7 cut kinds. All three reach the same semantic terminal state
+through 618 crash-and-reconstruction schedules only because trampoline and
+generator continuations remain disposable and every decision returns to
+durable state. The trampoline is either a redundant `step` bounce or a hidden
+second scheduler; the generator is either a presentation wrapper or an
+unrecoverable authority frame. S8 therefore recommends retaining the explicit
+step baseline and finite budgeted production loops. The spike also confirms
+that pinned Petrus needs supported public seams for bounded load/one-occurrence
+reconciliation and for separating one Activity's claim, effect observation,
+and terminal recording; control-flow syntax cannot close those gaps. R3 remains
+unruled, no decision record is recommended, and S9 remains blocked until the
+Navigator separately rules the driver mechanism.
