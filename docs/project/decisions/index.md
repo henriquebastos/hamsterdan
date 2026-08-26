@@ -15,3 +15,4 @@ settled direction by superseding its record explicitly rather than drifting.
 - [Non-sharded V5 replaces the parallel production topology (superseded)](records/2026-08-18T1425Z-non-sharded-v5-replaces-the-parallel-production-topology.md)
 - [V5 durable decisions are explicit topology](records/2026-08-22T0107Z-v5-durable-decisions-are-explicit-topology.md)
 - [V5 is the only runtime and retired topology state fails closed](records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md)
+- [Timeline and coroutine stepper share bounded execution](records/2026-08-26T2012Z-timeline-and-coroutine-stepper-share-bounded-execution.md)

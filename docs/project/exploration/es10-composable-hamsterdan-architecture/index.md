@@ -351,7 +351,8 @@ Concrete scenario: a Git ref update succeeds but its response is lost.
 ### Bounded production stepping
 
 Each stateful module should expose bounded single-step progress at meaningful
-durable or effect cuts. Production drivers and simulations use the same steps.
+durable or effect cuts. Production drains and simulation Timelines use the same
+steps.
 Convenience drain or settle operations may remain only as bounded loops over the
 single-step interface.
 
@@ -364,10 +365,11 @@ This direction makes crash cuts explicit without test-only callbacks or patches.
 It also prevents one readiness instance from hiding unbounded work inside one
 scheduler call.
 
-### Driver mechanism remains exploratory
+### Timeline stepping mechanism remains exploratory
 
 An explicit `step() -> StepResult` is the baseline. A bounded spike should
-compare it with an ephemeral trampoline or generator-based authoring style.
+compare it with an ephemeral trampoline, generator-based authoring style, and
+ordinary async owner calls routed through a coroutine stepper.
 
 Any candidate must reject a design that:
 
@@ -550,8 +552,8 @@ Phase B: Interface design
 
 Phase C: Stepping
   S7  Exp 7  bounded-step contract         -> experiments/07-step-contract.md
-  S8  Exp 8  driver mechanism spike        -> experiments/08-driver-spike.md
-  R3: driver mechanism ruled; promote a decision record only if warranted.
+  S8  Exp 8  Timeline/stepper spike        -> experiments/08-driver-spike.md
+  R3: Timeline stepping mechanism ruled; promote a decision record if warranted.
 
 Phase D: Simulation
   S9   Exp 9  simulation runtime           -> experiments/09-simulation-runtime.md
@@ -721,14 +723,15 @@ Output: step contracts and cut matrix for workflow, readiness, and host.
 Exit: simulations reach required crash cuts without callbacks, monkeypatches, or
 private mutable runtime access.
 
-### 8. Driver mechanism spike
+### 8. Timeline and coroutine stepper spike
 
 Question: does an explicit loop, trampoline, or generator provide the clearest
-bounded driver over durable steps?
+bounded stepping mechanism beneath a simulation Timeline?
 
 Work:
 
-- prototype the three mechanisms outside production;
+- prototype the explicit loop, data trampoline, completed-result generator,
+  and clarified Timeline/coroutine-stepper mechanism outside production;
 - reconstruct after every durable cut using only retained state;
 - compare stack behavior, cancellation, fairness, inspectability, replay
   vocabulary, and type checking;
@@ -738,7 +741,7 @@ Output: evidence table and recommendation. Promote a decision record only if the
 selected mechanism is hard to reverse, surprising, and chosen through a real
 trade-off.
 
-Exit: one driver mechanism is selected or the explicit step baseline remains
+Exit: one stepping mechanism is selected or the explicit step baseline remains
 because alternatives add no leverage.
 
 ### 9. Hamsterdan simulation runtime
@@ -1058,21 +1061,30 @@ cursor, one readiness call per selected subject, and tail requeue. The record
 identifies two mechanism gaps for S8 rather than hiding them: current Petrus
 first-load reconciliation can repair multiple retained occurrences before one
 normal action, and current Worker execution combines claim, effect, and
-terminal report. R3 remains unruled. S8 may now begin its driver-mechanism spike
-from the accepted S7 contract.
+terminal report. At S7 acceptance R3 remained unruled, so S8 could begin its
+Timeline/stepper spike from the accepted S7 contract.
 
-S8 is complete and accepted by the Navigator:
-[experiments/08-driver-spike.md](experiments/08-driver-spike.md) compares an
-explicit step loop, a data trampoline, and a generator over one retained-state
-model of all 31 S7 cut kinds. All three reach the same semantic terminal state
-through 618 crash-and-reconstruction schedules only because trampoline and
-generator continuations remain disposable and every decision returns to
-durable state. The trampoline is either a redundant `step` bounce or a hidden
-second scheduler; the generator is either a presentation wrapper or an
-unrecoverable authority frame. S8 therefore recommends retaining the explicit
-step baseline and finite budgeted production loops. The spike also confirms
-that pinned Petrus needs supported public seams for bounded load/one-occurrence
-reconciliation and for separating one Activity's claim, effect observation,
-and terminal recording; control-flow syntax cannot close those gaps. R3 remains
-unruled, no decision record is recommended, and S9 remains blocked until the
-Navigator separately rules the driver mechanism.
+S8's first record was accepted as executed evidence, then reopened after the
+Navigator clarified that “trampoline” meant ordinary deep Python calls yielding
+their actual leaf callable, not recursion elimination or a data bounce around a
+monolithic `step()`. The amended
+[experiments/08-driver-spike.md](experiments/08-driver-spike.md) retains the
+original 31-cut/618-crash comparison and adds a callable-coroutine spike across
+host, readiness, workflow, and Activity layers. Its public `Timeline` can stop
+before the leaf, after the leaf while its value remains outside the owners, or
+after normal returns produce the host result through one internal
+`CoroutineStepper`. All 32 returned progress
+positions and the three focused effect positions reconstruct without a saved
+frame; lookup-first recovery leaves one provider mutation per operation. The
+amended recommendation is Timeline over the callable coroutine stepper, with
+production using that same stepper inside an explicit finite drain. Durable
+owner state retains all scheduling authority, and the stepper enforces one leaf
+per owner step. The Petrus bounded-load and split Activity-execution gaps
+remain. The Navigator accepted the amended S8 and ruled R3 in
+[`Timeline and coroutine stepper share bounded execution`](../../decisions/records/2026-08-26T2012Z-timeline-and-coroutine-stepper-share-bounded-execution.md):
+`Timeline` is the public simulation/debugging API, `CoroutineStepper` is the
+shared internal mechanism, and production uses bounded `step()`/`drain()` over
+that mechanism. Coroutine frames and callables remain process-local; durable
+owner state remains recovery and scheduling authority. The ruling authorizes
+no production implementation and leaves S9 to settle the exact Timeline API.
+S9 is unblocked and awaits separate authorization.
