@@ -1041,3 +1041,22 @@ declaration and host lifecycle evidence; host never decodes Activity work or
 manufactures a workflow terminal. These are architecture rulings, not
 production-change authorization. S7 may now define the bounded-step contract
 from the ruled Phase B trees; S8 still requires S7.
+
+S7 is complete and accepted by the Navigator:
+[experiments/07-step-contract.md](experiments/07-step-contract.md) records the
+workflow-runtime, readiness, and host step contracts and the current
+crash/recovery cut matrix. Headline findings: one bounded step crosses exactly
+one named cut for one subject and separately bounds rows, bytes, calls, and
+time; `Progressed`, `Waiting`, `Quiescent`, `Terminal`, and `Unavailable` are
+distinct results; effect observation is exposed before Activity terminal
+recording; timer acceptance and local markers remain separate; and host inbox
+acknowledgement, posture, route settlement, and fair requeue follow readiness
+as their own cuts. Production drains are finite budgeted loops over the same
+steps used by simulation. One-instance weak fairness uses a readiness-lane
+cursor; multi-instance fairness uses a durable enqueue sequence or equivalent
+cursor, one readiness call per selected subject, and tail requeue. The record
+identifies two mechanism gaps for S8 rather than hiding them: current Petrus
+first-load reconciliation can repair multiple retained occurrences before one
+normal action, and current Worker execution combines claim, effect, and
+terminal report. R3 remains unruled. S8 may now begin its driver-mechanism spike
+from the accepted S7 contract.
