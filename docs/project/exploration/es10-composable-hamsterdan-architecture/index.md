@@ -1007,3 +1007,22 @@ workflow History, place process-wide discovery and the deferred
 progress. S4's review-failure and deliberately unfenced-publication tensions
 remain open beside these S5 handoffs for checkpoint R2. S6 may proceed from the
 accepted S5 record; checkpoint R2 remains unruled.
+
+S6 is complete and accepted by the Navigator:
+[experiments/06-host-narrowing.md](experiments/06-host-narrowing.md) records the
+target `host` tree, host-to-readiness factory and lifecycle seam, and
+multi-instance invariants. Headline findings: a host-owned durable instance
+catalog replaces discovery through readiness History paths; a monotonic
+route/custody lifecycle view replaces shared webhook-table access; readiness
+reports bounded agent-operation posture so process-wide route repair no longer
+decodes workflow History; and host inspection aggregates readiness-owned
+detached projections instead of parsing History itself. `HostService` loses
+Activity-name lookup, inactive-terminal synthesis, readiness drains, and
+concrete one-PR construction; the retained runnable index must provide bounded
+fair turns so one degraded PR cannot monopolize progress. Production
+qualification faults remain a separate optional host composition concern, live
+atomic setup qualification moves beside operator support, and the unconsumed
+historical `PublicationQualification` record dies in the replacement tree.
+S4's review-evidence and deliberately weaker publication-fencing questions,
+plus the exact readiness-owned outcome for queued publication after route
+revocation, remain visible for checkpoint R2. R2 remains unruled.
