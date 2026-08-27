@@ -1182,7 +1182,14 @@ ruling preserves bounded production-aligned steps, explicit resource limits,
 lookup-first crash recovery, and exact replay while retaining the reports'
 correspondence limits: it does not approve production implementation, spike
 file structure, artifact compatibility, or claims about real process or
-distributed concurrency. S12 may now synthesize the ruled S1-S11 evidence and
-the engineering style contract style contract into the candidate package map, architecture rules,
-delivery graph, validation matrix, decision/debt assessment, and Capability
-Value proposal. Experiment 12 has not yet begun.
+distributed concurrency.
+
+S12 has synthesized those fixed inputs into the Delivery candidate at
+[experiments/12-enforcement-delivery.md](experiments/12-enforcement-delivery.md).
+It fixes the exact `src/hamsterdan2` and `tests2` trees, final import DAG and
+blocking the engineering style contract gate, a 61/61 current-source disposition ledger, production
+seam and V5 cleanup inventories, twelve dependency-ordered green Delivery
+Stories, the complete validation matrix, and proposed Capability Value. The
+Navigator accepted its Experience Report on 2026-08-27. ES-010 remains
+`Thickening` while the accepted candidate awaits a separate promotion ruling.
+No Delivery Story, production change, or roadmap promotion has begun.
