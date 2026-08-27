@@ -1087,4 +1087,27 @@ shared internal mechanism, and production uses bounded `step()`/`drain()` over
 that mechanism. Coroutine frames and callables remain process-local; durable
 owner state remains recovery and scheduling authority. The ruling authorizes
 no production implementation and leaves S9 to settle the exact Timeline API.
-S9 is unblocked and awaits separate authorization.
+
+S9 is complete and accepted by the Navigator:
+[experiments/09-simulation-runtime.md](experiments/09-simulation-runtime.md)
+defines the exact Hamsterdan-owned `Timeline`, structural module boundary,
+logical clock, eligible-action scheduler, namespaced deterministic choices,
+occurrence faults, crash generations, budgets and resource gauges, strict
+journal, single-version artifact, and exact replay contract. The copy-and-own
+ledger pins every adapted mechanism to Petrus
+`44cac5ff48ac371ebae56323941983f30db13c0d` while omitting profiles,
+identities, checker cadence, fair/converged policy, process framing, and V1–V4
+compatibility. Its independent `alpha`/`beta` proof shares time and equal-time
+ordering, crosses the offered/executed/idle crash positions, recovers a landed
+effect lookup-first, and exactly replays without importing Petrus testing code
+or naming workflow, readiness, GitHub, agent, or host semantics. Coroutine
+frames, callables, held leaf values, exceptions, and owner-return values remain
+process-local and absent from artifacts; durable modules retain eligibility and
+recovery authority. The confirmed post-acceptance review correction makes every
+execution-budget failure terminal, discards any suspended frame, reserves
+post-operation journal capacity, and preserves an exact final artifact even
+when leaf, journal, or restart-generation capacity is exhausted. The isolated
+spike and ten focused contracts live under
+[experiments/spikes/09-simulation-runtime/](experiments/spikes/09-simulation-runtime/).
+No production, maintained test, or configuration surface changed. Experiment
+10 and checkpoint R4 remain unstarted and unruled.
