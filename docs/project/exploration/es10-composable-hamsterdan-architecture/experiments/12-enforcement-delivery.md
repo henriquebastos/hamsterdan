@@ -7,21 +7,36 @@ test tree; and the current feedback, architecture, packaging, and deployment
 surfaces. The repository baseline was local `main` at `2266af5`, one accepted
 R4-ruling commit ahead of `origin/main` at `4e12312`. No production,
 maintained-test, configuration, roadmap, decision, debt, or worklog file is
-changed by this synthesis.
+changed by the original synthesis. The later accepted promotion updates only
+the linked exploration, roadmap, and decision owners.
 
 Method: treat R1–R4 as fixed architecture inputs; assign every current source
 module exactly once; state the complete replacement tree and its import rules;
 separate target-tree blocking gates from the old tree's audit posture; turn the
 production-seam gaps and cleanup inventory into dependency-ordered green
 Delivery Stories; and test the candidate against every ES-010 completion
-condition. This record is a Delivery contract, not an implementation and not a
-compatibility plan.
+condition. At synthesis time this was the candidate Delivery contract, not an
+implementation or compatibility plan. Promotion transferred current contract
+ownership to CV20 as stated below.
+
+## Promotion status
+
+This record preserves the synthesis and evidence that supported promotion. It
+is no longer the implementation contract. The canonical, self-contained
+Delivery truth lives in
+[CV20](../../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md):
+its local architecture, API contract, delivery sequence, replacement ledger
+and selected Delivery Story. Implementers and reviewers should not reconstruct
+current decisions from S1–S12 or resolve conflicts among experiment-era
+alternatives. If this record differs from CV20, CV20 governs Delivery.
 
 ## Verdict
 
-ES-010 has a coherent Delivery candidate. The accepted architecture can be
-built as a parallel replacement tree, qualified through behavior-owned tests,
-and switched in one final cut without importing or migrating V5 runtime state:
+ES-010 formed a coherent Delivery candidate, now promoted as
+[planned CV20 — Composable, reconstructible Hamsterdan](../../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md).
+The accepted architecture can be built as a parallel replacement tree,
+qualified through behavior-owned tests, and switched in one final cut without
+importing or migrating V5 runtime state:
 
 ```text
 src/hamsterdan2 + tests2
@@ -889,11 +904,12 @@ At Delivery/cutover, update active truth in:
   or old inspection commands.
 
 Dated CV17/CV18/ES7/ES8/ES9 records and worklogs remain unchanged as historical
-evidence. At candidate promotion, create one architecture decision that
-supersedes
-`2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md`
-and states that the composable replacement is the only runtime with no old
-state compatibility. Preserve or restate the still-valid principle from
+evidence. Candidate promotion creates a planning decision without superseding
+the current V5-only operational decision: V5 remains the sole runtime while
+CV20 is Planned and during DS1–DS11. A separately approved DS12 cutover decision
+supersedes it, renames the replacement to canonical Hamsterdan, and removes
+both V5 and temporary Hamsterdan2 as active runtime concepts. Preserve the
+still-valid principle from
 `2026-08-22T0107Z-v5-durable-decisions-are-explicit-topology.md`: durable
 workflow decisions stay explicit in the topology. The R3 Timeline/coroutine
 decision remains active.
@@ -1115,7 +1131,9 @@ canonical Python test paths in one change, retaining
 `tests/amp_webhook_relay.test.ts`. Switch packaging/entry points/deployment to
 the new runtime, update active docs and architecture decision, delete old
 source/Python tests/configuration, and qualify fresh state. No new runtime
-opens old state.
+opens old state. The result is canonical Hamsterdan; neither Hamsterdan2 nor V5
+remains an active runtime, identity, schema, path, compatibility, or operator
+concept.
 
 **Predecessor.** DS10 and DS11 accepted; explicit Navigator approval for the
 shared deployment/state actions.
@@ -1189,13 +1207,13 @@ Tests lower each meaningful limit and prove a typed refusal or replayable
 terminal budget failure. “One logical operation” without bounded internal
 reads is not sufficient.
 
-## Capability Value and Delivery Stories proposal
+## Capability Value and Delivery Stories
 
-Candidate Capability Value title:
+Promoted Capability Value title:
 
 > **Composable, reconstructible Hamsterdan**
 
-Candidate value statement:
+Promoted value statement:
 
 > Workflow, one-PR readiness execution, GitHub and agent implementations,
 > trusted host supervision, and deterministic simulation run through typed,
@@ -1204,7 +1222,7 @@ Candidate value statement:
 > at-least-once effects, lookup-first recovery, explicit resource bounds, and
 > exact deterministic replay.
 
-Proposed Delivery Story titles, in dependency order:
+Delivery Story titles, in dependency order:
 
 1. Establish the replacement-tree gate.
 2. Own bounded Petrus and Motus execution seams.
@@ -1219,8 +1237,9 @@ Proposed Delivery Story titles, in dependency order:
 11. Prove real provider and process correspondence.
 12. Cut over and remove V5.
 
-This is a roadmap proposal, not roadmap state. Promotion belongs to a separate
-Navigator ruling after this candidate is accepted.
+The Navigator promoted this candidate on 2026-08-27 as
+[planned CV20](../../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md).
+All twelve Delivery Stories are Planned; none is pulled by promotion.
 
 ## Decision, debt, and documentation assessment
 
@@ -1232,10 +1251,14 @@ the readiness runtime admission boundary, and the public agent terminal codec
 is owned by `agents.protocol`. Rate-limit reset metadata is omitted unless a
 bounded scheduler test proves it necessary.
 
-At promotion/cutover, one new architecture decision must supersede the current
-V5-only/retired-state decision. The durable-explicit-topology principle and R3
-Timeline/coroutine decision stay active. No decision record is created by S12
-because the candidate has not yet been promoted.
+Promotion records that the composable architecture is the planned replacement
+without superseding current operation. The
+[planning decision](../../../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md)
+keeps V5 as the sole runtime through DS1–DS11. A separately approved DS12
+cutover decision must supersede the V5-only/retired-state decision; after that
+swap the implementation is simply Hamsterdan and neither V5 nor Hamsterdan2 is
+an active concept. The durable-explicit-topology principle and R3
+Timeline/coroutine decision stay active.
 
 ### Debt
 
@@ -1247,16 +1270,17 @@ with an explicit consequence and recovery plan.
 
 ### Documentation
 
-S12 updates only this experiment and the ES-010 index. Active project truth is
-updated story-by-story when the corresponding implementation becomes true;
-cutover performs the final README/briefing/AGENTS/development/deployment and
-decision coherence pass. Dated evidence remains historical.
+The original S12 synthesis updated only this experiment and the ES-010 index.
+Promotion also updates the Exploration, roadmap, and decision routing surfaces.
+Active implementation truth is updated story-by-story when the corresponding
+behavior becomes true; cutover performs the final
+README/briefing/AGENTS/development/deployment and operational-decision coherence
+pass. Dated evidence remains historical.
 
-## Candidate-gate assessment
+## Promotion-gate assessment
 
-The Navigator accepted this candidate's Experience Report on 2026-08-27. The
-candidate meets the first twelve ES-010 completion conditions and is ready for
-the separate thirteenth gate, roadmap placement:
+The Navigator accepted this candidate's Experience Report and promoted it as
+Planned CV20 on 2026-08-27. All thirteen ES-010 completion conditions are met:
 
 1. **Exact package ownership:** the source tree and 61-entry disposition ledger
    assign every current responsibility once.
@@ -1284,10 +1308,9 @@ the separate thirteenth gate, roadmap placement:
 12. **Complete validation:** behavior, real seams, local/composed simulation,
     journeys, process/provider correspondence, distribution, crash cuts, and
     bounds are explicit.
-13. **Pending promotion gate:** the Capability Value, Delivery Stories,
-    decision supersession, debt result, and active-doc cleanup are ready.
-    Candidate acceptance is recorded; roadmap placement is not inferred by
-    S12.
+13. **Promotion gate:** the Capability Value and twelve Delivery Stories are
+    recorded as Planned; the planning decision preserves current V5 operation;
+    no story, cutover, deployment, or external effect is inferred by promotion.
 
 No stop condition triggered: the candidate does not contradict R1–R4; no
 current source module is unassigned or multiply assigned; no compatibility or
@@ -1302,7 +1325,6 @@ predecessors, owned files, production seams, rollback point, and validation
 without rediscovering ownership or reopening R1–R4. The current production
 tree remains authoritative until a separately accepted final cutover.
 
-ES-010 remains `Thickening` after Navigator acceptance of this candidate and
-pending a separate promotion ruling. No Delivery Story, roadmap item,
-decision, debt, commit, push, deployment, or external effect is authorized by
-this record.
+ES-010 is `Promoted` as Planned CV20. No Delivery Story is pulled, and no
+production implementation, cutover, deployment, external effect, commit, or
+push is authorized by this record.

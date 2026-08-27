@@ -14,6 +14,14 @@ belongs in each item's own metadata; this index routes to current owners.
   supervised launch, one bounded monitoring proof, and private release history
   remain.
 
+## Planned
+
+- [CV20 — Composable, reconstructible Hamsterdan](cv20-composable-reconstructible-hamsterdan/index.md):
+  ES-010's accepted architecture is promoted as twelve dependency-ordered
+  Delivery Stories. None is pulled; the replacement remains non-selectable
+  construction work while CV19 stays the only active Value and V5 stays the
+  only current runtime.
+
 ## Paused until after private v0.1
 
 - [CV18 — Deterministic readiness simulation](cv18-deterministic-readiness-simulation/index.md):
@@ -38,4 +46,9 @@ belongs in each item's own metadata; this index routes to current owners.
 
 The current topology ruling is
 [V5 is the only runtime and retired topology state fails closed](../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md).
-Sharded V5 and the former production topology are not available runtime choices.
+The
+[CV20 planning decision](../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md)
+does not supersede that operational truth: sharded V5, the former production
+topology, and the planned replacement are not available runtime choices. A
+separately approved CV20.DS12 cutover will make the replacement canonical
+Hamsterdan and remove the V5 and Hamsterdan2 runtime concepts together.

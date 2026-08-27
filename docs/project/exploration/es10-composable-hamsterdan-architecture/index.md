@@ -1,15 +1,29 @@
 ---
-status: Thickening
+status: Promoted
 opened: 2026-08-25
+promoted: 2026-08-27
 navigator: Henrique
 related:
   - ../es9-human-codebase-ownership/index.md
   - ../../roadmap/cv18-deterministic-readiness-simulation/index.md
+  - ../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md
   - ../../decisions/records/2026-08-01T0203Z-hamsterdan-is-a-standalone-petrus-application.md
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
+  - ../../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md
 ---
 
 # ES-010: Composable Hamsterdan architecture
+
+## Promotion status
+
+This exploration is complete and retained as provenance. The canonical,
+self-contained implementation contract is now
+[CV20](../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md),
+especially its local architecture, API contract, delivery sequence,
+replacement ledger and selected Delivery Story. Those records own current
+design truth and implementation order. The alternatives, experiment-era names
+and possibilities below are not implementation inputs; where wording differs,
+CV20 governs Delivery.
 
 ## Inquiry
 
@@ -1189,7 +1203,11 @@ S12 has synthesized those fixed inputs into the Delivery candidate at
 It fixes the exact `src/hamsterdan2` and `tests2` trees, final import DAG and
 blocking the engineering style contract gate, a 61/61 current-source disposition ledger, production
 seam and V5 cleanup inventories, twelve dependency-ordered green Delivery
-Stories, the complete validation matrix, and proposed Capability Value. The
-Navigator accepted its Experience Report on 2026-08-27. ES-010 remains
-`Thickening` while the accepted candidate awaits a separate promotion ruling.
-No Delivery Story, production change, or roadmap promotion has begun.
+Stories, the complete validation matrix, and promoted Capability Value. The
+Navigator accepted its Experience Report and promoted the candidate on
+2026-08-27 as
+[planned CV20 — Composable, reconstructible Hamsterdan](../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md).
+All twelve Delivery Stories remain Planned; none is pulled. Current V5 remains
+the only runtime until a separately approved DS12 cutover makes the replacement
+canonical Hamsterdan and removes both the V5 and temporary Hamsterdan2 runtime
+concepts. No production implementation or deployment change has begun.

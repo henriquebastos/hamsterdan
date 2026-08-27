@@ -6,16 +6,17 @@ Paused, Candidate, Promoted, or Archived.
 
 ## Active
 
-- [ES-010: Composable Hamsterdan architecture](es10-composable-hamsterdan-architecture/index.md):
-  separate pure workflow definition, effectful readiness execution, trusted host
-  supervision, provider adapters, and Hamsterdan-owned compositional deterministic
-  simulation before proposing a new Capability Value.
 - [ES-009 — Human ownership of the Hamsterdan codebase](es9-human-codebase-ownership/index.md):
   learn the current V5 system through vertical journeys, review its module depth
   and correctness from evidence, and form bounded improvement candidates.
 
 ## Promoted
 
+- [ES-010: Composable Hamsterdan architecture](es10-composable-hamsterdan-architecture/index.md):
+  its ruled package ownership, bounded execution, provider/agent separation,
+  and compositional simulation candidate entered
+  [planned CV20](../roadmap/cv20-composable-reconstructible-hamsterdan/index.md)
+  as twelve Delivery Stories; none is pulled.
 - [ES-001 — Simplify the Petri Net at the Motus boundary](es1-petri-net-motus-boundary/index.md):
   its Activity ownership and durable-execution conclusions entered production.
 - [ES-007 — The complete V5 Hamsterdan](es7-v5-hamsterdan/index.md): its
