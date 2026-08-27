@@ -1139,5 +1139,22 @@ Engine-load, Activity/effect, GitHub publication, agent lifecycle/terminal, and
 host lifecycle/catalog/scheduler/shutdown seams recorded by the five reports;
 those are S11/S12 correspondence inputs rather than new debt or authorization
 for production changes. No production, maintained test, or configuration
-surface changed. Experiment 11 is unblocked but unstarted. Checkpoint R4 remains
-unruled.
+surface changed.
+
+S11 produced an accepted partial negative result:
+[experiments/11-composition.md](experiments/11-composition.md) proves that all
+five unchanged Experiment 10 modules co-mount under one unchanged S9
+`Timeline`, share the exact resource union and recorded interleavings, compose
+their local checkers, survive mounted-process reconstruction, replay exactly,
+and reduce one workflow-local failure to workflow scope. It does not prove the
+required causal whole-Hamsterdan vertical. The accepted workflow simulation
+exposes only `RerunReq -> RerunLanded`, while the accepted readiness simulation
+requires workflow-declared `MutWork`; composition cannot invent or reinterpret
+that typed workflow meaning. The retained co-mounting counterexample records
+this blocker instead of presenting its independently constructed coding and
+readiness mutation branch as workflow execution.
+
+The Navigator accepted the partial result and confirmed that it needs no
+pre-integration refactor or debt record. Acceptance did not complete S11 or
+authorize the proposed bounded causal-alignment follow-up. S11 remains blocked,
+checkpoint R4 remains unruled, and Experiment 12 has not begun.
