@@ -5,6 +5,9 @@ existing Hamsterdan capability outside the delivery roadmap.
 
 ## Candidate, not pulled
 
+- [RS-035 — Make orb setup independent of ambient USER](rs-035-make-orb-setup-independent-of-ambient-user.md):
+  stop the Docker-feedback setup step from depending on an optional ambient
+  identity variable and restore the scrubbed-environment full-gate tests.
 - [RS-030 — Review the maintained complexity baseline](rs-030-review-maintained-complexity-baseline.md):
   classify 47 non-blocking `C901` findings before choosing refactorings,
   exceptions, or any tighter gate.
