@@ -1109,5 +1109,35 @@ post-operation journal capacity, and preserves an exact final artifact even
 when leaf, journal, or restart-generation capacity is exhausted. The isolated
 spike and ten focused contracts live under
 [experiments/spikes/09-simulation-runtime/](experiments/spikes/09-simulation-runtime/).
-No production, maintained test, or configuration surface changed. Experiment
-10 and checkpoint R4 remain unstarted and unruled.
+No production, maintained test, or configuration surface changed.
+
+Experiment 10's five local simulations are complete and accepted by the
+Navigator: [workflow](experiments/10-workflow-simulation.md),
+[readiness](experiments/10-readiness-simulation.md),
+[GitHub](experiments/10-github-simulation.md),
+[agents](experiments/10-agents-simulation.md), and
+[host](experiments/10-host-simulation.md). Each mounts through S9's unchanged
+`Timeline`, declares strict module-owned commands, observations, faults,
+resources, and local checker rules, generates one meaningful failure, and
+exactly replays without constructing whole Hamsterdan. The workflow proof
+reconstructs a pending Activity request from retained History and detects a
+typed terminal with the wrong operation. Readiness recovers one accepted
+response-lost Git effect lookup-first with one agent call. GitHub crosses an
+executed-phase crash after exactly one accepted POST and refuses content or
+full-authority identity collisions. Agents recover retained runtime and
+delivery terminals across two crashes without a duplicate runtime start. Host
+gives two PRs bounded fair progress, preserves a stable operation across
+response-loss requeue or crash, observes route revocation freshly, and cleans
+up resources after a local close failure.
+
+Pre-acceptance review corrected physical-effect counting in the readiness
+checker, GitHub's retained proof to respect one mutation attempt per bounded
+step, idempotent agent resubmission in its checker, and host response-loss
+terminalization before requeue. Thirty-three focused contracts and every
+session's quick and full gates pass. Production still needs the bounded
+Engine-load, Activity/effect, GitHub publication, agent lifecycle/terminal, and
+host lifecycle/catalog/scheduler/shutdown seams recorded by the five reports;
+those are S11/S12 correspondence inputs rather than new debt or authorization
+for production changes. No production, maintained test, or configuration
+surface changed. Experiment 11 is unblocked but unstarted. Checkpoint R4 remains
+unruled.
