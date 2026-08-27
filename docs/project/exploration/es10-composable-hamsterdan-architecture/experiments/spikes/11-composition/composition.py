@@ -1,4 +1,4 @@
-"""Whole-Hamsterdan co-mounting counterexample over unchanged S9/S10 spikes."""
+"""Causal whole-Hamsterdan composition over the accepted S9/S10 simulations."""
 
 from __future__ import annotations
 
@@ -37,23 +37,21 @@ from runtime import (
     Waiting,
     replay,
 )
-from workflow_simulation import WorkflowSimulation
+from workflow_simulation import V5MutationWorkflowSimulation, WorkflowSimulation
 
+from hamsterdan.agents.protocol import AgentProtocolError, CodingRequest, CodingResult
 from hamsterdan.contracts.readiness_v5 import MutWork
+from hamsterdan.host.git_publish import payload_digest
 from hamsterdan.host.v5.mutation import V5MutationGate
 
 LOCAL_MODULES = ("workflow", "readiness", "github", "agents", "host")
 MOUNTED_MODULES = ("composition", *LOCAL_MODULES)
-CAUSAL_VERTICAL_BLOCKER = (
-    "accepted workflow exposes only RerunReq -> RerunLanded; accepted readiness requires "
-    "workflow-declared MutWork; composition cannot create or reinterpret typed workflow meaning"
-)
 
 HEAD = "a" * 40
 BASE = "b" * 40
 CORRUPT_HEAD = "c" * 40
 POLICY = "policy-1"
-INCARNATION = 3
+INCARNATION = 1
 DELIVERY = "delivery-501"
 ROUTE = "installation:44:repository:31"
 SUBJECT = "owner:repo:pr:7"
@@ -87,8 +85,8 @@ RESOURCE_LIMITS = {
     "readiness.requests": 8,
     "readiness.terminals": 8,
     "workflow.commands": 8,
-    "workflow.history_records": 128,
-    "workflow.pending_activities": 1,
+    "workflow.history_records": 256,
+    "workflow.pending_activities": 16,
 }
 
 COMPOSITION_BUDGET = Budget(
@@ -132,18 +130,46 @@ WEBHOOK_FIELDS = {
     "incarnation",
     "policy",
     "route",
-    "run_attempt",
-    "run_conclusion",
-    "run_fingerprint",
-    "run_id",
     "signature",
     "subject",
 }
 WEBHOOK_BODY_FIELDS = WEBHOOK_FIELDS - {"signature"}
+_WORK_FIELDS = set(MutWork.__dataclass_fields__)
 
 
 class CompositionRouteError(RuntimeError):
     pass
+
+
+class DeliveredAgentsCodingRunner:
+    """Adapt one exact delivered agents terminal to readiness' typed runner port."""
+
+    def __init__(self, agents: AgentsSimulation) -> None:
+        self.agents = agents
+
+    def code(
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: Any = None,
+    ) -> CodingResult:
+        if is_current is None or not is_current():
+            raise AgentProtocolError("coding authority moved", canceled=True)
+        delivered = self.agents.delivered(operation, attempt)
+        if delivered.kind != "coding":
+            raise CompositionRouteError("delivered agent execution is not a coding operation")
+        if delivered.repository_url != repository_url:
+            raise CompositionRouteError("delivered agent repository differs from the readiness request")
+        if delivered.operation != operation or delivered.attempt != attempt:
+            raise CompositionRouteError("delivered agent identity differs from the readiness request")
+        if not isinstance(delivered.request, CodingRequest) or delivered.request != request:
+            raise CompositionRouteError("delivered agent request differs from the readiness request")
+        if not isinstance(delivered.result, CodingResult):
+            raise CompositionRouteError("delivered agent terminal is not a CodingResult")
+        return delivered.result
 
 
 @dataclass
@@ -225,16 +251,26 @@ class _CompositionGeneration:
     def _handoff_agent(self, payload: object, _context: Any) -> object:
         values = _exact(
             payload,
-            {"delivery", "instruction", "operation", "workflow_operation"},
+            {"delivery", "proposed_commit_message", "workflow_occurrence", "work"},
             "agent handoff",
         )
         delivery = _text(values["delivery"], "delivery")
         webhook = self._webhook(delivery)
-        operation = _text(values["operation"], "operation")
-        workflow_operation = _text(values["workflow_operation"], "workflow_operation")
-        instruction = _text(values["instruction"], "instruction")
-        work = _work(webhook, operation, instruction)
-        request = V5MutationGate.request("owner/repo", 7, MutWork(**work))
+        work = MutWork(**_exact(values["work"], _WORK_FIELDS, "workflow mutation work"))
+        request = V5MutationGate.request("owner/repo", 7, work)
+        occurrence = values["workflow_occurrence"]
+        if type(occurrence) is not int or occurrence < 0:
+            raise CompositionRouteError("workflow_occurrence must be a non-negative integer")
+        expected_authority = _authority(webhook)
+        if (work.head, work.base, work.policy, work.incarnation) != (
+            expected_authority["head"],
+            expected_authority["base"],
+            expected_authority["policy"],
+            expected_authority["incarnation"],
+        ):
+            raise CompositionRouteError("workflow mutation work differs from the signed webhook authority")
+        message = _text(values["proposed_commit_message"], "proposed_commit_message")
+        operation = work.op_key
         agent_operation = f"mutation:owner/repo:pr:7:{operation}"
         submission = {
             "kind": "coding",
@@ -253,7 +289,7 @@ class _CompositionGeneration:
                 "epoch": request.epoch,
                 "head": request.head,
                 "kind": request.kind,
-                "proposed_commit_message": "Apply requested change",
+                "proposed_commit_message": message,
                 "pull_request": request.pull_request,
                 "ref": request.ref,
                 "repository": request.repository,
@@ -264,11 +300,13 @@ class _CompositionGeneration:
         }
         handoff = {
             "agent_operation": agent_operation,
-            "authority": _authority(webhook),
+            "authority": expected_authority,
             "delivery": delivery,
-            "instruction": instruction,
             "operation": operation,
-            "workflow_operation": workflow_operation,
+            "request": asdict(request),
+            "proposed_commit_message": message,
+            "work": work.dump(),
+            "workflow_occurrence": occurrence,
         }
         previous = self.store.handoffs.get(operation)
         if previous is not None:
@@ -286,11 +324,6 @@ class _CompositionGeneration:
             handoff = self.store.handoffs[operation]
         except KeyError:
             raise CompositionRouteError(f"agent handoff {operation!r} must exist before readiness routing") from None
-        if "readiness_authority" in handoff:
-            return {
-                "authority": handoff["readiness_authority"],
-                "work": handoff["readiness_work"],
-            }
         authority = dict(handoff["authority"])
         faults = context.faults("handoff.authority")
         if len(faults) > 1:
@@ -298,11 +331,9 @@ class _CompositionGeneration:
         if faults:
             fault = _exact(faults[0].payload, {"head"}, "handoff.authority fault")
             authority["head"] = _commit(fault["head"], "fault head")
-        webhook = self._webhook(cast(str, handoff["delivery"]))
-        work = _work(webhook | {"head": authority["head"]}, operation, cast(str, handoff["instruction"]))
         handoff["readiness_authority"] = authority
-        handoff["readiness_work"] = work
-        return {"authority": authority, "work": work}
+        handoff["readiness_work"] = dict(handoff["work"])
+        return {"authority": authority, "work": handoff["readiness_work"]}
 
     def _webhook(self, delivery: str) -> dict[str, Any]:
         try:
@@ -322,7 +353,7 @@ class CoMountingReport:
 
 
 @dataclass(frozen=True)
-class CoMountingCounterexample:
+class CompositionEvidence:
     artifact: Artifact
     replay: ReplayResult
     report: CoMountingReport
@@ -340,15 +371,15 @@ class WorkflowFailureProof:
 
 
 class HamsterdanCoMounting:
-    """Route co-mounting vocabulary while every local module remains unchanged."""
+    """Route typed values among independently owned local simulations."""
 
     def __init__(self, timeline: Timeline, modules: tuple[Any, ...]) -> None:
         self.timeline = timeline
         self.modules = {module.name: module for module in modules}
 
     @classmethod
-    def open(cls, *, seed: int = 31) -> HamsterdanCoMounting:
-        modules = build_modules()
+    def open(cls, *, seed: int = 31, module_factory: Any = None) -> HamsterdanCoMounting:
+        modules = build_modules() if module_factory is None else module_factory()
         return cls(Timeline.open(modules, COMPOSITION_BUDGET, seed=seed), modules)
 
     def webhook(self, *, signature: str | None = None) -> dict[str, object]:
@@ -361,10 +392,6 @@ class HamsterdanCoMounting:
             "incarnation": INCARNATION,
             "policy": POLICY,
             "route": ROUTE,
-            "run_attempt": 1,
-            "run_conclusion": "failure",
-            "run_fingerprint": "tests-red",
-            "run_id": 7,
             "subject": SUBJECT,
         }
         return {**body, "signature": signature or _signature(body, SIGNING_KEY)}
@@ -433,11 +460,19 @@ class HamsterdanCoMounting:
             )
         raise CompositionRouteError(f"unknown fault {name!r}")
 
-    def route_composition_owned_mutation(self, *, operation: str = PUBLICATION_OPERATION) -> str:
+    def route_workflow_mutation(
+        self,
+        *,
+        proposed_commit_message: str,
+        substitute_work_instruction: str | None = None,
+    ) -> str:
         workflow = cast(dict[str, Any], self.observe("workflow.state"))
         pending = cast(dict[str, Any] | None, workflow["pending"])
-        if pending is None:
-            raise CompositionRouteError("workflow must expose one pending Activity before agent handoff")
+        if pending is None or pending["activity"] != "git_gate":
+            raise CompositionRouteError("real workflow must expose one pending git_gate before agent handoff")
+        work = dict(cast(dict[str, Any], pending["work"]))
+        if substitute_work_instruction is not None:
+            work["instruction"] = substitute_work_instruction
         routed = cast(
             dict[str, Any],
             self.timeline.command(
@@ -445,9 +480,9 @@ class HamsterdanCoMounting:
                 "handoff.agent",
                 {
                     "delivery": DELIVERY,
-                    "instruction": "rename the config key",
-                    "operation": operation,
-                    "workflow_operation": pending["operation"],
+                    "proposed_commit_message": proposed_commit_message,
+                    "workflow_occurrence": pending["occurrence"],
+                    "work": work,
                 },
             ),
         )
@@ -455,7 +490,7 @@ class HamsterdanCoMounting:
         self.timeline.command("agents", "terminal", routed["terminal"])
         return cast(str, routed["handoff"]["agent_operation"])
 
-    def route_composition_owned_mutation_to_readiness(self, *, operation: str = PUBLICATION_OPERATION) -> None:
+    def route_delivered_mutation_to_readiness(self, *, operation: str = PUBLICATION_OPERATION) -> None:
         state = cast(dict[str, Any], self.observe("composition.state"))
         [handoff] = [item for item in state["handoffs"] if item["operation"] == operation]
         agent_operation = cast(str, handoff["agent_operation"])
@@ -486,15 +521,17 @@ class HamsterdanCoMounting:
             {"request": "authority-before-mutation", "at_us": self.timeline.now_us},
         )
 
-    def settle_independent_workflow_rerun(self) -> None:
-        workflow = cast(dict[str, Any], self.observe("workflow.state"))
-        pending = cast(dict[str, Any] | None, workflow["pending"])
-        if pending is None:
-            raise CompositionRouteError("workflow has no pending Activity to settle")
+    def settle_workflow_mutation(self, *, operation: str = PUBLICATION_OPERATION) -> None:
+        composition = cast(dict[str, Any], self.observe("composition.state"))
+        [handoff] = [item for item in composition["handoffs"] if item["operation"] == operation]
+        readiness = cast(dict[str, Any], self.observe("readiness.state"))
+        [terminal] = [item for item in readiness["terminals"] if item["operation"] == operation]
+        if terminal["variant"] != "Pushed":
+            raise CompositionRouteError("readiness did not return Pushed for the workflow mutation")
         self.timeline.command(
             "workflow",
-            "terminal.rerun",
-            {"operation": pending["operation"], "variant": "landed"},
+            "terminal.mutation",
+            {"occurrence": handoff["workflow_occurrence"], "value": terminal["value"]},
         )
 
     def check(self, scenario_id: str) -> tuple[CoMountingReport, Artifact, dict[str, Any]]:
@@ -531,7 +568,7 @@ class HamsterdanCoMounting:
         }
         local_passed = {name: not violations for name, violations in local_violations.items()}
         cross = _cross_violations(artifact, states)
-        causal_blockers = (CAUSAL_VERTICAL_BLOCKER,) if states["composition"]["handoffs"] else ()
+        causal_blockers: tuple[str, ...] = ()
         failed = [name for name, passed in local_passed.items() if not passed]
         if cross or len(failed) != 1:
             scope = "co_mounting"
@@ -582,19 +619,9 @@ class HamsterdanCoMounting:
                     "head": values["head"],
                     "base": values["base"],
                     "policy": values["policy"],
-                    "incarnation": values["incarnation"],
-                },
-            ),
-            (
-                "workflow",
-                "observe.run",
-                {
-                    "identity": f"{values['delivery']}:run",
-                    "head": values["head"],
-                    "run_id": values["run_id"],
-                    "attempt": values["run_attempt"],
-                    "conclusion": values["run_conclusion"],
-                    "fingerprint": values["run_fingerprint"],
+                    "mergeable": True,
+                    "strict_base": False,
+                    "base_current": True,
                 },
             ),
             (
@@ -621,6 +648,18 @@ class HamsterdanCoMounting:
 
 
 def build_modules() -> tuple[Any, ...]:
+    agents = AgentsSimulation()
+    return (
+        CompositionModule(),
+        V5MutationWorkflowSimulation.fresh(),
+        ReadinessModule(runner=DeliveredAgentsCodingRunner(agents)),
+        GitHubSimulation(),
+        agents,
+        HostSimulation(),
+    )
+
+
+def build_failure_modules() -> tuple[Any, ...]:
     return (
         CompositionModule(),
         WorkflowSimulation.fresh(),
@@ -631,12 +670,38 @@ def build_modules() -> tuple[Any, ...]:
     )
 
 
-def run_co_mounting_counterexample(*, corrupt_handoff_authority: bool = False) -> CoMountingCounterexample:
+def run_causal_composition(
+    *,
+    proposed_commit_message: str = "Apply requested change",
+    corrupt_handoff_authority: bool = False,
+    substitute_work_instruction: str | None = None,
+) -> CompositionEvidence:
     whole = HamsterdanCoMounting.open()
     whole.command("composition.signed_webhook", whole.webhook())
-    _run_until(whole, lambda: cast(dict[str, Any], whole.observe("workflow.state"))["pending"] is not None)
-    agent_operation = whole.route_composition_owned_mutation()
-    whole.settle_independent_workflow_rerun()
+    _run_until(
+        whole,
+        lambda: cast(dict[str, Any], whole.observe("workflow.state"))["life_state"]["head"] == HEAD,
+    )
+    whole.command(
+        "workflow.observe.comment",
+        {
+            "identity": f"{DELIVERY}:comment",
+            "id": "501",
+            "kind": "change",
+            "arg": "rename the config key",
+            "authorized": True,
+        },
+    )
+    _run_until(
+        whole,
+        lambda: cast(dict[str, Any], whole.observe("workflow.state"))["pending"] is not None,
+    )
+    requested = cast(dict[str, Any], whole.observe("workflow.state"))
+    held_at_request = list(requested["held_activities"])
+    agent_operation = whole.route_workflow_mutation(
+        proposed_commit_message=proposed_commit_message,
+        substitute_work_instruction=substitute_work_instruction,
+    )
     _run_until(
         whole,
         lambda: (
@@ -647,9 +712,7 @@ def run_co_mounting_counterexample(*, corrupt_handoff_authority: bool = False) -
             == "delivered"
         ),
     )
-    if corrupt_handoff_authority:
-        whole.fault("composition.handoff.authority", {"head": CORRUPT_HEAD})
-    whole.route_composition_owned_mutation_to_readiness()
+    whole.route_delivered_mutation_to_readiness()
     whole.fault("readiness.git_response_lost", {"operation": PUBLICATION_OPERATION})
     _start_module(whole, "readiness")
     whole.timeline.execute()
@@ -659,18 +722,37 @@ def run_co_mounting_counterexample(*, corrupt_handoff_authority: bool = False) -
         whole,
         lambda: bool(cast(dict[str, Any], whole.observe("readiness.state"))["terminals"]),
     )
-    _run_until_waiting(whole)
-    report, artifact, states = whole.check(
-        "hamsterdan-co-mounting-authority-mismatch"
-        if corrupt_handoff_authority
-        else "hamsterdan-co-mounting-counterexample"
+    whole.settle_workflow_mutation()
+    _run_until(
+        whole,
+        lambda: (
+            cast(dict[str, Any], whole.observe("workflow.state"))["mutation_state"] is not None
+            and cast(dict[str, Any], whole.observe("workflow.state"))["mutation_state"]["state"] == "idle"
+            and bool(cast(dict[str, Any], whole.observe("workflow.state"))["life_state"]["expected"])
+        ),
     )
+    _run_until_waiting(whole)
+    if corrupt_handoff_authority:
+        whole.fault("composition.handoff.authority", {"head": CORRUPT_HEAD})
+        whole.command("composition.handoff.readiness", {"operation": PUBLICATION_OPERATION})
+    if corrupt_handoff_authority:
+        scenario_id = "hamsterdan-causal-composition-authority-mismatch"
+    elif substitute_work_instruction is not None:
+        scenario_id = "hamsterdan-causal-composition-work-substitution"
+    else:
+        scenario_id = "hamsterdan-causal-composition"
+    report, artifact, states = whole.check(scenario_id)
     replayed = replay(Artifact.decode(artifact.encode()), build_modules)
-    return CoMountingCounterexample(artifact, replayed, report, _metrics(artifact, states))
+    return CompositionEvidence(
+        artifact,
+        replayed,
+        report,
+        _metrics(artifact, states) | {"held_activities_at_request": held_at_request},
+    )
 
 
 def run_workflow_failure_proof() -> WorkflowFailureProof:
-    whole = HamsterdanCoMounting.open()
+    whole = HamsterdanCoMounting.open(module_factory=build_failure_modules)
     whole.command("workflow.observe.head", _workflow_head())
     whole.command("workflow.observe.run", _workflow_run())
     _run_until(whole, lambda: cast(dict[str, Any], whole.observe("workflow.state"))["pending"] is not None)
@@ -688,7 +770,7 @@ def run_workflow_failure_proof() -> WorkflowFailureProof:
     )
     _run_until_waiting(whole)
     report, artifact, _states = whole.check("hamsterdan-co-mounting-workflow-correlation-failure")
-    replayed = replay(Artifact.decode(artifact.encode()), build_modules)
+    replayed = replay(Artifact.decode(artifact.encode()), build_failure_modules)
     reduced, reduced_violations = _reduced_workflow_failure()
     reduced_replay = replay(Artifact.decode(reduced.encode()), lambda: (WorkflowSimulation.fresh(),))
     return WorkflowFailureProof(
@@ -775,6 +857,16 @@ def _cross_violations(artifact: Artifact, states: dict[str, Any]) -> tuple[str, 
     [webhook] = composition["webhooks"]
     [handoff] = composition["handoffs"]
     violations = []
+    workflow_request = states["workflow"]["request"]
+    if (
+        workflow_request is None
+        or handoff["workflow_occurrence"] != workflow_request["occurrence"]
+        or handoff["operation"] != workflow_request["correlation"]
+        or handoff["operation"] != workflow_request["idempotency"]
+    ):
+        violations.append("composition handoff does not identify the real workflow mutation request")
+    if workflow_request is not None and handoff["work"] != workflow_request["work"]:
+        violations.append("composition handoff altered the real workflow-declared MutWork")
     readiness_authority = handoff.get("readiness_authority")
     signed_authority = _authority(webhook)
     github_authority = states["github"]["authority"]
@@ -791,22 +883,45 @@ def _cross_violations(artifact: Artifact, states: dict[str, Any]) -> tuple[str, 
         }
     ):
         violations.append("readiness authority differs from the signed webhook and GitHub authority")
-    workflow_terminal = states["workflow"]["terminal"]
-    if workflow_terminal is None or workflow_terminal["op"] != handoff["workflow_operation"]:
-        violations.append("workflow terminal does not match the workflow operation copied into composition metadata")
+    operation = handoff["operation"]
+    work = handoff["work"]
+    expected_request = asdict(V5MutationGate.request("owner/repo", 7, MutWork(**work)))
     requests = states["readiness"]["requests"]
     publications = states["readiness"]["provider"]["publications"]
-    if [item["operation"] for item in requests] != [handoff["operation"]] or [
-        item["operation"] for item in publications
-    ] != [handoff["operation"]]:
-        violations.append("readiness request and accepted Git effect do not share the composition-owned operation")
+    if requests != [{"operation": operation, "value": work}]:
+        violations.append("readiness did not receive the unchanged workflow-declared MutWork")
+    if len(publications) != 1 or publications[0]["operation"] != operation:
+        violations.append("accepted Git effect does not share the workflow operation")
+    submission = _one_command_payload(artifact, "agents", "submit")
+    terminal_declaration = _one_command_payload(artifact, "agents", "terminal")
+    if (
+        submission["operation"] != handoff["agent_operation"]
+        or submission["attempt"] != 1
+        or submission["request"] != expected_request
+        or handoff["request"] != expected_request
+    ):
+        violations.append("agents did not receive the canonical request for the workflow-declared MutWork")
     agent_operations = states["agents"]["operations"]
     if (
         len(agent_operations) != 1
         or agent_operations[0]["operation"] != handoff["agent_operation"]
         or agent_operations[0]["state"] != "delivered"
     ):
-        violations.append("agent terminal is not delivered under the composition-owned operation")
+        violations.append("agent terminal is not delivered under the workflow operation")
+    if publications:
+        delivered_digest = payload_digest({"schema_version": 1, "coding_result": terminal_declaration["result"]})
+        if publications[0]["coding_result_digest"] != delivered_digest:
+            violations.append("Git publication did not consume the exact delivered agents CodingResult")
+    readiness_terminals = states["readiness"]["terminals"]
+    workflow_terminal = states["workflow"]["terminal"]
+    if (
+        len(readiness_terminals) != 1
+        or workflow_terminal is None
+        or workflow_terminal["operation"] != operation
+        or workflow_terminal["occurrence"] != handoff["workflow_occurrence"]
+        or workflow_terminal["value"] != readiness_terminals[0]["value"]
+    ):
+        violations.append("readiness Pushed did not close the original workflow occurrence")
     host_subject = states["host"]["subjects"].get(webhook["subject"])
     if host_subject is None or host_subject["route"] != webhook["route"]:
         violations.append("host route custody does not match the signed webhook")
@@ -837,6 +952,14 @@ def _metrics(artifact: Artifact, states: dict[str, Any]) -> dict[str, Any]:
             resource_peaks[name] = max(resource_peaks.get(name, 0), value)
     [publication] = provider["publications"]
     [agent] = agents
+    [handoff] = states["composition"]["handoffs"]
+    [request] = readiness["requests"]
+    workflow_request_projection = workflow["request"]
+    if workflow_request_projection is None:
+        raise ValueError("causal composition metrics require one real workflow mutation request")
+    submission = _one_command_payload(artifact, "agents", "submit")
+    terminal_declaration = _one_command_payload(artifact, "agents", "terminal")
+    workflow_request = V5MutationGate.request("owner/repo", 7, MutWork(**request["value"]))
     return {
         "accepted_git_effects": len(provider["publications"]),
         "agent_deliveries": agent["accepted_deliveries"],
@@ -851,12 +974,39 @@ def _metrics(artifact: Artifact, states: dict[str, Any]) -> dict[str, Any]:
         "journal_digest": artifact.journal_digest,
         "journal_entries": len(artifact.journal),
         "lookup_recoveries": int(publication["recovered"]),
+        "delivered_request": submission["request"],
+        "delivered_result_digest": payload_digest(
+            {"schema_version": 1, "coding_result": terminal_declaration["result"]}
+        ),
+        "final_held_activities": workflow["held_activities"],
         "operations": len(artifact.operations),
+        "operation": handoff["operation"],
+        "provider_call_kinds": [call["kind"] for call in provider["calls"]],
+        "publication_coding_result_digest": publication["coding_result_digest"],
+        "publication_payload_digest": publication["payload_digest"],
+        "publication_result_head": publication["result_head"],
+        "readiness_request": asdict(workflow_request),
+        "readiness_work": request["value"],
         "readiness_agent_calls": sum(call["kind"] == "agent" for call in provider["calls"]),
         "resource_peaks": resource_peaks,
         "signed_webhooks": len(states["composition"]["webhooks"]),
         "workflow_terminal": workflow["terminal"]["variant"],
+        "workflow_expected_head": workflow["life_state"]["expected"],
+        "workflow_work": workflow_request_projection["work"],
     }
+
+
+def _one_command_payload(artifact: Artifact, module: str, name: str) -> dict[str, Any]:
+    payloads = [
+        operation["request"]["payload"]
+        for operation in artifact.operations
+        if operation["kind"] == "command"
+        and operation["request"]["module"] == module
+        and operation["request"]["name"] == name
+    ]
+    if len(payloads) != 1:
+        raise CompositionRouteError(f"expected one {module}.{name} command, observed {len(payloads)}")
+    return cast(dict[str, Any], payloads[0])
 
 
 def _action_position(artifact: Artifact, module: str, name: str) -> int | None:
@@ -894,32 +1044,13 @@ def _signature(body: dict[str, object], signing_key: bytes) -> str:
 
 def _validate_webhook_body(body: dict[str, Any]) -> None:
     if body["event"] != "issue_comment" or body["action"] != "created":
-        raise CompositionRouteError("co-mounting counterexample accepts only an issue_comment created webhook")
-    for name in ("delivery", "route", "subject", "policy", "run_fingerprint"):
+        raise CompositionRouteError("causal composition accepts only an issue_comment created webhook")
+    for name in ("delivery", "route", "subject", "policy"):
         _text(body[name], name)
     _commit(body["head"], "head")
     _commit(body["base"], "base")
-    for name in ("incarnation", "run_id", "run_attempt"):
-        if type(body[name]) is not int or body[name] < 1:
-            raise CompositionRouteError(f"{name} must be a positive integer")
-    if body["run_conclusion"] != "failure":
-        raise CompositionRouteError("co-mounting counterexample requires one failed run observation")
-
-
-def _work(webhook: dict[str, Any], operation: str, instruction: str) -> dict[str, Any]:
-    return {
-        "op": "change",
-        "op_key": operation,
-        "head": webhook["head"],
-        "base": webhook["base"],
-        "policy": webhook["policy"],
-        "incarnation": webhook["incarnation"],
-        "lineage": "",
-        "kind": "change",
-        "instruction": instruction,
-        "run_id": 0,
-        "attempt": 0,
-    }
+    if type(body["incarnation"]) is not int or body["incarnation"] < 1:
+        raise CompositionRouteError("incarnation must be a positive integer")
 
 
 def _authority(webhook: dict[str, Any]) -> dict[str, object]:
@@ -983,13 +1114,13 @@ def _commit(value: object, subject: str) -> str:
 
 
 __all__ = [
-    "CAUSAL_VERTICAL_BLOCKER",
     "COMPOSITION_BUDGET",
     "LOCAL_MODULES",
+    "PUBLICATION_OPERATION",
     "RESOURCE_LIMITS",
     "CompositionRouteError",
     "HamsterdanCoMounting",
     "build_modules",
-    "run_co_mounting_counterexample",
+    "run_causal_composition",
     "run_workflow_failure_proof",
 ]

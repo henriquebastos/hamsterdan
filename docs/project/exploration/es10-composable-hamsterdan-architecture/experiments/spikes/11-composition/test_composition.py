@@ -4,7 +4,6 @@ import ast
 import sys
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, cast
 
 import pytest
 
@@ -20,21 +19,21 @@ LOCAL_SPIKES = {
 sys.path[:0] = [str(HERE), str(SPIKES / "09-simulation-runtime")]
 
 from composition import (
-    CAUSAL_VERTICAL_BLOCKER,
     COMPOSITION_BUDGET,
     LOCAL_MODULES,
+    PUBLICATION_OPERATION,
     RESOURCE_LIMITS,
     CompositionRouteError,
     HamsterdanCoMounting,
     build_modules,
-    run_co_mounting_counterexample,
+    run_causal_composition,
     run_workflow_failure_proof,
 )
 from runtime import Timeline
 
 
-class TestNamespacedCoMountingSurface:
-    """Co-mounting commands, observations, and faults retain strict module ownership."""
+class TestNamespacedCompositionSurface:
+    """Composition keeps routing explicit and budgets the exact mounted resource union."""
 
     def test_namespaces_and_signed_webhooks_fail_before_state_change(self) -> None:
         whole = HamsterdanCoMounting.open()
@@ -70,33 +69,12 @@ class TestNamespacedCoMountingSurface:
             "module resource usage must exactly match the budget; missing=[], additional=['workflow.commands']",
         )
 
-    def test_exact_handoff_replay_survives_later_readiness_enrichment(self) -> None:
-        whole = HamsterdanCoMounting.open()
-        webhook = whole.webhook()
-        whole.command("composition.signed_webhook", webhook)
-        operation = f"push:comment:501:{webhook['head']}:i{webhook['incarnation']}"
-        payload = {
-            "delivery": webhook["delivery"],
-            "instruction": "rename the config key",
-            "operation": operation,
-            "workflow_operation": "rerun:tests-red:7:1",
-        }
 
-        first_agent = cast(dict[str, Any], whole.command("composition.handoff.agent", payload))
-        first_readiness = whole.command("composition.handoff.readiness", {"operation": operation})
-        repeated_agent = cast(dict[str, Any], whole.command("composition.handoff.agent", payload))
-        repeated_readiness = whole.command("composition.handoff.readiness", {"operation": operation})
+class TestCausalComposition:
+    """One workflow-declared mutation and one delivered agent result cause the published effect."""
 
-        assert repeated_agent["submission"] == first_agent["submission"]
-        assert repeated_agent["terminal"] == first_agent["terminal"]
-        assert repeated_readiness == first_readiness
-
-
-class TestHamsterdanCoMounting:
-    """Five local scenarios co-mount and recover without proving one causal vertical."""
-
-    def test_counterexample_composes_local_checkers_and_recorded_interleavings(self) -> None:
-        proof = run_co_mounting_counterexample()
+    def test_real_workflow_result_flows_through_all_five_local_checkers(self) -> None:
+        proof = run_causal_composition()
 
         assert proof.replay.exact
         assert proof.report.local_passed == {
@@ -107,36 +85,64 @@ class TestHamsterdanCoMounting:
             "workflow": True,
         }
         assert proof.report.cross_violations == ()
-        assert proof.report.causal_blockers == (CAUSAL_VERTICAL_BLOCKER,)
-        commands = {
-            (operation["request"]["module"], operation["request"]["name"]): operation["request"]["payload"]
-            for operation in proof.artifact.operations
-            if operation["kind"] == "command"
-        }
-        rerun = commands[("workflow", "terminal.rerun")]
-        handoff = commands[("composition", "handoff.agent")]
-        mutation = commands[("readiness", "request_mutation")]
-        assert handoff["workflow_operation"] == rerun["operation"] == "rerun:tests-red:7:1"
-        assert handoff["operation"] == mutation["op_key"]
-        assert handoff["instruction"] == mutation["instruction"] == "rename the config key"
-        assert mutation["op_key"] != rerun["operation"]
-        assert proof.metrics["signed_webhooks"] == 1
+        assert proof.report.causal_blockers == ()
+        assert proof.metrics["operation"] == PUBLICATION_OPERATION
+        assert proof.metrics["workflow_work"] == proof.metrics["readiness_work"]
+        assert proof.metrics["delivered_request"] == proof.metrics["readiness_request"]
+        assert proof.metrics["delivered_result_digest"] == proof.metrics["publication_coding_result_digest"]
         assert proof.metrics["accepted_git_effects"] == 1
+        assert proof.metrics["provider_call_kinds"] == [
+            "reconcile",
+            "claim",
+            "agent",
+            "claim",
+            "claim",
+            "publish_accepted",
+            "reconcile",
+        ]
         assert proof.metrics["readiness_agent_calls"] == 1
         assert proof.metrics["agent_runtime_starts"] == 1
         assert proof.metrics["agent_deliveries"] == 1
         assert proof.metrics["lookup_recoveries"] == 1
         assert proof.metrics["final_generation"] == 2
         assert proof.metrics["crash_phases"] == ["executed"]
-        assert proof.metrics["interleaving_draws"] > 0
-        assert len(proof.metrics["interleaved_modules"]) > 1
-        assert proof.metrics["workflow_terminal"] == "RerunLanded"
+        assert proof.metrics["workflow_terminal"] == "Pushed"
+        assert proof.metrics["workflow_expected_head"] == proof.metrics["publication_result_head"]
+        assert "git_gate" not in proof.metrics["final_held_activities"]
+        assert set(proof.metrics["held_activities_at_request"]) > {"git_gate"}
+
+    def test_publication_is_sensitive_to_the_exact_delivered_coding_result(self) -> None:
+        first = run_causal_composition(proposed_commit_message="Apply requested change")
+        second = run_causal_composition(proposed_commit_message="Apply bounded rename")
+
+        assert first.metrics["workflow_work"] == second.metrics["workflow_work"]
+        assert first.metrics["delivered_request"] == second.metrics["delivered_request"]
+        assert first.metrics["publication_payload_digest"] == second.metrics["publication_payload_digest"]
+        assert first.metrics["delivered_result_digest"] != second.metrics["delivered_result_digest"]
+        assert first.metrics["publication_result_head"] != second.metrics["publication_result_head"]
+        assert first.metrics["publication_coding_result_digest"] != second.metrics["publication_coding_result_digest"]
+        assert first.replay.exact and second.replay.exact
+
+    def test_cross_checker_rejects_composition_substitution_of_workflow_instruction(self) -> None:
+        proof = run_causal_composition(
+            substitute_work_instruction="composition substituted this instruction",
+        )
+
+        assert proof.replay.exact
+        assert all(proof.report.local_passed.values())
+        assert proof.report.causal_blockers == ()
+        assert proof.report.scope == "co_mounting"
+        assert proof.report.cross_violations == ("composition handoff altered the real workflow-declared MutWork",)
+        assert proof.metrics["workflow_work"]["instruction"] == "rename the config key"
+        assert proof.metrics["readiness_work"]["instruction"] == "composition substituted this instruction"
+        assert proof.metrics["workflow_terminal"] == "Pushed"
+        assert proof.metrics["accepted_git_effects"] == 1
 
 
 class TestCheckerOwnershipAndLocalization:
-    """Local failures reduce locally; composition-owned observations replay while co-mounted."""
+    """Local failures reduce locally; the one value-flow rule remains composition-owned."""
 
-    def test_workflow_failure_reduces_to_the_unchanged_workflow_simulation(self) -> None:
+    def test_workflow_failure_reduces_to_the_unchanged_s3_workflow_simulation(self) -> None:
         proof = run_workflow_failure_proof()
 
         assert proof.replay.exact
@@ -153,14 +159,14 @@ class TestCheckerOwnershipAndLocalization:
         assert proof.reduced_replay.exact
         assert proof.reduced_violations == proof.report.local_violations["workflow"]
 
-    def test_authority_mismatch_is_cross_state_and_replays_at_co_mounting_scope(self) -> None:
-        proof = run_co_mounting_counterexample(corrupt_handoff_authority=True)
+    def test_authority_mismatch_is_cross_state_and_replays_at_composition_scope(self) -> None:
+        proof = run_causal_composition(corrupt_handoff_authority=True)
 
         assert proof.replay.exact
         assert all(proof.report.local_passed.values())
         assert proof.report.scope == "co_mounting"
         assert proof.report.reducible_to is None
-        assert proof.report.causal_blockers == (CAUSAL_VERTICAL_BLOCKER,)
+        assert proof.report.causal_blockers == ()
         assert proof.report.cross_violations == (
             "readiness authority differs from the signed webhook and GitHub authority",
         )

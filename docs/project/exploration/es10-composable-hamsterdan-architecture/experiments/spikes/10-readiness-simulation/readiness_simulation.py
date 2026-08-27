@@ -9,13 +9,13 @@ step are experimental.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from hashlib import sha256
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from runtime import ActionRef, Budget, Timeline
 
-from hamsterdan.agents.protocol import AgentProtocolError, CodingRequest, CodingResult
+from hamsterdan.agents.protocol import AgentProtocolError, AgentRunner, CodingRequest, CodingResult
 from hamsterdan.contracts.readiness_v5 import DeclinedM, FaultM, MovedM, MutWork, Pushed
 from hamsterdan.github_app.models import GitHubBoundaryError
 from hamsterdan.host.git_publish import (
@@ -23,6 +23,9 @@ from hamsterdan.host.git_publish import (
     GitPublishResult,
     GitReconciliation,
     PublicationCategory,
+)
+from hamsterdan.host.git_publish import (
+    payload_digest as digest_payload,
 )
 from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.mutation import V5MutationGate
@@ -67,6 +70,18 @@ DEFAULT_BUDGET = Budget(
 )
 
 
+class CodingRunner(Protocol):
+    def code(
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: Any = None,
+    ) -> CodingResult: ...
+
+
 def _exact_payload(value: object, fields: set[str], subject: str) -> dict[str, object]:
     if type(value) is not dict or set(cast(dict[object, object], value)) != fields:
         raise ValueError(f"{subject} payload must contain exactly {sorted(fields)!r}")
@@ -84,7 +99,13 @@ def _authority(value: object) -> CurrentClaim:
         raise ValueError("authority incarnation must be a positive integer")
     if any(type(item) is not str or not item for item in (head, base, policy)):
         raise ValueError("authority head, base, and policy must be non-empty strings")
-    return CurrentClaim(phase, incarnation, head, base, policy)
+    return CurrentClaim(
+        cast(Any, phase),
+        incarnation,
+        cast(str, head),
+        cast(str, base),
+        cast(str, policy),
+    )
 
 
 def _authority_payload(claim: CurrentClaim) -> dict[str, object]:
@@ -99,7 +120,7 @@ def _authority_payload(claim: CurrentClaim) -> dict[str, object]:
 
 def _work(value: object) -> MutWork:
     payload = _exact_payload(value, WORK_FIELDS, "mutation work")
-    work = MutWork(**payload)
+    work = MutWork(**cast(dict[str, Any], payload))
     V5MutationGate.request("owner/repo", 7, work)
     return work
 
@@ -114,6 +135,7 @@ def _terminal_payload(value: object) -> dict[str, object]:
 class Publication:
     operation: str
     payload_digest: str
+    coding_result_digest: str
     expected_head: str
     base_head: str
     result_head: str
@@ -126,6 +148,7 @@ class Publication:
         return {
             "operation": self.operation,
             "payload_digest": self.payload_digest,
+            "coding_result_digest": self.coding_result_digest,
             "expected_head": self.expected_head,
             "base_head": self.base_head,
             "result_head": self.result_head,
@@ -180,8 +203,7 @@ class AuthorityReader:
 
 
 class DeterministicCodingAgent:
-    def __init__(self, provider: ProviderTruth, work: MutWork) -> None:
-        self.provider = provider
+    def __init__(self, work: MutWork) -> None:
         self.work = work
 
     def code(
@@ -201,7 +223,6 @@ class DeterministicCodingAgent:
         expected_request = V5MutationGate.request("owner/repo", 7, self.work)
         if request != expected_request:
             raise AssertionError("coding agent received an undeclared mutation request")
-        self.provider.record("agent", self.work.op_key)
         if is_current is None or not is_current():
             raise AgentProtocolError("coding authority moved", canceled=True)
         return CodingResult(
@@ -218,6 +239,31 @@ class DeterministicCodingAgent:
             changed_files=["a"],
             validation_evidence=[],
             proposed_commit_message="Apply requested change",
+        )
+
+
+class RecordedCodingAgent:
+    def __init__(self, provider: ProviderTruth, work: MutWork, runner: CodingRunner) -> None:
+        self.provider = provider
+        self.work = work
+        self.runner = runner
+
+    def code(
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: Any = None,
+    ) -> CodingResult:
+        self.provider.record("agent", self.work.op_key)
+        return self.runner.code(
+            repository_url,
+            request,
+            operation=operation,
+            attempt=attempt,
+            is_current=is_current,
         )
 
 
@@ -283,11 +329,15 @@ class DeterministicGitPublisher:
             if payload != {"operation": operation, "response_lost": True}:
                 raise ValueError("git_response_lost fault differs from the executing operation")
             response_lost = True
-        result_head = sha256(f"{expected_head}\0{operation}\0{payload_digest}".encode()).hexdigest()[:40]
+        coding_result_digest = digest_payload({"schema_version": 1, "coding_result": asdict(result)})
+        result_head = sha256(
+            f"{expected_head}\0{operation}\0{payload_digest}\0{coding_result_digest}".encode()
+        ).hexdigest()[:40]
         accepted_sequence = self.provider.record("publish_accepted", operation)
         publication = Publication(
             operation=operation,
             payload_digest=payload_digest,
+            coding_result_digest=coding_result_digest,
             expected_head=expected_head,
             base_head=base_head,
             result_head=result_head,
@@ -399,12 +449,13 @@ class ReadinessModule:
 
     name = "readiness"
 
-    def __init__(self) -> None:
+    def __init__(self, runner: CodingRunner | None = None) -> None:
         self.readiness = ReadinessStore()
         self.provider = ProviderTruth()
+        self.runner = runner
 
     def open(self, _context: object) -> ReadinessGeneration:
-        return ReadinessGeneration(self.readiness, self.provider)
+        return ReadinessGeneration(self.readiness, self.provider, self.runner)
 
     def drop(self, _generation: ReadinessGeneration) -> None:
         pass
@@ -423,9 +474,10 @@ class ReadinessModule:
 
 
 class ReadinessGeneration:
-    def __init__(self, readiness: ReadinessStore, provider: ProviderTruth) -> None:
+    def __init__(self, readiness: ReadinessStore, provider: ProviderTruth, runner: CodingRunner | None) -> None:
         self.readiness = readiness
         self.provider = provider
+        self.runner = runner
 
     def command(self, name: str, payload: object, _context: object) -> object:
         if name == "admit_grant":
@@ -519,10 +571,11 @@ class ReadinessGeneration:
 
     def execute_mutation(self, work: MutWork, context: Any) -> dict[str, object]:
         reader = AuthorityReader(self.readiness, self.provider, work.op_key)
+        selected = self.runner if self.runner is not None else cast(AgentRunner, DeterministicCodingAgent(work))
         gate = V5MutationGate(
             repository="owner/repo",
             pull_request=7,
-            runner=DeterministicCodingAgent(self.provider, work),
+            runner=cast(AgentRunner, RecordedCodingAgent(self.provider, work, selected)),
             publisher=DeterministicGitPublisher(self.provider, work, context),
             public_clone_url="https://example.test/owner/repo.git",
             claim=reader,

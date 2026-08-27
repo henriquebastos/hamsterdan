@@ -429,3 +429,41 @@ would add a one-use helper without shortening the contract. No new debt record
 is recommended. The pre-acceptance checker defect is fixed in the spike, while
 the production-seam gaps above remain already-ruled delivery inputs rather than
 newly discovered debt.
+
+## S11 causal-alignment extension — injected exact coding result
+
+The accepted standalone proof always constructed `DeterministicCodingAgent`
+inside `execute_mutation()`. In the earlier S11 composition that meant agents
+could deliver one terminal while readiness generated and published a second
+result. Equal requests and delivery-before-admission showed correspondence but
+not causation.
+
+The approved extension gives `ReadinessModule` one optional typed `CodingRunner`
+dependency. `None` preserves the existing deterministic local default and all
+standalone behavior. A small recording wrapper preserves the existing `agent`
+call-ledger event at the actual invocation for either path. S11 injects a
+composition-owned adapter that returns the exact result retained by
+`AgentsSimulation.delivered()` after validating repository URL, logical
+operation, attempt, request value, and current authority. `MutWork` remains
+unchanged and does not carry `CodingResult`.
+
+The deterministic Git adapter now records:
+
+```text
+coding_result_digest = payload_digest({
+  "schema_version": 1,
+  "coding_result": asdict(the exact runner result),
+})
+
+result_head = sha256(
+  expected_head + operation + mutation_payload_digest + coding_result_digest
+)
+```
+
+This makes the data dependency observable without changing stable operation or
+workflow meaning. A red-first A/B contract changes only the valid delivered
+`proposed_commit_message`: workflow `MutWork`, canonical `CodingRequest`, and
+mutation payload digest remain equal, while coding-result digest and published
+head both change. An injected valid `unchanged` result returns `DeclinedM` and
+publishes nothing. The default response-loss proof and its exact call order,
+one-effect checker, bounds, and replay remain intact.

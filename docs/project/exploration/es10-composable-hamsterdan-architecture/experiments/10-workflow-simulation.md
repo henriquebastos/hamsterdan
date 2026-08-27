@@ -295,3 +295,56 @@ both the passing recovery and failing counterexample replay exactly.
 The workflow part of Experiment 10 therefore meets its local exit criterion,
 subject to Navigator acceptance. This record does not update the ES-010 index,
 compose another module, begin Experiment 11, or propose R4.
+
+## S11 causal-alignment extension — real V5 mutation path
+
+The Navigator-approved S11 follow-up found that the accepted S3 proof above
+cannot supply readiness's `MutWork`: its only Activity is
+`RerunReq -> RerunLanded`. Copying production conversation and mutation folds
+into this spike would create a test-only shadow workflow. The minimum honest
+extension therefore adds `V5MutationWorkflowSimulation` beside the unchanged
+S3 simulation and executes the current production
+`hamsterdan.readiness.net_v5.topology.build_net_v5()` Net.
+
+The extension uses the production `seed_marking`, `GATES`, `DERIVED`,
+`wire_gates`, contract values, real Petrus `Engine`, History, Dispatch, and the
+real `choose_throughput` policy. Declaration-only Activity stubs provide every
+V5 gate type but raise if called; they exist only so Dispatch can retain typed
+invocations. No `_classify`, `MutationRequest`, `_start`, or mutation fold is
+copied into the simulation. The closed extension vocabulary is:
+
+```text
+observe.head       -> real HeadSeen delivery
+observe.comment    -> real CommentSeen delivery
+advance            -> one real Engine.advance()
+terminal.mutation  -> exact Pushed for the original git_gate occurrence
+```
+
+An authorized `change` comment with ID `501` reaches the real `git_gate` with:
+
+```text
+MutWork.op_key = push:comment:501:<40-character head>:i1
+MutWork.instruction = rename the config key
+correlation = idempotency = MutWork.op_key
+```
+
+At that request cut, `dash_gate`, `git_gate`, and `reply_gate` are held. After
+the exact `Pushed` returns through the original occurrence, the production
+mutation fold reaches `idle`, the lifecycle's expected head equals
+`Pushed.new_head`, and unrelated `dash_gate`, `reply_gate`, and `review_agent`
+work remains held. Crash/reload reconstructs the same occurrence and work from
+History. The public state also projects the occurrence, exact decoded
+`MutWork`, correlation, and idempotency directly from that durable production
+`git_gate` `ActivityRequested` History record. Unlike the Dispatch-backed
+pending projection, this request projection remains available after `Pushed`
+completes the Activity, so a composition checker does not need to trust routed
+handoff state as workflow truth. Unauthorized comments never declare
+`git_gate` work. The S3 recovery, checker-sensitivity, resource, and replay
+contracts above remain unchanged.
+
+In the composed proof, the real V5 path peaks at 154 History records and four
+pending Activities under S11's explicit limits of 256 and 16. This is not a
+new production workflow or an assertion that all held V5 Activities can be
+executed under the experimental adapters. It is the smallest local evidence
+that lets S11 route one workflow-declared mutation without duplicating workflow
+semantics or changing production.

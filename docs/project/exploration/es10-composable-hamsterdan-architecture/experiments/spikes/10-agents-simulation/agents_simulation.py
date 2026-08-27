@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field, fields
 from hashlib import sha256
 from pathlib import Path
@@ -107,6 +108,16 @@ class CheckResult:
 
 
 @dataclass(frozen=True)
+class DeliveredExecution:
+    kind: str
+    repository_url: str
+    operation: str
+    attempt: int
+    request: AgentRequest
+    result: AgentResult
+
+
+@dataclass(frozen=True)
 class FailureProof:
     artifact: Artifact
     replay: ReplayResult
@@ -187,6 +198,28 @@ class AgentsSimulation:
             "agents.receiver_terminals": len(self.store.receiver_terminals),
             "agents.terminal_declarations": len(self.store.terminal_declarations),
         }
+
+    def delivered(self, operation: str, attempt: int) -> DeliveredExecution:
+        execution_id = execution_identity(operation, attempt)
+        retained = self.store.operations.get(execution_id)
+        if retained is None:
+            raise ValueError(f"unknown agent operation {execution_id!r}; submit it first")
+        terminal = self.store.receiver_terminals.get(execution_id)
+        if retained.state != "delivered" or terminal is None:
+            raise ValueError(f"agent execution {execution_id!r} has not delivered a result terminal")
+        if terminal.get("kind") != "result" or type(terminal.get("value")) is not dict:
+            raise ValueError(f"agent execution {execution_id!r} did not deliver a result terminal")
+        value = deepcopy(cast(dict[str, Any], terminal["value"]))
+        changed = value.get("changed_files") if retained.kind == "coding" else None
+        result = _validate_result(retained.kind, value, retained.request, changed)
+        return DeliveredExecution(
+            retained.kind,
+            retained.repository_url,
+            retained.operation,
+            retained.attempt,
+            deepcopy(retained.request),
+            result,
+        )
 
 
 class _AgentsGeneration:
@@ -648,7 +681,7 @@ class AgentsChecker:
         for identity, model in expected.items():
             actual = observed[identity]
             for name in names:
-                before, after = getattr(model, name), actual[name]
+                before, after = getattr(model, name), cast(dict[str, Any], actual)[name]
                 if before != after:
                     violations.append(f"{name} expected {before!r}, observed {after!r}")
 
@@ -870,9 +903,9 @@ def _text(value: object, name: str, limit: int) -> str:
 
 
 def _attempt(value: object) -> int:
-    if type(value) is not int or cast(int, value) < 1:
+    if type(value) is not int or value < 1:
         raise ValueError("agent attempt must be a positive integer")
-    return cast(int, value)
+    return value
 
 
 def _exact(value: object, keys: set[str], subject: str) -> dict[str, Any]:
@@ -885,7 +918,7 @@ def _request(kind: str, repository_url: str, value: object) -> AgentRequest:
     request_type = REQUEST_TYPES[kind]
     keys = {field.name for field in fields(request_type)}
     data = _exact(value, keys, f"{kind} request")
-    request = request_type(**data)
+    request = cast(Any, request_type)(**data)
     encode_prompt(kind, repository_url, request)
     return request
 
@@ -897,7 +930,7 @@ def _result(operation: _Operation, value: object) -> dict[str, Any]:
     validated: AgentResult = _validate_result(operation.kind, value, operation.request, changed)
     return {
         "kind": "result",
-        "status": validated.status,
+        "status": cast(Any, validated).status,
         "value": asdict(validated),
     }
 
@@ -916,7 +949,7 @@ def _credential_free(value: object, path: str = "request") -> None:
         for key, child in cast(dict[object, object], value).items():
             if type(key) is not str:
                 raise ValueError(f"agent {path} contains a non-string field")
-            normalized = cast(str, key).upper()
+            normalized = key.upper()
             if any(secret in normalized for secret in SECRET_FIELDS):
                 raise ValueError(f"agent {path} contains credential-shaped field {key!r}")
             _credential_free(child, f"{path}.{key}")

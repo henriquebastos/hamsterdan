@@ -354,3 +354,39 @@ bounds, a semantically independent checker where useful, one exact meaningful
 failure replay, and no whole-Hamsterdan construction. The production seam gaps
 above should be carried into S11/S12 synthesis only after Navigator acceptance;
 this record does not alter the ES-010 index or any fixed R2/R3 ruling.
+
+## S11 causal-alignment extension — exact delivered terminal seam
+
+The accepted observation surface reports delivery state and counters but does
+not expose the typed value that the receiver accepted. That was sufficient for
+the local proof and insufficient for S11: readiness must consume the delivered
+agents result itself, not a separately generated equivalent.
+
+The approved extension adds one bounded public simulation seam:
+
+```text
+AgentsSimulation.delivered(logical_operation, attempt) -> DeliveredExecution
+
+DeliveredExecution:
+  kind
+  repository_url
+  operation
+  attempt
+  typed request
+  typed result
+```
+
+The method derives the existing stable execution identity, requires lifecycle
+state `delivered`, reads the exact receiver-terminal store, rejects canceled or
+failure terminals, revalidates the typed result against the retained request,
+and returns detached deep copies. It does not introduce another terminal
+store, reconstruct a result from summary fields, or make a readiness decision.
+Pre-delivery access, unknown identity, and canceled delivery fail explicitly;
+mutating a returned result cannot mutate retained agent custody.
+
+The original lifecycle, cancellation, response-loss, checker, budget, and
+replay contracts remain unchanged. In S11 the seam exposes one delivered
+`CodingRequest` and `CodingResult` under
+`mutation:owner/repo:pr:7:<workflow op_key>`, attempt 1. The composition-owned
+adapter validates all of those fields before returning that exact result to
+readiness.

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import cast
+from dataclasses import asdict
+from typing import Any, cast
 
 import pytest
 from readiness_simulation import (
@@ -12,18 +14,23 @@ from readiness_simulation import (
 )
 from runtime import Artifact, LeafExecuted, LeafOffered, StepCompleted, Timeline, Waiting, replay
 
+from hamsterdan.agents.protocol import CodingRequest, CodingResult
+from hamsterdan.contracts.readiness_v5 import MutWork
+from hamsterdan.host.git_publish import payload_digest
+from hamsterdan.host.v5.mutation import V5MutationGate
+
 HEAD = "a" * 40
 BASE = "b" * 40
 MOVED_HEAD = "d" * 40
 OPERATION = f"push:comment:9:{HEAD}:i3"
-AUTHORITY = {
+AUTHORITY: dict[str, Any] = {
     "phase": "running",
     "incarnation": 3,
     "head": HEAD,
     "base": BASE,
     "policy": "policy-1",
 }
-WORK = {
+WORK: dict[str, Any] = {
     "op": "change",
     "op_key": OPERATION,
     "head": HEAD,
@@ -36,6 +43,52 @@ WORK = {
     "run_id": 0,
     "attempt": 0,
 }
+
+
+def coding_result(*, message: str = "Apply requested change", status: str = "changed") -> CodingResult:
+    request = V5MutationGate.request("owner/repo", 7, MutWork(**WORK))
+    changed = status == "changed"
+    return CodingResult(
+        kind=request.kind,
+        repository=request.repository,
+        pull_request=request.pull_request,
+        epoch=request.epoch,
+        head=request.head,
+        base=request.base,
+        ref=request.ref,
+        status=status,
+        reproduction_status="not_attempted",
+        diff="diff --git a/a b/a\n" if changed else "",
+        changed_files=["a"] if changed else [],
+        validation_evidence=[{"command": "synthetic", "result": "passed"}] if changed else [],
+        proposed_commit_message=message if changed else "",
+    )
+
+
+class InjectedCodingAgent:
+    def __init__(self, result: CodingResult) -> None:
+        self.result = result
+        self.calls: list[dict[str, object]] = []
+
+    def code(
+        self,
+        repository_url: str,
+        request: CodingRequest,
+        *,
+        operation: str,
+        attempt: int,
+        is_current: object = None,
+    ) -> CodingResult:
+        self.calls.append(
+            {
+                "repository_url": repository_url,
+                "request": request,
+                "operation": operation,
+                "attempt": attempt,
+            }
+        )
+        assert callable(is_current) and cast(Callable[[], bool], is_current)()
+        return self.result
 
 
 def build_readiness() -> tuple[ReadinessModule]:
@@ -227,6 +280,64 @@ class TestReadinessSimulationContract:
 
         assert report["passed"] is False
         assert report["violations"] == [{"operation": OPERATION, "rule": "recovery_is_lookup_first"}]
+
+
+class TestInjectedCodingDependency:
+    """Readiness publishes the exact injected CodingResult while retaining its standalone default."""
+
+    def run_changed(self, message: str) -> tuple[InjectedCodingAgent, dict[str, object]]:
+        result = coding_result(message=message)
+        agent = InjectedCodingAgent(result)
+        timeline = Timeline.open((ReadinessModule(runner=agent),), DEFAULT_BUDGET, seed=10)
+        timeline.command("readiness", "admit_grant", AUTHORITY)
+        timeline.command("readiness", "set_provider_authority", AUTHORITY)
+        timeline.command("readiness", "request_mutation", WORK)
+
+        completed = timeline.step()
+
+        assert isinstance(completed, StepCompleted)
+        assert completed.value["variant"] == "Pushed"
+        state = cast(dict[str, object], timeline.observe("readiness", "state").value)
+        provider = cast(dict[str, object], state["provider"])
+        [publication] = cast(list[dict[str, object]], provider["publications"])
+        assert publication["coding_result_digest"] == payload_digest(
+            {"schema_version": 1, "coding_result": asdict(result)}
+        )
+        assert [call["kind"] for call in cast(list[dict[str, object]], provider["calls"])] == [
+            "reconcile",
+            "claim",
+            "agent",
+            "claim",
+            "claim",
+            "publish_accepted",
+        ]
+        return agent, publication
+
+    def test_valid_result_change_alters_the_accepted_publication(self) -> None:
+        first_agent, first = self.run_changed("Apply requested change")
+        second_agent, second = self.run_changed("Apply bounded rename")
+
+        assert len(first_agent.calls) == len(second_agent.calls) == 1
+        assert first["operation"] == second["operation"] == OPERATION
+        assert first["payload_digest"] == second["payload_digest"]
+        assert first["coding_result_digest"] != second["coding_result_digest"]
+        assert first["result_head"] != second["result_head"]
+
+    def test_unchanged_injected_result_declines_without_a_git_effect(self) -> None:
+        agent = InjectedCodingAgent(coding_result(status="unchanged"))
+        timeline = Timeline.open((ReadinessModule(runner=agent),), DEFAULT_BUDGET, seed=10)
+        timeline.command("readiness", "admit_grant", AUTHORITY)
+        timeline.command("readiness", "set_provider_authority", AUTHORITY)
+        timeline.command("readiness", "request_mutation", WORK)
+
+        completed = timeline.step()
+
+        assert isinstance(completed, StepCompleted)
+        assert completed.value["variant"] == "DeclinedM"
+        state = cast(dict[str, object], timeline.observe("readiness", "state").value)
+        provider = cast(dict[str, object], state["provider"])
+        assert provider["publications"] == []
+        assert len(agent.calls) == 1
 
 
 class TestReadinessVocabularyContract:

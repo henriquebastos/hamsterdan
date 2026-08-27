@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -19,7 +20,7 @@ from runtime import (
     Timeline,
     replay,
 )
-from workflow_simulation import WorkflowSimulation
+from workflow_simulation import V5MutationWorkflowSimulation, WorkflowSimulation
 
 RESOURCE_LIMITS = {
     "workflow.commands": 8,
@@ -58,6 +59,51 @@ RUN = {
 }
 OPERATION = "rerun:tests-red:7:1"
 
+V5_HEAD: dict[str, Any] = {
+    "identity": "delivery-501:head",
+    "head": "a" * 40,
+    "base": "b" * 40,
+    "mergeable": True,
+    "policy": "policy-1",
+    "strict_base": True,
+    "base_current": True,
+}
+V5_COMMENT: dict[str, Any] = {
+    "identity": "delivery-501:comment",
+    "id": "501",
+    "kind": "change",
+    "arg": "rename the config key",
+    "authorized": True,
+}
+V5_OPERATION = f"push:comment:501:{V5_HEAD['head']}:i1"
+V5_WORK = {
+    "op": "change",
+    "op_key": V5_OPERATION,
+    "head": V5_HEAD["head"],
+    "base": V5_HEAD["base"],
+    "policy": V5_HEAD["policy"],
+    "incarnation": 1,
+    "lineage": "",
+    "kind": "change",
+    "instruction": V5_COMMENT["arg"],
+    "run_id": 0,
+    "attempt": 0,
+}
+V5_BUDGET = replace(
+    DEFAULT_BUDGET,
+    operations=512,
+    owner_steps=128,
+    eligible_actions=16,
+    leaf_calls=128,
+    journal_entries=2_048,
+    artifact_bytes=2_000_000,
+    resources={
+        "workflow.commands": 8,
+        "workflow.history_records": 512,
+        "workflow.pending_activities": 16,
+    },
+)
+
 
 class WorkflowScenario:
     """The workflow is driven only through Timeline commands, steps, and observations."""
@@ -75,6 +121,7 @@ class WorkflowScenario:
             assert isinstance(offered, LeafOffered)
             executed = self.timeline.execute()
             assert isinstance(executed, LeafExecuted)
+            assert isinstance(executed.value, dict)
             if executed.value["cut"] == "activity_requested":
                 return executed
             assert isinstance(self.timeline.finish(), StepCompleted)
@@ -229,3 +276,138 @@ class TestWorkflowSurface:
         artifact = scenario.timeline.artifact("workflow-command-budget")
         assert replay(artifact, lambda: (WorkflowSimulation.fresh(),)).exact
         assert artifact.operations[-1]["accepted"] is True
+
+
+class V5MutationScenario:
+    """The current production V5 Net declares mutation work while unrelated Activities stay held."""
+
+    def __init__(self) -> None:
+        self.timeline = Timeline.open((V5MutationWorkflowSimulation.fresh(),), V5_BUDGET, seed=10)
+
+    def request_mutation(self, comment: dict[str, Any] = V5_COMMENT) -> dict[str, Any]:
+        self.timeline.command("workflow", "observe.head", V5_HEAD)
+        for _ in range(16):
+            state = cast(dict[str, Any], self.timeline.observe("workflow", "state").value)
+            if state["life_state"]["head"] == V5_HEAD["head"]:
+                break
+            assert isinstance(self.timeline.step(), StepCompleted)
+        else:
+            raise AssertionError("real V5 workflow did not admit the head within 16 bounded steps")
+        self.timeline.command("workflow", "observe.comment", comment)
+        for _ in range(64):
+            state = cast(dict[str, Any], self.timeline.observe("workflow", "state").value)
+            if state["pending"] is not None:
+                return state
+            assert isinstance(self.timeline.step(), StepCompleted)
+        raise AssertionError("real V5 workflow did not request git_gate within 64 bounded steps")
+
+    def settle(self) -> dict[str, Any]:
+        for _ in range(64):
+            state = cast(dict[str, Any], self.timeline.observe("workflow", "state").value)
+            if (
+                state["terminal"] is not None
+                and state["mutation_state"] is not None
+                and state["life_state"]["expected"]
+            ):
+                return state
+            assert isinstance(self.timeline.step(), StepCompleted)
+        raise AssertionError("real V5 workflow did not fold Pushed within 64 bounded steps")
+
+
+class TestRealV5MutationWorkflow:
+    """The simulation executes production conversation and mutation folds without shadow semantics."""
+
+    def test_authorized_comment_reaches_one_exact_production_git_gate(self) -> None:
+        scenario = V5MutationScenario()
+
+        state = scenario.request_mutation()
+
+        pending = state["pending"]
+        assert pending == {
+            "activity": "git_gate",
+            "occurrence": pending["occurrence"],
+            "operation": V5_OPERATION,
+            "idempotency": V5_OPERATION,
+            "work": V5_WORK,
+        }
+        assert state["request"] == {
+            "activity": "git_gate",
+            "occurrence": pending["occurrence"],
+            "correlation": V5_OPERATION,
+            "idempotency": V5_OPERATION,
+            "work": V5_WORK,
+        }
+        assert set(state["held_activities"]) > {"git_gate"}
+        assert state["source"] == "hamsterdan.readiness.net_v5.topology.build_net_v5"
+
+    def test_pending_work_reconstructs_and_real_pushed_fold_replays_exactly(self) -> None:
+        scenario = V5MutationScenario()
+        state = scenario.request_mutation()
+        occurrence = state["pending"]["occurrence"]
+        scenario.timeline.crash("v5_mutation_requested")
+        scenario.timeline = scenario.timeline.restart()
+        for _ in range(16):
+            reloaded = scenario.timeline.observe("workflow", "state").value
+            if reloaded["pending"] is not None:
+                break
+            assert isinstance(scenario.timeline.step(), StepCompleted)
+        else:
+            raise AssertionError("real V5 git_gate was not reconstructed")
+        assert reloaded["pending"]["occurrence"] == occurrence
+        assert reloaded["pending"]["work"] == V5_WORK
+        pushed = {
+            "op": "change",
+            "op_key": V5_OPERATION,
+            "head": V5_HEAD["head"],
+            "new_head": "c" * 40,
+            "incarnation": 1,
+            "lineage": "",
+        }
+
+        scenario.timeline.command(
+            "workflow",
+            "terminal.mutation",
+            {"occurrence": occurrence, "value": pushed},
+        )
+        settled = scenario.settle()
+
+        assert settled["terminal"] == {
+            "occurrence": occurrence,
+            "operation": V5_OPERATION,
+            "variant": "Pushed",
+            "value": pushed,
+        }
+        assert settled["request"] == {
+            "activity": "git_gate",
+            "occurrence": occurrence,
+            "correlation": V5_OPERATION,
+            "idempotency": V5_OPERATION,
+            "work": V5_WORK,
+        }
+        assert settled["mutation_state"]["state"] == "idle"
+        assert settled["life_state"]["expected"] == pushed["new_head"]
+        assert scenario.timeline.observe("workflow", "check").value == {
+            "ok": True,
+            "violations": [],
+        }
+        artifact = scenario.timeline.artifact("real-v5-workflow-mutation")
+        assert replay(artifact, lambda: (V5MutationWorkflowSimulation.fresh(),)).exact
+
+    def test_unauthorized_comment_never_declares_mutation_work(self) -> None:
+        scenario = V5MutationScenario()
+        scenario.timeline.command("workflow", "observe.head", V5_HEAD)
+        scenario.timeline.command(
+            "workflow",
+            "observe.comment",
+            {**V5_COMMENT, "identity": "delivery-502:comment", "authorized": False},
+        )
+        for _ in range(64):
+            result = scenario.timeline.step()
+            if not isinstance(result, StepCompleted):
+                break
+
+        state = scenario.timeline.observe("workflow", "state").value
+
+        assert state["pending"] is None
+        assert state["request"] is None
+        assert "git_gate" not in state["held_activities"]

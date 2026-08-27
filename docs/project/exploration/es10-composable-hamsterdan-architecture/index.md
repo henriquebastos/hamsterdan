@@ -1141,20 +1141,39 @@ those are S11/S12 correspondence inputs rather than new debt or authorization
 for production changes. No production, maintained test, or configuration
 surface changed.
 
-S11 produced an accepted partial negative result:
-[experiments/11-composition.md](experiments/11-composition.md) proves that all
-five unchanged Experiment 10 modules co-mount under one unchanged S9
-`Timeline`, share the exact resource union and recorded interleavings, compose
-their local checkers, survive mounted-process reconstruction, replay exactly,
-and reduce one workflow-local failure to workflow scope. It does not prove the
-required causal whole-Hamsterdan vertical. The accepted workflow simulation
-exposes only `RerunReq -> RerunLanded`, while the accepted readiness simulation
-requires workflow-declared `MutWork`; composition cannot invent or reinterpret
-that typed workflow meaning. The retained co-mounting counterexample records
-this blocker instead of presenting its independently constructed coding and
-readiness mutation branch as workflow execution.
+S11 is complete and accepted by the Navigator:
+[experiments/11-composition.md](experiments/11-composition.md) first retained an
+accepted partial negative result when the unchanged S10 workflow and readiness
+simulations lacked a causal typed edge. The accepted bounded follow-up extends
+only the S10 workflow, agents, and readiness experiments and composes all five
+local simulations under S9's unchanged `Timeline`. The corrected vertical is:
 
-The Navigator accepted the partial result and confirmed that it needs no
-pre-integration refactor or debt record. Acceptance did not complete S11 or
-authorize the proposed bounded causal-alignment follow-up. S11 remains blocked,
-checkpoint R4 remains unruled, and Experiment 12 has not begun.
+```text
+real build_net_v5 MutWork
+  -> accepted agents delivery
+  -> exact delivered CodingResult
+  -> readiness publication
+  -> Pushed into the original workflow occurrence
+```
+
+The workflow request projection comes from the production `git_gate`
+`ActivityRequested` History record, not composition handoff state. The
+composition-owned adapter returns the exact retained typed agents result to
+readiness without making the local simulations import one another. Readiness
+records that result's canonical digest in the one accepted Git publication;
+after the accepted response is lost, generation two reconciles lookup-first
+without a second agent call or publication and returns exact `Pushed` to the
+original Activity occurrence. The real production mutation fold then settles.
+
+All five local checkers and the one cross-module checker pass, resource use is
+bounded, and the canonical crash/recovery artifact replays exactly. A full-flow
+counterexample that changes only the composition handoff's `MutWork.instruction`
+leaves every local checker passing while the cross checker reports exactly that
+composition altered the real workflow-declared work; this establishes checker
+ownership rather than mere co-mounting. The S10 standalone defaults and current
+production correspondence tests remain green. No production, maintained test,
+configuration, or runtime-state surface changed, and no debt record is needed.
+
+Phase D evidence S9 through S11 is complete. Checkpoint R4 remains unruled and
+requires a separate Navigator decision on the simulation design. Experiment 12
+has not begun and cannot begin before that ruling.

@@ -4,8 +4,9 @@ import sys
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from typing import Any, cast
 
-from hamsterdan.agents.protocol import AgentProtocolError
+from hamsterdan.agents.protocol import AgentProtocolError, CodingRequest, CodingResult
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "09-simulation-runtime"))
@@ -15,10 +16,32 @@ from agents_simulation import (
     AgentsChecker,
     AgentsSimulation,
     canceled_coding_submission,
+    execution_identity,
     production_port_submissions,
     run_failure_proof,
 )
 from runtime import StepCompleted, Timeline, replay
+
+
+def changed_coding_result(
+    submission: dict[str, object], *, message: str = "Apply requested change"
+) -> dict[str, object]:
+    request = cast(dict[str, object], submission["request"])
+    return {
+        "base": request["base"],
+        "changed_files": ["a"],
+        "diff": "diff --git a/a b/a\n",
+        "epoch": request["epoch"],
+        "head": request["head"],
+        "kind": request["kind"],
+        "proposed_commit_message": message,
+        "pull_request": request["pull_request"],
+        "ref": request["ref"],
+        "repository": request["repository"],
+        "reproduction_status": "not_attempted",
+        "status": "changed",
+        "validation_evidence": [{"command": "synthetic", "result": "passed"}],
+    }
 
 
 class AgentFailureRecoveryContract(unittest.TestCase):
@@ -55,6 +78,7 @@ class AgentCancellationContract(unittest.TestCase):
         timeline.command("agents", "submit", submission)
         accepted = timeline.step()
         self.assertIsInstance(accepted, StepCompleted)
+        assert isinstance(accepted, StepCompleted)
         self.assertEqual(accepted.action.name, "accept")
         timeline.command(
             "agents",
@@ -64,6 +88,8 @@ class AgentCancellationContract(unittest.TestCase):
 
         canceled = timeline.step()
         delivered = timeline.step()
+        assert isinstance(canceled, StepCompleted)
+        assert isinstance(delivered, StepCompleted)
         final = timeline.observe(
             "agents",
             "operation",
@@ -95,12 +121,97 @@ class ProductionPortCorrespondenceContract(unittest.TestCase):
 
         for submission in production_port_submissions():
             with self.subTest(kind=submission["kind"]):
-                result = timeline.command("agents", "submit", submission)
+                result = cast(dict[str, Any], timeline.command("agents", "submit", submission))
                 self.assertEqual(result["kind"], submission["kind"])
                 self.assertEqual(result["state"], "submitted")
 
-        state = timeline.observe("agents", "state").value
+        state = cast(dict[str, Any], timeline.observe("agents", "state").value)
         self.assertEqual([item["kind"] for item in state["operations"]], ["coding", "conversation", "review"])
+
+
+class DeliveredAgentResultContract(unittest.TestCase):
+    """The public seam returns the exact accepted typed terminal only after delivery."""
+
+    def accept_coding_execution(self) -> tuple[AgentsSimulation, Timeline, dict[str, Any], str, int]:
+        module = AgentsSimulation()
+        timeline = Timeline.open((module,), AGENT_BUDGET)
+        submission = production_port_submissions()[2]
+        operation = cast(str, submission["operation"])
+        attempt = cast(int, submission["attempt"])
+        timeline.command("agents", "submit", submission)
+        timeline.step()
+        return module, timeline, submission, operation, attempt
+
+    def deliver_coding_execution(self) -> tuple[AgentsSimulation, dict[str, Any], str, int]:
+        module, timeline, submission, operation, attempt = self.accept_coding_execution()
+        timeline.command(
+            "agents",
+            "terminal",
+            {"operation": operation, "attempt": attempt, "result": changed_coding_result(submission)},
+        )
+        timeline.step()
+        timeline.step()
+        return module, submission, operation, attempt
+
+    def test_result_is_unavailable_before_delivery(self) -> None:
+        module, _timeline, _submission, operation, attempt = self.accept_coding_execution()
+        execution_id = execution_identity(operation, attempt)
+
+        with self.assertRaises(ValueError) as raised:
+            module.delivered(operation, attempt)
+
+        self.assertEqual(
+            raised.exception.args,
+            (f"agent execution {execution_id!r} has not delivered a result terminal",),
+        )
+
+    def test_delivery_returns_the_exact_typed_request_and_result(self) -> None:
+        module, submission, operation, attempt = self.deliver_coding_execution()
+
+        delivered = module.delivered(operation, attempt)
+
+        self.assertEqual(delivered.kind, "coding")
+        self.assertEqual(delivered.repository_url, submission["repository_url"])
+        self.assertEqual((delivered.operation, delivered.attempt), (operation, attempt))
+        self.assertIsInstance(delivered.request, CodingRequest)
+        self.assertIsInstance(delivered.result, CodingResult)
+        assert isinstance(delivered.result, CodingResult)
+        self.assertEqual(delivered.result.proposed_commit_message, "Apply requested change")
+
+    def test_delivery_returns_a_copy_of_the_retained_terminal(self) -> None:
+        module, _submission, operation, attempt = self.deliver_coding_execution()
+        delivered = module.delivered(operation, attempt)
+        assert isinstance(delivered.result, CodingResult)
+
+        delivered.result.changed_files.append("mutated")
+        repeated_result = module.delivered(operation, attempt).result
+
+        assert isinstance(repeated_result, CodingResult)
+        self.assertEqual(repeated_result.changed_files, ["a"])
+
+    def test_canceled_delivery_is_not_a_result_terminal(self) -> None:
+        module = AgentsSimulation()
+        timeline = Timeline.open((module,), AGENT_BUDGET)
+        submission = canceled_coding_submission()
+        operation, attempt = submission["operation"], submission["attempt"]
+        timeline.command("agents", "submit", submission)
+        timeline.step()
+        timeline.command(
+            "agents",
+            "cancel",
+            {"operation": operation, "attempt": attempt, "reason": "authority-moved"},
+        )
+        timeline.step()
+        timeline.step()
+
+        execution_id = execution_identity(cast(str, operation), cast(int, attempt))
+        with self.assertRaises(ValueError) as raised:
+            module.delivered(operation, attempt)
+
+        self.assertEqual(
+            raised.exception.args,
+            (f"agent execution {execution_id!r} did not deliver a result terminal",),
+        )
 
 
 class StrictAgentVocabularyContract(unittest.TestCase):
@@ -174,7 +285,7 @@ class IndependentAgentCheckerContract(unittest.TestCase):
         timeline.step()
         timeline.step()
 
-        repeated = timeline.command("agents", "submit", submission)
+        repeated = cast(dict[str, Any], timeline.command("agents", "submit", submission))
         timeline.observe("agents", "state")
         artifact = timeline.artifact("agent-idempotent-resubmit")
         check = AgentsChecker.check(artifact)
