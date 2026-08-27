@@ -1174,6 +1174,15 @@ ownership rather than mere co-mounting. The S10 standalone defaults and current
 production correspondence tests remain green. No production, maintained test,
 configuration, or runtime-state surface changed, and no debt record is needed.
 
-Phase D evidence S9 through S11 is complete. Checkpoint R4 remains unruled and
-requires a separate Navigator decision on the simulation design. Experiment 12
-has not begun and cannot begin before that ruling.
+Phase D evidence S9 through S11 is complete and checkpoint R4 is ruled. The
+Navigator accepted S9's Hamsterdan-owned semantic-free `Timeline`, the five
+owner-local simulations and checkers from S10, and S11's composition-owned
+adapters and cross-module checkers as the target simulation design inputs. The
+ruling preserves bounded production-aligned steps, explicit resource limits,
+lookup-first crash recovery, and exact replay while retaining the reports'
+correspondence limits: it does not approve production implementation, spike
+file structure, artifact compatibility, or claims about real process or
+distributed concurrency. S12 may now synthesize the ruled S1-S11 evidence and
+the engineering style contract style contract into the candidate package map, architecture rules,
+delivery graph, validation matrix, decision/debt assessment, and Capability
+Value proposal. Experiment 12 has not yet begun.
