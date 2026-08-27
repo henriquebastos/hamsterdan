@@ -37,6 +37,12 @@ including GNU `stat`. Direct pytest reports platform skips on BSD and other
 non-Linux hosts; full and release deselect the marked module before strict skip
 handling. The Linux orb and hosted CI run it.
 
+The Hamsterdan orb setup installs Graphviz and Docker, enables and starts the
+Docker socket/service, and makes the socket available to the orb user. This is
+the local feedback contract for the adjacent Petrus checkout: graph validation
+and real PostgreSQL tests must not be skipped merely because a fresh orb lacks
+those tools. `.agents/resume` restarts Docker when needed after pause/resume.
+
 Routine commands run frozen and must not rewrite `uv.lock`. A dependency change
 is deliberate and includes the lockfile. This repository fixes the resolver
 cutoff in `uv.toml`; use

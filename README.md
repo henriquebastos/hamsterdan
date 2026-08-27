@@ -81,6 +81,10 @@ uv sync --frozen
 scripts/check full
 ```
 
+Orb setup also installs and starts Docker and Graphviz so the adjacent Petrus
+checkout can run its PostgreSQL and graph-validation feedback locally. Orb
+resume checks restart Docker when needed; no manual daemon setup is required.
+
 Petrus is pinned to an exact Git revision and is currently a private source
 dependency. Installation therefore requires a dedicated read-only
 `PETRUS_GITHUB_TOKEN`; it is build authority, not a host runtime credential.

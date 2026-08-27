@@ -151,7 +151,12 @@ retire_identity() {
     [[ ! -L "$root/gh" ]] || fail
     if [[ -d "$root/gh" ]]; then
         retire_managed_file "$root/gh/hosts.yml"
+        retire_managed_file "$root/gh/config.yml"
         rmdir -- "$root/gh" 2>/dev/null || fail
+    fi
+    [[ ! -L "$root/amp" ]] || fail
+    if [[ -d "$root/amp" ]]; then
+        rmdir -- "$root/amp" 2>/dev/null || fail
     fi
     rmdir -- "$root" 2>/dev/null || fail
 }
@@ -165,6 +170,7 @@ install_identity() {
     fi
     assert_private_directory "$root"
     assert_private_directory "$root/gh"
+    retire_managed_file "$root/gh/config.yml"
     install_private_file "$root/gh/hosts.yml" "$value"
 }
 
@@ -207,6 +213,28 @@ install_private_file "$RUNTIME/webhook-secret" "$github_webhook_secret"
 retire_managed_file "$RUNTIME/anthropic-api-key"
 install_private_file "$RUNTIME/agent-api-key" "$pi_key"
 unset demo_author_hosts demo_reviewer_hosts github_app_key github_webhook_secret pi_key
+
+missing_petrus_feedback_tools=()
+command -v docker >/dev/null 2>&1 || missing_petrus_feedback_tools+=(docker.io)
+command -v dot >/dev/null 2>&1 || missing_petrus_feedback_tools+=(graphviz)
+if (( ${#missing_petrus_feedback_tools[@]} > 0 )); then
+    echo "==> Installing Petrus feedback tools"
+    sudo apt-get update
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_petrus_feedback_tools[@]}"
+else
+    echo "==> Petrus feedback tools already available"
+fi
+
+echo "==> Starting Docker for Petrus PostgreSQL feedback"
+sudo usermod -aG docker "$USER"
+sudo mkdir -p /etc/systemd/system/docker.socket.d
+sudo tee /etc/systemd/system/docker.socket.d/orb.conf >/dev/null <<'EOF'
+[Socket]
+SocketMode=0666
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now docker.socket docker.service
+[[ ! -S /var/run/docker.sock ]] || sudo chmod 666 /var/run/docker.sock
 
 echo "==> Installing uv"
 if ! command -v uv >/dev/null 2>&1; then

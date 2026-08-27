@@ -104,3 +104,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-25 — Broad quality evidence established without new commit gates](entries/2026-08-25T1135Z-broad-quality-evidence-established.md)
 - [2026-08-25 — Restart-applied installation portfolio accepted locally](entries/2026-08-25T1230Z-restart-applied-installation-portfolio-accepted-locally.md)
 - [2026-08-25 — Restart-applied installation portfolio qualified on exe.dev](entries/2026-08-25T1332Z-restart-applied-installation-portfolio-qualified-on-exe-dev.md)
+- [2026-08-27 — Petrus feedback tools qualified in the Hamsterdan orb](entries/2026-08-27T1441Z-petrus-feedback-tools-qualified-in-orb.md)

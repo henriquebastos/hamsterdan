@@ -3,5 +3,10 @@ set -euo pipefail
 
 command -v uv >/dev/null
 command -v bun >/dev/null
+command -v docker >/dev/null
+if ! docker info >/dev/null 2>&1; then
+    sudo systemctl start docker.service
+fi
+[[ ! -S /var/run/docker.sock ]] || sudo chmod 666 /var/run/docker.sock
 test -f uv.lock
-echo "Hamsterdan requires no resume-time repair yet"
+echo "Hamsterdan resume checks passed"
