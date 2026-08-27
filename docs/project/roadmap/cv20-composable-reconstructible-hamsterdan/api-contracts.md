@@ -14,8 +14,37 @@ The labels are:
 
 Pseudocode describes required capability shape. It does not require Python
 `Protocol` classes, inheritance, mixins, or one interface file per capability.
-The DS Plan Checkpoint chooses the simplest composition style allowed by the
-project's Python contract.
+The first tracer that uses a capability rules the smallest concrete Python API
+with its real producer, consumer, deterministic seam and observation surface in
+view. Later tracers may extend that API from new real call sites, but do not add
+speculative compatibility aliases. The Plan Checkpoint chooses the simplest
+composition style allowed by the project's Python contract.
+
+## Tracer API ruling rule
+
+Every Plan Checkpoint reviews behavior/call tree, values/signatures, identities/
+authority, errors, durable cuts/recovery, observations/limits and unresolved
+names as one packet. The fixed semantics below constrain that review. A
+concrete API becomes canonical only when this document and the owning DS record
+are updated before implementation.
+
+First-use ownership is:
+
+| Contract family | First real tracer | Later strengthening |
+|---|---|---|
+| one-PR subject, composition, detached step/posture, Timeline/artifact | DS1 | DS2–DS10 only from added call sites |
+| provider observation, host delivery and readiness ingress | DS2 | DS7/DS9 add observation families |
+| workflow Activity/manifest/occurrence identity | DS3 | DS5–DS8 add Activity families |
+| provider transport and lookup-first publication | DS4 | DS6/DS7 add Git/rerun operations; DS9 completes policies |
+| agent protocol, runtime, workspace and exact delivery | DS5 | DS6 adds coding values |
+| complete `AuthorityClaim` and first strong findings fence | DS5 | DS6/DS7 reuse it; DS9 completes the policy/lifecycle matrix |
+| conversation, `MutWork`, coding and Git causal chain | DS6 | DS7 reuses it for repair |
+| CI evidence, rerun and escalation | DS7 | DS11 qualifies combinations |
+| timer protocol/custody and deferred wakes | DS8 | DS11 qualifies combinations |
+| complete lifecycle and authority matrix | DS9 | DS10 consumes fresh evidence |
+| catalog, runnable leases, multi-PR service/operator | DS10 | DS11 qualifies process behavior |
+| journey/correspondence/evidence report | DS11 | DS12 consumes the report |
+| cutover commands and no-return evidence | DS12 | removed when construction ends where specified |
 
 ## Cross-cutting identity contract
 
@@ -27,7 +56,7 @@ readiness binding and provider routing must agree before work runs.
 
 - **Fixed behavior:** immutable one-PR binding and fail-closed mismatch.
 - **DS review:** concrete `Subject` representation and serialized field names
-  in DS7/DS8.
+  in DS1; DS10 may extend portfolio inspection without changing identity.
 
 ### Authority claim
 
@@ -53,7 +82,9 @@ The claim is readiness-owned. A provider snapshot alone is insufficient, and
 host cannot grant workflow authority.
 
 - **Fixed behavior:** fields, three-source composition and freshness rule.
-- **DS review:** concrete type/factory/method names in DS7.
+- **DS review:** concrete claim/factory/evidence names at the first protected
+  findings call site in DS5. DS9 may add lifecycle-driven APIs and completes
+  the operation-specific matrix without changing the claim's meaning.
 
 ### Workflow Activity identity
 
@@ -75,7 +106,8 @@ idempotency and terminal operation with the exact invocation. A mismatch fails
 before Dispatch or History accepts the terminal.
 
 - **Fixed behavior:** complete comparison and original-occurrence return.
-- **DS review:** terminal-admission function and error names in DS2/DS7.
+- **DS review:** request identity/projection names in DS3 and terminal-admission
+  function/error names in DS4.
 
 ### External operations
 
@@ -93,16 +125,17 @@ Fixed identities include:
 | Git mutation/publication | exact workflow `MutWork.op_key` |
 | Activity terminal | original workflow operation plus original occurrence |
 
-Before implementation, DS3/DS5/DS7 must define every other Activity family's
-final operation grammar in this document. Each grammar encodes the stable PR
+Before implementation, the first tracer for each Activity family must define
+its final operation grammar in this document: dashboard in DS3, review in DS5,
+mutation in DS6, CI rerun/repair in DS7, timer/deferred work in DS8 and any
+remaining lifecycle operation in DS9. Each grammar encodes the stable PR
 subject, business source identity and operation-specific authority required for
 provider lookup and user-visible idempotency, while omitting topology labels
 such as `v5`. Current provider markers may supply correspondence evidence; an
 implementer does not infer the grammar from exploration.
 
 - **Fixed behavior/name:** the five identities above and no topology label.
-- **DS review:** final operation grammar for each other Activity family in
-  DS3/DS5/DS7.
+- **DS review:** final operation grammar in the owning first-use DS3–DS9 tracer.
 
 ## Workflow contracts
 
@@ -126,8 +159,9 @@ them into workflow.
 
 - **Fixed names:** `build_net`, `seed_marking`, `TOKENS`, `MANIFEST`,
   `wire_gates`.
-- **DS review:** exact parameters and return values in DS3, constrained by
-  real Petrus integration and defining-module imports.
+- **DS review:** DS1 rules the minimal `build_net`/`seed_marking` boundary from
+  real Petrus use; DS3 rules manifest/gate wiring; owning DS5–DS9 tracers extend
+  topology without changing these names.
 
 ### Value groups
 
@@ -140,10 +174,10 @@ them into workflow.
 | `workflow.net.*` | loop-private state and pure folds | private loop state does not become a public port |
 
 The fixed observation families are head/base authority, draft/ready, closure,
-human conversation and CI/run evidence. DS3's API checkpoint must record the
-final concrete type census and fields in this document before implementation.
-After that ruling, additions require a CV20 contract update rather than an ad
-hoc ingress payload.
+human conversation and CI/run evidence. Their first real tracers record the
+concrete types/fields here before implementation: head/base in DS2,
+conversation in DS6, CI/run in DS7 and remaining lifecycle/authority in DS9.
+Additions require a CV20 contract update rather than an ad hoc ingress payload.
 
 ### Activity manifest
 
@@ -179,9 +213,9 @@ be silently converted to a business terminal.
 - **Fixed behavior:** capability groups, workflow ownership and closed result
   families.
 - **DS review:** final method names and whether capabilities are functions,
-  callable objects or collaborator methods in DS3/DS7.
-- **DS review:** terminal type names may improve during DS3 only if every loop,
-  manifest entry, adapter and CV20 document changes together.
+  callable objects or collaborator methods in the owning DS3–DS9 tracer.
+- **DS review:** terminal type names may improve before their first tracer use
+  only if loop, manifest entry, adapter and CV20 documents change together.
 
 ### Mutation causal contract
 
@@ -210,8 +244,8 @@ the same workflow occurrence.
 
 - **Fixed behavior/name:** `MutWork`, `CodingRequest`, `CodingResult`, `Pushed`
   and the causal flow.
-- **DS review:** exact immutable Python data shapes in DS3/DS6 and mutation
-  capability signature in DS7.
+- **DS review:** exact immutable Python data shapes and mutation capability
+  signatures in DS6.
 
 ### Timer values
 
@@ -221,7 +255,7 @@ marks exact deliveries. The clock uses signed integer microseconds; no float
 conversion is allowed.
 
 - **Fixed behavior:** owner, value roles, ordering and time unit.
-- **DS review:** exact value fields and custody method names in DS3/DS7.
+- **DS review:** exact value fields and custody method names in DS8.
 
 ## Readiness contracts
 
@@ -238,7 +272,8 @@ project(event, action) -> tuple[workflow observation, ...]
 
 - **Fixed behavior:** normalized values only; no provider exceptions or SDK
   objects cross the boundary.
-- **DS review:** capability and method names in DS7.
+- **DS review:** capability and head-observation method names in DS2; DS7/DS9
+  extend the same boundary for CI and lifecycle evidence.
 
 ### Conversation classification
 
@@ -250,7 +285,7 @@ freezes that result in the ingress manifest before workflow admission.
 
 - **Fixed behavior:** task fields, identity, current-authority check and frozen
   result.
-- **DS review:** task/capability names and exact actor field types in DS7.
+- **DS review:** task/capability names and exact actor field types in DS6.
 
 ### Authority capability
 
@@ -262,7 +297,7 @@ Evidence unavailability produces a readiness-owned, bounded, secret-free
 failure before a new observation or effect is accepted.
 
 - **Fixed behavior:** fresh three-source composition.
-- **DS review:** sync/async shape and failure taxonomy in DS7.
+- **DS review:** sync/async shape and failure taxonomy in DS9.
 
 ### Timer custody capability
 
@@ -284,7 +319,7 @@ needed to rebuild or fail closed. A live method does not hide that recovery in
 an unbounded constructor.
 
 - **Fixed behavior:** operation set and ordering.
-- **DS review:** concrete names and transaction API in DS7.
+- **DS review:** concrete names and transaction API in DS8.
 
 ### Shared step result
 
@@ -338,7 +373,8 @@ is returned.
   `Terminal`, `Unavailable`, `CutRef`, `WorkPosture`, `DeliveryPosture`.
 - **Fixed behavior:** detached shape and host acknowledgement rule.
 - **DS review:** concrete dataclass fields and enum/private-value treatment in
-  DS7/DS8.
+  DS1 for the first lifecycle; later owning tracers add only fields proven by
+  their new calls, with terminal lifecycle fields completed in DS9.
 
 ### Workflow-runtime cuts
 
@@ -354,8 +390,8 @@ Petrus `Wait` and `Stop` map to non-progress results. An impure workflow action
 may record one `ActivityRequested`; it never executes the effect inline.
 
 - **Fixed names/behavior:** the five cuts and bounds.
-- **DS review:** page cursor/result structures in DS2 and runtime method layout
-  in DS7.
+- **DS review:** DS1 rules page cursor/result and initial runtime layout, DS2
+  rules observation cuts and DS3 rules occurrence repair/action request use.
 
 ### Readiness cuts
 
@@ -387,7 +423,7 @@ the durable effect owner. It never trusts or serializes the lost result.
 - **Fixed names/behavior:** all cuts, one-call boundary and lookup-first
   recovery.
 - **DS review:** application method names and lane selection representation in
-  DS7.
+  the first tracer that exercises each cut: DS1–DS4, DS8 and DS10 respectively.
 
 ### Readiness lifecycle
 
@@ -408,7 +444,8 @@ It may decode readiness-owned state but returns no History records, Engine,
 Dispatch, workflow names or typed terminals.
 
 - **Fixed behavior:** operation set, one-PR binding and detached results.
-- **DS review:** factory/lifecycle names and signatures in DS7/DS8.
+- **DS review:** initial factory/lifecycle names and signatures in DS1, delivery
+  admission in DS2, effect settlement in DS4 and close/service use in DS9/DS10.
 
 ## GitHub provider contracts
 
@@ -420,7 +457,8 @@ errors remain inside `github_app`. Configuration validates strict App,
 installation, repository and route inputs and redacts secret-bearing values.
 
 - **Fixed behavior:** provider-owned frozen models and secret custody.
-- **DS review:** model names and error taxonomy in DS5.
+- **DS review:** webhook/observation models in DS2; transport/effect errors in
+  DS4; CI and lifecycle model additions in DS7/DS9.
 
 ### Bounded transport and gateway
 
@@ -434,7 +472,7 @@ not classify readiness outcomes.
 
 - **Fixed behavior:** complete bounded reads, metadata and ownership.
 - **DS review:** whether the transport keeps `request`/`pages` or uses more
-  specific calls; response and pagination value names in DS5.
+  specific calls; response and pagination value names in DS4.
 
 ### Lookup-first provider effect
 
@@ -467,7 +505,7 @@ must affect accepted publication evidence.
 - **Fixed behavior/name:** lookup-first order, one attempt, marker, exact ref
   CAS and result sensitivity.
 - **DS review:** provider result types, canonical result-digest schema and
-  method grouping in DS5/DS7.
+  method grouping in DS4 for comment publication, DS6 for Git and DS7 for rerun.
 
 ### Operation-specific authority
 
@@ -477,7 +515,8 @@ safeguards. CV20 does not silently strengthen every publication to one generic
 fence.
 
 - **Fixed behavior:** safeguards remain operation-specific.
-- **DS review:** explicit matrix and capability parameters in DS5/DS7.
+- **DS review:** initial dashboard safeguard in DS4 and complete explicit matrix
+  plus capability parameters in DS9.
 
 ## Agent contracts
 
@@ -503,7 +542,7 @@ replacement.
   pair validation.
 - **Fixed names:** `CodingRequest`, `CodingResult`.
 - **DS review:** other concrete value/terminal names, field types and public
-  codec API in DS6.
+  codec API in DS5; coding variants are ruled in DS6.
 
 ### Durable execution lifecycle
 
@@ -521,7 +560,7 @@ terminal.
 
 - **Fixed behavior:** positions, lookup precedence and cardinality.
 - **DS review:** store schemas, lifecycle API and terminal-delivery method names
-  in DS6.
+  in DS5.
 
 ### Pi and workspace
 
@@ -531,7 +570,7 @@ archive and patch safety without GitHub credentials. Host owns Pi installation,
 connection, process runtime, secret lifetime and route composition.
 
 - **Fixed behavior:** identity and custody split.
-- **DS review:** adapter and workspace API names in DS6/DS8.
+- **DS review:** adapter, workspace and host custody API names in DS5.
 
 ### Exact delivered result
 
@@ -542,7 +581,7 @@ second coding implementation or manufacture an equal result for publication.
 
 - **Fixed behavior:** exact value dependency and current fence.
 - **DS review:** coding capability signature and whether result lookup is a
-  separate collaborator operation in DS6/DS7.
+  separate collaborator operation in DS6.
 
 ## Host contracts
 
@@ -562,7 +601,8 @@ Both generations advance whenever their owned state changes. Readiness can ask
 about one retained blocker without querying host tables.
 
 - **Fixed behavior:** fields, generation semantics and read-only boundary.
-- **DS review:** type/method names in DS8.
+- **DS review:** one-subject evidence begins in DS1/DS2; complete generation and
+  revocation names are ruled in DS9.
 
 ### Construction
 
@@ -582,7 +622,7 @@ runnable row, Engine, Dispatch, Worker or simulation state.
 
 - **Fixed behavior:** sole composition location and credential lifetime.
 - **DS review:** named factories and ownership-friendly constructor grouping in
-  DS8.
+  DS1, extended when provider/agent resources first appear in DS2/DS4/DS5.
 
 ### Instance catalog and inspection
 
@@ -595,7 +635,8 @@ projection. It never parses History or constructs a running host solely to
 read state.
 
 - **Fixed behavior:** mapping and detached inspection boundary.
-- **DS review:** catalog schema, page token and JSON output names in DS8.
+- **DS review:** one-subject binding/inspection in DS1 and catalog page/portfolio
+  JSON in DS10.
 
 ### Fair runnable contract
 
@@ -615,7 +656,7 @@ unclaimed subjects. Lost/corrupt wake hints reconstruct from catalog plus
 readiness inspection.
 
 - **Fixed behavior:** fairness and one-readiness-call turn.
-- **DS review:** lease/store API and batch configuration in DS8.
+- **DS review:** lease/store API and batch configuration in DS10.
 
 ### Host cuts
 
@@ -633,7 +674,8 @@ readiness inspection.
 | `instance_closed` | close one instance/resource independently |
 
 - **Fixed names/behavior:** all cuts and recovery boundaries.
-- **DS review:** public service method organization in DS8.
+- **DS review:** DS1/DS2 rule the one-subject open/posture/acknowledgement cuts;
+  DS5 adds route settlement; DS10 rules selection/requeue/close organization.
 
 ## Simulation contracts
 
@@ -661,7 +703,8 @@ process-local state. Eligibility after restart derives only from retained
 owner state.
 
 - **Fixed behavior/signature shape:** all operations above.
-- **DS review:** concrete type names and sync/async annotations in DS4.
+- **DS review:** concrete mechanics/type names in DS1; each tracer rules only
+  its new owner-local command/observation/action vocabulary.
 
 ### Timeline
 
@@ -696,7 +739,9 @@ Budget termination discards frames and remains artifactable and replayable.
 
 - **Fixed names/behavior:** `Timeline`, `Artifact`, the API and
   `hamsterdan-simulation` version 1.
-- **DS review:** exact result/error field shapes in DS4.
+- **DS review:** DS1 rules core result/error/artifact fields at first use; DS4
+  rules split effect leaves, DS8 time advance, and later tracers extend evidence
+  without creating another artifact family.
 
 ### Runtime and module ownership
 
@@ -711,8 +756,8 @@ stores. Root cross checkers compare edge-local facts from more than one owner.
 Checker output does not become runtime disposition.
 
 - **Fixed behavior:** ownership and checker independence.
-- **DS review:** local command/fault vocabularies in DS9 after production owners
-  exist.
+- **DS review:** local command/fault vocabularies in every tracer alongside the
+  production behavior they drive; root cross evidence grows at the same time.
 
 ## Error contract
 
@@ -743,17 +788,17 @@ in a chat or plan.
 
 | Story | Fixed before review | Questions the DS must settle |
 |---|---|---|
-| DS1 | exact tree, gate rules, positive/negative architecture edges | gate command names, fixture DSL and diagnostic payloads |
-| DS2 | bounded replay/repair and split claim/effect/terminal positions | Petrus/Motus public signatures, cursor/result/error types, pin/update sequence |
-| DS3 | workflow ownership, nine loops, values, manifest and topology names | final value fields/names, manifest entry shape, build signatures, loop-local APIs |
-| DS4 | Timeline API, module structure, one-leaf semantics and artifact family | concrete result/error dataclasses, strict JSON aliases, budget construction |
-| DS5 | provider custody, bounds and lookup-first one-attempt algorithm | transport/gateway methods, provider model names, operation results/errors, limit types |
-| DS6 | credential-free protocol, stable execution identity and lifecycle cuts | request/result/terminal fields, codec, stores, Pi/workspace call signatures |
-| DS7 | one-PR ownership, cuts, authority, causal mutation and typed terminals | readiness capabilities, application/lifecycle signatures, custody schemas, failure taxonomy |
-| DS8 | sole composition root, lifecycle evidence, catalog, fairness and shutdown | constructors, store/lease APIs, inspection JSON, service/CLI commands |
-| DS9 | five local modules, one root composition and checker ownership | exact local command/observation/fault vocabularies and report types |
-| DS10 | twelve journey meanings and required evidence | acceptance DSL and artifact/coverage report schema |
-| DS11 | direct real-seam correspondence and explicit external approvals | harness boundaries, process-kill controls and evidence report format |
+| DS1 | one-PR ownership, sole composition, bounded step/posture, strict gate and core Timeline/artifact | subject/root/factory/result signatures, minimal Petrus replay cursor, gate diagnostics and first local/root evidence |
+| DS2 | raw-byte provider input, host delivery custody, readiness manifest/grant and real `HeadSeen` fold | webhook/route/delivery/observation values, stage/admit/ack calls, duplicate/collision errors and bounds |
+| DS3 | workflow ownership, manifest identity and first durable `DashReq` | request/terminal fields, manifest/token/build/wiring APIs, occurrence projection and pending posture |
+| DS4 | lookup-first one-attempt provider effect and split Activity positions | transport/gateway/result APIs, marker lookup, claim/effect/terminal calls, terminal admission and physical metrics |
+| DS5 | credential-free agent protocol, stable execution identity, exact delivery and first protected findings call | review values/codecs, lifecycle/store calls, Pi/workspace/route custody, complete claim/evidence APIs, findings fence, cancellation errors and bounds |
+| DS6 | exact workflow→coding→Git→workflow causal contract | conversation/`MutWork`/coding/`Pushed` shapes, result digest, patch/Git/ref-CAS APIs and sensitivity evidence |
+| DS7 | exact-head CI, workflow escalation and lookup-first rerun | CI evidence/state, rerun/repair operations, retry limits, stale/ambiguous errors and schedule reports |
+| DS8 | integer-time workflow protocol and readiness timer custody | timer/custody/clock/wake APIs, reminder/deferred operations, cut transactions and resource keys |
+| DS9 | complete lifecycle outcomes and operation-specific authority matrix over the established claim | lifecycle-driven claim/evidence/generation extensions, remaining policy matrix, blocked/moved/conflict mappings and fence diagnostics |
+| DS10 | catalog discovery, durable runnable fairness and one-call host turns | catalog/page/lease/service/inspection/operator APIs, startup/shutdown aggregation and portfolio bounds |
+| DS11 | twelve journey meanings, complete correspondence and explicit approvals | journey/shrink/report DSL, claim/fixture/process-kill protocols, evidence binding and unavailable policy |
 | DS12 | one cutover, no migration and canonical Hamsterdan naming | operator command sequence, no-return marker, rollback record and cleanup evidence |
 
 ## Provenance

@@ -14,6 +14,13 @@ mean copy the current file. “Split” means a current mixed-owner file contrib
 behavior to more than one target. “Delete” means no target code path retains
 that responsibility.
 
+The package boundaries and current-file dispositions are fixed. Target module
+and test paths are reviewed initial maps. An owning tracer may merge or split a
+path under the deletion test when doing so produces a clearer API/responsibility,
+provided this ledger and [the architecture](architecture.md) are updated before
+implementation. No such change may alter package ownership or preserve a
+compatibility lane.
+
 ## Target module deletion test
 
 A target module exists only when deleting it would either duplicate a coherent
@@ -89,7 +96,31 @@ and the no-facade policy while exporting nothing.
 | `simulation/replay.py` | expanded-operation replay and exact comparison |
 | `simulation/hamsterdan.py` | five-module adapters and cross-module checkers |
 
-## Exact replacement Python test tree
+## Tracer ownership of the initial map
+
+This table assigns first implementation responsibility. Later tracers may
+extend an existing owner only from a new real call site.
+
+| Tracer | First implementation responsibility |
+|---|---|
+| DS1 | strict gate; minimum workflow/readiness/host spine; one-PR binding; core Timeline/artifact/replay; first local/root modules |
+| DS2 | provider webhook/model/route input; host inbox custody; readiness ingress/evidence; `HeadSeen` lifecycle fold |
+| DS3 | workflow facts/Activity manifest/folding/gating/topology and dashboard request; pending-Activity runtime evidence |
+| DS4 | provider auth/transport/gateway/effects; readiness publication adapter; split effect cuts and terminal admission |
+| DS5 | agents protocol/Pi/workspace; host agent custody/evidence; complete readiness authority claim and findings fence; readiness review custody/effect; workflow review round |
+| DS6 | conversation/mutation folds; coding protocol; readiness mutation/Git; provider raw Git operations |
+| DS7 | CI/escalation folds; provider check evidence; readiness/provider rerun operation |
+| DS8 | workflow reminders/deferred values; readiness timer custody; host clock/deadline wake |
+| DS9 | complete lifecycle/readiness folds; remaining authority-policy matrix; host/provider route-generation movement; blocked/moved mappings |
+| DS10 | host catalog/runnable/service/API/CLI/inspection/qualification and operator surfaces |
+| DS11 | acceptance journeys/recovery/correspondence, generated schedules, qualification/distribution evidence |
+| DS12 | canonical rename, old implementation deletion, gate/config/deployment/doc promotion and fresh-state cutover |
+
+Every DS1–DS11 row includes its owner-local/root simulation, checker,
+correspondence and resource evidence. Those are not deferred modules owned by a
+later integration story.
+
+## Reviewed initial replacement Python test map
 
 Tests are grouped by behavior owner, not mirrored one-to-one from production
 files. Scenario classes and local DSL helpers stay in the behavior file until
@@ -159,9 +190,11 @@ tests2/
     test_correspondence.py
 ```
 
-The exact tree is a placement contract, not a test-count target. A story may
-add scenarios to a listed file. A new file/directory requires the deletion test
-and Navigator review of this ledger.
+The map is grouped by behavior owner, not a test-count target or immutable file
+inventory. A tracer may add scenarios, merge files whose separation adds no
+responsibility, or split a file when independently reusable test vocabulary
+earns a new owner. The deletion test and Navigator review update this ledger
+before implementation; package/behavior ownership does not move silently.
 
 `tests/amp_webhook_relay.test.ts` remains the maintained relay gate during
 construction and after cutover. It is not part of `tests2` or the Python
@@ -169,7 +202,7 @@ disposition census.
 
 ## Replacement quality gate
 
-DS1 creates:
+DS1 creates and runs the isolated gate over the real modules it admits:
 
 ```text
 quality/hamsterdan2/ruff.toml
@@ -214,6 +247,11 @@ and positive edges, empty initializers, defining-module imports, external
 library custody, unique readiness runtime custody, manifest/loop/gate/token
 census, forbidden generation/compatibility names and registry-driven enum
 privacy.
+
+Positive checks apply when their owning tracer admits the corresponding real
+composition. DS1 does not create an empty final skeleton or construction
+placeholder merely to satisfy a future edge. Every later tracer updates the
+positive census in the same change that introduces the real edge.
 
 The replacement gate runs from `scripts/check quick`; `full` and `release`
 inherit it. At DS12 the isolated config becomes the repository default and the
@@ -289,7 +327,9 @@ temporary path qualifier disappears.
 
 This table assigns source responsibility, not lines. A mixed-owner current file
 must be reimplemented under final owners; copying it first would make an
-architecture-invalid intermediate tree.
+architecture-invalid intermediate tree. Target paths named here refer to the
+reviewed initial map and follow any pre-implementation merge/split ruling in
+this ledger.
 
 ## Current Python test disposition (46/46)
 
@@ -434,8 +474,12 @@ Mechanical coherence checks must prove:
    source markers;
 2. every current `tests/**/*.py` path appears exactly once between the test
    markers;
-3. the target source and test trees contain no duplicate path;
-4. every target module has one deletion-test row;
-5. every Delivery Story's owned paths are a subset of these target trees or
-   the explicitly listed quality/dependency/cutover files; and
-6. DS12's forbidden-name/schema/path census reaches zero in active owners.
+3. the reviewed initial and accepted actual source/test maps contain no
+   duplicate path;
+4. every accepted actual target module passes the deletion test and has one
+   responsibility owner;
+5. every admitted path is owned by its tracer or explicitly listed
+   quality/dependency/cutover scope, with no future-only placeholder;
+6. every DS1–DS11 tracer has local/root simulation, checker, bounds and
+   correspondence disposition alongside production responsibility; and
+7. DS12's forbidden-name/schema/path census reaches zero in active owners.

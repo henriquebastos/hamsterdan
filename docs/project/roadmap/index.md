@@ -17,10 +17,10 @@ belongs in each item's own metadata; this index routes to current owners.
 ## Planned
 
 - [CV20 — Composable, reconstructible Hamsterdan](cv20-composable-reconstructible-hamsterdan/index.md):
-  ES-010's accepted architecture is promoted as twelve dependency-ordered
-  Delivery Stories. None is pulled; the replacement remains non-selectable
-  construction work while CV19 stays the only active Value and V5 stays the
-  only current runtime.
+  ES-010's accepted architecture is promoted as eleven progressively deepened
+  vertical tracer Delivery Stories and one final cutover story. None is pulled;
+  the replacement remains non-selectable construction work while CV19 stays
+  the only active Value and V5 stays the only current runtime.
 
 ## Paused until after private v0.1
 

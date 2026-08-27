@@ -17,3 +17,4 @@ settled direction by superseding its record explicitly rather than drifting.
 - [V5 is the only runtime and retired topology state fails closed](records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md)
 - [Timeline and coroutine stepper share bounded execution](records/2026-08-26T2012Z-timeline-and-coroutine-stepper-share-bounded-execution.md)
 - [Composable Hamsterdan is the planned replacement architecture](records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md)
+- [CV20 delivers through vertical tracer bullets](records/2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md)

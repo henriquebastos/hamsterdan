@@ -1,400 +1,313 @@
 # CV20 delivery sequence
 
-This document is the canonical build order for CV20. It explains what exists
-after each Delivery Story, what the next story may rely on, and which evidence
-must remain green. All twelve stories are `Planned`; this sequence does not pull
-DS1 or authorize implementation, external effects, deployment or cutover.
+This is the canonical construction order for CV20. DS1–DS11 are permanent,
+production-shaped tracer bullets that progressively deepen one system. DS12 is
+the separately approved cutover, not an ordinary tracer. All stories are
+`Planned`; this sequence pulls no work and authorizes no external effect,
+credential use, deployment, commit or push.
+
+## What counts as Delivery
+
+A tracer begins at an external, operator or deterministic-simulation command,
+enters through real production host composition and every relevant owner, and
+ends in a bounded visible posture, durable workflow request or accepted effect.
+It includes its deterministic simulation, observability, named crash cuts,
+finite resource bounds and applicable real-seam correspondence.
+
+A component implementation is a Technical Story inside a tracer. It may have
+green unit/type/architecture tests and a reviewable commit, but it does not
+close the Delivery Story. For example:
+
+```text
+provider HeadSeen value                              component work
+
+raw webhook -> provider -> host -> readiness
+  -> real workflow fold -> detached posture          tracer
+```
+
+This distinction prevents “tracer” from becoming an inverted component plan.
+If the acceptance evidence can pass while the real producer, consumer or
+composition edge is absent, it is not tracer evidence.
 
 ## Sequence rules
 
-1. A Delivery Story expands into bounded User or Technical Stories before code
-   changes begin.
-2. Its Plan Checkpoint resolves the DS-review items listed in
-   [the API contract](api-contracts.md).
-3. Every child story leaves the current V5 runtime and the replacement tree
-   green. Partial ownership moves that violate the final import graph are not
-   accepted as intermediate states.
-4. A story may depend only on accepted predecessors listed below. Parallel
-   stories do not invent temporary cross-imports.
-5. The replacement remains non-selectable through DS11. Tests may import it;
-   configuration, entry points, service launch and deployed state do not.
-6. Rollback means remove/revert the replacement story while current V5 keeps
-   operating. It never means convert replacement state into V5.
-7. Shared/external actions retain separate approval: dependency publication,
-   provider mutation, credential use, process launch/kill, deployment, release,
-   state retention/deletion, commit and push are not inferred from a story.
+1. The stories are linear: DS(n) depends on accepted DS(n−1). A later tracer
+   thickens the same production spine; it does not build a parallel model.
+2. Before code, the selected DS expands into User/Technical Stories and rules
+   its concrete API at the first real producer/consumer call sites.
+3. Each tracer introduces at most one major effect family, custody state
+   machine, authority policy, concurrency dimension or causal chain. Split the
+   tracer if focused review would require several new chains at once.
+   Fixed identity, applicable authority, recovery, bounds and observation ship
+   at their first call site and are not deferred as a later integration layer.
+4. Every tracer mounts real production owners in deterministic composition.
+   Owner-local simulations do not import siblings; root composition owns only
+   adapters and cross-owner checks.
+5. Every tracer has exact replay from a fresh object graph, one meaningful
+   local/cross counterexample, named durable cuts, lowered-budget failures and
+   measured resource peaks.
+6. A newly introduced external seam gains direct correspondence in that tracer
+   or records an explicit unavailable blocker. DS11 completes portfolio and
+   real-process qualification; it does not rescue missing early correspondence.
+7. The replacement remains non-selectable through DS11. It uses fresh state and
+   never reads, migrates, converts or dual-writes current state.
+8. Rollback removes the current replacement increment. It never converts state
+   between implementations or weakens an accepted earlier tracer.
+9. Shared/external actions retain explicit approval: dependency publication,
+   live provider mutation, credential use, process kill, deployment, release,
+   state retention/deletion, commit and push are never inferred.
 
-## Dependency graph
+## Linear graph
 
 ```text
-DS1 replacement gate
- ├─ DS2 Petrus/Motus seams
- ├─ DS3 workflow
- ├─ DS4 simulation runtime
- ├─ DS5 GitHub provider
- └─ DS6 agents
-
-DS2 + DS3 + DS4 + DS5 + DS6 ──▶ DS7 readiness
-DS6 + DS7                    ──▶ DS8 host
-DS3 + DS4 + DS5 + DS6 + DS7 + DS8 ──▶ DS9 composition
-DS7 + DS8 + DS9              ──▶ DS10 journeys
-DS8 + DS10                   ──▶ DS11 correspondence
-DS10 + DS11                  ──▶ DS12 cutover
+DS1 first bounded one-PR lifecycle
+  -> DS2 admit/fold one real PR observation
+  -> DS3 expose one workflow-declared Activity
+  -> DS4 settle one GitHub Activity lookup-first
+  -> DS5 settle one reconstructible agent round
+  -> DS6 publish one causally aligned mutation
+  -> DS7 recover CI and repair escalation
+  -> DS8 recover timers and deferred work
+  -> DS9 fence lifecycle and authority changes
+  -> DS10 supervise multiple PRs fairly
+  -> DS11 qualify journeys and real-seam correspondence
+  -> DS12 separately approved canonical cutover
 ```
 
-DS2–DS6 may proceed independently after DS1. DS7 is the first replacement
-story that joins workflow with provider and agent capabilities. DS8 constructs
-the real process but leaves it disabled. DS9 mounts production owners under
-simulation. DS10 qualifies complete behavior. DS11 proves real-seam
-correspondence. DS12 alone changes the installed application.
+## State after each tracer
 
-## State after each story
-
-| Story accepted | New durable project state | Still deliberately absent |
+| Accepted story | New usable replacement capability | Deliberately absent |
 |---|---|---|
-| DS1 | exact replacement/test skeleton; blocking target gate; construction placeholders | domain behavior, target runtime, selectable service |
-| DS2 | public bounded Petrus replay/repair and Motus claim/effect/terminal seams; pinned qualified dependency | workflow and readiness application |
-| DS3 | pure real workflow topology, vocabulary, manifest and behavioral tests | Engine lifecycle, external implementations |
-| DS4 | semantic-free Timeline, generation/fault/budget/artifact/replay mechanics | owner-local modules and domain scenarios |
-| DS5 | strict GitHub App/provider implementation, route/webhook mechanisms and lookup-first operations | durable host custody, readiness classification or enabled target route |
-| DS6 | typed agent protocol, Pi/workspace adapter and reconstructible execution lifecycle | host route/secret composition and readiness use |
-| DS7 | one-PR readiness application using injected workflow/provider/agent capabilities and fresh stores | multi-PR process supervision and selectable service |
-| DS8 | complete disabled host/operator composition with catalog, fair scheduling, inspection and bounded lifecycle | deterministic whole-system proof and production activation |
-| DS9 | five owner-local simulations and one causal whole-Hamsterdan composition | full journey portfolio and real-seam qualification |
-| DS10 | twelve accepted journeys through replacement owners with generated/replayable recovery | approved real-provider/process correspondence and cutover |
-| DS11 | direct provider, Git, Pi, durability, process-death and concurrency evidence | installed replacement or state switch |
-| DS12 | one canonical Hamsterdan package/runtime on fresh state; old implementation removed | active V5/Hamsterdan2 names, readers, selectors or compatibility |
-
-## Story handoffs
-
-### DS1 to every implementation story
-
-DS1 supplies:
-
-- the exact `src/hamsterdan2` and `tests2` package markers;
-- isolated strict Ruff and formatter configuration;
-- seven verified ast-grep rules and fixtures;
-- semantic AST architecture/enum auditing;
-- positive construction assertions; and
-- `scripts/check` integration.
-
-Every later story extends this admitted tree. It may not weaken a gate to make
-new code pass. A justified per-site exception stays visible at the exact site
-and is covered by the appropriate rule/test.
-
-### DS2 to DS7
-
-DS2 supplies public dependency seams only:
-
-```text
-page-bounded History replay
-one-occurrence repair
-Activity attempt claim
-effect observed
-terminal recorded
-```
+| DS1 | one registered PR can be composed, stepped, inspected, crashed, reconstructed and exactly replayed under the strict gate | provider input, Activity, external effect, service selection |
+| DS2 | one signed PR delivery traverses provider/host/readiness into a real workflow fold and exact host acknowledgement | workflow Activity or provider mutation |
+| DS3 | the real workflow emits one durable correlated `DashReq` and waits visibly | Activity execution |
+| DS4 | that Activity settles through lookup-first GitHub publication and folds at the original occurrence | agent execution and mutation coding |
+| DS5 | one workflow review request completes one reconstructible typed agent round | coding-to-Git causal mutation |
+| DS6 | authorized comment yields real `MutWork`, exact delivered `CodingResult`, one Git publication and original-occurrence `Pushed` | CI escalation, time, complete authority, multi-PR |
+| DS7 | clean, flaky and persistently failing CI traverse bounded rerun/repair escalation | durable timer/deferred wakes |
+| DS8 | timer command/ack/maturity and reminder/deferred work survive restart | complete lifecycle/authority movement |
+| DS9 | draft/ready/head/base/policy/revocation/closure/conflict are fenced by complete operation-specific authority | multi-PR supervision |
+| DS10 | multiple PRs progress under durable fair leases, bounded startup/shutdown and detached inspection | final aggregate qualification or selectable service |
+| DS11 | complete journeys, generated schedules, distribution and required real-seam/process correspondence are revision-bound | installed replacement or state switch |
+| DS12 | one canonical Hamsterdan on fresh state; old implementation removed | active V5/Hamsterdan2 names, selectors, readers or compatibility |
 
-DS7 wraps those defining/public APIs in `readiness.runtime`. If Hamsterdan must
-inspect or patch private Petrus runtime state, DS2 has not met its exit and DS7
-does not begin.
+## Focused API review at every tracer
 
-### DS3 to DS7 and DS9
+The Plan Checkpoint presents one review packet rather than asking the Navigator
+to reconstruct intent from exploration or module documents:
 
-DS3 supplies:
+1. **Behavior and call tree** — entry command, every real owner, terminal
+   posture/request/effect and exact producer/consumer sequence.
+2. **Types and signatures** — values, factories, capabilities, results and
+   serialization at actual call sites.
+3. **Identity and authority** — subject, delivery, workflow occurrence,
+   operation, attempt, generation and applicable fence.
+4. **Errors** — business terminal, unavailable/retry, identity/correlation/
+   authority contradiction and process-local exception boundaries.
+5. **Cuts and recovery** — named durable positions, what can be lost, who owns
+   lookup/repair and physical effect cardinality.
+6. **Observations and limits** — detached inspection, local/cross reports,
+   operation metrics, rows/pages/bytes/calls/time/retries and artifact fields.
+7. **Unresolved names** — concrete names still under DS review, with a proposed
+   ruling and real call-site examples.
 
-```text
-build_net
-seed_marking
-TOKENS
-MANIFEST
-wire_gates
-workflow observations/facts/work/terminals
-```
+Resolved APIs are written into [the API contract](api-contracts.md) and the DS
+before implementation. Internal replacement APIs may change atomically while
+their owning tracer is under construction; they receive no compatibility alias.
+Fixed semantic identities and externally discoverable markers do not drift.
 
-DS7 binds capabilities to the manifest and executes the Net. DS9's workflow
-simulation mounts that same production package. Neither duplicates transition
-folds or creates a simulation-only workflow.
+## Tracer handoffs
 
-### DS4 to DS9 and DS10
+### DS1 — First bounded one-PR lifecycle
 
-DS4 supplies the exact public `Timeline`, structural module contract, strict
-artifact and replay. It contains no GitHub, agent, readiness, workflow or host
-meaning. DS9 supplies owner modules; DS10 supplies semantic journeys. Neither
-adds a second scheduler or artifact family.
+The first tracer admits only the gate and real code needed to register one
+subject, construct host/readiness/workflow, produce a detached posture and
+reconstruct/replay it. It also qualifies the minimum public Petrus
+construction/page-replay seam. There is no final empty skeleton or positive-edge
+placeholder.
 
-### DS5 and DS6 to DS7/DS8
+Handoff: one strict, non-selectable, bounded production spine plus Timeline,
+artifact/replay and local/root evidence that every later tracer extends.
 
-DS5 supplies provider implementations and provider-owned values. DS6 supplies
-credential-free agent implementations and typed terminal lookup. DS7 defines
-readiness-owned capability boundaries over them. DS8 is the only owner that
-constructs those concrete implementations with credentials and process
-resources.
+### DS2 — One real observation
 
-The concrete import route is:
+DS2 adds raw-byte webhook verification, provider normalization, host inbox/route
+custody, readiness manifest/grant and one real `HeadSeen` fold. Host acknowledges
+only after exact readiness acceptance.
 
-```text
-host.composition
-  -> github_app concrete constructors
-  -> agents/host agent-runtime constructors
-  -> readiness effect adapters
-  -> readiness lifecycle construction
-```
+Handoff: durable provider→host→readiness→workflow input and acknowledgement.
 
-Readiness core never imports concrete construction, and GitHub/agents never
-import one another.
+### DS3 — One durable Activity
 
-### DS7 to DS8
+DS3 extends real workflow topology/manifest until the retained observation
+declares one `DashReq`. It qualifies the public Petrus/Motus request and
+one-occurrence reconstruction seams but deliberately holds the effect.
 
-DS7 supplies a one-PR lifecycle with bounded admit/progress/settle/inspect/close
-semantics and detached `StepResult`. DS8 supplies host lifecycle evidence and
-calls that lifecycle once per selected subject turn.
+Handoff: exact request, occurrence, operation, correlation and idempotency in
+History/Dispatch plus host-visible waiting posture.
 
-The acknowledgement rule is fixed:
+### DS4 — One lookup-first GitHub effect
 
-```text
-host retains delivery
-  -> readiness returns accepted/already accepted for exact delivery
-  -> host acknowledges delivery
-  -> host persists posture and route settlements
-```
+DS4 adds bounded provider transport/gateway, operation-marker lookup, one
+publication attempt and split claim/effect-observed/terminal-recorded cuts.
+`DashLanded` returns through strict admission to the original occurrence.
 
-### DS3–DS8 to DS9
+Handoff: first accepted effect family with accepted-hidden recovery, physical
+one-effect evidence and provider correspondence.
 
-Each owner is production-complete enough to mount directly. DS9 adds exactly:
+### DS5 — One reconstructible agent round
 
-- one local simulation module and checker per owner;
-- strict owner-local commands, observations, faults and gauges;
-- root adapters that join local modules; and
-- cross checkers that compare edge-local evidence.
+DS5 adds the credential-free protocol, stable operation/attempt/execution
+identity, Pi/workspace adapter, host route/secret custody and durable
+submit→accept→terminal→delivery positions. One workflow `RoundOpen` receives the
+exact delivered `AgentReview` value. Before protected findings work starts,
+readiness composes the complete `AuthorityClaim` from its durable grant, a
+fresh provider read and fresh host route/custody evidence.
 
-DS9 does not implement a second domain model. A local module used in root
-composition is the same module used in standalone local tests.
+Handoff: one-start/one-delivery agent execution with exact typed lookup and no
+GitHub credential in agent territory, under the first strong three-source
+authority policy.
 
-### DS9 to DS10
+### DS6 — One causal mutation
 
-DS9 supplies deterministic causal composition, failures, shrinking inputs,
-resource accounting and exact replay. DS10 uses them to express product
-journeys. A journey names the visible outcome, authority, operation identity,
-physical effect cardinality, crash/recovery cuts and finite limits.
+DS6 adds authorized conversation, real `MutWork`, canonical coding request,
+exact delivered coding result, patch admission, Git objects/trailers/ref CAS and
+`Pushed` into the original occurrence. Result A/B and work-substitution
+sensitivities prove the data dependency.
 
-### DS10 to DS11
+Handoff: the accepted workflow→agents→Git→workflow causal vertical.
 
-DS10 states what behavior must hold. DS11 pairs selected simulation claims with
-real provider/process evidence. DS11 does not change the model to match a
-convenient harness. A mismatch returns to the production owner or simulation
-contract that is wrong.
+### DS7 — CI and repair escalation
 
-### DS10 and DS11 to DS12
+DS7 adds exact-head check evidence, workflow CI/escalation, one lookup-first
+rerun effect and reuse of the established agent/mutation chain for persistent
+regression. Clean, flake and repair paths each have finite final posture.
 
-DS12 begins only after behavior and correspondence are accepted. It requires a
-new cutover decision and explicit approval for shared deployment/state actions.
-The current V5-only decision remains active before that point.
+Handoff: bounded CI recovery without a second repair path or convergence drain.
 
-## Story sequence
+### DS8 — Time and deferred work
 
-### DS1 — Establish the replacement-tree gate
+DS8 adds integer-microsecond workflow timer values, readiness command/ack/
+maturity/delivery custody, host deadline wakes and reminders/deferred work over
+existing effect seams.
 
-Create the complete empty source/test skeleton and blocking quality gate. Use
-explicit construction placeholders so positive architecture checks are active
-before real modules exist. The old tree receives no blanket formatting or
-suppression work.
+Handoff: reconstructible logical time and one-item timer cuts; wake hints remain
+non-authoritative.
 
-Exit: every required positive/negative rule has a fixture, `quick` runs the
-target gate, and the empty replacement is distributively invisible.
+### DS9 — Complete lifecycle and authority
 
-### DS2 — Own bounded Petrus and Motus execution seams
+DS9 adds all lifecycle movements and completes the operation-specific policy
+matrix over the full `AuthorityClaim` established at DS5 and reused by DS6/DS7.
+Each effect keeps its safeguard and stale work receives a workflow-declared
+outcome from readiness.
 
-Implement and qualify public dependency APIs for bounded History replay,
-one-occurrence repair and split Activity execution positions. Pin the qualified
-dependency and expose a thin readiness-runtime contract test.
+Handoff: every established effect is fenced and every lifecycle movement has a
+real composed outcome.
 
-Exit: one step can attempt at most one provider mutation, response-loss cuts
-are observable, and Hamsterdan imports no private dependency state.
+### DS10 — Multi-PR fairness
 
-### DS3 — Deliver the pure readiness workflow
+DS10 extends one-subject host composition with catalog pages, durable runnable
+sequence/leases/tail requeue, one-readiness-call turns, bounded startup/shutdown,
+detached portfolio inspection, API/CLI and operator surfaces.
 
-Implement workflow values, observations, facts, Activity manifest, nine loops,
-token registry, topology and declaration-only real-Engine tests. Remove the
-`ready.facts` compatibility lane from the replacement design rather than
-porting it.
+Handoff: disabled but process-complete multi-PR supervision with fairness,
+failure isolation and process/concurrency correspondence.
 
-Exit: observations derive exact typed Activity work, exact terminals fold by
-original occurrence/correlation, and static purity/registry checks pass.
+### DS11 — Portfolio qualification
 
-### DS4 — Deliver the Hamsterdan simulation runtime
+DS11 runs all twelve named journeys and overlays, generated finite schedules,
+semantic shrinking, exact replay, distribution/secret checks and the complete
+correspondence matrix. It changes production behavior only by returning a found
+gap to its owning tracer; a new major chain requires Navigator-approved split.
 
-Implement logical clock, deterministic scheduling, occurrence faults,
-generation loss, one-leaf stepper coordination, global/module budgets, strict
-journal, one artifact version and exact replay.
+Handoff: one revision-bound report sufficient for the separate DS12 decision.
 
-Exit: independent generic modules interleave and recover exactly; every budget
-failure terminates, discards process-local frames and remains replayable.
+### DS12 — Canonical cutover
 
-### DS5 — Deliver strict GitHub provider operations
+After separate approval, DS12 stops/fences current service, snapshots old state
+only for bounded rollback, removes current source/tests, moves replacement to
+canonical paths, starts on fresh roots and proves one approved operation. After
+the first new accepted effect there is no schema downgrade path.
 
-Implement provider models, App auth/config, bounded transport/gateway,
-route/webhook verification and persistence mechanisms, and lookup-first
-comment/rerun/Git operations. Host retains durable route/inbox custody. Provider
-operations report observations; they do not return workflow decisions.
+Result: there is simply Hamsterdan. V5 and Hamsterdan2 remain only in dated
+history, not active code, schema, configuration, selector or operator language.
 
-Exit: complete bounded lookup precedes every mutation, a step makes at most one
-mutation attempt, and accepted-hidden effects recover without duplication.
+## Cumulative deterministic and observability contract
 
-### DS6 — Deliver reconstructible agent execution
+From DS1 onward, each affected owner has:
 
-Implement request/result/terminal codecs, Pi/workspace adaptation and durable
-submit→accept→result/cancel→delivery lifecycle with bounded lookup and cleanup.
+- strict commands, observations, eligibility and named faults;
+- a local checker consuming detached evidence rather than private store state;
+- measured operation/retained-record/byte resources and finite budgets; and
+- a local counterexample proving the checker can fail.
 
-Exit: response loss cannot create a second runtime start or accepted delivery,
-and no persisted or transmitted agent value contains GitHub credentials.
+Root composition mounts those same modules and records:
 
-### DS7 — Deliver one-PR readiness execution
+- exact cross-owner values and identities at each edge;
+- deterministic choices and one-leaf cuts;
+- local and cross reports, physical attempts/acceptances and generation;
+- resource peak union plus journal/artifact costs; and
+- strict artifact encoding and fresh-object exact replay.
 
-Implement readiness ports, authority, custody, effect adapters, bounded Petrus
-runtime and one-PR application. Enforce terminal correlation before History.
-Pass the exact delivered coding result through mutation publication.
-
-Exit: every readiness cut reconstructs from fresh state, route revocation
-produces workflow-declared outcomes in readiness, and ambiguous effects recover
-lookup-first.
-
-### DS8 — Deliver trusted host custody and fair supervision
-
-Implement concrete composition, provider/agent resource lifetime, catalog,
-lifecycle evidence, fair runnable sequence/lease, detached inspection, bounded
-startup/shutdown, qualification controls, API, process CLI and operator package.
-
-Exit: two already-due PRs progress fairly, credentials remain in trusted
-custody, host uses no workflow/Petrus knowledge, and the service remains
-disabled/non-selectable.
-
-### DS9 — Compose whole Hamsterdan deterministically
-
-Implement five owner-local simulation/checker packages and root composition.
-Prove local counterexamples and cross-only authority/work substitutions. Prove
-the causal mutation vertical with result and work sensitivity.
-
-Exit: resources are a bounded union, exact replay rebuilds fresh object graphs,
-and only the responsible checker reports each injected violation.
-
-### DS10 — Requalify the readiness journey portfolio
-
-Implement twelve acceptance journeys: the eleven accepted semantic journeys
-named in the DS10 record plus exact delivered-result mutation. Apply the
-required timer, revocation, Git-ambiguity and closure overlays. Use replacement
-owners and composed simulation, not V5 fixtures or a second model.
-
-Exit: every journey has visible outcome, authority, stable operation, physical
-effect count, crash/recovery evidence, finite bounds, shrinking and exact replay.
-
-### DS11 — Prove real provider and process correspondence
-
-Run direct evidence against GitHub transport/Git, authenticated Pi where
-approved, fresh filesystem/SQLite state, OS process death, lease expiry and
-bounded multi-PR concurrency.
-
-Exit: each required simulation claim has a named real-seam counterpart and its
-limits are explicit. The replacement service remains disabled.
-
-### DS12 — Cut over and remove V5
-
-After a separate approval, stop the old service, retain old state only for
-bounded rollback, rename replacement source/tests to canonical paths, switch
-package/entry points/deployment, qualify fresh state, and delete current code,
-schemas, configuration and active documentation.
-
-Exit: there is one Hamsterdan runtime and no active V5/Hamsterdan2 concept.
-Old-state deletion remains a later separately approved action.
-
-## Validation matrix
-
-Each DS selects the rows it owns. DS10–DS12 cover the matrix completely.
-
-| Layer | Required evidence | Decisive boundary |
-|---|---|---|
-| Mechanical gate | strict Ruff/format, ty, seven ast-grep rules/fixtures, AST architecture/enum audit | target blocks from DS1; no blanket suppressions |
-| Behavioral unit | every workflow loop, readiness custody/effect group, GitHub operation family, agent lifecycle, host lifecycle/fairness | full transitions and exact typed failures, not private helper calls |
-| Petrus seam | bounded replay, one-occurrence repair, one coordinator action, split Motus phases | no private import or hidden multi-occurrence drain |
-| Storage | fresh History, Dispatch, ingress, review, timer, catalog, route, runnable and webhook stores | transaction interruption/reopen, exact bounds, no old reader |
-| Provider | bounded GitHubKit/httpx, Git object/ref and Pi/workspace operations | one mutation attempt per step, complete lookup, credentials isolated |
-| Local simulation | five owners independently | strict vocabularies, meaningful local counterexample, bounds, replay |
-| Composed simulation | unchanged local modules under one Timeline | cross failures belong only to cross checkers |
-| Journey acceptance | twelve target journeys | outcome, authority, operation, effect count, crash/recovery and bound |
-| Correspondence | provider, Git, Pi, filesystem/SQLite, OS death, lease/concurrency | direct real-seam evidence for required simulation claims |
-| Distribution/operation | source/wheel, entry points, config, inspection and image | fresh install, secret scan, disabled through DS11 |
+A root counterexample changes only the edge under review, leaves owner-local
+checkers green and yields exactly the responsible cross violation. Checker
+output never changes runtime disposition.
 
 ## Required crash cuts
 
-The complete portfolio includes:
+The cumulative portfolio covers:
 
-- ingress manifest/grant stage, entry History acceptance, fold, returned host
-  posture and inbox acknowledgement;
-- bounded History page and one-occurrence repair;
-- Activity request, attempt claim, effect observed, terminal record and
-  workflow projection;
-- timer command, command acknowledgement, maturity claim, maturity History
-  acceptance and exact delivered marks;
-- deferred wake and agent-route settlement;
-- subject selection lease, instance open, readiness return, posture/route
-  recording, requeue and close;
-- agent submit, acceptance, runtime terminal, cancellation, delivery and lookup;
-  and
-- accepted Git/ref or comment mutation with response loss before local terminal.
+- subject registration, lifecycle open, workflow step and posture record;
+- provider inbox retention, manifest/grant stage, History accept/fold, returned
+  acceptance and host acknowledgement;
+- bounded History page, Activity request, occurrence repair, attempt claim,
+  effect observation, terminal record and workflow fold;
+- agent submit, acceptance, runtime terminal, cancellation, receiver delivery
+  and exact delivered lookup;
+- Git/provider acceptance hidden before local terminal;
+- timer command, acknowledgement, maturity claim, maturity History acceptance
+  and exact delivered marks;
+- authority provider/host reads, route/grant movement and effect fence; and
+- catalog page, runnable lease, instance open, readiness return, consequence
+  persistence, tail requeue, terminal close and resource shutdown.
 
-Each test discards process-local state and reconstructs from durable owners.
-Injecting a callback inside an otherwise unbounded operation does not prove an
-exposed production cut.
+Every cut discards process-local frames/objects and rebuilds from durable owners.
+A callback inside an unbounded operation does not prove a production cut.
 
 ## Required finite bounds
 
-Every public command, step, observation, startup page, shutdown turn and
-artifact declares and tests relevant limits for:
+Every applicable public command/call/step/startup/shutdown/artifact declares and
+tests limits for input/output bytes, rows, History records, pages, external
+calls, mutation attempts, retries, elapsed time/deadlines, eligible actions,
+owner steps/leaves, deterministic draws/faults/generations, journal/artifact
+bytes, pending Activities, loaded instances, catalog/route/runnable/timer rows,
+retained terminals and workspace/archive bytes.
 
-```text
-input and output bytes
-rows and History records examined
-pages
-external calls
-provider mutation attempts
-attempts and retries
-elapsed time and deadlines
-eligible actions
-owner steps and leaf calls
-choice draws and active faults
-generations
-journal entries and artifact bytes
-pending Activities
-loaded instances
-catalog, route and runnable rows
-retained terminals
-workspace and archive bytes
-```
-
-A logical-operation limit does not excuse unbounded internal reads. Lowering a
-meaningful limit must produce a typed refusal or replayable budget failure.
+Lowering a meaningful limit must produce a typed refusal or replayable budget
+failure. A logical-operation cap does not excuse an unbounded internal read.
 
 ## Stop conditions
 
-Delivery stops for Navigator review when:
+Stop for Navigator review when:
 
-- a story requires a compatibility reader, state migration, dual writer,
-  selector or active second runtime;
-- package ownership or an import edge must differ from
-  [the architecture](architecture.md);
-- a DS-review API choice changes fixed behavior rather than naming/composition;
-- bounded execution requires private Petrus inspection or hides more than one
-  effect attempt in a step;
-- provider or agent credentials would cross their fixed custody boundary;
-- a process restart depends on a saved coroutine, local return or exception;
-- a local simulation cannot mount the real production owner;
-- a cross property can pass without a real data dependency;
-- real correspondence contradicts deterministic semantics; or
-- DS12 cannot remove active V5/Hamsterdan2 concepts without compatibility code.
+- a “tracer” can pass from component-only evidence or uses a fake downstream
+  owner;
+- the chosen increment introduces several new major chains and cannot be
+  reviewed as one behavior;
+- a concrete API is designed without its first real producer/consumer;
+- package ownership/imports differ from [the architecture](architecture.md);
+- compatibility reader, migration, dual writer, selector or active second
+  runtime is proposed;
+- bounded execution needs private Petrus state or hides repeated effects;
+- credentials cross fixed custody, or recovery trusts a frame/return/exception;
+- local simulation cannot mount production code, or a cross property has no
+  real data dependency;
+- required real correspondence contradicts deterministic semantics; or
+- DS12 cannot remove all active generation concepts without compatibility.
 
 ## Completion
 
-CV20 completes only when all twelve stories are accepted, current project truth
-describes the resulting single runtime, and DS12's separately approved cutover
-has produced canonical Hamsterdan on fresh state. Historical records remain
-unchanged as dated evidence; active code, configuration, schemas, deployment
-and operator language contain no generation label.
+CV20 completes only after all twelve stories are accepted and the separately
+approved DS12 cutover leaves one canonical Hamsterdan on fresh state. Historical
+records keep their dated terminology; active product, project, process,
+distribution, deployment, schema and operator truth contain no generation label.

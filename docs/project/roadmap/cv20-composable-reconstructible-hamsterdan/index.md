@@ -2,11 +2,12 @@
 code: CV20
 level: Value
 status: Planned
-status_reason: ES-010 is promoted with twelve planned Delivery Stories; none is pulled while CV19 remains active
+status_reason: ES-010 is promoted as eleven planned tracer Delivery Stories plus cutover; none is pulled while CV19 remains active
 updated: 2026-08-27
 related:
   - ../../exploration/es10-composable-hamsterdan-architecture/index.md
   - ../../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md
+  - ../../decisions/records/2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md
   - ../cv19-private-v0-1-production/index.md
   - architecture.md
   - api-contracts.md
@@ -44,23 +45,32 @@ bounds, and exact deterministic replay.
 CV20 is self-contained for implementation and review. Read these local owners
 in order:
 
-1. [Architecture](architecture.md) — fixed decisions, package ownership, exact
-   source tree, import graph, runtime shape, durable authority and vocabulary.
+1. [Architecture](architecture.md) — fixed decisions, package ownership,
+   reviewed initial source map, import graph, runtime shape, durable authority
+   and vocabulary.
 2. [API contracts](api-contracts.md) — values, capabilities, identities,
    failures, bounded cuts, fixed names, and explicit DS-review questions.
-3. [Delivery sequence](delivery-sequence.md) — dependency graph, state after
-   each story, cross-story handoffs, validation matrix, crash cuts, bounds and
-   stop conditions.
-4. [Replacement ledger](replacement-ledger.md) — module deletion test, exact
-   test tree, quality gate, 61/61 source and 46/46 test dispositions, fresh
-   stores, cleanup and cutover inventory.
+3. [Delivery sequence](delivery-sequence.md) — tracer definition, linear graph,
+   focused API review, state after each story, cumulative DST/observability,
+   crash cuts, bounds and stop conditions.
+4. [Replacement ledger](replacement-ledger.md) — module deletion test, reviewed
+   initial test map, quality gate, 61/61 source and 46/46 test dispositions,
+   fresh stores, cleanup and cutover inventory.
 5. The selected Delivery Story — its owned paths, local contract slice,
-   implementation order, API-strengthening questions and acceptance evidence.
+   vertical path, component Technical Stories, API-strengthening questions and
+   acceptance evidence.
 
 These CV20 documents are the normative replacement design. Each DS Plan
 Checkpoint may strengthen a listed DS-review name or signature and must update
 the affected CV20 owner. It may not recover an alternative from exploration or
 change a fixed boundary without a new Navigator ruling.
+
+Delivery proceeds as a tracer ladder. Each of DS1–DS11 deepens one real
+production spine from an external/operator/simulation command to a bounded
+visible posture, durable workflow request, or accepted effect. Component work
+is reviewable Technical Story work inside that tracer, not a separately
+accepted horizontal layer. Deterministic simulation, observability, crash
+recovery, finite bounds and applicable correspondence ship with every tracer.
 
 ## Exploration provenance
 
@@ -75,40 +85,32 @@ canonical CV20 contract, CV20 governs Delivery.
 ## Delivery graph
 
 ```text
-DS1 replacement gate
- ├─ DS2 Petrus/Motus seams
- ├─ DS3 workflow
- ├─ DS4 simulation runtime
- ├─ DS5 GitHub provider
- └─ DS6 agents
-
-DS2 + DS3 + DS4 + DS5 + DS6 ──▶ DS7 readiness
-DS6 + DS7                    ──▶ DS8 host
-DS3 + DS4 + DS5 + DS6 + DS7 + DS8 ──▶ DS9 composition
-DS7 + DS8 + DS9              ──▶ DS10 journeys
-DS8 + DS10                   ──▶ DS11 correspondence
-DS10 + DS11                  ──▶ DS12 cutover
+DS1 bounded PR lifecycle -> DS2 observation -> DS3 Activity
+  -> DS4 GitHub effect -> DS5 agent round -> DS6 causal mutation
+  -> DS7 CI/repair -> DS8 timers -> DS9 authority/lifecycle
+  -> DS10 multi-PR fairness -> DS11 qualification -> DS12 cutover
 ```
 
 ## Delivery
 
-1. [CV20.DS1 — Establish the replacement-tree gate](cv20-ds1-replacement-tree-gate.md)
-2. [CV20.DS2 — Own bounded Petrus and Motus execution seams](cv20-ds2-bounded-petrus-motus-execution-seams.md)
-3. [CV20.DS3 — Deliver the pure readiness workflow](cv20-ds3-pure-readiness-workflow.md)
-4. [CV20.DS4 — Deliver the Hamsterdan simulation runtime](cv20-ds4-hamsterdan-simulation-runtime.md)
-5. [CV20.DS5 — Deliver strict GitHub provider operations](cv20-ds5-strict-github-provider-operations.md)
-6. [CV20.DS6 — Deliver reconstructible agent execution](cv20-ds6-reconstructible-agent-execution.md)
-7. [CV20.DS7 — Deliver one-PR readiness execution](cv20-ds7-one-pr-readiness-execution.md)
-8. [CV20.DS8 — Deliver trusted host custody and fair supervision](cv20-ds8-trusted-host-custody-fair-supervision.md)
-9. [CV20.DS9 — Compose whole Hamsterdan deterministically](cv20-ds9-whole-hamsterdan-deterministic-composition.md)
-10. [CV20.DS10 — Requalify the readiness journey portfolio](cv20-ds10-readiness-journey-portfolio.md)
-11. [CV20.DS11 — Prove real provider and process correspondence](cv20-ds11-real-provider-process-correspondence.md)
+1. [CV20.DS1 — Establish the first bounded PR lifecycle](cv20-ds1-first-bounded-pr-lifecycle.md)
+2. [CV20.DS2 — Admit and fold one PR observation](cv20-ds2-admit-fold-pr-observation.md)
+3. [CV20.DS3 — Expose one workflow-declared Activity](cv20-ds3-expose-workflow-activity.md)
+4. [CV20.DS4 — Settle one GitHub Activity lookup-first](cv20-ds4-settle-github-activity.md)
+5. [CV20.DS5 — Settle one reconstructible agent round](cv20-ds5-settle-agent-round.md)
+6. [CV20.DS6 — Publish one causally aligned mutation](cv20-ds6-publish-causal-mutation.md)
+7. [CV20.DS7 — Recover CI and repair escalation](cv20-ds7-recover-ci-repair-escalation.md)
+8. [CV20.DS8 — Recover timers and deferred work](cv20-ds8-recover-timers-deferred-work.md)
+9. [CV20.DS9 — Fence lifecycle and authority changes](cv20-ds9-fence-lifecycle-authority.md)
+10. [CV20.DS10 — Supervise multiple PRs fairly](cv20-ds10-supervise-multiple-prs-fairly.md)
+11. [CV20.DS11 — Qualify journeys and real-seam correspondence](cv20-ds11-qualify-journeys-correspondence.md)
 12. [CV20.DS12 — Cut over and remove V5](cv20-ds12-cutover-remove-v5.md)
 
-Every Delivery Story is `Planned`. Before implementation, the selected story
-must expand into one or more User or Technical Stories and pass its own Plan
-Checkpoint. Promotion does not pull DS1, authorize a deployment, or change
-CV19's active priority.
+Every Delivery Story is `Planned`. Before implementation, the selected tracer
+must expand into one or more User/Technical Stories and pass its own Plan
+Checkpoint. Component Technical Stories cannot close the tracer without its
+real vertical acceptance. Promotion does not pull DS1, authorize a deployment,
+or change CV19's active priority.
 
 ## Done condition
 

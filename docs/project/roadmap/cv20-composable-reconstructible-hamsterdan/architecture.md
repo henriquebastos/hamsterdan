@@ -15,7 +15,7 @@ CV20 uses two design states:
   update.
 - **DS review** means the behavior and owner are fixed, but a concrete class,
   function, parameter, field, or exception name is intentionally left for that
-  Delivery Story's API-strengthening Plan Checkpoint.
+  tracer Delivery Story's API-strengthening Plan Checkpoint.
 
 There is no implicit third state in the exploration. If implementation exposes
 a missing choice, the Driver records it as a DS-review question instead of
@@ -52,6 +52,8 @@ new state ─────────── replacement only ──────�
 | Concern | Fixed decision | Consequence |
 |---|---|---|
 | Delivery strategy | Build a parallel, non-selectable replacement and perform one final cutover | No story before DS12 changes the installed runtime |
+| Delivery increment | DS1–DS11 are progressively deepened vertical tracer bullets | Component implementation is Technical Story work and cannot close Delivery without a bounded end-to-end outcome |
+| API design | Semantics and ownership are contract-first; concrete signatures are call-site-proven in the first tracer that uses them | Producer, consumer, deterministic seam and observation surface are reviewed together; no speculative compatibility API |
 | Compatibility | Do not migrate state, read old schemas, preserve old imports, or add artifact readers | A compatibility adapter is an architecture violation, not deferred work |
 | Value ownership | Values stay with the package that defines their meaning | The target has no neutral `contracts` package |
 | Workflow | `workflow` owns pure workflow meaning, including observations, facts, Activity work and terminals, and loop state | Workflow imports no runtime, provider, agent, host, clock, filesystem, HTTP, or database effect |
@@ -67,6 +69,7 @@ new state ─────────── replacement only ──────�
 | Bounded execution | Production and simulation expose claim/start, effect-observed/execute, and terminal-recorded/finish cuts | Process-local frames and returned values are never recovery authority |
 | Simulation runtime | Hamsterdan owns one semantic-free synchronous `Timeline`; `CoroutineStepper` is internal | The runtime schedules one owner action and at most one leaf without understanding domain meaning |
 | Simulation ownership | Workflow, readiness, GitHub, agents, and host each own their local simulation and checker | Root composition mounts those unchanged modules and owns only cross-module properties |
+| Tracer evidence | Every tracer ships deterministic composition, local/cross checker evidence, named crash cuts, resource gauges and applicable real-seam correspondence | DST, observability and correspondence cannot be deferred to a later integration phase |
 | Causal mutation | Real workflow `MutWork` creates the agent request; the exact delivered `CodingResult` reaches Git publication; `Pushed` returns to the original occurrence | Equality-by-reconstruction or co-mounting is insufficient evidence |
 | Quality gate | The CV20 replacement gate defined in the ledger blocks the replacement tree from DS1 onward | The old tree keeps its current checks until deletion; the target receives no broad suppressions |
 | Naming | `hamsterdan2` is construction-only; V5 names do not enter replacement APIs | DS12 removes both temporary generation labels from active truth |
@@ -88,12 +91,51 @@ Crossing a package boundary does not make a value neutral. For example,
 `MutWork` remains workflow-owned when readiness executes it, and
 `CodingResult` remains agent-owned when readiness publishes it.
 
-## Exact replacement source tree
+## Tracer verticality contract
 
-The tree is a placement contract. New modules require the deletion test: the
-module must own a coherent responsibility that would otherwise be duplicated
-or mixed into a different owner. One command, value, fault, or class is not by
-itself a reason to create a module.
+A Delivery Story is a tracer only when all of these are true:
+
+1. it begins at an external, operator, or deterministic-simulation command;
+2. it enters through the real `host` composition and every production owner
+   relevant to the behavior;
+3. it ends in a bounded visible posture, durable workflow request, or accepted
+   external effect;
+4. downstream code owned by Hamsterdan is not replaced by a permissive mock;
+5. the same change adds owner-local behavioral evidence, root deterministic
+   composition, checker sensitivity, named cuts, exact replay and resource
+   bounds; and
+6. a newly introduced external seam gains direct correspondence in that tracer
+   or records an explicitly approved/unavailable qualification blocker.
+
+For example, defining a provider observation value is component work. Taking
+bounded raw webhook input through provider normalization, host custody,
+readiness admission, the real workflow fold and detached posture is a tracer.
+The provider value, custody store and fold may land as small green Technical
+Stories, but the Delivery Story remains open until the vertical result exists.
+
+Each tracer introduces at most one major new effect family, custody state
+machine, authority policy, concurrency dimension, or causal chain. If one
+review would have to reason about several new chains simultaneously, split the
+tracer rather than broadening its acceptance surface.
+
+The first real call site also carries every fixed cross-cutting obligation it
+needs: complete applicable authority, stable identity, recovery, bounds and
+observation. Those obligations cannot be deferred as “integration,” but they
+also cannot be used to hide a second new policy or causal chain in the tracer.
+
+## Reviewed initial replacement source map
+
+The package set and ownership boundaries are fixed. The module paths below are
+the reviewed initial placement map, not an immutable 89-file prescription. The
+owning tracer may merge or split modules during its API-strengthening Plan
+Checkpoint when the deletion test demonstrates a clearer responsibility. It
+must update this map and the replacement ledger before implementation.
+
+New or split modules require the deletion test: the module must own a coherent
+responsibility that would otherwise be duplicated or mixed into a different
+owner. One command, value, fault, or class is not by itself a reason to create
+a module. Merging files may not merge package ownership or create forbidden
+imports.
 
 ```text
 src/hamsterdan2/
@@ -336,6 +378,12 @@ Each owner-local module supplies strict semantic commands, observations,
 eligibility, faults, retained state, resource gauges and its local checker.
 Root composition supplies concrete adapters and checks only relationships
 between owners.
+
+This shape exists from the first tracer and thickens with production behavior.
+There is no late simulation-composition phase. Each tracer adds the local
+vocabulary and checker evidence for its new owner behavior, mounts those same
+production owners in root composition, records exact operations/cuts/resource
+peaks, and replays from a fresh object graph.
 
 The required cross-module mutation proof is:
 

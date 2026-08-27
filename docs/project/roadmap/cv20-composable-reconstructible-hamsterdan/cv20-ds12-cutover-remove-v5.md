@@ -2,12 +2,11 @@
 code: CV20.DS12
 level: Delivery Story
 status: Planned
-status_reason: Waits for accepted CV20.DS10 and CV20.DS11 plus explicit cutover approval
+status_reason: Waits for accepted CV20.DS11 plus explicit cutover approval
 updated: 2026-08-27
 related:
   - index.md
-  - cv20-ds10-readiness-journey-portfolio.md
-  - cv20-ds11-real-provider-process-correspondence.md
+  - cv20-ds11-qualify-journeys-correspondence.md
   - architecture.md
   - api-contracts.md
   - delivery-sequence.md
@@ -66,7 +65,7 @@ relay test remains canonical and is not part of that Python census.
 
 ## Fixed design
 
-- DS12 starts only after accepted DS10/DS11 evidence, a fresh full qualification
+- DS12 starts only after accepted DS11 evidence, a fresh full qualification
   run and explicit Navigator/operator approval of shared actions.
 - The existing V5-only operational decision remains in force until the cutover
   decision supersedes it. There is no pre-DS12 selector or shadow runtime.
@@ -93,15 +92,15 @@ relay test remains canonical and is not part of that Python census.
 
 ## Position and predecessors
 
-Requires accepted CV20.DS10 and DS11, explicit Navigator approval for shared
-deployment/state actions, and a cutover decision that supersedes the current
-V5-only operational decision.
+Requires accepted CV20.DS11, explicit Navigator approval for shared deployment/
+state actions, and a cutover decision that supersedes the current V5-only
+operational decision. DS11 already incorporates the accepted DS1–DS10 evidence.
 
 ## Implementation sequence
 
 1. Rule the cutover command/evidence API below and expand DS12 into preparation,
    shared action, fresh-runtime qualification and no-return cleanup stories.
-2. Re-run DS10/DS11/full gates on the exact candidate revision; record artifacts,
+2. Re-run DS11/full gates on the exact candidate revision; record artifacts,
    dependency versions, resource bounds and correspondence limits.
 3. Inventory active service/routes/operations; drain or reconcile them by stable
    identity, then stop and fence the current service.

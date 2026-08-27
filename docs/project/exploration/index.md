@@ -16,7 +16,7 @@ Paused, Candidate, Promoted, or Archived.
   its ruled package ownership, bounded execution, provider/agent separation,
   and compositional simulation candidate entered
   [planned CV20](../roadmap/cv20-composable-reconstructible-hamsterdan/index.md)
-  as twelve Delivery Stories; none is pulled.
+  as eleven vertical tracer Delivery Stories plus cutover; none is pulled.
 - [ES-001 — Simplify the Petri Net at the Motus boundary](es1-petri-net-motus-boundary/index.md):
   its Activity ownership and durable-execution conclusions entered production.
 - [ES-007 — The complete V5 Hamsterdan](es7-v5-hamsterdan/index.md): its
