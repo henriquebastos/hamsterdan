@@ -83,6 +83,12 @@ questions while terms are reviewed one at a time. Accepted language belongs in
 the project glossary; the analysis does not replace this Value's canonical
 architecture, API contracts or Delivery Stories.
 
+## Pending audit rulings
+
+The [DS4–DS13 pending-rulings register](pending-rulings.md) preserves
+reconciled audit evidence and recommendations for later Navigator review. It is
+not canonical acceptance and changes no Delivery Story or decision.
+
 ## Exploration provenance
 
 [ES-010](../../exploration/es10-composable-hamsterdan-architecture/index.md)
