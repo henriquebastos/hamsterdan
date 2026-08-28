@@ -7,9 +7,12 @@ related:
   - ../es9-human-codebase-ownership/index.md
   - ../../roadmap/cv18-deterministic-readiness-simulation/index.md
   - ../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md
+  - ../../roadmap/cv21-composable-outer-hamsterdan/index.md
+  - ../../roadmap/cv22-decomposable-readiness-workflow/index.md
   - ../../decisions/records/2026-08-01T0203Z-hamsterdan-is-a-standalone-petrus-application.md
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
   - ../../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md
+  - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
 ---
 
 # ES-010: Composable Hamsterdan architecture
@@ -17,13 +20,16 @@ related:
 ## Promotion status
 
 This exploration is complete and retained as provenance. The canonical,
-self-contained implementation contract is now
-[CV20](../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md),
-especially its local architecture, API contract, delivery sequence,
-replacement ledger and selected Delivery Story. Those records own current
-design truth and implementation order. The alternatives, experiment-era names
-and possibilities below are not implementation inputs; where wording differs,
-CV20 governs Delivery.
+self-contained implementation owners are now
+[CV21](../../roadmap/cv21-composable-outer-hamsterdan/index.md) for the new outer
+system over one temporary current-Net bridge and
+[CV22](../../roadmap/cv22-decomposable-readiness-workflow/index.md) for the
+recursive production-subnet workflow, bridge removal, and final cutover.
+[CV20](../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md)
+preserves the superseded integrated design and its review evidence. The
+alternatives, experiment-era names and possibilities below are not
+implementation inputs; where wording differs, the owning CV21 or CV22 record
+governs Delivery.
 
 ## Inquiry
 
@@ -1205,9 +1211,11 @@ blocking the engineering style contract gate, a 61/61 current-source disposition
 seam and V5 cleanup inventories, twelve dependency-ordered green Delivery
 Stories, the complete validation matrix, and promoted Capability Value. The
 Navigator accepted its Experience Report and promoted the candidate on
-2026-08-27 as
-[planned CV20 — Composable, reconstructible Hamsterdan](../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md).
-All twelve Delivery Stories remain Planned; none is pulled. Current V5 remains
-the only runtime until a separately approved DS12 cutover makes the replacement
-canonical Hamsterdan and removes both the V5 and temporary Hamsterdan2 runtime
-concepts. No production implementation or deployment change has begun.
+2026-08-27 as CV20. The
+[later fragmentation decision](../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md)
+dropped [that integrated plan](../../roadmap/cv20-composable-reconstructible-hamsterdan/index.md)
+before implementation. CV21 now owns outer reconstruction through one retained-
+Net bridge and CV22 owns recursive production-subnet workflow replacement and
+final cutover. Neither successor is pulled. Current V5 remains the only runtime
+until a separately approved CV22 cutover; no replacement implementation or
+deployment change has begun.

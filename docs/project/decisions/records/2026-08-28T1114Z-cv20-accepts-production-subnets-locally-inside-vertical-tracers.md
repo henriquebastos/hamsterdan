@@ -3,6 +3,8 @@ status: Decided
 raised: 2026-08-28
 decided: 2026-08-28
 recorded: 2026-08-28T1114Z
+superseded_in_part_by:
+  - 2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
 deciders:
   - Henrique (Navigator)
 related:
@@ -51,3 +53,10 @@ finish every isolated subnet before testing their edges.
   composed through that same subnet to a durable dashboard Activity.
 - The existing vertical-tracer decision remains in force. Green component work
   is reviewable and locally acceptable, but insufficient Delivery evidence.
+
+## Partial supersession
+
+CV20 was later dropped before implementation. CV22 now owns this production-
+subnet rule recursively, including subnets composed from other subnets. CV21
+owns only adapter-local correspondence around the retained workflow and does not
+implement a replacement production subnet.

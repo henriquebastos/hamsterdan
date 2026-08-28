@@ -1,8 +1,8 @@
 ---
 code: CV20.DS3
 level: Delivery Story
-status: Planned
-status_reason: Design and API review accepted; implementation waits for accepted CV20.DS2 and a public bounded Petrus one-occurrence seam
+status: Dropped
+status_reason: Parent CV20 was superseded before implementation by CV21 and CV22; its accepted dashboard design is retained for CV22
 updated: 2026-08-28
 related:
   - index.md

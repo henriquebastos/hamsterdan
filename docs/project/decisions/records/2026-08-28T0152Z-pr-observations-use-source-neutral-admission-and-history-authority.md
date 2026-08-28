@@ -7,6 +7,7 @@ deciders:
   - Henrique (Navigator)
 related:
   - CV20.DS2
+  - CV21.DS2
   - 2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md
 ---
 

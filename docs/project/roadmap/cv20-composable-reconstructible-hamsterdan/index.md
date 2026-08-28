@@ -1,18 +1,21 @@
 ---
 code: CV20
 level: Value
-status: Planned
-status_reason: ES-010 is promoted as twelve planned tracer Delivery Stories plus cutover; none is pulled while CV19 remains active
+status: Dropped
+status_reason: Superseded before implementation by CV21 outer-system reconstruction and CV22 workflow replacement; retained as integrated design history
 updated: 2026-08-28
 related:
   - ../../exploration/es10-composable-hamsterdan-architecture/index.md
   - ../../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md
+  - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
   - ../../decisions/records/2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md
   - ../../decisions/records/2026-08-28T0152Z-pr-observations-use-source-neutral-admission-and-history-authority.md
   - ../../decisions/records/2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
   - ../../decisions/records/2026-08-28T1113Z-dashboard-closure-converges-before-generation-close.md
   - ../../decisions/records/2026-08-28T1114Z-cv20-accepts-production-subnets-locally-inside-vertical-tracers.md
   - ../cv19-private-v0-1-production/index.md
+  - ../cv21-composable-outer-hamsterdan/index.md
+  - ../cv22-decomposable-readiness-workflow/index.md
   - architecture.md
   - api-contracts.md
   - delivery-sequence.md
@@ -20,6 +23,14 @@ related:
 ---
 
 # CV20 — Composable, reconstructible Hamsterdan
+
+> **Superseded 2026-08-28:** CV20 was not implemented. Its integrated
+> complete-replacement plan is preserved for comparison and provenance. Current
+> delivery ownership is [CV21](../cv21-composable-outer-hamsterdan/index.md) for
+> the new outer system over one temporary bridge and
+> [CV22](../cv22-decomposable-readiness-workflow/index.md) for the recursive
+> production-subnet workflow, bridge removal, and final cutover. The remainder
+> of this record describes the superseded CV20 plan and is not pullable work.
 
 ## Intent
 

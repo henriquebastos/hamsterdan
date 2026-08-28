@@ -16,13 +16,17 @@ belongs in each item's own metadata; this index routes to current owners.
 
 ## Planned
 
-- [CV20 — Composable, reconstructible Hamsterdan](cv20-composable-reconstructible-hamsterdan/index.md):
-  ES-010's accepted architecture is promoted as twelve progressively deepened
-  vertical tracer Delivery Stories and one final cutover story. Configured-
-  repository recovery now includes bounded discovery of unknown eligible open
-  PRs before final qualification and cutover. None is pulled;
-  the replacement remains non-selectable construction work while CV19 stays
-  the only active Value and V5 stays the only current runtime.
+- [CV21 — Composable outer Hamsterdan over the retained workflow](cv21-composable-outer-hamsterdan/index.md):
+  twelve progressively deepened tracers rebuild GitHub, agents, readiness,
+  host, operator, custody, authority, effects, discovery, fairness, and
+  Hamsterdan-owned DST around one temporary bridge to the current working Net.
+  No workflow loop is reimplemented and no story is pulled.
+- [CV22 — Decomposable PR-readiness workflow](cv22-decomposable-readiness-workflow/index.md):
+  replace the bridge with recursively independent production subnets, beginning
+  from the accepted dashboard design, then remove V5 and perform the separately
+  approved final cutover. Its known subnet stories are manifested at low detail;
+  pull order and implementation detail wait for the typed subnet-boundary and
+  abstract/concrete conformance ruling.
 
 ## Paused until after private v0.1
 
@@ -46,11 +50,18 @@ belongs in each item's own metadata; this index routes to current owners.
   eleven semantic journeys plus fresh GitHub clean-green, transient-CI, and
   complete three-actor evidence were accepted before V5 became the sole runtime.
 
+## Dropped
+
+- [CV20 — Composable, reconstructible Hamsterdan](cv20-composable-reconstructible-hamsterdan/index.md):
+  superseded before implementation by CV21's outer-system reconstruction and
+  CV22's workflow replacement. Its integrated architecture, API contracts,
+  reviews, pending rulings, concept analysis, and thirteen stories remain
+  historical design evidence and comparison surfaces.
+
 The current topology ruling is
 [V5 is the only runtime and retired topology state fails closed](../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md).
-The
-[CV20 planning decision](../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md)
+The [CV20 fragmentation decision](../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md)
 does not supersede that operational truth: sharded V5, the former production
-topology, and the planned replacement are not available runtime choices. A
-separately approved CV20.DS13 cutover will make the replacement canonical
-Hamsterdan and remove the V5 and Hamsterdan2 runtime concepts together.
+topology, CV21, and pre-cutover CV22 are not available runtime choices. A
+separately approved final CV22 cutover will make the replacement canonical
+Hamsterdan and remove the bridge, V5, and Hamsterdan2 runtime concepts together.

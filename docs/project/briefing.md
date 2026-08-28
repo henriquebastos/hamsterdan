@@ -77,6 +77,17 @@ approved supervised launch and one bounded monitoring proof. Launch still
 requires explicit approval because durable webhook state can cause GitHub
 effects.
 
+Beyond CV19, [CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) is the
+planned non-selectable reconstruction of the outer system over one temporary
+bridge to the current working Net.
+[CV22](roadmap/cv22-decomposable-readiness-workflow/index.md) then replaces that
+bridge with recursively independent production subnets and owns final cutover.
+The former integrated
+[CV20](roadmap/cv20-composable-reconstructible-hamsterdan/index.md) plan was
+dropped before implementation and remains design history. Neither successor is
+a runtime choice; V5 remains the sole runtime until a separately approved CV22
+cutover.
+
 The pinned Petrus source dependency is currently private. Orb installation uses
 a dedicated project-scoped `PETRUS_GITHUB_TOKEN`, removes temporary Git
 authority on every outcome, and does not put that token in host runtime state.

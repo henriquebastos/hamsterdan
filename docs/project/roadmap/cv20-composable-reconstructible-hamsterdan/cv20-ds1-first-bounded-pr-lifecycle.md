@@ -1,8 +1,8 @@
 ---
 code: CV20.DS1
 level: Delivery Story
-status: Planned
-status_reason: Promoted with CV20; the first tracer is not pulled
+status: Dropped
+status_reason: Parent CV20 was superseded before implementation by CV21 and CV22; this reviewed story is retained as design evidence
 updated: 2026-08-28
 related:
   - index.md

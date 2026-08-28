@@ -5,6 +5,7 @@ decided: 2026-08-27
 recorded: 2026-08-27T1925Z
 superseded_in_part_by:
   - 2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
+  - 2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
 deciders:
   - Henrique (Navigator)
 related:
@@ -72,3 +73,8 @@ before implementation.
 The configured-repository recovery decision inserts DS10 discovery and
 renumbers the later stories. The vertical-tracer contract remains unchanged;
 the current sequence is twelve tracers plus DS13 cutover.
+
+The later CV20-fragmentation decision drops that integrated sequence before
+implementation. The vertical-tracer rule remains active: CV21 applies it to
+twelve outer-system tracers through the retained-Net bridge, and CV22 applies it
+to locally accepted production subnets and their composed root tracers.

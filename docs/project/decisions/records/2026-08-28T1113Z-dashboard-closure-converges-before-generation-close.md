@@ -10,6 +10,7 @@ related:
   - CV20.DS3
   - CV20.DS4
   - CV20.DS9
+  - CV22
   - 2026-08-11T0000Z-lifecycle-scopes-close-generations-before-canceling-effects.md
 ---
 

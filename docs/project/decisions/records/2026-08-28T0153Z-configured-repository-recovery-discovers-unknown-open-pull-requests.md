@@ -13,6 +13,9 @@ related:
   - CV20.DS9
   - CV20.DS10
   - CV20.DS11
+  - CV21.DS9
+  - CV21.DS10
+  - CV21.DS11
 ---
 
 # Configured-repository recovery discovers unknown open pull requests

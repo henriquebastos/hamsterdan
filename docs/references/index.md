@@ -78,13 +78,20 @@
   `petrus.testing.dst.runner/v1` outer-process containment contract. A killed
   call yields an acknowledged prefix and unfinished attempt, never a fabricated
   replay artifact.
-- CV20.DS2 dependency gap at that exact pin: public identified delivery can
+- CV21.DS2–DS3 dependency gap at that exact pin: public identified delivery can
   report prior acknowledgement, but Hamsterdan has no public bounded seam to
-  resume one accepted-and-begun nonterminal occurrence. DS2 must not access
+  resume one accepted-and-begun nonterminal occurrence. CV21 must not access
   internal Petrus `Instance` state or collapse accepted/folded cuts. Crash
   recovery remains blocked until Petrus implements, tests and releases a public
   accept/resume-one-accepted-unfinished-occurrence seam and Hamsterdan pins and
   qualifies that release.
+- CV22 hierarchy evidence inspected 2026-08-28:
+  `henriquebastos/petrus@2d26d34de9a1b34b7489ee2207f3492e777a282a`.
+  Public `NetSpec` nested stamping flattens child paths into one built Net and
+  rejects a stamped child's root-completion declaration. This proves reusable
+  structural composition, not that an arbitrary child subnet is behaviorally
+  equivalent to one abstract transition. CV22 must rule and prove any
+  parent-first contract substitution separately.
 
 ## GitHub documentation
 
@@ -108,7 +115,7 @@ Authoritative GitHub documentation inspected 2026-08-01:
 - <https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api>
 - <https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api>
 
-CV20 uses the list endpoint only for bounded candidate discovery in
+CV21 uses the list endpoint only for bounded candidate discovery in
 operator-configured repositories. An exact get precedes registration and common
 observation admission. Pagination and rate-limit documentation constrain DS4
 transport and DS10 pass custody; they do not establish an atomic repository

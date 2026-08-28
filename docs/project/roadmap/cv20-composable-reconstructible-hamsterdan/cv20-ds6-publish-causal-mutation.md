@@ -1,9 +1,9 @@
 ---
 code: CV20.DS6
 level: Delivery Story
-status: Planned
-status_reason: Waits for accepted CV20.DS5 and is not pulled
-updated: 2026-08-27
+status: Dropped
+status_reason: Parent CV20 was superseded before implementation by CV21 and CV22; this audited story is retained as design evidence
+updated: 2026-08-28
 related:
   - index.md
   - cv20-ds5-settle-agent-round.md

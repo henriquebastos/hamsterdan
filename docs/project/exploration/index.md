@@ -14,10 +14,14 @@ Paused, Candidate, Promoted, or Archived.
 
 - [ES-010: Composable Hamsterdan architecture](es10-composable-hamsterdan-architecture/index.md):
   its ruled package ownership, bounded execution, provider/agent separation,
-  and compositional simulation candidate entered
-  [planned CV20](../roadmap/cv20-composable-reconstructible-hamsterdan/index.md)
-  as twelve vertical tracer Delivery Stories plus cutover after the later E1
-  recovery ruling added bounded unknown-open-PR discovery; none is pulled.
+  and compositional simulation candidate first entered
+  [superseded CV20](../roadmap/cv20-composable-reconstructible-hamsterdan/index.md)
+  as one integrated replacement. Current delivery is split between
+  [planned CV21](../roadmap/cv21-composable-outer-hamsterdan/index.md), which
+  rebuilds the outer system over one retained-Net bridge, and
+  [planned CV22](../roadmap/cv22-decomposable-readiness-workflow/index.md),
+  which replaces the workflow through recursively independent production
+  subnets and owns final cutover. None is pulled.
 - [ES-001 — Simplify the Petri Net at the Motus boundary](es1-petri-net-motus-boundary/index.md):
   its Activity ownership and durable-execution conclusions entered production.
 - [ES-007 — The complete V5 Hamsterdan](es7-v5-hamsterdan/index.md): its

@@ -1,8 +1,9 @@
 ---
-status: Decided
+status: Superseded
 raised: 2026-08-27
 decided: 2026-08-27
 recorded: 2026-08-27T1604Z
+superseded_by: 2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
 superseded_in_part_by:
   - 2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
 deciders:
@@ -16,6 +17,11 @@ related:
 ---
 
 # Composable Hamsterdan is the planned replacement architecture
+
+> **Superseded 2026-08-28:** CV20's integrated replacement was not
+> implemented. CV21 now owns the outer-system reconstruction over one temporary
+> current-Net bridge, and CV22 owns the workflow replacement, bridge removal,
+> and final cutover. This record preserves the original integrated strategy.
 
 ## Decision
 

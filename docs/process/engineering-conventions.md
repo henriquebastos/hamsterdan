@@ -15,13 +15,18 @@ quality gate when one clear test owner can enforce it.
 
 1. Import Petrus concepts from their defining ownership modules; never from the
    empty `petrus` root and never from an `impetus` compatibility namespace.
-2. The host is the only concrete composition root. Sibling provider and domain
-   packages share neutral contracts but do not import one another. Engine,
-   concrete Dispatch, and Worker custody remain under `host`.
-3. The readiness Net owns routing and workflow state. Activities perform typed,
-   Petri-agnostic work and return frozen JSON-faithful results. If an Activity
-   cannot derive cleanly, first inspect whether routing, classification, a join,
-   reservation, or authority transfer is hidden outside the Net.
+2. The host is the only concrete application composition root. In current V5,
+   Engine, concrete Dispatch, and Worker custody remain under `host`, and
+   provider/domain siblings share only neutral contracts. In non-selectable
+   `hamsterdan2`, the more specific CV21/CV22 architecture applies: readiness
+   owns one-PR Petrus execution and receives concrete capabilities from host
+   composition; workflow owns pure boundary and later Net meaning.
+3. The workflow Net owns routing and workflow state. In current V5 it lives
+   under readiness; in CV22 it lives under the workflow owner behind CV21's
+   unchanged boundary. Activities perform typed, Petri-agnostic work and return
+   frozen JSON-faithful results. If an Activity cannot derive cleanly, first
+   inspect whether routing, classification, a join, reservation, or authority
+   transfer is hidden outside the Net.
 4. Normalize provider data at the boundary. GitHubKit and provider HTTP values
    remain in `github_app`; FastAPI remains at the host HTTP boundary. Do not let
    SDK or HTTP types cross into contracts, readiness, or the Net. A third-party
