@@ -11,27 +11,28 @@ related:
   - api-contracts.md
   - delivery-sequence.md
   - replacement-ledger.md
+  - ../../decisions/records/2026-08-28T1113Z-dashboard-closure-converges-before-generation-close.md
 ---
 
 # CV20.DS4 — Settle one GitHub Activity lookup-first
 
 ## Outcome
 
-Execute the DS3 `DashReq` through a real readiness adapter and bounded GitHub
-provider implementation. Complete lookup precedes at most one publication
-attempt; an accepted-but-hidden response is recovered in a later step; the
-exact typed `DashLanded` terminal returns to the original Activity occurrence
-and the real workflow fold updates posture.
+Execute the DS3 `DashboardPublication` through a real readiness adapter and
+bounded GitHub provider implementation. Complete lookup precedes at most one
+publication attempt; an accepted-but-hidden response is recovered in a later
+step; the exact landed `DashboardPublicationOutcome` returns to the original
+Activity occurrence and the real workflow fold updates posture.
 
 ## Vertical path
 
 ```text
-DS3 ActivityRequested(DashReq, occurrence, operation)
+DS3 ActivityRequested(DashboardPublication, occurrence, operation)
   -> readiness claims one exact attempt
   -> github_app complete marker lookup plus current fence
   -> at most one dashboard/comment publication attempt
   -> durable provider observation
-  -> readiness records exact DashLanded terminal
+  -> readiness records exact landed DashboardPublicationOutcome
   -> Petrus completes original occurrence and workflow folds
   -> host records settled detached posture
 ```
@@ -113,10 +114,10 @@ fixed.
 ## Tracer acceptance
 
 Given the exact pending DS3 request, when bounded host/readiness work runs, then
-one provider publication is accepted and one `DashLanded` closes the original
-occurrence. If the response is lost after provider acceptance, generation 2's
-first effect action is lookup, no second mutation occurs, and the same terminal
-and workflow posture result.
+one provider publication is accepted and one landed
+`DashboardPublicationOutcome` closes the original occurrence. If the response
+is lost after provider acceptance, generation 2's first effect action is lookup,
+no second mutation occurs, and the same terminal and workflow posture result.
 
 Acceptance also requires exact-read/list-page normalization and bounds without
 making DS4 perform discovery, plus refused/stale/collision paths,
@@ -140,7 +141,7 @@ correlation is checked after History, or credentials cross into another owner.
 ## Rollback
 
 Remove provider execution/adapter growth and fresh provider state. DS3 retains
-the pending `DashReq`; no current-runtime path changes.
+the pending `DashboardPublication`; no current-runtime path changes.
 
 ## Validation
 

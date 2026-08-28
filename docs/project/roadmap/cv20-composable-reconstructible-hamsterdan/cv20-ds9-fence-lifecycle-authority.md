@@ -11,6 +11,7 @@ related:
   - api-contracts.md
   - delivery-sequence.md
   - replacement-ledger.md
+  - ../../decisions/records/2026-08-28T1113Z-dashboard-closure-converges-before-generation-close.md
 ---
 
 # CV20.DS9 — Fence lifecycle and authority changes
@@ -29,7 +30,11 @@ provider and route authority remain available.
 
 ```text
 lifecycle delivery -> host custody -> readiness manifest -> real life fold
-  -> detached draft/ready/closed/merged posture
+  -> detached draft/ready posture
+
+closure/merge observation -> closing lifecycle plus terminal DashboardEvent
+  -> reconcile one older publication -> final terminal DashboardPublication
+  -> landed outcome -> generation close -> detached closed/merged posture
 
 protected Activity -> durable grant + fresh provider read + fresh host evidence
   -> exact AuthorityClaim fence -> execute or workflow-declared blocked/moved
@@ -44,7 +49,7 @@ existing provider, agent, Git and timer mechanisms.
 ## Component Technical Stories
 
 1. Complete lifecycle observation/fold vocabulary for draft, ready, head/base,
-   policy, closure, merge and conflict.
+   policy, closure, merge, dashboard convergence and conflict.
 2. Extend the established readiness `AuthorityClaim` composition across the
    complete operation-specific policy matrix.
 3. Implement host route/custody lifecycle generations and read-only evidence.
@@ -55,7 +60,7 @@ existing provider, agent, Git and timer mechanisms.
 ## Initial owned paths
 
 ```text
-src/hamsterdan2/workflow/net/{life,readiness,mutation,review}.py
+src/hamsterdan2/workflow/net/{life,dashboard,readiness,mutation,review}.py
 src/hamsterdan2/readiness/{authority,application,ports}.py
 src/hamsterdan2/readiness/effects/** established adapters
 src/hamsterdan2/host/{composition,instances,inspection}.py and route custody
@@ -93,15 +98,25 @@ implemented owner-local/root simulation and tests
   workflow-declared blocked terminal; host never decodes Activity work.
 - Head/base/policy movement under one operation cannot be accepted as an exact
   duplicate. It is stale authority or identity collision.
-- Closed/merged lifecycle is terminal and bounded. No new effects are claimed;
-  already accepted operations are reconciled by stable identity.
+- Provider closure/merge observation and committed lifecycle-generation close
+  are separate cuts. Observation makes the desired dashboard absorbingly
+  terminal while the generation remains open only for reconciliation and its
+  one final dashboard publication. No new unrelated work is claimed.
+- Already accepted operations are reconciled by stable identity. After the
+  final terminal dashboard publication lands, lifecycle commits generation
+  close; then no new effects are claimed and late facts cannot reopen the
+  dashboard.
+- A terminal inability to land the final dashboard remains explicit retained
+  failure. This DS rules the bounded operator-recovery or close policy rather
+  than silently treating failure as alignment.
 - Authority evidence and error output are bounded, typed and secret-free.
 
 ## API-strengthening checkpoint
 
 Review the lifecycle and each operation-specific fence call tree and settle:
 
-- lifecycle observation/state/terminal and detached posture fields;
+- lifecycle observation/closing/state/terminal and detached posture fields;
+- final-dashboard convergence acknowledgement and terminal-inability policy;
 - incarnation successor and cut-specific `CurrentnessWitness` values;
 - any claim/current-authority capability extensions forced by new lifecycle
   call sites; the complete claim shape and three-source rule remain unchanged;
@@ -123,8 +138,10 @@ and fail-closed movement are fixed.
 
 Run complete vertical schedules for draft→ready, stale base update, policy/head
 movement, route revocation, true conflict, collaboration approval and PR close/
-merge. Each begins with provider/host input and ends in workflow-owned posture or
-typed terminal, with no stale physical effect.
+merge. Close/merge proves closure observation, older-operation reconciliation,
+one final terminal dashboard publication and generation close as distinct
+ordered cuts. Each begins with provider/host input and ends in workflow-owned
+posture or typed terminal, with no stale physical effect.
 
 Inject movement at every read/fence cut and assert the exact owning local or
 cross checker, stable operation behavior and physical effect count. Crash after
@@ -142,7 +159,8 @@ generic fence cannot close this DS.
 
 Stop if any effect uses provider truth alone, host fabricates workflow outcomes,
 one generic policy changes weaker operations, route generation is not fresh,
-closed subjects claim new work, or stale identity is treated as retryable.
+generation close can overtake final dashboard convergence, closed subjects
+claim new work, or stale identity is treated as retryable.
 
 ## Rollback
 

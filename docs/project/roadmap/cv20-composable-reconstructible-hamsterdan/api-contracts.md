@@ -53,7 +53,7 @@ First-use ownership is:
 |---|---|---|
 | one-PR subject, composition, detached step/posture, Timeline/artifact | DS1 | DS2–DS11 only from added call sites |
 | provider observation, host delivery and readiness ingress | DS2 | DS7/DS9 add observation families |
-| workflow Activity/manifest/occurrence identity | DS3 | DS5–DS8 add Activity families |
+| dashboard subnet/event/projection/publication and workflow Activity/manifest/occurrence identity | DS3 | DS4 executes the effect; DS5–DS8 add Activity families; DS9 composes closure |
 | provider transport and lookup-first publication | DS4 | DS6/DS7 add Git/rerun operations; DS9 completes policies |
 | agent protocol, runtime, workspace and exact delivery | DS5 | DS6 adds coding values |
 | complete `AuthorityClaim` and first strong findings fence | DS5 | DS6/DS7 reuse it; DS9 completes the policy/lifecycle matrix |
@@ -146,13 +146,13 @@ Fixed identities include:
 | Activity terminal | original workflow operation plus original occurrence |
 
 Before implementation, the first tracer for each Activity family must define
-its final operation grammar in this document: dashboard in DS3, review in DS5,
-mutation in DS6, CI rerun/repair in DS7, timer/deferred work in DS8 and any
-remaining lifecycle operation in DS9. Each grammar encodes the stable PR
-subject, business source identity and operation-specific authority required for
-provider lookup and user-visible idempotency, while omitting topology labels
-such as `v5`. Current provider markers may supply correspondence evidence; an
-implementer does not infer the grammar from exploration.
+its final operation grammar in this document: dashboard publication in DS3,
+review in DS5, mutation in DS6, CI rerun/repair in DS7, timer/deferred work in
+DS8 and any remaining lifecycle operation in DS9. Each grammar encodes the
+stable PR subject, business source identity and operation-specific authority
+required for provider lookup and user-visible idempotency, while omitting
+topology labels such as `v5`. Current provider markers may supply correspondence
+evidence; an implementer does not infer the grammar from exploration.
 
 - **Fixed behavior/name:** the five identities above and no topology label.
 - **DS review:** final operation grammar in the owning first-use DS3–DS9 tracer.
@@ -227,6 +227,12 @@ marking. `TOKENS` is explicit and collision-checked. `MANIFEST` declares every
 Activity once. `wire_gates` binds supplied implementations without importing
 them into workflow.
 
+Each concern module also exposes the smallest DS-ruled construction seam needed
+to mount that exact production subnet independently. `build_net` composes those
+same constructions; owner-local simulation cannot copy a fold or maintain a
+second topology. DS3 rules the first concrete seam from the dashboard module,
+its standalone scenario runner and the root call site together.
+
 - **Fixed names:** `build_net`, `seed_marking`, `TOKENS`, `MANIFEST`,
   `wire_gates`.
 - **DS review:** DS1 rules the minimal `build_net`/`seed_marking` boundary from
@@ -268,7 +274,7 @@ Required Activity capabilities are:
 |---|---|---|
 | Reply publication | `ReplyReq` | `Replied | ReplyBlocked | ReplyFault` |
 | Findings publication | `Publishable` | `ReviewLanded | ReviewMoved | ReviewBlocked | ReviewFault` |
-| Dashboard publication | `DashReq` | `DashLanded | DashDeferred | DashBlocked | DashFault` |
+| Dashboard publication | `DashboardPublication` | `DashboardPublicationOutcome` closed family |
 | Reminder publication | `RemReq` | `RemLanded | RemBlocked | RemFault` |
 | Readiness announcement | `AnnounceReq` | `ALanded | ADeferred | AMoved | ABlocked | AFault` |
 | CI rerun | `RerunReq` | `RerunLanded | RerunMoved | RerunFault` |
@@ -286,6 +292,59 @@ be silently converted to a business terminal.
   callable objects or collaborator methods in the owning DS3–DS9 tracer.
 - **DS review:** terminal type names may improve before their first tracer use
   only if loop, manifest entry, adapter and CV20 documents change together.
+
+### Dashboard subnet
+
+The dashboard concern owns four distinct meanings:
+
+```text
+DashboardEvent
+  one workflow-owned fact relevant to the desired dashboard
+
+DashboardProjection
+  private durable desired, landed, pending and retained-failure state
+
+DashboardPublication
+  one immutable exact external command with stable operation identity
+
+DashboardPublicationOutcome
+  one closed workflow terminal family for that exact publication
+```
+
+`DashboardEvent` is not provider evidence. Lifecycle and other workflow folds
+translate their owned observations/outcomes into this internal fact family.
+`DashboardProjection` is not Activity work: History/Dispatch own occurrence and
+execution custody, while the projection retains the exact logical pending
+publication needed to match outcomes and enforce single-flight publication.
+`DashboardPublication` does not carry held projection/recovery state merely to
+transport it through the effect boundary.
+
+The pure behavior is:
+
+```text
+fold one DashboardEvent or DashboardPublicationOutcome into DashboardProjection
+  -> update desired, landed, pending or retained failure
+  -> emit no publication while one exact publication is unresolved
+  -> otherwise emit one DashboardPublication exactly when desired != landed
+```
+
+A provider closure observation carries its evidence-owned close instant into a
+normal dashboard event. That event makes the desired document absorbingly
+closed and supersedes desired documents that have not become Activities. An
+already-issued publication is reconciled first; workflow then emits one final
+closed publication. On the successful path, the lifecycle generation commits
+close only after that publication lands. A terminal inability remains explicit
+for DS9 policy; it cannot masquerade as alignment. A later fact cannot reopen
+the dashboard, and a pure fold never calls a clock to create the close instant.
+
+- **Fixed names:** `DashboardEvent`, `DashboardProjection`,
+  `DashboardPublication`, `DashboardPublicationOutcome`.
+- **Fixed behavior:** meaning split, immutable publication work, single-flight
+  coalescing, exact outcome matching and final-close convergence order.
+- **DS review:** DS3 rules concrete event variants, document/work/projection and
+  terminal fields, operation grammar, construction seam and local scenario
+  commands/observations. DS4 rules provider execution/admission signatures.
+  DS9 rules terminal inability and lifecycle-close completion policy.
 
 ### Mutation causal contract
 
@@ -988,7 +1047,7 @@ in a chat or plan.
 |---|---|---|
 | DS1 | one-PR ownership, sole composition, bounded step/posture, strict gate and core Timeline/artifact | subject/root/factory/result signatures, minimal Petrus replay cursor, gate diagnostics and first local/root evidence |
 | DS2 | webhook-only snapshot/provenance, host delivery custody, source-neutral observation/key/manifest/grant/classification and real incarnation-1 `HeadSeen` fold | codecs, retain/stage/classify/admit/fold/ack calls, tombstones, collision/corroboration/refusal payloads and calibrated bounds |
-| DS3 | workflow ownership, manifest identity and first durable `DashReq` | request/terminal fields, manifest/token/build/wiring APIs, occurrence projection and pending posture |
+| DS3 | workflow ownership, independently executable dashboard subnet, four dashboard meanings, manifest identity and first durable `DashboardPublication` | event/document/projection/publication/outcome fields, operation grammar, subnet/build/wiring APIs, scenario runner, public bounded repair-one-occurrence seam, occurrence projection and pending posture |
 | DS4 | exact PR read, one bounded repository list page, lookup-first one-attempt provider effect and split Activity positions | read/list/transport/gateway/result APIs, pagination/rate metadata, marker lookup, claim/effect/terminal calls, terminal admission and physical metrics |
 | DS5 | credential-free agent protocol, stable execution identity, exact delivery and first protected findings call | review values/codecs, lifecycle/store calls, Pi/workspace/route custody, complete claim/evidence APIs, findings fence, cancellation errors and bounds |
 | DS6 | exact workflow→coding→Git→workflow causal contract | conversation/`MutWork`/coding/`Pushed` shapes, result digest, patch/Git/ref-CAS APIs and sensitivity evidence |
