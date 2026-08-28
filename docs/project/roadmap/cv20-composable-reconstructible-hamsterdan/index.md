@@ -10,6 +10,8 @@ related:
   - ../../decisions/records/2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md
   - ../../decisions/records/2026-08-28T0152Z-pr-observations-use-source-neutral-admission-and-history-authority.md
   - ../../decisions/records/2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
+  - ../../decisions/records/2026-08-28T1113Z-dashboard-closure-converges-before-generation-close.md
+  - ../../decisions/records/2026-08-28T1114Z-cv20-accepts-production-subnets-locally-inside-vertical-tracers.md
   - ../cv19-private-v0-1-production/index.md
   - architecture.md
   - api-contracts.md
@@ -70,9 +72,11 @@ change a fixed boundary without a new Navigator ruling.
 Delivery proceeds as a tracer ladder. Each of DS1–DS12 deepens one real
 production spine from an external/operator/simulation command to a bounded
 visible posture, durable workflow request, or accepted effect. Component work
-is reviewable Technical Story work inside that tracer, not a separately
-accepted horizontal layer. Deterministic simulation, observability, crash
-recovery, finite bounds and applicable correspondence ship with every tracer.
+is reviewable inside that tracer, not a separately accepted horizontal layer.
+An exact production subnet may have a Navigator-facing local User Story and
+acceptance checkpoint, but only the composed vertical path accepts Delivery.
+Deterministic simulation, observability, crash recovery, finite bounds and
+applicable correspondence ship with every tracer.
 
 ## Concept analysis
 
@@ -113,7 +117,7 @@ DS1 bounded PR lifecycle -> DS2 observation -> DS3 Activity
 
 1. [CV20.DS1 — Establish the first bounded PR lifecycle](cv20-ds1-first-bounded-pr-lifecycle.md)
 2. [CV20.DS2 — Admit and fold one PR observation](cv20-ds2-admit-fold-pr-observation.md)
-3. [CV20.DS3 — Expose one workflow-declared Activity](cv20-ds3-expose-workflow-activity.md)
+3. [CV20.DS3 — Exercise the dashboard subnet and expose one Activity](cv20-ds3-expose-workflow-activity.md)
 4. [CV20.DS4 — Settle one GitHub Activity lookup-first](cv20-ds4-settle-github-activity.md)
 5. [CV20.DS5 — Settle one reconstructible agent round](cv20-ds5-settle-agent-round.md)
 6. [CV20.DS6 — Publish one causally aligned mutation](cv20-ds6-publish-causal-mutation.md)

@@ -106,13 +106,13 @@ extend an existing owner only from a new real call site.
 |---|---|
 | DS1 | strict gate; minimum workflow/readiness/host spine; one-PR binding; core Timeline/artifact/replay; first local/root modules |
 | DS2 | provider webhook/model/route input; host inbox custody; readiness ingress/evidence; `HeadSeen` lifecycle fold |
-| DS3 | workflow facts/Activity manifest/folding/gating/topology and dashboard request; pending-Activity runtime evidence |
+| DS3 | independently executable production dashboard subnet and scenario evidence; workflow facts/Activity manifest/folding/gating/topology; pending-Activity runtime evidence |
 | DS4 | provider auth/transport/gateway/effects; readiness publication adapter; split effect cuts and terminal admission |
 | DS5 | agents protocol/Pi/workspace; host agent custody/evidence; complete readiness authority claim and findings fence; readiness review custody/effect; workflow review round |
 | DS6 | conversation/mutation folds; coding protocol; readiness mutation/Git; provider raw Git operations |
 | DS7 | CI/escalation folds; provider check evidence; readiness/provider rerun operation |
 | DS8 | workflow reminders/deferred values; readiness timer custody; host clock/deadline wake |
-| DS9 | complete lifecycle/readiness folds; known-subject exact-read convergence; remaining authority-policy matrix; host/provider route-generation movement; blocked/moved mappings |
+| DS9 | complete lifecycle/readiness/dashboard-terminal folds; known-subject exact-read convergence; remaining authority-policy matrix; host/provider route-generation movement; blocked/moved mappings |
 | DS10 | provider open-PR list-page use; host configured-repository discovery-pass custody; exact-read-before-registration; idempotent registration/enqueue |
 | DS11 | host catalog/runnable/service/API/CLI/inspection/qualification and operator surfaces; fair known-subject/discovery turns |
 | DS12 | acceptance journeys/recovery/correspondence, generated schedules, qualification/distribution evidence |

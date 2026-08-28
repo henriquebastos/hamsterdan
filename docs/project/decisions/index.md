@@ -21,3 +21,4 @@ settled direction by superseding its record explicitly rather than drifting.
 - [PR observations use source-neutral admission and History authority](records/2026-08-28T0152Z-pr-observations-use-source-neutral-admission-and-history-authority.md)
 - [Configured-repository recovery discovers unknown open pull requests](records/2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md)
 - [Dashboard closure converges before lifecycle generation close](records/2026-08-28T1113Z-dashboard-closure-converges-before-generation-close.md)
+- [CV20 accepts production subnets locally inside vertical tracers](records/2026-08-28T1114Z-cv20-accepts-production-subnets-locally-inside-vertical-tracers.md)

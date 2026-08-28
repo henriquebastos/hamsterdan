@@ -12,6 +12,7 @@ related:
   - delivery-sequence.md
   - replacement-ledger.md
   - ../../decisions/records/2026-08-28T1113Z-dashboard-closure-converges-before-generation-close.md
+  - ../../decisions/records/2026-08-28T1114Z-cv20-accepts-production-subnets-locally-inside-vertical-tracers.md
 ---
 
 # CV20.DS3 — Exercise the dashboard subnet and expose one Activity
