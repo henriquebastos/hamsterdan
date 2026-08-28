@@ -25,10 +25,10 @@ recovering an old experimental possibility.
 
 CV20 builds a replacement in non-selectable `src/hamsterdan2` and `tests2`
 namespaces. The current V5 application remains the sole runtime through
-CV20.DS1–DS11. Replacement code uses fresh state roots and never reads,
+CV20.DS1–DS12. Replacement code uses fresh state roots and never reads,
 converts, or writes current runtime state.
 
-CV20.DS12 is a separately approved cutover. It stops the current service,
+CV20.DS13 is a separately approved cutover. It stops the current service,
 preserves old state only as bounded rollback custody, removes the current
 implementation, renames the replacement to canonical `src/hamsterdan` and
 canonical Python test paths, and switches packaging and deployment. The
@@ -51,8 +51,8 @@ new state ─────────── replacement only ──────�
 
 | Concern | Fixed decision | Consequence |
 |---|---|---|
-| Delivery strategy | Build a parallel, non-selectable replacement and perform one final cutover | No story before DS12 changes the installed runtime |
-| Delivery increment | DS1–DS11 are progressively deepened vertical tracer bullets | Component implementation is Technical Story work and cannot close Delivery without a bounded end-to-end outcome |
+| Delivery strategy | Build a parallel, non-selectable replacement and perform one final cutover | No story before DS13 changes the installed runtime |
+| Delivery increment | DS1–DS12 are progressively deepened vertical tracer bullets | Component implementation is Technical Story work and cannot close Delivery without a bounded end-to-end outcome |
 | API design | Semantics and ownership are contract-first; concrete signatures are call-site-proven in the first tracer that uses them | Producer, consumer, deterministic seam and observation surface are reviewed together; no speculative compatibility API |
 | Compatibility | Do not migrate state, read old schemas, preserve old imports, or add artifact readers | A compatibility adapter is an architecture violation, not deferred work |
 | Value ownership | Values stay with the package that defines their meaning | The target has no neutral `contracts` package |
@@ -66,13 +66,14 @@ new state ─────────── replacement only ──────�
 | Route revocation | Host reports fresh lifecycle evidence; readiness creates the workflow-declared blocked result | Host never decodes Activity work or fabricates a workflow terminal |
 | Timers | Workflow owns timer commands and due facts; readiness owns durable timer custody | Command, acknowledgement, maturity claim, History acceptance, and delivered marks remain distinct cuts |
 | Fairness | Host owns durable enqueue sequence, bounded selection leases, and tail requeue | One already-due PR cannot be starved by a repeatedly failing PR |
+| Configured-repository recovery | DS9 exact-reads every known nonterminal subject; DS10 boundedly discovers unknown eligible open PRs; DS11 fairly schedules both turn classes | List summaries are hints, exact read precedes registration, and no pass claims an atomic repository snapshot |
 | Bounded execution | Production and simulation expose claim/start, effect-observed/execute, and terminal-recorded/finish cuts | Process-local frames and returned values are never recovery authority |
 | Simulation runtime | Hamsterdan owns one semantic-free synchronous `Timeline`; `CoroutineStepper` is internal | The runtime schedules one owner action and at most one leaf without understanding domain meaning |
 | Simulation ownership | Workflow, readiness, GitHub, agents, and host each own their local simulation and checker | Root composition mounts those unchanged modules and owns only cross-module properties |
 | Tracer evidence | Every tracer ships deterministic composition, local/cross checker evidence, named crash cuts, resource gauges and applicable real-seam correspondence | DST, observability and correspondence cannot be deferred to a later integration phase |
 | Causal mutation | Real workflow `MutWork` creates the agent request; the exact delivered `CodingResult` reaches Git publication; `Pushed` returns to the original occurrence | Equality-by-reconstruction or co-mounting is insufficient evidence |
 | Quality gate | The CV20 replacement gate defined in the ledger blocks the replacement tree from DS1 onward | The old tree keeps its current checks until deletion; the target receives no broad suppressions |
-| Naming | `hamsterdan2` is construction-only; V5 names do not enter replacement APIs | DS12 removes both temporary generation labels from active truth |
+| Naming | `hamsterdan2` is construction-only; V5 names do not enter replacement APIs | DS13 removes both temporary generation labels from active truth |
 | Initializers | Every package initializer is empty except for a policy docstring and explicit empty exports | There are no package facades or child re-exports |
 
 ## Package ownership
@@ -86,6 +87,59 @@ new state ─────────── replacement only ──────�
 | `host` | concrete construction, provider/agent resource lifetime, instance catalog, runnable fairness, lifecycle evidence, inspection, API and service process | workflow names, Activity resolution, History decoding, Petrus execution |
 | `operator` | human command behavior and atomic qualification setup | long-running service policy or workflow interpretation |
 | `simulation` | logical time, deterministic scheduling, generic occurrence faults, process generations, budgets, artifacts and replay | owner commands, domain eligibility, retries, timers, authority or checker semantics |
+
+## Observation and recovery language
+
+Provider acquisition, workflow observation and readiness authority are separate
+layers:
+
+```text
+acquisition
+  PullRequestSnapshot + ObservationProvenance
+    -> focused observation + ObservationKey
+    -> IngressManifest + AdmissionGrant + ordered IngressEntry values
+    -> HistoryAdmissionId in Petrus History
+    -> workflow fold
+
+recovery
+  known subject -> bounded exact read -> common admission seam
+  unknown subject -> bounded configured-repository pass -> exact read
+                  -> idempotent registration/enqueue -> common admission seam
+```
+
+The minimal aggregates are:
+
+- provider-owned immutable `PullRequestSnapshot` and bounded
+  `ObservationProvenance`;
+- readiness-owned immutable `IngressManifest`, one manifest-scoped
+  `AdmissionGrant`, and ordered unique-key `IngressEntry` values;
+- host-owned delivery custody, active route binding/generations and
+  `RepositoryDiscoveryPass` custody; and
+- Petrus History as the sole workflow-admission ledger.
+
+`HeadSeen` is one focused workflow observation: subject, local incarnation and
+exact head/base branch tips. Draft, lifecycle, mergeability and readiness policy
+remain separate facts. The first local `HeadSeen` binds incarnation 1 without
+claiming current authority. DS9 owns later lifecycle incarnations and
+cut-specific `CurrentnessWitness`; DS2 never implements either behavior.
+
+DS2 is webhook-only. Source-neutral means webhook and later exact-read
+acquisitions use the same snapshot/provenance and admission contract, not that
+DS2 performs provider reads. DS4 owns exact-read/list transport mechanics, DS9
+owns known-subject convergence and currentness, DS10 owns unknown discovery, and
+DS11 owns fair scheduling across known/discovery turns.
+
+## Factories and reducers
+
+Pure reducers perform deterministic state transitions over explicit values.
+They never hide clocks, randomness, storage, processes, credentials or provider
+calls. Intention-named factories compose explicit capabilities and may assemble
+an owner around an injected reducer. A factory does not make an effectful owner
+pure, and a reducer does not become a generic service layer.
+
+For example, a readiness factory may bind durable ingress custody, History and
+an injected observation reducer. The reducer can classify/fold an explicit
+observation, but cannot fetch GitHub state or open storage behind the call.
 
 Crossing a package boundary does not make a value neutral. For example,
 `MutWork` remains workflow-owned when readiness executes it, and
@@ -219,6 +273,7 @@ src/hamsterdan2/
     clock.py
     composition.py
     service.py
+    discovery.py
     instances.py
     inspection.py
     runnable.py
@@ -404,9 +459,9 @@ that merely creates equal values independently does not satisfy this contract.
 
 | Term | Meaning in CV20 |
 |---|---|
-| Hamsterdan | The product and, after DS12, the only canonical implementation |
-| `hamsterdan2` | Temporary source namespace used only during DS1–DS11 construction |
-| V5 | The current implementation that remains operational until DS12 and is then removed |
+| Hamsterdan | The product and, after DS13, the only canonical implementation |
+| `hamsterdan2` | Temporary source namespace used only during DS1–DS12 construction |
+| V5 | The current implementation that remains operational until DS13 and is then removed |
 | workflow | Pure Petri Net definition and workflow-owned typed values |
 | readiness | One-PR execution, authority, custody and effect adaptation |
 | host | Trusted process composition and multi-PR supervision |

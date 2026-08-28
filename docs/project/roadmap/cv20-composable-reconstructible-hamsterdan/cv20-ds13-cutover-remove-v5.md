@@ -1,12 +1,12 @@
 ---
-code: CV20.DS12
+code: CV20.DS13
 level: Delivery Story
 status: Planned
-status_reason: Waits for accepted CV20.DS11 plus explicit cutover approval
-updated: 2026-08-27
+status_reason: Waits for accepted CV20.DS12 plus explicit cutover approval
+updated: 2026-08-28
 related:
   - index.md
-  - cv20-ds11-qualify-journeys-correspondence.md
+  - cv20-ds12-qualify-journeys-correspondence.md
   - architecture.md
   - api-contracts.md
   - delivery-sequence.md
@@ -14,7 +14,7 @@ related:
   - ../../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md
 ---
 
-# CV20.DS12 — Cut over and remove V5
+# CV20.DS13 — Cut over and remove V5
 
 ## Outcome
 
@@ -44,7 +44,7 @@ names. There is no V5, Hamsterdan2, generation selector or dual-runtime concept.
 
 ## Owned paths
 
-DS12 owns the coordinated repository-wide transition, limited by the exact
+DS13 owns the coordinated repository-wide transition, limited by the exact
 disposition ledger:
 
 ```text
@@ -65,10 +65,10 @@ relay test remains canonical and is not part of that Python census.
 
 ## Fixed design
 
-- DS12 starts only after accepted DS11 evidence, a fresh full qualification
+- DS13 starts only after accepted DS12 evidence, a fresh full qualification
   run and explicit Navigator/operator approval of shared actions.
 - The existing V5-only operational decision remains in force until the cutover
-  decision supersedes it. There is no pre-DS12 selector or shadow runtime.
+  decision supersedes it. There is no pre-DS13 selector or shadow runtime.
 - The current service is stopped and fenced before state snapshot or package
   replacement. In-flight external operations are reconciled by stable identity.
 - Old state is captured as bounded, read-only, access-controlled rollback data.
@@ -92,15 +92,15 @@ relay test remains canonical and is not part of that Python census.
 
 ## Position and predecessors
 
-Requires accepted CV20.DS11, explicit Navigator approval for shared deployment/
+Requires accepted CV20.DS12, explicit Navigator approval for shared deployment/
 state actions, and a cutover decision that supersedes the current V5-only
-operational decision. DS11 already incorporates the accepted DS1–DS10 evidence.
+operational decision. DS12 already incorporates the accepted DS1–DS11 evidence.
 
 ## Implementation sequence
 
-1. Rule the cutover command/evidence API below and expand DS12 into preparation,
+1. Rule the cutover command/evidence API below and expand DS13 into preparation,
    shared action, fresh-runtime qualification and no-return cleanup stories.
-2. Re-run DS11/full gates on the exact candidate revision; record artifacts,
+2. Re-run DS12/full gates on the exact candidate revision; record artifacts,
    dependency versions, resource bounds and correspondence limits.
 3. Inventory active service/routes/operations; drain or reconcile them by stable
    identity, then stop and fence the current service.

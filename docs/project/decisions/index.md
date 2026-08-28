@@ -4,7 +4,7 @@ Decision records live under `records/`, one file per durable ruling. Change a
 settled direction by superseding its record explicitly rather than drifting.
 
 - [Hamsterdan is a standalone Petrus application (single-account consequence superseded)](records/2026-08-01T0203Z-hamsterdan-is-a-standalone-petrus-application.md)
-- [GitHubKit and a durable relay own provider ingress (single-account consequence superseded)](records/2026-08-01T0335Z-githubkit-and-a-durable-relay-own-provider-ingress.md)
+- [GitHubKit and a durable relay own provider ingress (single-account and CV20 missed-first-webhook consequences superseded)](records/2026-08-01T0335Z-githubkit-and-a-durable-relay-own-provider-ingress.md)
 - [Operator installation portfolios are restart-applied configuration](records/2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md)
 - [Agenticus routing is explicit, host-owned, and fail-closed](records/2026-08-05T1254Z-agenticus-routing-is-explicit-host-owned-and-fail-closed.md)
 - [Agenticus Pi is the only agent execution route](records/2026-08-11T2359Z-agenticus-pi-is-the-only-agent-execution-route.md)
@@ -16,5 +16,7 @@ settled direction by superseding its record explicitly rather than drifting.
 - [V5 durable decisions are explicit topology](records/2026-08-22T0107Z-v5-durable-decisions-are-explicit-topology.md)
 - [V5 is the only runtime and retired topology state fails closed](records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md)
 - [Timeline and coroutine stepper share bounded execution](records/2026-08-26T2012Z-timeline-and-coroutine-stepper-share-bounded-execution.md)
-- [Composable Hamsterdan is the planned replacement architecture](records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md)
-- [CV20 delivers through vertical tracer bullets](records/2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md)
+- [Composable Hamsterdan is the planned replacement architecture (tracer count and cutover number superseded)](records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md)
+- [CV20 delivers through vertical tracer bullets (tracer count and later numbering superseded)](records/2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md)
+- [PR observations use source-neutral admission and History authority](records/2026-08-28T0152Z-pr-observations-use-source-neutral-admission-and-history-authority.md)
+- [Configured-repository recovery discovers unknown open pull requests](records/2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md)

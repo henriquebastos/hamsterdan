@@ -3,7 +3,7 @@ code: CV20.DS1
 level: Delivery Story
 status: Planned
 status_reason: Promoted with CV20; the first tracer is not pulled
-updated: 2026-08-27
+updated: 2026-08-28
 related:
   - index.md
   - architecture.md
@@ -45,8 +45,9 @@ observation and performs no external effect.
 
 The DS may expand into these independently green units, but none closes the DS:
 
-1. install the isolated replacement Ruff/format, ast-grep and semantic
-   architecture gate over only the modules admitted by this tracer;
+1. inventory/apply applicable guidance and signed-in Amp skills, then install
+   the isolated replacement Ruff/format/ty, verified ast-grep and semantic AST
+   architecture/feedback gate over only the modules admitted by this tracer;
 2. qualify and pin the minimum public Petrus page-bounded construction/replay
    seam required to reconstruct one seeded lifecycle;
 3. implement the minimal workflow topology/seed and one lifecycle fold;
@@ -101,11 +102,26 @@ test. Package ownership and forbidden edges do not change.
   deployment and current state roots.
 - The gate starts strict and grows with admitted code. No blanket suppression,
   empty final skeleton, compatibility alias or speculative facade is accepted.
+- The isolated gate covers only `src/hamsterdan2` and `tests2` through DS12.
+  Legacy source/tests retain their current repository gate until DS13 promotes
+  the replacement.
+- `quick` includes replacement Ruff lint/format, ty, verified ast-grep,
+  fast AST architecture/feedback checks and fast pytest. `full` inherits quick
+  and adds complete deterministic pytest/Hypothesis, Timeline/DST replay with
+  domain-aware shrinking, semantic coverage, accepted focused mutation evidence
+  and accepted real seams. `release` inherits full and adds accepted serial and
+  revision-bound suites.
+- Exact ty configuration; mutation tool, targets, threshold/survival policy and
+  cadence; numeric coverage policy; real/live markers, environment and
+  skip/fail policy; and calibrated resource limits remain Plan refinements.
 
 ## API-strengthening checkpoint
 
 Before implementation, review one focused packet containing:
 
+- **guidance and skills:** applicable root/nested `AGENTS.md`, Ariad Process/
+  Project/Product owners, engineering conventions and signed-in personal/global
+  Amp skills, with conflicts or justified non-application recorded;
 - **behavior and call tree:** exact register, open, step, posture-record and
   inspect sequence;
 - **types/signatures:** subject/root representation, lifecycle factory/calls,
@@ -144,6 +160,10 @@ Acceptance requires:
   peaks in the evidence report;
 - direct correspondence for public Petrus replay/reconstruction and fresh
   filesystem/SQLite reopen; and
+- `tests2/test_feedback.py` proof that every replacement path is covered only by
+  the intended profile, with no final-tree placeholder;
+- TDD, pytest/Hypothesis, Timeline/DST replay/shrink, semantic coverage,
+  focused mutation sensitivity and accepted real-seam evidence; and
 - the strict target gate, quick/full checks, distribution invisibility and
   current-runtime regression tests.
 
@@ -168,10 +188,12 @@ them.
 
 ## Validation
 
-Run target Ruff/format/ty/ast-grep/architecture fixtures, owner behavioral
-tests, real Petrus integration, fresh reopen and generation-loss cuts, subject
-substitution sensitivity, exact replay, lowered bounds, distribution checks,
-and project quick/full gates.
+Run guidance/skill inventory and target-profile path-isolation fixtures; target
+Ruff/format/ty/ast-grep/AST architecture/feedback checks; TDD owner behavior and
+Hypothesis; Timeline/DST replay, domain-aware shrinking and semantic coverage;
+focused mutation sensitivity; accepted real seams; real Petrus integration;
+fresh reopen and generation-loss cuts; subject substitution sensitivity; every
+limit at −1 / limit / +1; distribution checks; and project quick/full gates.
 
 ## Expansion boundary
 

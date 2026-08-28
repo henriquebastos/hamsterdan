@@ -17,8 +17,10 @@ belongs in each item's own metadata; this index routes to current owners.
 ## Planned
 
 - [CV20 — Composable, reconstructible Hamsterdan](cv20-composable-reconstructible-hamsterdan/index.md):
-  ES-010's accepted architecture is promoted as eleven progressively deepened
-  vertical tracer Delivery Stories and one final cutover story. None is pulled;
+  ES-010's accepted architecture is promoted as twelve progressively deepened
+  vertical tracer Delivery Stories and one final cutover story. Configured-
+  repository recovery now includes bounded discovery of unknown eligible open
+  PRs before final qualification and cutover. None is pulled;
   the replacement remains non-selectable construction work while CV19 stays
   the only active Value and V5 stays the only current runtime.
 
@@ -50,5 +52,5 @@ The
 [CV20 planning decision](../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md)
 does not supersede that operational truth: sharded V5, the former production
 topology, and the planned replacement are not available runtime choices. A
-separately approved CV20.DS12 cutover will make the replacement canonical
+separately approved CV20.DS13 cutover will make the replacement canonical
 Hamsterdan and remove the V5 and Hamsterdan2 runtime concepts together.

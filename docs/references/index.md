@@ -78,6 +78,13 @@
   `petrus.testing.dst.runner/v1` outer-process containment contract. A killed
   call yields an acknowledged prefix and unfinished attempt, never a fabricated
   replay artifact.
+- CV20.DS2 dependency gap at that exact pin: public identified delivery can
+  report prior acknowledgement, but Hamsterdan has no public bounded seam to
+  resume one accepted-and-begun nonterminal occurrence. DS2 must not access
+  internal Petrus `Instance` state or collapse accepted/folded cuts. Crash
+  recovery remains blocked until Petrus implements, tests and releases a public
+  accept/resume-one-accepted-unfinished-occurrence seam and Hamsterdan pins and
+  qualifies that release.
 
 ## GitHub documentation
 
@@ -95,6 +102,17 @@ Authoritative GitHub documentation inspected 2026-08-01:
 - <https://docs.github.com/en/rest/using-the-rest-api/troubleshooting-the-rest-api#resource-not-accessible>
 - <https://docs.github.com/en/rest/guides/using-the-rest-api-to-interact-with-your-git-database>
 - <https://docs.github.com/en/webhooks/webhook-events-and-payloads>
+- <https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/redelivering-webhooks>
+- <https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests>
+- <https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#get-a-pull-request>
+- <https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api>
+- <https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api>
+
+CV20 uses the list endpoint only for bounded candidate discovery in
+operator-configured repositories. An exact get precedes registration and common
+observation admission. Pagination and rate-limit documentation constrain DS4
+transport and DS10 pass custody; they do not establish an atomic repository
+snapshot, webhook completeness or lifecycle authority.
 
 ## Workflow-theory and functional-programming literature (ES-003)
 

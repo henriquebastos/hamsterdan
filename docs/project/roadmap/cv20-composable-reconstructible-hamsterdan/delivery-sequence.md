@@ -1,7 +1,7 @@
 # CV20 delivery sequence
 
-This is the canonical construction order for CV20. DS1–DS11 are permanent,
-production-shaped tracer bullets that progressively deepen one system. DS12 is
+This is the canonical construction order for CV20. DS1–DS12 are permanent,
+production-shaped tracer bullets that progressively deepen one system. DS13 is
 the separately approved cutover, not an ordinary tracer. All stories are
 `Planned`; this sequence pulls no work and authorizes no external effect,
 credential use, deployment, commit or push.
@@ -47,15 +47,21 @@ composition edge is absent, it is not tracer evidence.
    local/cross counterexample, named durable cuts, lowered-budget failures and
    measured resource peaks.
 6. A newly introduced external seam gains direct correspondence in that tracer
-   or records an explicit unavailable blocker. DS11 completes portfolio and
+   or records an explicit unavailable blocker. DS12 completes portfolio and
    real-process qualification; it does not rescue missing early correspondence.
-7. The replacement remains non-selectable through DS11. It uses fresh state and
+7. The replacement remains non-selectable through DS12. It uses fresh state and
    never reads, migrates, converts or dual-writes current state.
 8. Rollback removes the current replacement increment. It never converts state
    between implementations or weakens an accepted earlier tracer.
 9. Shared/external actions retain explicit approval: dependency publication,
    live provider mutation, credential use, process kill, deployment, release,
    state retention/deletion, commit and push are never inferred.
+10. Before a DS Plan Checkpoint, inventory and apply every applicable root/
+    nested `AGENTS.md`, Ariad Process/Project/Product owner, engineering
+    convention and signed-in personal/global Amp skill. Record material
+    conflicts or justified non-application in the Plan rather than silently
+    choosing one source. This pre-implementation discovery is a DS1 acceptance
+    prerequisite and remains required for every later tracer.
 
 ## Linear graph
 
@@ -69,9 +75,10 @@ DS1 first bounded one-PR lifecycle
   -> DS7 recover CI and repair escalation
   -> DS8 recover timers and deferred work
   -> DS9 fence lifecycle and authority changes
-  -> DS10 supervise multiple PRs fairly
-  -> DS11 qualify journeys and real-seam correspondence
-  -> DS12 separately approved canonical cutover
+  -> DS10 discover unregistered open PRs boundedly
+  -> DS11 supervise known/discovery turns fairly
+  -> DS12 qualify journeys and real-seam correspondence
+  -> DS13 separately approved canonical cutover
 ```
 
 ## State after each tracer
@@ -86,10 +93,11 @@ DS1 first bounded one-PR lifecycle
 | DS6 | authorized comment yields real `MutWork`, exact delivered `CodingResult`, one Git publication and original-occurrence `Pushed` | CI escalation, time, complete authority, multi-PR |
 | DS7 | clean, flaky and persistently failing CI traverse bounded rerun/repair escalation | durable timer/deferred wakes |
 | DS8 | timer command/ack/maturity and reminder/deferred work survive restart | complete lifecycle/authority movement |
-| DS9 | draft/ready/head/base/policy/revocation/closure/conflict are fenced by complete operation-specific authority | multi-PR supervision |
-| DS10 | multiple PRs progress under durable fair leases, bounded startup/shutdown and detached inspection | final aggregate qualification or selectable service |
-| DS11 | complete journeys, generated schedules, distribution and required real-seam/process correspondence are revision-bound | installed replacement or state switch |
-| DS12 | one canonical Hamsterdan on fresh state; old implementation removed | active V5/Hamsterdan2 names, selectors, readers or compatibility |
+| DS9 | draft/ready/head/base/policy/revocation/closure/conflict are fenced by complete operation-specific authority and known subjects converge through bounded exact reads | unknown-subject discovery and multi-PR supervision |
+| DS10 | unknown eligible open PRs in configured repositories enter known-subject reconciliation through bounded passes and exact reads | fair multi-PR/discovery scheduling or atomic repository-snapshot claims |
+| DS11 | multiple PRs and discovery turns progress under durable fair leases, bounded startup/shutdown and detached inspection | final aggregate qualification or selectable service |
+| DS12 | complete journeys, generated schedules, distribution and required real-seam/process correspondence are revision-bound | installed replacement or state switch |
+| DS13 | one canonical Hamsterdan on fresh state; old implementation removed | active V5/Hamsterdan2 names, selectors, readers or compatibility |
 
 ## Focused API review at every tracer
 
@@ -126,14 +134,33 @@ reconstruct/replay it. It also qualifies the minimum public Petrus
 construction/page-replay seam. There is no final empty skeleton or positive-edge
 placeholder.
 
+DS1 also proves the isolated `src/hamsterdan2`/`tests2` gate: TDD with pytest
+and Hypothesis, deterministic Timeline/DST replay and domain-aware shrinking,
+semantic coverage, focused mutation sensitivity, marked real seams, Ruff,
+format, ty, seven verified ast-grep rules and AST architecture/feedback tests.
+`quick`, `full` and `release` membership is executable and path-isolated. The
+legacy `src/hamsterdan`/`tests` tree remains under its current gate through DS12;
+DS13 promotes the replacement gate at cutover. Exact ty configuration, mutation
+tool/targets/threshold/cadence, numeric coverage policy and live marker/skip
+policy remain DS1 Plan and acceptance refinements.
+
 Handoff: one strict, non-selectable, bounded production spine plus Timeline,
 artifact/replay and local/root evidence that every later tracer extends.
 
 ### DS2 — One real observation
 
-DS2 adds raw-byte webhook verification, provider normalization, host inbox/route
-custody, readiness manifest/grant and one real `HeadSeen` fold. Host acknowledges
-only after exact readiness acceptance.
+DS2 adds raw-byte webhook verification; snapshot/provenance normalization; host
+`delivery_retained` route/custody; readiness observation keys,
+manifest/grant/entry classification and History-derived admission; and one real
+incarnation-1 `HeadSeen` fold. Host keeps the three receipt layers distinct and
+acknowledges only after exact accepted/already-accepted readiness posture. DS2
+is webhook-only; source neutrality belongs to the downstream admission seam.
+
+Crash recovery across separate `observation_accepted` and `observation_folded`
+cuts is blocked until Petrus supplies a public bounded
+accept/resume-one-accepted-unfinished-occurrence seam beyond pinned
+`44cac5ff48ac371ebae56323941983f30db13c0d`. Internal `Instance` access and
+collapsing the cuts are forbidden.
 
 Handoff: durable provider→host→readiness→workflow input and acknowledgement.
 
@@ -148,8 +175,9 @@ History/Dispatch plus host-visible waiting posture.
 
 ### DS4 — One lookup-first GitHub effect
 
-DS4 adds bounded provider transport/gateway, operation-marker lookup, one
-publication attempt and split claim/effect-observed/terminal-recorded cuts.
+DS4 adds bounded provider transport/gateway, one exact PR read, one bounded
+open-PR list page, operation-marker lookup, one publication attempt and split
+claim/effect-observed/terminal-recorded cuts.
 `DashLanded` returns through strict admission to the original occurrence.
 
 Handoff: first accepted effect family with accepted-hidden recovery, physical
@@ -196,35 +224,49 @@ non-authoritative.
 
 ### DS9 — Complete lifecycle and authority
 
-DS9 adds all lifecycle movements and completes the operation-specific policy
+DS9 adds all lifecycle movements, incarnation successors and cut-specific
+`CurrentnessWitness`; converges registered nonterminal subjects through bounded
+exact reads; and completes the operation-specific policy
 matrix over the full `AuthorityClaim` established at DS5 and reused by DS6/DS7.
 Each effect keeps its safeguard and stale work receives a workflow-declared
 outcome from readiness.
 
-Handoff: every established effect is fenced and every lifecycle movement has a
-real composed outcome.
+Handoff: every established effect is fenced, every lifecycle movement has a
+real composed outcome, and known-subject exact-read recovery converges.
 
-### DS10 — Multi-PR fairness
+### DS10 — Unknown open-PR discovery
 
-DS10 extends one-subject host composition with catalog pages, durable runnable
-sequence/leases/tail requeue, one-readiness-call turns, bounded startup/shutdown,
-detached portfolio inspection, API/CLI and operator surfaces.
+DS10 adds host-owned bounded `RepositoryDiscoveryPass` custody over configured
+repositories. Each unknown listed candidate receives an exact read before
+idempotent registration/enqueue. `RepositoryDiscoveryPassBoundary` records
+resume custody without claiming an atomic snapshot; list absence never changes
+lifecycle or proves catalog completeness.
+
+Handoff: unknown eligible open PRs enter known-subject reconciliation through
+bounded, observable, rate-aware discovery.
+
+### DS11 — Multi-PR and discovery-turn fairness
+
+DS11 extends one-subject host composition with catalog pages, durable runnable
+sequence/leases/tail requeue, fair known-subject/discovery turns,
+one-readiness-call turns, bounded startup/shutdown, detached portfolio
+inspection, API/CLI and operator surfaces.
 
 Handoff: disabled but process-complete multi-PR supervision with fairness,
 failure isolation and process/concurrency correspondence.
 
-### DS11 — Portfolio qualification
+### DS12 — Portfolio qualification
 
-DS11 runs all twelve named journeys and overlays, generated finite schedules,
+DS12 runs all twelve named journeys and overlays, generated finite schedules,
 semantic shrinking, exact replay, distribution/secret checks and the complete
 correspondence matrix. It changes production behavior only by returning a found
 gap to its owning tracer; a new major chain requires Navigator-approved split.
 
-Handoff: one revision-bound report sufficient for the separate DS12 decision.
+Handoff: one revision-bound report sufficient for the separate DS13 decision.
 
-### DS12 — Canonical cutover
+### DS13 — Canonical cutover
 
-After separate approval, DS12 stops/fences current service, snapshots old state
+After separate approval, DS13 stops/fences current service, snapshots old state
 only for bounded rollback, removes current source/tests, moves replacement to
 canonical paths, starts on fresh roots and proves one approved operation. After
 the first new accepted effect there is no schema downgrade path.
@@ -258,8 +300,8 @@ output never changes runtime disposition.
 The cumulative portfolio covers:
 
 - subject registration, lifecycle open, workflow step and posture record;
-- provider inbox retention, manifest/grant stage, History accept/fold, returned
-  acceptance and host acknowledgement;
+- `delivery_retained`/quarantine, manifest/grant stage, entry classification,
+  History accept/fold, returned acceptance and host acknowledgement;
 - bounded History page, Activity request, occurrence repair, attempt claim,
   effect observation, terminal record and workflow fold;
 - agent submit, acceptance, runtime terminal, cancellation, receiver delivery
@@ -269,7 +311,10 @@ The cumulative portfolio covers:
   and exact delivered marks;
 - authority provider/host reads, route/grant movement and effect fence; and
 - catalog page, runnable lease, instance open, readiness return, consequence
-  persistence, tail requeue, terminal close and resource shutdown.
+  persistence, tail requeue, terminal close and resource shutdown; and
+- discovery-pass open, list page, pass boundary, exact candidate read,
+  classification, idempotent registration/enqueue, completed pass and deferred
+  rate/route posture.
 
 Every cut discards process-local frames/objects and rebuilds from durable owners.
 A callback inside an unbounded operation does not prove a production cut.
@@ -284,7 +329,9 @@ bytes, pending Activities, loaded instances, catalog/route/runnable/timer rows,
 retained terminals and workspace/archive bytes.
 
 Lowering a meaningful limit must produce a typed refusal or replayable budget
-failure. A logical-operation cap does not excuse an unbounded internal read.
+failure. Every selected limit has −1 / limit / +1 evidence. Numeric values and
+exact call signatures remain fixture-calibrated Plan/acceptance refinements; a
+logical-operation cap does not excuse an unbounded internal read.
 
 ## Stop conditions
 
@@ -303,11 +350,11 @@ Stop for Navigator review when:
 - local simulation cannot mount production code, or a cross property has no
   real data dependency;
 - required real correspondence contradicts deterministic semantics; or
-- DS12 cannot remove all active generation concepts without compatibility.
+- DS13 cannot remove all active generation concepts without compatibility.
 
 ## Completion
 
-CV20 completes only after all twelve stories are accepted and the separately
-approved DS12 cutover leaves one canonical Hamsterdan on fresh state. Historical
+CV20 completes only after all thirteen stories are accepted and the separately
+approved DS13 cutover leaves one canonical Hamsterdan on fresh state. Historical
 records keep their dated terminology; active product, project, process,
 distribution, deployment, schema and operator truth contain no generation label.

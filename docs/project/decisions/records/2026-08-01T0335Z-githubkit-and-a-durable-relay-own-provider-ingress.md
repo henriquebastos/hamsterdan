@@ -6,6 +6,7 @@ deciders:
   - Henrique (Navigator)
 superseded_in_part_by:
   - 2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
+  - 2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
 related:
   - CV1.DS1
 ---
@@ -64,3 +65,9 @@ verification or coupling the App to Amp's agent surface.
 - The first instance is a private HBNetwork-owned App. GitHub permits changing
   an App's visibility later; generalized public installation and multi-account
   tenancy remain out of scope.
+
+## Partial supersession
+
+The manual-redelivery consequence remains historical/current-V5 behavior.
+CV20's planned replacement supersedes it through bounded configured-repository
+discovery plus exact-read-before-registration.

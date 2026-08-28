@@ -1,19 +1,19 @@
 ---
-code: CV20.DS10
+code: CV20.DS11
 level: Delivery Story
 status: Planned
-status_reason: Waits for accepted CV20.DS9 and is not pulled
-updated: 2026-08-27
+status_reason: Waits for accepted CV20.DS10 and is not pulled
+updated: 2026-08-28
 related:
   - index.md
-  - cv20-ds9-fence-lifecycle-authority.md
+  - cv20-ds10-discover-unregistered-open-prs-boundedly.md
   - architecture.md
   - api-contracts.md
   - delivery-sequence.md
   - replacement-ledger.md
 ---
 
-# CV20.DS10 — Supervise multiple PRs fairly
+# CV20.DS11 — Supervise multiple PRs fairly
 
 ## Outcome
 
@@ -23,7 +23,7 @@ startup reconstructs registered subjects, a durable runnable sequence leases
 one due subject at a time, each turn invokes readiness once, and already-due
 subjects progress fairly despite one failing or repeatedly waking PR.
 
-## Vertical path
+## Vertical paths
 
 ```text
 operator/service start or webhook wake
@@ -34,16 +34,23 @@ operator/service start or webhook wake
   -> persist delivery/route/posture consequences
   -> tail requeue or terminal close
   -> bounded detached portfolio inspection and shutdown
+
+completed repository discovery pass
+  -> idempotent unknown-subject registration/enqueue
+  -> durable fair selection among known-subject and discovery turns
+  -> one bounded readiness or discovery cut
+  -> tail requeue without starving either work class
 ```
 
-This tracer introduces one concurrency dimension—multiple independent PRs—while
-preserving all DS1–DS9 owner, authority, effect and recovery contracts.
+This tracer introduces one concurrency dimension—multiple independent PRs—and
+fairly schedules the known-subject and discovery turns established by DS10,
+while preserving all DS1–DS10 owner, authority, effect and recovery contracts.
 
 ## Component Technical Stories
 
 1. Implement durable catalog and bounded instance reconstruction pages.
 2. Implement coalesced runnable reasons, monotonic enqueue sequence, leases,
-   expiry repair and tail requeue.
+   expiry repair and tail requeue across known-subject and discovery turns.
 3. Implement one-readiness-call host turns and consequence persistence.
 4. Implement failure-isolated startup/shutdown, FastAPI lifespan and process CLI.
 5. Implement operator registration/inspection/qualification surfaces.
@@ -66,6 +73,9 @@ implemented host/root simulation and tests
 - Runnable state owns monotonic enqueue sequence, eligibility instant, lease,
   coalesced reasons and tail requeue. A repeatedly failing/re-woken subject is
   ordered behind already-due unclaimed subjects.
+- Discovery turns and known-subject turns share durable fair scheduling without
+  making repository traversal part of a readiness lifecycle. Neither class can
+  starve the other under the accepted finite bounds.
 - One service turn selects one subject, opens/reconstructs it, calls readiness
   at most once, persists consequences and requeues/closes it.
 - Host preserves the nested readiness cut unchanged and never interprets
@@ -77,7 +87,7 @@ implemented host/root simulation and tests
   prevent unrelated progress/cleanup.
 - Inspection is detached and bounded. Operator/API rims contain no business
   semantics and expose no credentials or live runtime objects.
-- Replacement service remains disabled/non-selectable through DS11.
+- Replacement service remains disabled/non-selectable through DS12.
 
 ## API-strengthening checkpoint
 
@@ -85,6 +95,7 @@ Review startup, one turn, inspection and shutdown call trees and settle:
 
 - catalog register/page/lookup and reconstructible instance factory signatures;
 - runnable enqueue/claim/renew/complete/requeue identities and transactions;
+- known-subject/discovery-turn fairness and bounded selection representation;
 - host-turn input/result plus readiness `StepResult` consequence mapping;
 - startup/close result aggregation, cancellation, timeout and partial-failure
   taxonomy;
@@ -99,11 +110,12 @@ and non-selectability are fixed.
 
 ## Tracer acceptance
 
-Given at least two already-due PRs—one repeatedly failing or waking—when bounded
-service turns run, then each non-terminal subject progresses in durable enqueue
-order, no turn invokes readiness twice, failures remain isolated, and inspection
-reports bounded detached posture. Lease loss and process death reconstruct and
-continue without duplicate external effects.
+Given at least two already-due PRs—one repeatedly failing or waking—and a due
+repository discovery turn, when bounded service turns run, then each
+non-terminal subject and the discovery pass progress in durable fair order, no
+turn invokes readiness twice, failures remain isolated, and inspection reports
+bounded detached posture. Lease loss and process death reconstruct and continue
+without duplicate external effects or registration.
 
 Acceptance covers partial startup, lease expiry at every turn cut, lost wake
 hints, concurrent enqueues, route/lifecycle generation movement, terminal close
@@ -139,5 +151,5 @@ process/storage/concurrency correspondence, distribution/secret scans and gates.
 ## Expansion boundary
 
 Catalog, runnable, turn, lifecycle and operator work may be separate Technical
-or User Stories. Keep DS10 open until the same production host demonstrably
+or User Stories. Keep DS11 open until the same production host demonstrably
 supervises multiple real readiness lifecycles fairly.

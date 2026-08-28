@@ -1,19 +1,19 @@
 ---
-code: CV20.DS11
+code: CV20.DS12
 level: Delivery Story
 status: Planned
-status_reason: Waits for accepted CV20.DS10 and is not pulled
-updated: 2026-08-27
+status_reason: Waits for accepted CV20.DS11 and is not pulled
+updated: 2026-08-28
 related:
   - index.md
-  - cv20-ds10-supervise-multiple-prs-fairly.md
+  - cv20-ds11-supervise-multiple-prs-fairly.md
   - architecture.md
   - api-contracts.md
   - delivery-sequence.md
   - replacement-ledger.md
 ---
 
-# CV20.DS11 — Qualify journeys and real-seam correspondence
+# CV20.DS12 — Qualify journeys and real-seam correspondence
 
 ## Outcome
 
@@ -21,9 +21,9 @@ Qualify the complete non-selectable replacement as one coherent system. Run the
 accepted journey portfolio through production owners and deterministic
 composition; pair each material simulation claim with direct provider, Git, Pi,
 SQLite/filesystem, OS-process or concurrency evidence; and emit one bounded,
-revision-bound qualification report for the DS12 cutover decision.
+revision-bound qualification report for the DS13 cutover decision.
 
-DS11 is not a late integration phase. Every earlier tracer already owns local/
+DS12 is not a late integration phase. Every earlier tracer already owns local/
 cross DST, observability, bounds and its first applicable correspondence. This
 story closes portfolio combinations, distribution and real-process evidence.
 
@@ -41,7 +41,7 @@ declared journey/schedule
 
 No new major effect family, custody model, authority policy or concurrency
 dimension may be hidden here. A discovered gap returns to its owning tracer or
-requires Navigator approval to split another tracer before DS11 can close.
+requires Navigator approval to split another tracer before DS12 can close.
 
 ## Component Technical Stories
 
@@ -81,8 +81,9 @@ The top-level journeys are:
 12. causal exact-delivered-result mutation publication.
 
 Reminder/timer progression, route revocation, accepted-hidden Git/provider
-recovery, PR closure/merge and multi-PR fairness are required overlays on every
-applicable journey rather than separate toy models.
+recovery, PR closure/merge, known-subject exact-read convergence,
+unknown-open-PR discovery and known/discovery-turn fairness are required
+overlays on every applicable journey rather than separate toy models.
 
 ## Fixed design
 
@@ -106,6 +107,11 @@ applicable journey rather than separate toy models.
 - Secret scans cover arguments, bounded environment projections, logs, stores,
   artifacts, workspaces and agent values without printing secrets.
 - The replacement stays disabled/non-selectable and never reads current state.
+- Discovery correspondence covers configured scope, list/get pairing,
+  pagination/rate metadata, `RepositoryDiscoveryPassBoundary`, page restart or
+  ruled ETag continuation, exact-read-before-registration, list-absence safety,
+  webhook races, finite rate reserve/defer behavior and DST scheduling. It makes
+  no atomic completeness claim.
 
 ## API-strengthening checkpoint
 
@@ -129,19 +135,20 @@ physical counts, fresh-process recovery and separate external approvals are fixe
 All twelve journeys and overlays pass through production owners with exact
 replay, meaningful local/cross sensitivity, finite generation/shrinking,
 declared resource peaks and no hidden skip. Every required claim has accepted
-correspondence or an explicit blocker that prevents DS11 acceptance.
+correspondence or an explicit blocker that prevents DS12 acceptance.
 
 The report includes real Git object/ref CAS and accepted-hidden lookup, real SDK
 transport, fresh SQLite/filesystem transaction cuts, OS process kills at named
-cuts, lease expiry, bounded concurrent PRs, Pi protocol/workspace/cleanup and
-authenticated Pi only under separate approval. Source/wheel, CLI, disabled
-service, architecture, active-name and secret checks pass on the exact revision.
+cuts, lease expiry, bounded concurrent PRs, Pi protocol/workspace/cleanup, and
+configured-repository discovery/list/get/DST evidence. Authenticated Pi remains
+subject to separate approval. Source/wheel, CLI, disabled service, architecture,
+active-name and secret checks pass on the exact revision.
 
 ## Done condition
 
 The complete system behavior and correspondence portfolio is accepted and
-understandable from CV20 plus its evidence report. DS11 cannot pass by aggregating
-locally green components or by deferring an applicable real seam to DS12.
+understandable from CV20 plus its evidence report. DS12 cannot pass by aggregating
+locally green components or by deferring an applicable real seam to DS13.
 
 ## Stop conditions
 
@@ -153,7 +160,7 @@ are unavailable, or qualification would enable the replacement.
 ## Rollback
 
 Remove incomplete qualification harness/evidence and temporary fresh fixtures.
-Accepted DS1–DS10 production behavior remains non-selectable; never mutate or
+Accepted DS1–DS11 production behavior remains non-selectable; never mutate or
 translate current runtime state.
 
 ## Validation
@@ -167,4 +174,4 @@ quality gates, active-name census and secret scan.
 
 Expand by journey family or real seam and risk. Every credential, live mutation,
 process kill and cleanup action retains explicit approval. No child may weaken a
-previous tracer's acceptance or turn DS11 into component-first integration.
+previous tracer's acceptance or turn DS12 into component-first integration.

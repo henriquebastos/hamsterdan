@@ -3,6 +3,8 @@ status: Decided
 raised: 2026-08-27
 decided: 2026-08-27
 recorded: 2026-08-27T1604Z
+superseded_in_part_by:
+  - 2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
 deciders:
   - Henrique (Navigator)
 related:
@@ -55,3 +57,10 @@ V5-only operational decision.
   V5 implementation is deleted and the replacement is named simply Hamsterdan.
 - Shared deployment, state, provider, commit, push, and release actions retain
   separate explicit approval boundaries.
+
+## Partial supersession
+
+The configured-repository recovery decision inserts a distinct DS10 discovery
+tracer. Current CV20 therefore has twelve tracers plus DS13 cutover. This record's
+replacement strategy, non-selectability and no-compatibility rulings remain in
+force; only its tracer count and DS12 cutover number are superseded.

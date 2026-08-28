@@ -28,23 +28,43 @@ names as one packet. The fixed semantics below constrain that review. A
 concrete API becomes canonical only when this document and the owning DS record
 are updated before implementation.
 
+## Python shape policy
+
+Concrete Python follows the project engineering contract:
+
+- one-value identities and semantic scalars use validating native-type
+  subtypes;
+- external input and durable/serialized output use strict Pydantic boundary
+  models;
+- frozen dataclasses appear only when they remove real record boilerplate;
+- private state is exposed through predicates and domain operations rather than
+  exported status enums; and
+- narrow collaborators use direct callables/composition rather than a Protocol
+  or service layer per call.
+
+Public `dict[str, Any]`, generic handler/context/result names, one file per noun,
+fake-pure reducers and speculative API aliases are forbidden. Exact classes,
+methods, signatures, private representation, boundary-model placement and cut
+payload fields remain first-call-site DS Plan decisions.
+
 First-use ownership is:
 
 | Contract family | First real tracer | Later strengthening |
 |---|---|---|
-| one-PR subject, composition, detached step/posture, Timeline/artifact | DS1 | DS2–DS10 only from added call sites |
+| one-PR subject, composition, detached step/posture, Timeline/artifact | DS1 | DS2–DS11 only from added call sites |
 | provider observation, host delivery and readiness ingress | DS2 | DS7/DS9 add observation families |
 | workflow Activity/manifest/occurrence identity | DS3 | DS5–DS8 add Activity families |
 | provider transport and lookup-first publication | DS4 | DS6/DS7 add Git/rerun operations; DS9 completes policies |
 | agent protocol, runtime, workspace and exact delivery | DS5 | DS6 adds coding values |
 | complete `AuthorityClaim` and first strong findings fence | DS5 | DS6/DS7 reuse it; DS9 completes the policy/lifecycle matrix |
 | conversation, `MutWork`, coding and Git causal chain | DS6 | DS7 reuses it for repair |
-| CI evidence, rerun and escalation | DS7 | DS11 qualifies combinations |
-| timer protocol/custody and deferred wakes | DS8 | DS11 qualifies combinations |
-| complete lifecycle and authority matrix | DS9 | DS10 consumes fresh evidence |
-| catalog, runnable leases, multi-PR service/operator | DS10 | DS11 qualifies process behavior |
-| journey/correspondence/evidence report | DS11 | DS12 consumes the report |
-| cutover commands and no-return evidence | DS12 | removed when construction ends where specified |
+| CI evidence, rerun and escalation | DS7 | DS12 qualifies combinations |
+| timer protocol/custody and deferred wakes | DS8 | DS12 qualifies combinations |
+| complete lifecycle and authority matrix | DS9 | DS10/DS11 consume fresh evidence |
+| configured-repository unknown discovery | DS10 | DS11 fairly schedules discovery turns; DS12 qualifies recovery |
+| catalog, runnable leases, multi-PR service/operator | DS11 | DS12 qualifies process behavior |
+| journey/correspondence/evidence report | DS12 | DS13 consumes the report |
+| cutover commands and no-return evidence | DS13 | removed when construction ends where specified |
 
 ## Cross-cutting identity contract
 
@@ -56,7 +76,7 @@ readiness binding and provider routing must agree before work runs.
 
 - **Fixed behavior:** immutable one-PR binding and fail-closed mismatch.
 - **DS review:** concrete `Subject` representation and serialized field names
-  in DS1; DS10 may extend portfolio inspection without changing identity.
+  in DS1; DS11 may extend portfolio inspection without changing identity.
 
 ### Authority claim
 
@@ -136,6 +156,56 @@ implementer does not infer the grammar from exploration.
 
 - **Fixed behavior/name:** the five identities above and no topology label.
 - **DS review:** final operation grammar in the owning first-use DS3–DS9 tracer.
+
+### Provider acquisition and observation identity
+
+Acquisition identity records how provider evidence entered Hamsterdan:
+
+```text
+webhook acquisition = (ProviderRouteId, DeliveryId)
+read acquisition    = (ProviderRouteId, ProviderReadId)
+```
+
+The webhook identity preserves exact `X-GitHub-Delivery`. A retry of a read that
+may observe changed state receives a new `ProviderReadId`. `RouteGeneration`
+and `CustodyGeneration` record/fence the acquisition context; neither belongs to
+semantic observation equality.
+
+`PullRequestSnapshot` is immutable provider-owned evidence containing stable
+`PRSubject`, exact head/base `BranchTip(repository_id, ref, sha)`, lifecycle,
+draft, tri-state mergeability and diagnostic provider update time.
+`ObservationProvenance` carries bounded source-specific evidence. Webhook
+event/action belongs only to webhook provenance. Readiness policy is a separate
+`PolicySeen` observation and never a provider-authored snapshot field.
+
+Focused observation identity is:
+
+```text
+ObservationKey = obs:v1:sha256:<digest>
+canonical bytes = encode(version, subject, local incarnation,
+                         observation family, focused semantics)
+HistoryAdmissionId = admission:v1:sha256:<ObservationKey digest>
+```
+
+The canonical bytes and key are both persisted and compared. `v1` freezes key
+encoding, not snapshot schema. Acquisition identity, provenance, policy,
+receipt/provider times and route/custody generations are excluded from semantic
+equality. Same key with different canonical bytes is a fatal semantic collision.
+
+`HeadSeen` contains subject, local incarnation and exact head/base branch tips.
+Draft, lifecycle, mergeability and policy use separate focused observation
+families. The first locally admissible `HeadSeen` binds incarnation 1 as the
+first lifecycle segment known to this root, not as provider-current authority.
+DS9 alone owns successor incarnations and cut-specific `CurrentnessWitness`.
+
+- **Fixed names:** `PullRequestSnapshot`, `ObservationProvenance`, `BranchTip`,
+  `HeadSeen`, `PolicySeen`, `ObservationKey`, `HistoryAdmissionId`,
+  `ProviderRouteId`, `DeliveryId`, `ProviderReadId`, `ActiveRouteBinding`,
+  `RouteGeneration`, `CustodyGeneration`.
+- **Fixed behavior:** identity/equality/collision/incarnation semantics and
+  source-neutral admission compatibility.
+- **DS review:** exact Python shapes, codecs and constructor/call signatures in
+  DS2; read provenance fields in DS4; lifecycle/currentness fields in DS9.
 
 ## Workflow contracts
 
@@ -259,21 +329,62 @@ conversion is allowed.
 
 ## Readiness contracts
 
-### Evidence projection
+### Source-neutral ingress admission
 
-One provider-to-workflow normalization capability projects a bounded provider
-event/action into zero or more workflow observations. Delivery identity and
-door identity remain in readiness custody and are attached to the immutable
-manifest rather than embedded in workflow observations.
+One source-neutral readiness seam projects a `PullRequestSnapshot` plus
+`ObservationProvenance` into zero or more focused workflow observations. DS2
+implements webhook acquisition only. Provider reads introduced later must use
+the same seam.
+
+Each acquisition atomically stages:
 
 ```text
-project(event, action) -> tuple[workflow observation, ...]
+IngressManifest:
+  acquisition identity
+  snapshot/provenance digest references
+  ordered unique-key IngressEntry values       # 0..N
+
+AdmissionGrant:
+  exact manifest
+  subject
+  lifecycle/incarnation binding
+  route/custody generations
+  policy revision
+  snapshot/provenance digest references
 ```
 
-- **Fixed behavior:** normalized values only; no provider exceptions or SDK
-  objects cross the boundary.
-- **DS review:** capability and head-observation method names in DS2; DS7/DS9
-  extend the same boundary for CI and lifecycle evidence.
+There is exactly one immutable manifest and one immutable manifest-scoped grant
+per acquisition, including empty projections. An empty manifest stages but
+creates no Petrus History delivery. The grant means readiness may
+classify/admit frozen manifest M under lifecycle binding B. It is not fresh
+provider truth, effect authority or a mutable latest-subject grant.
+
+Each entry receives one persisted closed `AdmissionDecision`:
+
+```text
+exact_duplicate | acquisition_collision | novel | corroborating
+stale | semantic_collision | conflicting | incomparable
+```
+
+Same acquisition identity and content is an exact retry. Changed content under
+the same identity is an acquisition collision and quarantines before History.
+A distinct acquisition with the same key/canonical bytes is corroborating:
+append one bounded deterministically deduplicated provenance reference and stop
+at `ingress_entry_classified`; do not deliver, admit or fold again. Same key and
+different canonical bytes is a fatal semantic collision. Contradictions persist
+as non-retryable failure-as-data.
+
+Petrus History is the sole workflow-admission ledger. `ObservationAdmission`
+is a rebuildable projection/index from an admitted key, first entry and exact
+History admission. No `ObservationLedger` or `AdmissionLedger` exists.
+
+- **Fixed names:** `IngressManifest`, `IngressEntry`, `AdmissionGrant`,
+  `AdmissionDecision`, `ObservationAdmission`.
+- **Fixed behavior:** cardinality, ordering, classification, sole-ledger,
+  corroboration and empty-manifest semantics.
+- **DS review:** concrete codecs, storage rows, producer/consumer calls,
+  refusal types and bounded provenance representation in DS2; DS7/DS9 extend
+  observation families without changing admission identity.
 
 ### Conversation classification
 
@@ -295,6 +406,11 @@ current_authority() -> AuthorityClaim
 
 Evidence unavailability produces a readiness-owned, bounded, secret-free
 failure before a new observation or effect is accepted.
+
+DS9 may issue a `CurrentnessWitness` only for one admission/fence cut after a
+confirming exact provider read and unchanged pre/post host `RouteGeneration`
+and `CustodyGeneration`. It has no TTL and cannot be reused as general latest
+truth. DS2 does not construct it.
 
 - **Fixed behavior:** fresh three-source composition.
 - **DS review:** sync/async shape and failure taxonomy in DS9.
@@ -393,6 +509,14 @@ may record one `ActivityRequested`; it never executes the effect inline.
 - **DS review:** DS1 rules page cursor/result and initial runtime layout, DS2
   rules observation cuts and DS3 rules occurrence repair/action request use.
 
+At pinned Petrus `44cac5ff48ac371ebae56323941983f30db13c0d`, identified
+delivery can return a prior acknowledgement but the public API cannot boundedly
+resume one accepted-and-begun nonterminal occurrence. DS2 crash recovery is
+blocked until Petrus implements, tests and releases a public
+accept/resume-one-accepted-unfinished-occurrence seam and Hamsterdan pins and
+qualifies it. Readiness must not access internal `Instance` state or collapse
+`observation_accepted` and `observation_folded` to avoid this prerequisite.
+
 ### Readiness cuts
 
 One readiness call returns after one cut:
@@ -400,8 +524,9 @@ One readiness call returns after one cut:
 | Cut | Maximum work before return |
 |---|---|
 | `ingress_staged` | recover/project one delivery and atomically store one bounded manifest plus grant |
-| `ingress_entry_accepted` | accept one frozen manifest entry into History |
-| `ingress_entry_folded` | fold one accepted entry; the final fold may complete delivery posture |
+| `ingress_entry_classified` | persist one entry decision; corroboration appends bounded deduplicated provenance and performs no fold |
+| `ingress_entry_accepted` / `observation_accepted` | accept one novel frozen manifest entry into History |
+| `ingress_entry_folded` / `observation_folded` | fold one accepted entry; the final fold may complete delivery posture |
 | `runtime_reconstructed` | replay one History page or repair one occurrence |
 | `workflow_advanced` | commit one workflow action |
 | `activity_attempt_claimed` | claim one exact Activity attempt |
@@ -423,7 +548,8 @@ the durable effect owner. It never trusts or serializes the lost result.
 - **Fixed names/behavior:** all cuts, one-call boundary and lookup-first
   recovery.
 - **DS review:** application method names and lane selection representation in
-  the first tracer that exercises each cut: DS1–DS4, DS8 and DS10 respectively.
+  the first tracer that exercises each cut: DS1–DS4, DS8, DS10 and DS11
+  respectively.
 
 ### Readiness lifecycle
 
@@ -445,7 +571,7 @@ Dispatch, workflow names or typed terminals.
 
 - **Fixed behavior:** operation set, one-PR binding and detached results.
 - **DS review:** initial factory/lifecycle names and signatures in DS1, delivery
-  admission in DS2, effect settlement in DS4 and close/service use in DS9/DS10.
+  admission in DS2, effect settlement in DS4 and close/service use in DS9/DS11.
 
 ## GitHub provider contracts
 
@@ -468,11 +594,21 @@ enough bounded metadata to classify rate limits and stale reads without
 exposing credentials.
 
 The gateway owns normalized reads plus raw Git object/ref operations. It does
-not classify readiness outcomes.
+not classify readiness outcomes. DS4 establishes two recovery mechanics for
+later owners:
+
+```text
+exact-read one pull request -> PullRequestSnapshot + read provenance
+list one bounded page of open pull-request candidate identities
+  -> candidates + next-page/rate metadata
+```
+
+The list page is a discovery hint only. DS10 owns pass custody, configured
+scope, candidate comparison, exact-read-before-registration and eligibility.
 
 - **Fixed behavior:** complete bounded reads, metadata and ownership.
-- **DS review:** whether the transport keeps `request`/`pages` or uses more
-  specific calls; response and pagination value names in DS4.
+- **DS review:** exact read/list-page call and result names, response/rate/
+  pagination values and finite limits in DS4; DS10 rules pass use.
 
 ### Lookup-first provider effect
 
@@ -585,6 +721,34 @@ second coding implementation or manufacture an equal result for publication.
 
 ## Host contracts
 
+### Delivery receipt and custody
+
+Webhook receipt has three distinct layers:
+
+1. GitHub→Amp HTTP receipt at the relay boundary;
+2. host `InboxReceipt`, proving `delivery_retained` or a committed permanent
+   refusal/quarantine; and
+3. terminal `delivery_acknowledged`, after readiness reports accepted or
+   already-accepted posture.
+
+The Amp HTTP layer does not by itself prove that its physical 2xx follows host
+retention; DS2 correspondence must establish that ordering or fail closed.
+`delivery_retained` is the canonical host retention cut. Host acknowledgement
+is an independently idempotent guarded `retained → acknowledged` compare-and-
+swap. Pending posture never permits acknowledgement.
+
+Raw body, signature and non-allowlisted headers remain transient. Normalized
+delivery/snapshot evidence is retained through active and accepted-but-
+unacknowledged custody. Terminal settlement atomically replaces it with a
+bounded redacted `DeliveryTombstone`. No TTL, eviction or silent truncation may
+remove evidence required for reconstruction, classification or collision proof.
+Capacity refusal is typed and occurs before partial durable writes.
+
+- **Fixed names:** `InboxReceipt`, `delivery_retained`,
+  `delivery_quarantined`, `delivery_acknowledged`, `DeliveryTombstone`.
+- **DS review:** durable schemas, calls, cut/refusal payloads, compaction and
+  finite byte/row limits in DS2.
+
 ### Lifecycle evidence
 
 Host provides fresh evidence with this meaning:
@@ -636,7 +800,7 @@ read state.
 
 - **Fixed behavior:** mapping and detached inspection boundary.
 - **DS review:** one-subject binding/inspection in DS1 and catalog page/portfolio
-  JSON in DS10.
+  JSON in DS11.
 
 ### Fair runnable contract
 
@@ -653,17 +817,44 @@ requeue or close the subject
 
 A failed or immediately re-woken subject is ordered behind already-due
 unclaimed subjects. Lost/corrupt wake hints reconstruct from catalog plus
-readiness inspection.
+readiness inspection. DS11 applies the same durable fairness to known-subject
+and repository-discovery turns without moving traversal into readiness.
 
 - **Fixed behavior:** fairness and one-readiness-call turn.
-- **DS review:** lease/store API and batch configuration in DS10.
+- **DS review:** lease/store API and batch configuration in DS11.
+
+### Configured-repository discovery custody
+
+Host owns one bounded `RepositoryDiscoveryPass` at a time per configured
+repository. The durable resume point is an explicit
+`RepositoryDiscoveryPassBoundary`; provider pages are transient query windows.
+`LastCompletedOpenPullRequestDiscoveryPass` supports inspection and scheduling
+but is not an atomic-snapshot or completeness watermark.
+
+One discovery turn lists one bounded page or exact-reads/classifies one unknown
+candidate. Exact read precedes idempotent registration/enqueue. Closed, missing,
+unauthorized and route-invalid candidates are classified without registration.
+List absence never closes, revokes, deletes or proves catalog completeness.
+
+- **Fixed names:** `RepositoryDiscoveryPass`,
+  `RepositoryDiscoveryPassBoundary`,
+  `LastCompletedOpenPullRequestDiscoveryPass`,
+  `UnknownPullRequestDiscovery`.
+- **DS review:** pass/candidate/registration calls, boundary representation,
+  page-1 restart versus ETag-validated continuation, rate reserve, leases,
+  deferral and finite limits in DS10.
 
 ### Host cuts
 
 | Cut | Maximum work before return |
 |---|---|
+| `delivery_retained` | retain one verified normalized delivery under current binding/custody or refuse before partial write |
+| `delivery_quarantined` | retain one bounded permanent acquisition collision/refusal record |
 | `catalog_page_inspected` | inspect one bounded catalog/readiness page |
 | `custody_item_disposed` | terminally dispose one host-owned non-workflow delivery |
+| `repository_discovery_page_listed` | retain one bounded list-page result and next pass boundary |
+| `repository_discovery_candidate_classified` | exact-read and classify one unknown candidate before any registration |
+| `repository_discovery_pass_completed` | commit one completed pass boundary without a completeness claim |
 | `subject_selected` | durably lease one due subject |
 | `instance_opened` | open/reconstruct one readiness lifecycle |
 | `readiness_step_returned` | call readiness once and preserve its nested cut unchanged |
@@ -674,8 +865,9 @@ readiness inspection.
 | `instance_closed` | close one instance/resource independently |
 
 - **Fixed names/behavior:** all cuts and recovery boundaries.
-- **DS review:** DS1/DS2 rule the one-subject open/posture/acknowledgement cuts;
-  DS5 adds route settlement; DS10 rules selection/requeue/close organization.
+- **DS review:** DS1/DS2 rule one-subject open/delivery/posture/acknowledgement
+  cuts; DS5 adds route settlement; DS10 rules discovery cuts; DS11 rules
+  selection/requeue/close organization.
 
 ## Simulation contracts
 
@@ -780,6 +972,12 @@ Concrete exception/data taxonomies are **DS review** items owned by the package
 that detects the failure. Cross-package generic error hierarchies are not
 allowed.
 
+Every byte, row, capacity, page, call, History scan, timeout, attempt, backoff,
+lease, defer window, deterministic schedule, mutation, semantic-coverage,
+checker, journal and artifact limit is finite. Numeric values are calibrated
+from accepted fixtures and tested at −1 / limit / +1. This document does not
+turn evidence seeds or example call sites into accepted constants/signatures.
+
 ## DS API-strengthening register
 
 Each story must resolve its listed questions before implementation. Resolving
@@ -789,17 +987,18 @@ in a chat or plan.
 | Story | Fixed before review | Questions the DS must settle |
 |---|---|---|
 | DS1 | one-PR ownership, sole composition, bounded step/posture, strict gate and core Timeline/artifact | subject/root/factory/result signatures, minimal Petrus replay cursor, gate diagnostics and first local/root evidence |
-| DS2 | raw-byte provider input, host delivery custody, readiness manifest/grant and real `HeadSeen` fold | webhook/route/delivery/observation values, stage/admit/ack calls, duplicate/collision errors and bounds |
+| DS2 | webhook-only snapshot/provenance, host delivery custody, source-neutral observation/key/manifest/grant/classification and real incarnation-1 `HeadSeen` fold | codecs, retain/stage/classify/admit/fold/ack calls, tombstones, collision/corroboration/refusal payloads and calibrated bounds |
 | DS3 | workflow ownership, manifest identity and first durable `DashReq` | request/terminal fields, manifest/token/build/wiring APIs, occurrence projection and pending posture |
-| DS4 | lookup-first one-attempt provider effect and split Activity positions | transport/gateway/result APIs, marker lookup, claim/effect/terminal calls, terminal admission and physical metrics |
+| DS4 | exact PR read, one bounded repository list page, lookup-first one-attempt provider effect and split Activity positions | read/list/transport/gateway/result APIs, pagination/rate metadata, marker lookup, claim/effect/terminal calls, terminal admission and physical metrics |
 | DS5 | credential-free agent protocol, stable execution identity, exact delivery and first protected findings call | review values/codecs, lifecycle/store calls, Pi/workspace/route custody, complete claim/evidence APIs, findings fence, cancellation errors and bounds |
 | DS6 | exact workflow→coding→Git→workflow causal contract | conversation/`MutWork`/coding/`Pushed` shapes, result digest, patch/Git/ref-CAS APIs and sensitivity evidence |
 | DS7 | exact-head CI, workflow escalation and lookup-first rerun | CI evidence/state, rerun/repair operations, retry limits, stale/ambiguous errors and schedule reports |
 | DS8 | integer-time workflow protocol and readiness timer custody | timer/custody/clock/wake APIs, reminder/deferred operations, cut transactions and resource keys |
-| DS9 | complete lifecycle outcomes and operation-specific authority matrix over the established claim | lifecycle-driven claim/evidence/generation extensions, remaining policy matrix, blocked/moved/conflict mappings and fence diagnostics |
-| DS10 | catalog discovery, durable runnable fairness and one-call host turns | catalog/page/lease/service/inspection/operator APIs, startup/shutdown aggregation and portfolio bounds |
-| DS11 | twelve journey meanings, complete correspondence and explicit approvals | journey/shrink/report DSL, claim/fixture/process-kill protocols, evidence binding and unavailable policy |
-| DS12 | one cutover, no migration and canonical Hamsterdan naming | operator command sequence, no-return marker, rollback record and cleanup evidence |
+| DS9 | complete lifecycle/currentness outcomes, known-subject exact-read convergence and operation-specific authority matrix | incarnation/witness/claim/evidence/generation extensions, remaining policy matrix, blocked/moved/conflict mappings and fence diagnostics |
+| DS10 | bounded configured-repository discovery with exact-read-before-registration | pass/boundary/list-page/candidate/classification/registration APIs, continuation/rate/DST correspondence and calibrated portfolio bounds |
+| DS11 | catalog, durable known/discovery-turn fairness and one-call host turns | catalog/page/lease/service/inspection/operator APIs, startup/shutdown aggregation and portfolio bounds |
+| DS12 | twelve journey meanings, complete correspondence and explicit approvals | journey/shrink/report DSL, claim/fixture/process-kill protocols, evidence binding and unavailable policy |
+| DS13 | one cutover, no migration and canonical Hamsterdan naming | operator command sequence, no-return marker, rollback record and cleanup evidence |
 
 ## Provenance
 

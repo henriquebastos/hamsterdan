@@ -3,7 +3,7 @@ code: CV20.DS4
 level: Delivery Story
 status: Planned
 status_reason: Waits for accepted CV20.DS3 and is not pulled
-updated: 2026-08-27
+updated: 2026-08-28
 related:
   - index.md
   - cv20-ds3-expose-workflow-activity.md
@@ -43,7 +43,8 @@ separate explicit approval.
 ## Component Technical Stories
 
 1. Implement bounded provider transport/gateway values and App authentication
-   lifetime without leaking credentials.
+   lifetime without leaking credentials, including one exact PR read and one
+   bounded configured-repository open-PR list page for later consumers.
 2. Implement operation-marker lookup and one-attempt dashboard publication.
 3. Qualify Motus attempt-claim, effect-observed and terminal-recorded seams.
 4. Implement the readiness publication adapter and strict terminal admission.
@@ -66,6 +67,15 @@ Petrus/Motus split effect-position seam and dependency pin, if needed
 - The workflow request/terminal remain workflow-owned. Provider observations
   and refusal/ambiguity values remain `github_app`-owned. Readiness alone maps
   between them.
+- Provider read acquisition identity is `(ProviderRouteId, ProviderReadId)`.
+  Retrying a read that can observe changed state creates a new read ID. Exact
+  reads normalize to the same `PullRequestSnapshot` plus read provenance used by
+  DS2's source-neutral admission seam; they do not create a second observation
+  path.
+- The gateway exposes exact current-PR read mechanics and one bounded open-PR
+  list page. It owns transport, pagination and rate metadata, not discovery-pass
+  custody, eligibility, registration, lifecycle or readiness classification.
+  DS10 is the first consumer of repository listing.
 - Every effect uses stable operation identity and provider-observable marker:
   `<!-- hamsterdan:readiness operation=<operation> head=<head> -->`.
 - A bounded complete lookup runs before each possible mutation. One call makes
@@ -85,6 +95,8 @@ Petrus/Motus split effect-position seam and dependency pin, if needed
 Review the exact request→provider→terminal call tree and settle:
 
 - bounded transport page/call/result metadata and provider error taxonomy;
+- exact PR read and one-page open-PR list inputs/results, including stable
+  candidate identity, pagination correspondence and rate metadata;
 - gateway lookup/publication inputs, marker extraction and accepted/refused/
   ambiguous result values;
 - Activity attempt claim/effect observation/terminal record signatures;
@@ -106,11 +118,13 @@ occurrence. If the response is lost after provider acceptance, generation 2's
 first effect action is lookup, no second mutation occurs, and the same terminal
 and workflow posture result.
 
-Acceptance also requires refused/stale/collision paths, provider-result and
-terminal-substitution cross sensitivities, exact replay, lowered call/page/byte/
-attempt budgets, physical one-effect evidence, real SDK/HTTP mock-transport and
-GitHub marker correspondence, and secret scans. Unapproved live correspondence
-is explicitly unavailable rather than silently green.
+Acceptance also requires exact-read/list-page normalization and bounds without
+making DS4 perform discovery, plus refused/stale/collision paths,
+provider-result and terminal-substitution cross sensitivities, exact replay,
+lowered call/page/byte/attempt budgets, physical one-effect evidence, real
+SDK/HTTP mock-transport and GitHub marker correspondence, and secret scans.
+Unapproved live correspondence is explicitly unavailable rather than silently
+green.
 
 ## Done condition
 
@@ -130,9 +144,10 @@ the pending `DashReq`; no current-runtime path changes.
 
 ## Validation
 
-Run provider/adapter/workflow behavior, each split effect cut, accepted-hidden
-recovery, one-attempt/cardinality checks, authority/collision/terminal failures,
-local/cross sensitivities, exact replay, bounds, SDK transport correspondence,
+Run provider exact-read/list-page and adapter/workflow behavior, each split
+effect cut, accepted-hidden recovery, one-attempt/cardinality checks,
+authority/collision/terminal failures, local/cross sensitivities, exact replay,
+every limit at −1 / limit / +1, SDK list/get/pagination/rate correspondence,
 secret scans and project gates.
 
 ## Expansion boundary

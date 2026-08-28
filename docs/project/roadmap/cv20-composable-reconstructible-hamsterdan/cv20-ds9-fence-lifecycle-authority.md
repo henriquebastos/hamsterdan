@@ -3,7 +3,7 @@ code: CV20.DS9
 level: Delivery Story
 status: Planned
 status_reason: Waits for accepted CV20.DS8 and is not pulled
-updated: 2026-08-27
+updated: 2026-08-28
 related:
   - index.md
   - cv20-ds8-recover-timers-deferred-work.md
@@ -22,6 +22,8 @@ Draft/ready changes, head/base/policy movement, route/custody revocation,
 closure/merge and true conflict are admitted through the real lifecycle;
 protected work executes only under matching readiness grant, fresh provider
 truth and fresh host evidence; stale work ends in workflow-declared outcomes.
+Repeated bounded exact reads converge every registered nonterminal subject when
+provider and route authority remain available.
 
 ## Vertical paths
 
@@ -64,6 +66,16 @@ implemented owner-local/root simulation and tests
 ## Fixed design
 
 - `AuthorityClaim` contains phase, incarnation, head, base and policy.
+- DS9 alone owns lifecycle successor creation and increments local incarnation
+  for complete close/reopen/merge movement. DS2's incarnation 1 remains a
+  durable first-local-observation fact, never current-provider authority.
+- `CurrentnessWitness` is DS9-owned and cut-specific: a confirming exact read
+  plus unchanged pre/post `RouteGeneration` and `CustodyGeneration` around the
+  admission/fence cut. It has no TTL and is never inferred from delivery ID,
+  receipt time, provider update time or Git ancestry.
+- Every registered nonterminal subject receives bounded exact-read
+  reconciliation. The exact read uses DS4 mechanics and DS2's source-neutral
+  snapshot/provenance → observation/key → manifest/admission seam.
 - DS5 introduced this complete claim and its three-source composition for the
   first protected findings call site; DS6 and DS7 reuse it for mutation and
   rerun. This DS completes lifecycle movements and the safeguard matrix for
@@ -90,6 +102,7 @@ implemented owner-local/root simulation and tests
 Review the lifecycle and each operation-specific fence call tree and settle:
 
 - lifecycle observation/state/terminal and detached posture fields;
+- incarnation successor and cut-specific `CurrentnessWitness` values;
 - any claim/current-authority capability extensions forced by new lifecycle
   call sites; the complete claim shape and three-source rule remain unchanged;
 - host route/custody evidence, generation and read APIs;
@@ -98,6 +111,9 @@ Review the lifecycle and each operation-specific fence call tree and settle:
 - unavailable/stale/revoked/collision/closed error taxonomy;
 - read, grant, route-change, effect-claim and terminal cuts; and
 - evidence age/call/row/byte, generation, retained blocker and artifact limits.
+
+Numeric limits, exact call signatures, payload fields and refusal shapes remain
+fixture-calibrated Plan refinements with −1 / limit / +1 evidence.
 
 Write the ruled matrix and signatures into [the API contract](api-contracts.md).
 Three-source authority, operation-specific safeguards, readiness-owned mapping
@@ -138,8 +154,9 @@ unchanged.
 
 Run all lifecycle schedules, operation-specific authority matrix, every
 read/fence movement and crash cut, no-stale-effect physical counts, local/cross
-sensitivities, exact replay, lowered bounds, provider/route/process
-correspondence, secret scans and project gates.
+sensitivities, known-subject exact-read convergence, exact replay, every limit at
+−1 / limit / +1, provider/route/process/DST correspondence, secret scans and
+project gates.
 
 ## Expansion boundary
 

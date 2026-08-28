@@ -78,6 +78,7 @@ and the no-facade policy while exporting nothing.
 | `host/clock.py` | sole production wall-clock/sleep owner |
 | `host/composition.py` | only concrete readiness/GitHub/agent construction root |
 | `host/service.py` | portfolio startup, bounded multi-instance turns, isolation and shutdown |
+| `host/discovery.py` | configured-repository discovery-pass custody, exact-read-before-registration and pass boundaries |
 | `host/api.py` | FastAPI/lifespan adaptation |
 | `host/__main__.py` | process CLI and construction edge |
 | `host/instances.py` | process discovery independent of readiness internals |
@@ -111,12 +112,13 @@ extend an existing owner only from a new real call site.
 | DS6 | conversation/mutation folds; coding protocol; readiness mutation/Git; provider raw Git operations |
 | DS7 | CI/escalation folds; provider check evidence; readiness/provider rerun operation |
 | DS8 | workflow reminders/deferred values; readiness timer custody; host clock/deadline wake |
-| DS9 | complete lifecycle/readiness folds; remaining authority-policy matrix; host/provider route-generation movement; blocked/moved mappings |
-| DS10 | host catalog/runnable/service/API/CLI/inspection/qualification and operator surfaces |
-| DS11 | acceptance journeys/recovery/correspondence, generated schedules, qualification/distribution evidence |
-| DS12 | canonical rename, old implementation deletion, gate/config/deployment/doc promotion and fresh-state cutover |
+| DS9 | complete lifecycle/readiness folds; known-subject exact-read convergence; remaining authority-policy matrix; host/provider route-generation movement; blocked/moved mappings |
+| DS10 | provider open-PR list-page use; host configured-repository discovery-pass custody; exact-read-before-registration; idempotent registration/enqueue |
+| DS11 | host catalog/runnable/service/API/CLI/inspection/qualification and operator surfaces; fair known-subject/discovery turns |
+| DS12 | acceptance journeys/recovery/correspondence, generated schedules, qualification/distribution evidence |
+| DS13 | canonical rename, old implementation deletion, gate/config/deployment/doc promotion and fresh-state cutover |
 
-Every DS1–DS11 row includes its owner-local/root simulation, checker,
+Every DS1–DS12 row includes its owner-local/root simulation, checker,
 correspondence and resource evidence. Those are not deferred modules owned by a
 later integration story.
 
@@ -164,6 +166,7 @@ tests2/
       test_clock.py
       test_composition.py
       test_service.py
+      test_discovery.py
       test_instances_and_inspection.py
       test_runnable.py
       test_agent_custody.py
@@ -210,8 +213,16 @@ quality/hamsterdan2/sgconfig.yml
 quality/hamsterdan2/ast-grep/*.yml
 quality/hamsterdan2/ast-grep-tests/
 tests2/test_architecture.py
-scripts/check integration
+tests2/test_feedback.py
+scripts/check quick/full/release membership
 ```
+
+Before any production implementation, DS1's feedback test inventories and
+applies the applicable root/nested `AGENTS.md`, Ariad Process/Project/Product
+owners, engineering conventions and signed-in personal/global Amp skills. It
+proves the replacement gate is path-isolated and fails when `src/hamsterdan2` or
+`tests2` would escape an intended check. The approved requirement comes from the
+source-thread ruling; it is not represented as transfer of an absent checkout.
 
 The isolated Ruff configuration selects `ALL`, uses line length 120 and Ruff
 formatting, and has only this justified veto list:
@@ -253,9 +264,27 @@ composition. DS1 does not create an empty final skeleton or construction
 placeholder merely to satisfy a future edge. Every later tracer updates the
 positive census in the same change that introduces the real edge.
 
-The replacement gate runs from `scripts/check quick`; `full` and `release`
-inherit it. At DS12 the isolated config becomes the repository default and the
-temporary path qualifier disappears.
+The replacement profiles are cumulative:
+
+- `quick`: replacement Ruff lint/format, ty, verified ast-grep rules/tests,
+  fast AST architecture/feedback checks and fast pytest;
+- `full`: all quick evidence plus complete deterministic pytest/Hypothesis,
+  Timeline/DST replay and domain-aware shrinking, semantic coverage, accepted
+  focused reducer/checker mutation evidence and accepted real seams; and
+- `release`: all full evidence plus accepted serial and revision-bound suites.
+
+TDD starts each behavior with an intended failing test. Owner-local/root DST,
+Hypothesis, semantic-coverage assertions, mutation sensitivity and real-seam
+correspondence grow with the production behavior rather than arriving in DS12.
+Exact ty configuration; mutation tool, targets, survival policy/threshold and
+cadence; numeric coverage policy; real/live marker selection/environment and
+skip/fail policy; and every numeric resource bound remain DS1 Plan/acceptance
+refinements.
+
+The isolated profiles apply only to `src/hamsterdan2` and `tests2` through
+DS12. Legacy `src/hamsterdan` and `tests` remain under the current repository
+gate; no retrofit is required. At DS13 the isolated configuration becomes the
+repository default and the temporary path qualifier disappears.
 
 ## Current source disposition (61/61)
 
@@ -398,16 +427,17 @@ modifies or migrates an old root.
 | legacy-migrating agent routes | fresh host operation-route store |
 | runnable rows without durable fairness sequence/lease | fresh fair runnable store |
 | filesystem History discovery | host instance catalog |
+| no durable unknown-open-PR discovery custody | fresh configured-repository discovery-pass store |
 | old Dispatch/History file and queue identities | fresh readiness-owned names |
 | current webhook/routing stores | replace only where target bounded contracts differ; never add old-schema readers |
 
-Old state is retained only as bounded rollback custody after DS12 approval. It
+Old state is retained only as bounded rollback custody after DS13 approval. It
 is never an available runtime or compatibility contract. Deletion is a later,
 separately approved operator action.
 
 ## Removed names, schemas and artifacts
 
-DS12 removes from active code and state:
+DS13 removes from active code and state:
 
 - `host/v5`, `readiness/net_v5` and `contracts`;
 - topology descriptors/selectors and old binding/preflight/Activity resolver;
@@ -438,7 +468,7 @@ compatibility reader.
 
 ## Cutover file and documentation cleanup
 
-DS12 renames:
+DS13 renames:
 
 ```text
 src/hamsterdan2 -> src/hamsterdan
@@ -462,7 +492,7 @@ The cutover updates current truth in:
   schemas or topology.
 
 Dated CV17/CV18/ES7/ES8/ES9/ES10 records, decisions and worklogs remain
-historical evidence. The DS12 cutover decision supersedes the current V5-only
+historical evidence. The DS13 cutover decision supersedes the current V5-only
 operational decision. Active documents do not preserve V5 or Hamsterdan2 as a
 runtime concept merely because history still contains those words.
 
@@ -480,6 +510,6 @@ Mechanical coherence checks must prove:
    responsibility owner;
 5. every admitted path is owned by its tracer or explicitly listed
    quality/dependency/cutover scope, with no future-only placeholder;
-6. every DS1–DS11 tracer has local/root simulation, checker, bounds and
+6. every DS1–DS12 tracer has local/root simulation, checker, bounds and
    correspondence disposition alongside production responsibility; and
-7. DS12's forbidden-name/schema/path census reaches zero in active owners.
+7. DS13's forbidden-name/schema/path census reaches zero in active owners.

@@ -3,6 +3,8 @@ status: Decided
 raised: 2026-08-27
 decided: 2026-08-27
 recorded: 2026-08-27T1925Z
+superseded_in_part_by:
+  - 2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
 deciders:
   - Henrique (Navigator)
 related:
@@ -64,3 +66,9 @@ before implementation.
   is accepted.
 - CV20 and every Delivery Story remain `Planned`; this decision pulls no work
   and does not alter the V5-only runtime or DS12 approval boundary.
+
+## Partial supersession
+
+The configured-repository recovery decision inserts DS10 discovery and
+renumbers the later stories. The vertical-tracer contract remains unchanged;
+the current sequence is twelve tracers plus DS13 cutover.

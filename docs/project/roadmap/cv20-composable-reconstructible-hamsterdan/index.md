@@ -2,12 +2,14 @@
 code: CV20
 level: Value
 status: Planned
-status_reason: ES-010 is promoted as eleven planned tracer Delivery Stories plus cutover; none is pulled while CV19 remains active
-updated: 2026-08-27
+status_reason: ES-010 is promoted as twelve planned tracer Delivery Stories plus cutover; none is pulled while CV19 remains active
+updated: 2026-08-28
 related:
   - ../../exploration/es10-composable-hamsterdan-architecture/index.md
   - ../../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md
   - ../../decisions/records/2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md
+  - ../../decisions/records/2026-08-28T0152Z-pr-observations-use-source-neutral-admission-and-history-authority.md
+  - ../../decisions/records/2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
   - ../cv19-private-v0-1-production/index.md
   - architecture.md
   - api-contracts.md
@@ -26,7 +28,7 @@ and compose without duplicating semantic rules.
 
 `src/hamsterdan2` and `tests2` are construction namespaces only. They are not a
 selectable runtime and never read current V5 state. The current Hamsterdan V5
-runtime remains the sole operational runtime through DS1–DS11. DS12 performs
+runtime remains the sole operational runtime through DS1–DS12. DS13 performs
 one separately approved cutover: the replacement becomes canonical
 `src/hamsterdan` and `tests`, the current implementation is removed, and the
 temporary “Hamsterdan2” and “V5” concepts disappear from active runtime,
@@ -65,7 +67,7 @@ Checkpoint may strengthen a listed DS-review name or signature and must update
 the affected CV20 owner. It may not recover an alternative from exploration or
 change a fixed boundary without a new Navigator ruling.
 
-Delivery proceeds as a tracer ladder. Each of DS1–DS11 deepens one real
+Delivery proceeds as a tracer ladder. Each of DS1–DS12 deepens one real
 production spine from an external/operator/simulation command to a bounded
 visible posture, durable workflow request, or accepted effect. Component work
 is reviewable Technical Story work inside that tracer, not a separately
@@ -88,7 +90,8 @@ canonical CV20 contract, CV20 governs Delivery.
 DS1 bounded PR lifecycle -> DS2 observation -> DS3 Activity
   -> DS4 GitHub effect -> DS5 agent round -> DS6 causal mutation
   -> DS7 CI/repair -> DS8 timers -> DS9 authority/lifecycle
-  -> DS10 multi-PR fairness -> DS11 qualification -> DS12 cutover
+  -> DS10 unknown discovery -> DS11 multi-PR/discovery fairness
+  -> DS12 qualification -> DS13 cutover
 ```
 
 ## Delivery
@@ -102,9 +105,10 @@ DS1 bounded PR lifecycle -> DS2 observation -> DS3 Activity
 7. [CV20.DS7 — Recover CI and repair escalation](cv20-ds7-recover-ci-repair-escalation.md)
 8. [CV20.DS8 — Recover timers and deferred work](cv20-ds8-recover-timers-deferred-work.md)
 9. [CV20.DS9 — Fence lifecycle and authority changes](cv20-ds9-fence-lifecycle-authority.md)
-10. [CV20.DS10 — Supervise multiple PRs fairly](cv20-ds10-supervise-multiple-prs-fairly.md)
-11. [CV20.DS11 — Qualify journeys and real-seam correspondence](cv20-ds11-qualify-journeys-correspondence.md)
-12. [CV20.DS12 — Cut over and remove V5](cv20-ds12-cutover-remove-v5.md)
+10. [CV20.DS10 — Discover unregistered open PRs boundedly](cv20-ds10-discover-unregistered-open-prs-boundedly.md)
+11. [CV20.DS11 — Supervise multiple PRs fairly](cv20-ds11-supervise-multiple-prs-fairly.md)
+12. [CV20.DS12 — Qualify journeys and real-seam correspondence](cv20-ds12-qualify-journeys-correspondence.md)
+13. [CV20.DS13 — Cut over and remove V5](cv20-ds13-cutover-remove-v5.md)
 
 Every Delivery Story is `Planned`. Before implementation, the selected tracer
 must expand into one or more User/Technical Stories and pass its own Plan
@@ -116,10 +120,10 @@ or change CV19's active priority.
 
 CV20 is complete when:
 
-1. the twelve Delivery Stories satisfy their accepted outcomes and validation;
+1. the thirteen Delivery Stories satisfy their accepted outcomes and validation;
 2. the final implementation preserves the stated user behavior, authority,
    credential, recovery, fairness, bounds, and replay contracts;
-3. DS12 receives explicit approval for service, deployment, and state actions;
+3. DS13 receives explicit approval for service, deployment, and state actions;
 4. the replacement is the only canonical `hamsterdan` package and runtime;
 5. no active runtime concept, path, identifier, schema, selector, compatibility
    reader, or operator instruction retains “Hamsterdan2” or “V5”; and
@@ -128,7 +132,7 @@ CV20 is complete when:
 
 ## Boundaries
 
-- V5 remains the only runtime until DS12; `hamsterdan2` is never selectable.
+- V5 remains the only runtime until DS13; `hamsterdan2` is never selectable.
 - No replacement code opens, migrates, or converts current runtime state.
 - No Delivery Story begins merely because CV20 is Planned.
 - Provider mutations, production launch, cutover, state retention/deletion,
