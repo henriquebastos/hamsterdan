@@ -16,6 +16,7 @@ outer-system rows below. CV22 owns workflow rows. CV20 remains linked evidence.
 | immutable one-PR subject and exact identity/correlation/operation comparison | Adopt at every outer cut and bridge mapping | New workflow produces the same boundary identity |
 | three-source authority: durable readiness grant, fresh provider read, fresh host evidence | Adopt | Workflow supplies durable intent but never substitutes for fresh outer authority |
 | lookup-first at-least-once effects | Adopt for GitHub, Git, agent, and publication operations | Workflow emits stable immutable work and consumes exact outcomes |
+| Impetus canonical History plus separately supervised Motus Worker execution | Adopt with readiness owning one-PR Engine integration, Motus owning operational task/Attempt custody, and external deployment owning Worker process lifetime | Preserve the same Engine/Dispatch/Worker boundary when the replacement Net removes the bridge |
 | configured-repository unknown-open-PR discovery | Adopt in DS10–DS11 | No workflow discovery responsibility |
 | dashboard event/projection/publication/outcome and final-close convergence | Bridge only the retained dashboard request/outcome without changing retained behavior | Adopt as the first accepted concrete replacement-subnet design |
 | exact production subnet accepted locally before larger composition | Not a CV21 workflow implementation; bridge correspondence is accepted locally as an adapter | Adopt recursively for every production subnet |
@@ -46,20 +47,49 @@ PullRequestSnapshot + ObservationProvenance
   -> fold
 ```
 
-Webhook acquisition is first; later exact reads use the same seam. Duplicate,
-corroboration, collision, incomparable evidence, and accepted/folded/
-acknowledged cuts remain distinct. The bridge translates the accepted focused
-observation into the retained input; it does not become another admission
-ledger.
+Webhook acquisition is first; later exact reads use the same seam. The HTTP
+request ends after durable host custody, before a readiness turn. Duplicate,
+corroboration, collision, incomparable evidence, custody, acknowledgement,
+admission, and fold cuts remain distinct. The bridge translates the accepted
+focused observation into the retained input; it does not become another
+admission ledger.
 
 ### DS3
 
-CV21 adopts Activity/occurrence projection, History request authority, Dispatch
-execution custody, exact terminal comparison, and opaque host posture. It does
-not implement the accepted new dashboard subnet. CV22 owns that event,
-projection, publication, outcome, closure, and local-subnet contract. CV21 DS3
-instead proves that the retained dashboard request crosses the bridge without
-old type leakage or invented workflow behavior.
+CV21 adopts Activity/occurrence projection, Impetus History request authority,
+Motus Dispatch operational custody, exact terminal comparison, and opaque host
+posture. It does not implement the accepted new dashboard subnet. CV22 owns that
+event, projection, publication, outcome, closure, and local-subnet contract.
+CV21 DS3 instead proves that the retained dashboard request crosses the bridge,
+becomes durable pending Dispatch work, and admits a scripted operational
+terminal through Engine collection without old type leakage, invented workflow
+behavior, or a running Worker.
+
+## Accepted Worker and process profile
+
+[The accepted CV21 process ruling](../../decisions/records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md)
+places Activity execution in separately supervised Motus Worker roles. The
+initial production-shaped profile uses durable same-host Local Dispatch with
+separate GitHub and agent Worker processes. `host` composes each executable
+role, but the Hamsterdan authority role never creates, pumps, waits inside, or
+supervises those Workers; deployment supervision owns their process lifetimes.
+
+The stories introduce that boundary progressively:
+
+1. DS1 constructs one PR's Engine-facing Dispatch seam without a Worker.
+2. DS3 proves durable pending work and scripted terminal collection.
+3. DS4 proves a real GitHub Worker process and Local Dispatch correspondence.
+4. DS5 proves a separate credential-free agent Worker using Agenticus/Pi.
+5. DS6, DS7, and DS9 reuse those roles for later effects without adding an
+   authority-owned execution path.
+6. DS11 proves authority fairness across many PRs independently of shared
+   Worker concurrency.
+7. DS12 qualifies independent restart and credential isolation.
+
+For example, 100 open PRs produce 100 independent Impetus Instances, not 100
+agent processes. A bounded pool of separately supervised agent Workers can
+claim tasks for those Instances through Motus Dispatch while the authority role
+continues fair one-PR Engine turns.
 
 ## Pending outer-system rulings
 

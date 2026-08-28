@@ -39,13 +39,16 @@ register/step command -> new host composition -> new readiness runtime
 
 ## Excludes
 
-No provider observation, Activity execution, workflow replacement code, current
-outer application reuse, runtime selector, current state access, or deployment.
+No provider observation, Motus Worker construction, Activity execution,
+workflow replacement code, current outer application reuse, runtime selector,
+current state access, or deployment.
 
 ## Acceptance
 
 - only `readiness/workflow_bridge.py` imports the exact legacy allowlist;
 - the bridge mounts the production current Net and seed without old outer code;
+- the one-PR Engine receives its engine-facing Dispatch without constructing or
+  driving a Worker or concrete Activity registry;
 - host cannot inspect markings, old types, or Petrus runtime objects;
 - one call returns after one named cut with finite measured resources;
 - process death before and after that cut reconstructs deterministically;

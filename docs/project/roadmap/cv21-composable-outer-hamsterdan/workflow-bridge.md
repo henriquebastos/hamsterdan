@@ -7,9 +7,13 @@ application, a V5 facade, a migration layer, or a supported compatibility lane.
 ## Ownership
 
 The bridge lives at `src/hamsterdan2/readiness/workflow_bridge.py` because
-readiness owns Petrus execution and the application-to-workflow boundary. It is
-constructed by readiness runtime and receives no provider client, agent runner,
-host store, clock, credential, or current application object.
+readiness owns the one-PR Petrus Engine integration and the
+application-to-workflow boundary. It is constructed by readiness runtime and
+receives no provider client, agent runner, host store, clock, credential, or
+current application object. Readiness does not own Motus Worker execution:
+separately supervised Worker roles claim and execute tasks through Dispatch,
+and a later Engine turn collects operational terminals into canonical Impetus
+History.
 
 Only this production file may directly import:
 
@@ -133,13 +137,16 @@ Each admitted family adds scenarios that:
 
 1. create only new command values;
 2. mount the real retained production Net through the bridge;
-3. drive one action at a time through named acceptance, fold, request,
-   claim/execute, and terminal cuts;
-4. compare exact new observations with independently derived expectations;
-5. crash at every newly introduced durable cut, reconstruct from a fresh object
+3. drive one action at a time through named acceptance, fold, request, Dispatch
+   publication, Worker operational-terminal, Engine-collection, and Impetus
+   canonical-terminal cuts;
+4. from DS4 onward, prove that a Worker can claim, execute, and report without
+   the bridge or authority role on its call stack;
+5. compare exact new observations with independently derived expectations;
+6. crash at every newly introduced durable cut, reconstruct from a fresh object
    graph, and reach the same result;
-6. exactly replay the expanded action sequence; and
-7. mutate one mapping field or identity comparison and prove that the checker
+7. exactly replay the expanded action sequence; and
+8. mutate one mapping field or identity comparison and prove that the checker
    fails.
 
 Existing V5 workflow tests and accepted CV17 journeys prove retained behavior.

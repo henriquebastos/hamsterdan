@@ -29,16 +29,16 @@ dimension, or causal chain.
 | Story | Accepted new outer capability | Explicitly retained workflow behavior |
 |---|---|---|
 | DS1 | strict gate; fresh one-PR construction; host/readiness/bridge spine; bounded step/posture; Timeline and replay | current Net construction and seed |
-| DS2 | provider webhook acquisition; host custody; source-neutral manifest/admission; exact acknowledgement cuts | current ingress fold |
-| DS3 | typed pending-Activity projection and original-occurrence terminal admission | current dashboard request decision and state |
-| DS4 | bounded provider reads; lookup-first publication; split claim/execute/terminal cuts | current publication terminal fold |
-| DS5 | credential-free agent protocol; route custody; exact result delivery; first complete protected-work claim | current review/conversation decisions |
+| DS2 | provider webhook acquisition; durable host custody; HTTP response boundary; later source-neutral manifest/admission | current ingress fold |
+| DS3 | typed Activity projection; Impetus request/occurrence; pending Motus Dispatch; scripted terminal collection without a Worker | current dashboard request decision and state |
+| DS4 | separate GitHub Worker process; bounded provider reads; lookup-first publication; Motus operational terminal and later Engine collection | current publication terminal fold |
+| DS5 | separate agent Worker process; credential-free Agenticus/Pi protocol; exact result delivery; first complete protected-work claim | current review/conversation decisions |
 | DS6 | exact workflow→agent→Git→workflow causal custody and ref-CAS recovery | current mutation decision and terminal fold |
 | DS7 | exact-head CI evidence; rerun and repair effect execution/recovery | current escalation policy |
 | DS8 | durable timer command/acknowledgement/maturity/delivery and host clock wake | current reminder/defer decisions |
 | DS9 | complete lifecycle/currentness/authority matrix and known-subject convergence | current close/block/terminal behavior |
 | DS10 | bounded unknown-open-PR discovery and exact-read-before-registration | no new workflow family expected |
-| DS11 | durable fair scheduling across known-subject and discovery turns; service/operator inspection | no new workflow family expected |
+| DS11 | durable fair authority scheduling across known-subject and discovery turns, independent of shared Worker concurrency; service/operator inspection | no new workflow family expected |
 | DS12 | complete journey, recovery, bridge correspondence, distribution, and resource evidence | complete retained-Net behavior exercised through new outer system |
 
 ## Cumulative construction state
@@ -52,31 +52,37 @@ provider observation or external effect exists.
 
 ### After DS2
 
-One signed provider delivery is normalized and retained by new provider/host
-owners, staged in one readiness manifest, accepted in identified History,
-translated by the bridge, folded by the current Net, and acknowledged at a
-distinct cut. Duplicate, corroborating, colliding, and incomparable evidence is
-visible without a second admission ledger.
+One signed provider delivery is normalized and durably retained by new
+provider/host owners, then the HTTP request ends. A later authority turn stages
+it in one readiness manifest, accepts it in identified History, translates it
+through the bridge, folds it in the current Net, and marks host delivery
+completion at a distinct cut. Duplicate, corroborating, colliding, and
+incomparable evidence is visible without a second admission ledger.
 
 ### After DS3
 
 The bridge projects one current dashboard request as exact typed new Activity
-work with its occurrence and identities. History proves the request; Dispatch
-proves execution custody. Host sees only detached waiting posture. A typed
-terminal can return only to the original occurrence. No provider implementation
-runs and no new dashboard subnet exists.
+work with its occurrence and identities. Impetus History proves the canonical
+request; Motus Dispatch durably retains pending operational custody. Host sees
+only detached waiting posture. A scripted Dispatch terminal can become
+canonical only through Engine collection and can return only to the original
+occurrence. No Worker or provider implementation runs and no new dashboard
+subnet exists.
 
 ### After DS4
 
-The first real GitHub publication executes through new provider/readiness
-owners. Claim, effect-observed/execute, and terminal-recorded cuts are distinct.
-Ambiguity performs bounded lookup before any later attempt.
+The first real GitHub publication crosses durable same-host Local Dispatch to a
+separately supervised GitHub Worker process. Worker claim/lease, provider
+effect, Dispatch operational terminal, later Engine collection, and Impetus
+canonical terminal cuts are distinct. The authority and Worker roles restart
+independently. Ambiguity performs bounded lookup before any later attempt.
 
 ### After DS5
 
-One review or conversation agent round uses a credential-free request, durable
-host route, bounded Pi execution, exact receiver delivery, cancellation, and a
-complete authority claim. GitHub credentials never enter agent state.
+One review or conversation agent round crosses Dispatch to a separately
+supervised agent Worker. It uses a credential-free request, host-composed route,
+bounded Agenticus/Pi execution, exact receiver delivery, cancellation, and a
+complete authority claim. GitHub credentials never enter the agent process.
 
 ### After DS6
 
@@ -87,9 +93,9 @@ checked across reconstruction.
 
 ### After DS7
 
-Exact-head checks enter through common admission. New outer code executes and
-recovers rerun and repair work while the retained Net continues deciding
-escalation.
+Exact-head checks enter through common admission. The established GitHub and
+agent Worker roles execute and recover rerun and repair work while the retained
+Net continues deciding escalation.
 
 ### After DS8
 
@@ -112,9 +118,12 @@ registration, enqueue, and common admission.
 
 ### After DS11
 
-One process supervises many independent PR roots with durable fair leases and
-tail requeue across known-subject and discovery turns. API, CLI, inspection,
-startup, and shutdown remain bounded and do not decode workflow internals.
+One Hamsterdan authority role advances many independent PR roots with durable
+fair leases and tail requeue across known-subject and discovery turns. API,
+CLI, inspection, startup, and shutdown remain bounded and do not decode
+workflow internals. Shared separately supervised Worker roles serve those
+Instances without one process or thread per PR; their queue concurrency and
+lifetime remain outside authority fairness and supervision.
 
 ### After DS12
 

@@ -14,14 +14,19 @@ contracts. The retained component is mounted only by
 `readiness/workflow_bridge.py`. Everything above that seam is new.
 
 ```text
-host service/API
+host authority composition
   -> readiness application and lifecycle capabilities
        -> workflow boundary values
-       -> readiness runtime
+       -> one-PR Petrus Engine
+            -> Impetus Instance/History
+            -> engine-facing Motus Dispatch
             -> workflow_bridge
                  -> current Net/seed/gates/contracts
-       -> injected GitHub and agent capabilities
-  -> concrete github_app and agents construction
+
+host Worker composition
+  -> Motus Worker + WorkerDispatch
+       -> readiness typed Activity adapter
+            -> concrete github_app or agents capability
 ```
 
 ## Package ownership
@@ -29,10 +34,10 @@ host service/API
 | Package | Owns | Must not own |
 |---|---|---|
 | `workflow` | final outer-facing workflow observations, Activity work, terminals, operation identity, occurrence projection, and detached posture language required by CV21 call sites | Net topology, loop state, folds, Engine lifecycle, provider/agent calls, clocks, persistence, or a copy of current workflow decisions |
-| `readiness` | one-PR application, Petrus Engine/History/Dispatch adaptation, the sole legacy bridge, authority, ingress/review/timer/instance custody, and typed effect adaptation | concrete provider or agent construction, process-wide scheduling, HTTP or CLI |
+| `readiness` | one-PR application, Engine integration over Impetus History and engine-facing Motus Dispatch, the sole legacy bridge, authority, ingress/review/timer/instance custody, and typed Activity adaptation | Motus Worker construction or driving, Activity claim/retry/execution policy, concrete provider or agent construction, process-wide scheduling, HTTP or CLI |
 | `github_app` | provider models, App credentials, bounded transport/gateway, webhook and route mechanisms, and lookup-first provider operations | readiness or workflow decisions, agent execution, process supervision |
 | `agents` | credential-free request/result/terminal protocol, Pi adaptation, and workspace safety | GitHub credentials, provider publication, host route selection, workflow interpretation |
-| `host` | sole concrete construction root, process resources, durable webhook/route custody, agent runtime custody, catalog, discovery, runnable fairness, lifecycle evidence, inspection, API, and service | workflow tokens, Activity resolution, History decoding, Petrus execution |
+| `host` | sole concrete construction root for each process role, process-local resources, durable webhook/route custody, concrete Activity registry/resolution and queue binding, agent runtime custody, catalog, discovery, runnable fairness, lifecycle evidence, inspection, API, and service | workflow tokens, History decoding, Activity attempt/lease/retry semantics, or workflow execution decisions |
 | `operator` | bounded human command behavior and atomic qualification setup | long-running service policy or workflow interpretation |
 | `simulation` | logical time, deterministic scheduling, generic occurrence faults, process generations, budgets, strict artifacts, and replay | owner commands, domain policy, authority, retry, or checker semantics |
 
@@ -100,13 +105,17 @@ implementation. Package initializers export no child facade.
 Arrows mean imports:
 
 ```text
-host composition ─────────▶ readiness construction
-        ├─────────────────▶ github_app implementations
-        └─────────────────▶ agents implementations
+host authority composition ─▶ readiness construction
+host Worker composition ────▶ Motus Worker/WorkerDispatch
+        ├────────────────────▶ readiness Activity adapters
+        ├────────────────────▶ github_app implementations
+        └────────────────────▶ agents implementations
 
 readiness application ────▶ workflow boundary values
 readiness effects ─────────▶ injected github_app/agents capabilities
-readiness runtime ─────────▶ Petrus + readiness.workflow_bridge
+readiness runtime ─────────▶ Petrus Engine/Impetus History/
+                             engine-facing Motus Dispatch
+readiness runtime ─────────▶ readiness.workflow_bridge
 workflow_bridge ───────────▶ allowlisted current workflow modules
 
 owner.simulation ──────────▶ owner production + simulation mechanics
@@ -122,8 +131,10 @@ The architecture gate rejects:
 3. readiness-core imports of concrete provider/agent constructors or host;
 4. GitHub and agents importing each other, readiness, workflow, host, or
    simulation;
-5. Petrus Engine/History/Dispatch/Worker outside readiness runtime and the
-   narrow Petrus authoring types needed inside the bridge;
+5. Petrus Engine, Impetus History, or engine-facing Motus Dispatch outside
+   readiness runtime; Motus Worker or WorkerDispatch outside host Worker
+   composition; and Petrus authoring types outside the narrow readiness and
+   bridge call sites that need them;
 6. concrete application construction outside `host/composition.py`;
 7. any `hamsterdan` import outside `readiness/workflow_bridge.py`;
 8. any `host.v5`, old application/effect/custody/timer module, topology
@@ -137,8 +148,11 @@ them. The bridge allowlist and type-leak census apply from DS1.
 
 ## Runtime ownership and bounded cuts
 
-One host process supervises many independent one-PR readiness lifecycles. One
-call crosses one named durable cut and returns a detached value:
+One Hamsterdan authority role schedules many independent one-PR readiness
+lifecycles. Each readiness call crosses one named durable cut and returns a
+detached value. Motus Workers are separately supervised process roles over
+durable Dispatch; the authority role never creates, pumps, or waits inside an
+Activity implementation:
 
 ```text
 provider acquisition
@@ -147,15 +161,97 @@ provider acquisition
   -> bridge translation and identified History admission
   -> retained workflow fold
   -> bridge projection of pending typed Activity
-  -> readiness claim / execute / terminal-record cuts
+  -> Impetus Activity request/occurrence
+  -> Motus Dispatch publication
+  -> detached ActivityWait
+
+separately supervised Motus Worker
+  -> Dispatch claim/lease
+  -> host-composed typed Activity implementation
+  -> provider or Agenticus/Pi operation
+  -> Dispatch operational terminal
+
+later authority turn
+  -> Engine collects Dispatch terminal
+  -> Impetus records canonical Activity terminal
+  -> bridge converts the exact terminal
   -> retained workflow occurrence
   -> detached readiness posture
-  -> host acknowledgement or tail requeue
+  -> host custody completion or tail requeue
 ```
 
 Convenience drains are finite loops over those calls. They are never hidden
 inside application methods. Host sees detached lifecycle and work posture, not
 markings, current tokens, legacy classes, or workflow terminal variants.
+
+`host/composition.py` is the sole concrete composition location, not a
+single-process mandate. Each executable role invokes the constructor for its
+own in-process graph. An external deployment supervisor owns Worker launch,
+restart, scaling, placement, and termination; no workflow, readiness lifecycle,
+or authority turn spawns a Worker. CV21 qualifies these role boundaries but
+does not deploy them.
+
+The first real execution profile uses a separately supervised same-host Motus
+Worker over durable Local Dispatch. It does not make SQLite, one host, or one
+Worker process part of workflow semantics. Later Absurd/PostgreSQL or ZeroMQ
+placement may replace the Dispatch/Worker infrastructure without changing the
+Net, Activity declarations, readiness boundary, or terminal path. GitHub and
+agent Activities use separate Worker roles so GitHub credentials never enter
+agent process territory.
+
+Ingress and authority scheduling are distinct logical roles even when a later
+Plan chooses to co-locate them. Their OS-process placement is not decided by
+this Worker ruling. Motus Worker roles are not co-located with the authority
+role in the accepted production-shaped profile.
+
+After DS5, the smallest long-lived Hamsterdan topology therefore has three OS
+processes when ingress and authority are co-located, or four when they are
+split:
+
+```text
+ingress + authority (or one process for each logical role)
+one or more GitHub Worker processes
+one or more agent Worker processes
+```
+
+The external Amp relay is another service, not a Hamsterdan process. SQLite
+Local Dispatch is durable storage, not a daemon. Worker process counts are pool
+capacity and never derive from the number of PR Instances. A hundred PRs can
+share the same bounded Worker pools.
+
+Inside one agent Attempt, Agenticus/Pi may launch a bounded operation-local Pi
+child process. Agenticus owns that child protocol and lifetime; it is not
+another long-lived Worker role, does not receive GitHub credentials, and is not
+recovery authority. The agent Worker may reconstruct or retry from durable
+Motus and agent-lifecycle custody after that child exits or crashes.
+
+## Request and asynchronous process cycles
+
+The provider request cycle ends at durable host custody:
+
+```text
+GitHub -> Amp durable webhook relay -> HTTP ingress role
+  -> bound and verify request
+  -> durably commit delivery identity and normalized observation
+  -> return custody acknowledgement
+HTTP request ends
+```
+
+No readiness fold, Engine advancement, Dispatch claim, provider mutation,
+agent execution, or terminal admission is required to return that
+acknowledgement. Relay uncertainty may redeliver the same provider identity;
+durable custody classifies it without starting another workflow admission.
+
+Outside the request, an authority turn claims one host delivery, advances one
+PR through readiness, and either returns detached posture or publishes a Motus
+Activity. A Worker turn may continue while ingress or the authority role is
+down. After the Worker durably reports an operational terminal, a later
+authority turn collects it, lets Impetus author the canonical terminal, and
+continues the retained occurrence through the bridge.
+
+Logs are role-local observations correlated by subject/Instance, occurrence,
+operation, Attempt, and Worker incarnation. They are not delivery, workflow,
+Dispatch, provider-effect, or agent-result authority.
 
 ## Observation and admission
 
@@ -170,8 +266,8 @@ PullRequestSnapshot + ObservationProvenance
   -> retained workflow fold
 ```
 
-History remains the sole workflow-admission ledger. Host delivery, readiness
-staging, History acceptance, workflow fold, and webhook acknowledgement are
+History remains the sole workflow-admission ledger. Host delivery, HTTP custody
+acknowledgement, readiness staging, History acceptance, and workflow fold are
 distinct observable cuts. Later exact reads and discovery use the same common
 admission seam. `AdmissionGrant` is manifest-scoped admission authority, never
 fresh effect authority.
@@ -187,8 +283,9 @@ Readiness authorizes protected work by combining:
 The complete semantic claim includes phase, incarnation, head, base, and policy.
 No source substitutes for another. Every external mutation uses a stable logical
 operation, lookup-first ambiguity recovery, at most one mutation attempt per
-step, exact terminal correlation, and current-authority fencing at the required
-cut. GitHub credentials remain host-side and never enter agent values or state.
+Worker turn, exact terminal correlation, and current-authority fencing at the
+required cut. GitHub credentials exist only in the GitHub Worker role and never
+enter agent values, state, processes, or diagnostics.
 
 ## Durable truth
 
@@ -196,7 +293,9 @@ cut. GitHub credentials remain host-side and never enter agent values or state.
 |---|---|
 | provider acceptance and lookup result | GitHub operation custody or provider truth |
 | agent submission, terminal, and receiver delivery | agent lifecycle custody |
-| workflow request, occurrence, and terminal projection | Petrus History/Dispatch under readiness custody |
+| workflow request, occurrence, and canonical terminal | Impetus History through the one-PR Engine composed by readiness |
+| Activity task, Attempt, claim, lease, retry, heartbeat, and operational terminal | Motus Dispatch |
+| Activity execution and operational report | Motus Worker using the host-composed Activity registry |
 | bridge mapping/version and retained workflow identity | fresh CV21 readiness root |
 | ingress manifest and admission grant | readiness ingress custody |
 | review request and attempt | readiness review custody |

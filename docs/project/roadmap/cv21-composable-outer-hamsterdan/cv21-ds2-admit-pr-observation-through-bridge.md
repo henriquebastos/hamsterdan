@@ -15,19 +15,22 @@ related:
 
 ## Outcome
 
-Accept one signed GitHub webhook through new provider normalization, host
-delivery custody, source-neutral readiness admission, bridge conversion, and
-identified Petrus History delivery until the current Net folds the exact
-observation. Accepted, folded, and acknowledged remain distinct reconstructible
-cuts.
+Accept one signed GitHub webhook through new provider normalization and durable
+host delivery custody, then acknowledge the HTTP request without waiting for
+readiness. A later authority turn performs source-neutral readiness admission,
+bridge conversion, and identified Petrus History delivery until the current
+Net folds the exact observation. Custodied, acknowledged, admitted, and folded
+remain distinct reconstructible cuts.
 
 ## Vertical path
 
 ```text
-raw webhook -> new GitHub verification/normalization -> host delivery custody
-  -> PullRequestSnapshot + provenance -> focused observation/key
+HTTP request: raw webhook -> new GitHub verification/normalization
+  -> host delivery custody -> HTTP acknowledgement -> request ends
+
+later authority turn: PullRequestSnapshot + provenance -> focused observation/key
   -> manifest/grant -> bridge conversion -> identified History -> current fold
-  -> detached posture -> host acknowledgement
+  -> detached posture -> host delivery completion
 ```
 
 ## Owns
@@ -47,6 +50,8 @@ new workflow fold, or second admission ledger.
 
 - exact duplicate, corroboration, collision, incomparable evidence, and refusal
   have closed finite outcomes;
+- the HTTP response requires only durable host custody and never waits for a
+  readiness fold, Dispatch claim, provider effect, or Worker;
 - History is the sole workflow-admission ledger;
 - same accepted input reaches the current Net exactly once across every named
   crash cut without old value leakage;

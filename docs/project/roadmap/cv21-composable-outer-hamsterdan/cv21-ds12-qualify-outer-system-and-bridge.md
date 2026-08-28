@@ -8,6 +8,7 @@ related:
   - index.md
   - cv21-ds11-supervise-multiple-prs-fairly.md
   - workflow-bridge.md
+  - ../../decisions/records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md
   - ../cv22-decomposable-readiness-workflow/index.md
 ---
 
@@ -24,7 +25,8 @@ will use to replace only the workflow provider without changing outer owners.
 
 ```text
 strict journey/campaign command -> complete new host/owners
-  -> sole bridge + real retained Net -> provider/agent seams or scripted outcomes
+  -> authority role + sole bridge + real retained Net -> durable Dispatch
+  -> separately supervised GitHub/agent Workers or scripted outcomes
   -> terminal user posture -> exact artifact/replay/correspondence report
 ```
 
@@ -35,7 +37,9 @@ strict journey/campaign command -> complete new host/owners
   replay, checker mutation, semantic coverage, and physical resource reports;
 - accepted available provider/agent/Petrus correspondence and explicit
   unavailable/blocker policy; and
-- distribution proof that CV21 remains non-selectable and state-isolated.
+- distribution proof that CV21 remains non-selectable and state-isolated,
+  including independent authority/Worker process restart and credential
+  boundaries.
 
 ## Excludes
 
@@ -50,6 +54,8 @@ Hamsterdan.
   mutation, draft/lifecycle, base/conflict, approval, reminder, closure,
   discovery, and multi-PR meanings are exercised as applicable;
 - every named crash cut reconstructs without duplicate external mutation;
+- authority and Worker roles restart independently, shared Workers serve
+  multiple Instances, and agent process evidence contains no GitHub credential;
 - exact replay, semantic coverage, checker sensitivity, and finite resource
   ceilings pass from fresh roots;
 - real-seam evidence is revision-bound and unavailable evidence is explicit;

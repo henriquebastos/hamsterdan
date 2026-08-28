@@ -6,6 +6,7 @@ status_reason: Navigator paused CV19 and selected the outer-system reconstructio
 updated: 2026-08-28
 related:
   - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
+  - ../../decisions/records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md
   - ../../decisions/records/2026-08-28T0152Z-pr-observations-use-source-neutral-admission-and-history-authority.md
   - ../../decisions/records/2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
   - ../cv20-composable-reconstructible-hamsterdan/index.md
