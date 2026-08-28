@@ -1,8 +1,9 @@
-# CV20 DS4–DS13 pending rulings
+# CV20 DS1–DS13 pending rulings
 
-This register preserves the DS4–DS13 architecture audits for future Navigator
-review. It is evidence and recommendation, not accepted CV20 design. The
-canonical owners remain [the architecture](architecture.md),
+This register reconciles the DS1–DS3 source reviews and preserves the DS4–DS13
+architecture audits for future Navigator review. It is evidence and
+recommendation, not accepted CV20 design. The canonical owners remain
+[the architecture](architecture.md),
 [API contracts](api-contracts.md), [delivery sequence](delivery-sequence.md),
 [replacement ledger](replacement-ledger.md), the Delivery Stories, and decided
 records.
@@ -17,22 +18,27 @@ does not mean project adoption. No glossary term has been accepted by the
 
 | Field | Value |
 |---|---|
-| Current authority baseline | `c3db3c037af58dcf7e1906bfe4aa6ae37ac78bcb` (`origin/main` when this register was prepared) |
-| Audited provenance baseline | `5139af7848de4925c8326da12f7a53066ad76d7b` for every DS4–DS13 audit |
-| In scope | Pending findings and ruling proposals for CV20.DS4–DS13 |
-| Out of scope | Product implementation; acceptance of any ruling; changes to canonical DS1–DS3 authority; cutover, deployment, provider mutation, or dependency publication |
-| DS1–DS3 use | Dependency context for DS4 and later only; no DS1–DS3 ruling is recorded here |
+| Current authority baseline | `8cf232e5069ee37c652730f05d3dbe9339f501a6` (`origin/main` on 2026-08-28 when this reconciliation began) |
+| DS1 source baselines | The tooling archive did not record a commit SHA; its accepted substance is canonical by `5139af7848de4925c8326da12f7a53066ad76d7b`. Concept analysis was recorded at `c3db3c037af58dcf7e1906bfe4aa6ae37ac78bcb`. |
+| DS2 source baselines | Read-only synthesis/research at `4c5ae1cd84a1db8b11550b2fe3fbe92845153dbd`; canonicalization at `5139af7848de4925c8326da12f7a53066ad76d7b`; concept analysis at `c3db3c037af58dcf7e1906bfe4aa6ae37ac78bcb`. |
+| DS3 source baselines | Hardening audit at `5139af7848de4925c8326da12f7a53066ad76d7b`; accepted DS3 decisions/API work at `b15f7c2`, `8f7511f`, and `8cf232e5069ee37c652730f05d3dbe9339f501a6`. |
+| DS4–DS13 audit baseline | `5139af7848de4925c8326da12f7a53066ad76d7b`; first register reconciliation baseline `c3db3c037af58dcf7e1906bfe4aa6ae37ac78bcb`. |
+| In scope | Drift reconciliation and genuinely pending, conflicting, superseded, or revalidation findings for CV20.DS1–DS13. |
+| Out of scope | Product implementation; acceptance of a new ruling or glossary term; cutover, deployment, provider mutation, dependency publication, or changes to DS4–DS13 audit recommendations except necessary DS1–DS3 dependency links. |
 
-The only repository commit between the audit baseline and the current baseline
-is `c3db3c0` (`docs: preserve CV20 concept analysis`). It added the
-non-authoritative concept-analysis worksheets/register and linked them from the
-CV20 index. It did not change the architecture, API contracts, delivery
-sequence, replacement ledger, Delivery Stories, decisions, dependency pin, or
-product code. The added worksheets corroborate several hidden concepts below,
-but explicitly say that no concept has been accepted. Therefore no audit
-finding is treated as resolved or superseded by that drift. Audit line numbers
-are intentionally not copied; headings and named contracts are the stable
-anchors.
+Repository drift is material. `c3db3c0` added non-authoritative concept
+analysis; `63bf839` preserved the DS4–DS13 audits. The later `b15f7c2`,
+`8f7511f`, and `8cf232e` commits accepted dashboard closure, generalized
+production-subnet review, and finalized DS3's API contract. They changed the
+canonical architecture, API contracts, DS3, DS4/DS9 handoffs, decisions, and
+concept analysis without implementing product code. DS3 audit questions now
+stated canonically are resolved here rather than republished as pending.
+
+The DS4–DS13 sections remain snapshots of their audits at the named baseline.
+Their findings are not reclassified in this pass. The cross-story table and
+Petrus dependency summary below point them to current DS1–DS3 authority. Audit
+line numbers are intentionally not copied; headings and named contracts are the
+stable anchors.
 
 ### Reading labels
 
@@ -51,22 +57,36 @@ daylight saving time.
 
 Reconciliation statuses mean:
 
-- **Current**: still applies at `c3db3c0`.
-- **Already resolved**: newer repository authority resolved it.
-- **Superseded**: newer repository authority replaced it.
-- **Conflicting**: current canonical statements or ownership assignments still
-  conflict and require a ruling/correction.
-- **Requires revalidation**: external, adjacent-repository, live-state, or
-  approval-sensitive evidence must be checked again before implementation.
+- **Already canonical/resolved**: current accepted repository authority states
+  the finding or rejects the alternative.
+- **Current pending**: a genuine current Plan, API, calibration, concept, or
+  predecessor question remains.
+- **Conflicting with current authority**: current canonical statements or
+  ownership assignments disagree and require a ruling/correction.
+- **Superseded**: current authority replaced older wording, numbering, API, or
+  proposed design.
+- **Requiring revalidation**: external, adjacent-repository, live-state, or
+  approval-sensitive evidence must be checked against the exact selected
+  revision or seam before implementation.
 
-There are no **Already resolved** or **Superseded** findings in this register.
-The current drift added analysis, not rulings.
+The DS4–DS13 audit snapshots retain their original shorter labels. The exact
+five labels above govern the DS1–DS3 reconciliation.
+
+### DS1–DS3 reconciliation counts
+
+| Story | Already canonical/resolved | Current pending | Conflicting with current authority | Superseded | Requiring revalidation | Total |
+|---|---:|---:|---:|---:|---:|---:|
+| DS1 | 6 | 3 | 0 | 1 | 1 | 11 |
+| DS2 | 6 | 3 | 1 | 3 | 2 | 15 |
+| DS3 | 10 | 3 | 0 | 2 | 1 | 16 |
 
 ## Cross-story reconciliation
 
 | Relationship | Current reconciliation | Required future action |
 |---|---|---|
-| DS3 → DS4 occurrence seam | **Dependency.** DS3 requires exact public pending-Activity identity; DS4 needs the original Engine occurrence at claim and terminal admission. The pinned Petrus `ActivityAttempt` did not expose an explicit occurrence in the audit. | Prove an injective public invocation-to-occurrence projection or add, release, pin, and qualify a public Petrus occurrence reference. Do not modify DS3 in this pass. |
+| DS1 → DS2 reconstruction | **Dependency.** DS1's public page-bounded construction/replay seam is still qualification work. DS2 additionally requires one accepted-and-begun source occurrence to resume without collapsing accepted/folded cuts. | DS1 must pin and qualify its minimum public seam. DS2 must consume a released public accepted-unfinished resume seam; neither may use private `Instance` state. |
+| DS2 → DS3 admission | **Dependency.** DS2's source-neutral observation design is canonical, but DS2 remains unimplemented and blocked on the accepted-unfinished Petrus seam. DS3's design is accepted and waits for accepted DS2. | Complete DS2's Plan/API/calibration and public-seam qualification before pulling DS3 implementation. Do not reopen DS3 dashboard design. |
+| DS3 → DS4 occurrence seam | **Resolved contract plus dependency.** Current DS3 fixes exact Activity/work/operation/correlation/idempotency comparison, subject-scoped `ActivityWait`, readiness-internal `PendingActivity`, and History request authority versus Dispatch custody. It still needs a public bounded repair-one-selected-occurrence Petrus seam. DS4 owns provider execution and terminal admission to the original occurrence. | Release, pin, and qualify the selected-occurrence seam before DS3 implementation. DS4 then proves claim/effect-observed/terminal-recorded recovery and provider reason codes without redesigning DS3 identity or views. |
 | DS4 marker → DS13 cutover | **Conflict risk.** DS4 fixes `<!-- hamsterdan:readiness operation=<operation> head=<head> -->`; V5 already uses the same marker namespace and a singleton dashboard marker. Lookup can return an existing V5 effect before a canonical fence. | DS13 must rule each V5 marker family as rejected, external reconciliation evidence only, or superseded. An existing marker can never prove the canonical no-return operation. |
 | DS5 witness → DS9 ownership | **Conflicting.** DS5 needs a cut-specific currentness proof before protected findings/Pi start, while DS9 says it alone owns `CurrentnessWitness` and lifecycle/currentness completion. | Rule DS5's narrow start-cut witness and host conditional route binding; reserve successor incarnations, movement, convergence, revocation, and the full policy matrix for DS9. Or choose another explicit authority aggregate without reusing `AdmissionGrant`. |
 | DS5 accepted delivery → DS6 causal mutation | **Dependency.** DS6's “exact delivered result” must mean rehydration from the same agent-owned accepted-delivery record, not structural equality or Python object identity. | DS5 must settle accepted receiver identity, request/result digests, one accepted terminal, and retention before DS6 can prove causal publication. |
@@ -78,23 +98,27 @@ The current drift added analysis, not rulings.
 
 ### Adjacent Petrus seams
 
-Current canonical CV20 still cites Petrus
-`44cac5ff48ac371ebae56323941983f30db13c0d`. The audits found these public-seam
-obligations; none changed at `c3db3c0`:
+Current canonical CV20 at `8cf232e` still cites Petrus
+`44cac5ff48ac371ebae56323941983f30db13c0d`. The source reviews found these
+public-seam obligations:
 
-1. **DS2 transitive blocker:** public bounded
+1. **DS1 qualification:** minimum public page-bounded construction/replay of
+   one seeded lifecycle from fresh filesystem/SQLite state.
+2. **DS2 blocker:** public bounded
    `accept/resume-one-accepted-unfinished-occurrence` behavior. Internal
    `Instance` access and collapsing `observation_accepted` with
    `observation_folded` remain forbidden.
-2. **DS3/DS4:** public injective Activity invocation-to-occurrence identity and
-   split claim/effect-observed/terminal-recorded reconstruction. Public lower
-   `WorkerDispatch.claim/heartbeat/complete/fail` phases are usable, but
-   heartbeat data is not semantic effect proof.
-3. **DS5:** public behavior for accepted-and-begun Motus recovery, executing Pi
+3. **DS3:** public bounded repair of one caller-selected unresolved occurrence,
+   leaving unrelated work unchanged. Current subject-scoped occurrence
+   projection is canonical; broad first advancement is not a substitute.
+4. **DS4:** public split claim/effect-observed/terminal-recorded reconstruction.
+   Public lower `WorkerDispatch.claim/heartbeat/complete/fail` phases may be
+   usable, but heartbeat data is not semantic provider-effect proof.
+5. **DS5:** public behavior for accepted-and-begun Motus recovery, executing Pi
    process loss, receiver acceptance, retention/eviction, and complete bounded
    runtime supervision. Process death while `EXECUTING` must remain
    `INDETERMINATE` unless a supported resume contract proves otherwise.
-4. **DS11:** the minimum page-bounded construction/replay seam established by
+6. **DS11:** the minimum page-bounded construction/replay seam established by
    DS1 must be pinned and qualified before real multi-PR composition.
 
 Every item requires revalidation against the exact dependency revision selected
@@ -107,6 +131,9 @@ These are audit candidates, not canonical vocabulary:
 
 | Story | Minimum proposed concepts/aggregates |
 |---|---|
+| DS1 | Immutable PR subject, readiness root and one-PR lifecycle; detached posture/cut; reconstruction/exact replay; Timeline/artifact; local and cross checkers |
+| DS2 | Provider acquisition/snapshot/provenance; focused observation/key; ingress manifest/grant/entry/admission decision; History admission projection; host delivery custody/receipt/acknowledgement/tombstone |
+| DS3 | Dashboard event/projection/document/publication/outcome; workflow Activity identity; host-opaque Activity wait; readiness-internal pending Activity |
 | DS4 | Exact provider read, one-page candidate acquisition, complete marker lookup, operation-bound provider acceptance, Activity settlement |
 | DS5 | Review operation, workflow-authored agent attempt, immutable route bind, runtime terminal, receiver acceptance, cleanup report |
 | DS6 | Authorized conversation, accepted delivery, causal mutation work, Git object/publication proof, exact-head ref update |
@@ -117,6 +144,427 @@ These are audit candidates, not canonical vocabulary:
 | DS11 | Closed runnable target, fairness sequence, fenced lease, reason watermark, retained instance catalog |
 | DS12 | Predecessor obligation, journey/overlay catalog, violation fingerprint, correspondence row, qualification envelope |
 | DS13 | Relay generation/cut, mutation permit, phase journal, scoped grant, fresh-root proof, no-return acceptance, opaque snapshot custody |
+
+`Handler`, generic `Event`, `Context`, `Payload`, `Record`, `Status`, generic
+`Result`, generic service/protocol layers, one-file-per-noun, source-mixed
+provider observations, a second observation/admission ledger, a generic polling
+cursor, a final empty replacement skeleton, a fake-pure reducer and a
+readiness-owned Activity ledger are rejected design directions. They are not
+missing concepts. The concept-analysis candidates above remain traced evidence;
+no project glossary term has been accepted.
+
+## DS1 — Establish the first bounded PR lifecycle
+
+### Provenance and drift reconciliation
+
+- Tooling/guidance source:
+  [DS1 tooling archive](https://ampcode.com/threads/T-01a0454f-6e0b-733a-9ddc-e681636e3628)
+- Concept/newer-work source:
+  [DS1/DS2 concept review](https://ampcode.com/threads/T-01a047c7-8cac-7556-8725-c3ac960e21df)
+- The tooling archive reported a clean `main...origin/main` but did not record a
+  SHA. Its accepted four-document substance is present by the DS2
+  canonicalization commit `5139af7848de4925c8326da12f7a53066ad76d7b`.
+- DS1 concept analysis was committed at
+  `c3db3c037af58dcf7e1906bfe4aa6ae37ac78bcb`. It is reproducible analysis, not
+  accepted language.
+- Current reconciliation baseline:
+  `8cf232e5069ee37c652730f05d3dbe9339f501a6`.
+- Current story: `Planned`, not pulled. No replacement source or test tree
+  exists at this baseline.
+
+The older tooling report used the then-current DS11/DS12 end numbering. Current
+authority has twelve construction tracers and DS13 cutover. The gate therefore
+remains replacement-only through DS12 and becomes canonical in DS13.
+
+### Finding reconciliation
+
+| ID | Supported source finding | Reconciliation at `8cf232e` |
+|---|---|---|
+| DS1-F1 | Every DS Plan inventories applicable `AGENTS.md`, Ariad Process/Project/Product owners, engineering conventions and signed-in global skills before production implementation. | **Already canonical/resolved.** Delivery sequence rule 10, DS1's API checkpoint and the replacement feedback gate own it. |
+| DS1-F2 | The strict gate applies only to `src/hamsterdan2` and `tests2`; legacy source/tests keep their current gate during construction. | **Already canonical/resolved.** Architecture, DS1 and the replacement ledger fix path isolation and DS13 promotion. |
+| DS1-F3 | TDD, pytest, Hypothesis, Timeline/DST replay and domain shrinking, semantic coverage, focused mutation, real seams, Ruff/format/ty, seven ast-grep rules and AST architecture/feedback checks grow with the tracer. | **Already canonical/resolved.** The exact profile membership and evidence classes are fixed; numeric/tool calibration remains separate. |
+| DS1-F4 | Reducers are pure deterministic transitions; named factories compose explicit capabilities and do not make effects pure. | **Already canonical/resolved.** Architecture's factory/reducer contract rejects generic service layers and fake-pure reducers. |
+| DS1-F5 | One call stops at one named cut; reconstruction discards process-local objects; replay builds a fresh graph; no constructor or helper drains to convergence. | **Already canonical/resolved.** DS1, architecture and delivery sequence state the bounded lifecycle contract. |
+| DS1-F6 | PR subject, readiness root/lifecycle, posture, step result, cut, reconstruction, exact replay, Timeline, artifact and local/cross checker are traced enduring candidates. | **Current pending.** No candidate is accepted glossary language. The Navigator stopped before the first `PR subject` ruling and requires one question at a time. |
+| DS1-F7 | Concrete subject/root representations, lifecycle factory/method names, first-use `StepResult`/`WorkPosture`, replay cursor and artifact/error fields require real producer/consumer review. | **Current pending.** The DS1 Plan/API-strengthening checkpoint owns them. |
+| DS1-F8 | Exact ty configuration, mutation tool/targets/survivor policy/threshold/cadence, numeric coverage policy, real/live marker policy and calibrated resource limits are unruled. | **Current pending.** They remain fixture-calibrated DS1 Plan/acceptance work. |
+| DS1-F9 | DS1 needs a minimum public page-bounded Petrus construction/replay seam from a fresh process and store. | **Requiring revalidation.** The exact dependency selected by the DS1 Plan must expose, release and qualify it; a newer unpinned `main` is not evidence. |
+| DS1-F10 | The source report placed the isolated gate through DS11 and promotion at DS12. | **Superseded.** Configured-repository discovery inserted another tracer; current authority says construction through DS12 and promotion at DS13. |
+| DS1-F11 | A broad legacy retrofit, final empty skeleton, positive-edge placeholder, compatibility facade, generic handler/service and process-local recovery authority should not enter DS1. | **Already canonical/resolved.** Current architecture and DS1 explicitly reject all of them. |
+
+### Concepts and remaining ruling bundles
+
+The minimum DS1 aggregate is one immutable PR subject bound to one registered
+readiness root and opened as one readiness lifecycle. It returns detached
+posture after one bounded cut. Timeline/artifact/checkers are evidence owners,
+not workflow state or runtime authority.
+
+| Bundle and concrete scenario | Options | Recommendation |
+|---|---|---|
+| A. A future implementer must serialize repository 99 / PR 42 and reopen its retained root. | Pre-design a broad subject/root API; rule only the first register/open/inspect call sites. | Rule the smallest validating subject/root/factory/result API with all first producers and consumers in the DS1 Plan. Do not add aliases. |
+| B. A reduced budget fails after one page and the artifact must explain why. | Copy legacy profile constants; choose permissive defaults; calibrate strict target profiles from accepted fixtures. | Keep the fixed strict gate and calibrate every numeric/tool choice with bad/good path-isolation fixtures and −1 / limit / +1 evidence. |
+| C. Generation 1 dies after root registration and generation 2 must reconstruct one lifecycle. | Reach private Petrus state; broaden advancement; qualify a public page-bounded seam. | Require and pin the public seam. Private state or broad convergence is not a fallback. |
+| D. `PR subject` is useful in API prose but no glossary exists. | Accept all traced candidates in a batch; keep every term provisional; resume one-at-a-time Navigator review. | Resume with `PR subject` only when glossary work is desired. Concept acceptance does not block DS1 implementation planning. |
+
+### Identity, equality, authority and provenance
+
+- Subject equality is the immutable provider route, stable repository and pull
+  request identity that host catalog, readiness binding and provider routing
+  must agree on. Concrete serialized fields remain DS1 Plan work.
+- The readiness root is a durable reconstruction address, not subject identity
+  and not a History scan result.
+- Process generation, simulation generation, root and subject remain distinct.
+- `StepResult` and `WorkPosture` are detached bounded reports. Equal posture does
+  not prove equal workflow state or authorize work.
+- DS1 has no protected effect and therefore no `AuthorityClaim` or
+  `CurrentnessWitness`.
+- Retained owner state and public Petrus History/replay evidence are recovery
+  provenance. Frames, coroutines, return values, live clients and exceptions
+  are not.
+
+### Cuts, recovery and public API blockers
+
+The minimum durable sequence is root registration, lifecycle open, one bounded
+History page or workflow action, detached posture return and host posture
+record. A crash discards the process generation and reconstructs from the
+registered root plus retained owner state. Exact replay creates new owner
+objects and compares the bounded semantic result.
+
+The unresolved API packet is subject/root representation, lifecycle factory and
+calls, page cursor/result, initial `StepResult`/`WorkPosture`, simulation module
+mechanics, and artifact/error diagnostics. The adjacent public Petrus
+construction/replay seam is the only external DS1 blocker.
+
+### Bounds and verification obligations
+
+Every admitted command, row, History page, step, loaded instance, journal and
+artifact has a finite limit. The selected values require −1 / limit / +1
+evidence and typed refusal before partial durable state. TDD must begin with one
+failing behavior. Hypothesis covers identities, command/state spaces and codec
+round trips. Timeline/DST must crash at each named cut, replay from a fresh
+graph and shrink without dropping subject, identity, cut, budget or violated
+property. Focused mutation must prove the reducer and independent local/cross
+checkers detect omitted binding, unbounded drain, live-object recovery and edge
+substitution. Real seams cover public Petrus reconstruction and fresh
+filesystem/SQLite reopen. `tests2/test_feedback.py` proves every replacement
+path belongs to each intended profile and legacy paths do not leak into it.
+
+### Oracle, canonical targets and completion
+
+No Oracle finding is present in the DS1 source archives.
+
+Canonical targets after a future ruling are DS1 and API contracts first;
+architecture or the replacement ledger changes only if ownership or the
+reviewed initial map changes. A selected Petrus seam also updates the dependency
+pin and reference evidence.
+
+**Design-complete** means the DS1 Plan has ruled Bundles A–C, concrete APIs,
+errors, cuts, observations, profile policy and calibrated limits while
+preserving the fixed gate and factory/reducer boundaries. Glossary acceptance
+is independent. **Implementation-complete** means the real register → host
+composition → readiness/workflow step → detached posture tracer survives fresh
+reconstruction and exact replay with local/cross sensitivity, finite bounds,
+public Petrus/storage correspondence, strict gate evidence and accepted
+Navigator experience. A green component or empty skeleton is insufficient.
+
+## DS2 — Admit and fold one PR observation
+
+### Provenance and drift reconciliation
+
+- Synthesis:
+  [DS2 synthesis](https://ampcode.com/threads/T-01a045ec-e1f6-732d-a32f-4d696c1ea6bc)
+- Canonicalization:
+  [DS2 canonicalization](https://ampcode.com/threads/T-01a0460c-59dc-7787-816d-40ad25ad0821)
+- Concept/newer-work source:
+  [DS1/DS2 concept review](https://ampcode.com/threads/T-01a047c7-8cac-7556-8725-c3ac960e21df)
+- Focused research/provenance:
+  [approval queue](https://ampcode.com/threads/T-01a04567-eccc-71cd-9618-46f0a3fab457),
+  [custody](https://ampcode.com/threads/T-01a0457e-cfa5-750d-bcf4-ebe1a5296c33),
+  [manifest/History](https://ampcode.com/threads/T-01a04584-a1bd-748f-aa84-4e851e2c35c6),
+  [freshness/incarnation](https://ampcode.com/threads/T-01a0458c-249d-7670-885c-12908b05378e),
+  and
+  [reconciliation/discovery](https://ampcode.com/threads/T-01a04593-3909-76b9-a3c7-9e51271a7681).
+- Read-only research baseline:
+  `4c5ae1cd84a1db8b11550b2fe3fbe92845153dbd`.
+- Canonical DS2/DS10 decisions and coherent CV20 update:
+  `5139af7848de4925c8326da12f7a53066ad76d7b`.
+- Concept analysis baseline:
+  `c3db3c037af58dcf7e1906bfe4aa6ae37ac78bcb`.
+- Current reconciliation baseline:
+  `8cf232e5069ee37c652730f05d3dbe9339f501a6`.
+
+The approval-queue archive contains direct human wording for Bundles A–D but
+not direct human wording for E1. Current repository authority resolves that
+provenance ambiguity: the decided configured-repository recovery record names
+the Navigator, records E1, and the coherent `5139af7` commit is canonical. The
+older read-only recommendations do not override that decision.
+
+### Finding reconciliation
+
+| ID | Supported source finding | Reconciliation at `8cf232e` |
+|---|---|---|
+| DS2-F1 | Provider acquisition, immutable `PullRequestSnapshot`, bounded `ObservationProvenance`, focused observations, canonical bytes/`ObservationKey` and source-neutral admission are distinct. | **Already canonical/resolved.** The DS2 decision, architecture, API contracts and story fix them. |
+| DS2-F2 | First local `HeadSeen` binds incarnation 1 without claiming current provider authority; timestamps, delivery IDs, `updated_at` and ancestry do not establish a total order; DS9 owns successors/currentness. | **Already canonical/resolved.** Current authority states this split and treats unconfirmed changed evidence as incomparable. |
+| DS2-F3 | One immutable manifest and manifest-scoped grant per acquisition, ordered unique entries, closed decisions, bounded corroboration and Petrus History as sole admission ledger. | **Already canonical/resolved.** `ObservationAdmission` is only a rebuildable projection. |
+| DS2-F4 | Amp transport receipt, host `InboxReceipt`, `delivery_retained`, terminal acknowledgement, quarantine/disposal and bounded tombstone retention are distinct custody facts. | **Already canonical/resolved.** Semantics and cuts are fixed; schemas and numbers remain Plan work. |
+| DS2-F5 | Native scalar subtypes, strict Pydantic boundaries, selective frozen dataclasses, private predicates and direct composition replace generic handlers/services/protocols and `dict[str, Any]`. | **Already canonical/resolved.** API shape policy and engineering conventions own it. |
+| DS2-F6 | Recovery must include known-subject exact reads and bounded unknown eligible PR discovery in configured repositories, with exact read before registration and no atomic-snapshot claim. | **Already canonical/resolved.** The configured-repository recovery decision inserted DS10 and renumbered DS11–DS13. |
+| DS2-F7 | Early research called the host retention cut `inbox_retained`. | **Superseded.** The accepted canonical name is `delivery_retained`; “inbox retention” remains descriptive prose only. |
+| DS2-F8 | Early reports placed supervision/qualification/cutover at DS10/DS11/DS12. | **Superseded.** Discovery is DS10, supervision DS11, qualification DS12 and cutover DS13. |
+| DS2-F9 | Exact webhook/snapshot/provenance/subject Python shapes, codecs, retain/stage/classify/admit/fold/acknowledge calls, durable schemas and refusal/collision/corroboration/repair payloads remain unruled. | **Current pending.** The DS2 Plan/API-strengthening checkpoint owns them. |
+| DS2-F10 | Numeric body/header/manifest/provenance/History/row/page/journal/artifact/tombstone limits and compaction capacities need fixture calibration. | **Current pending.** Research numbers are seeds, not accepted constants; every selected limit needs −1 / limit / +1 evidence. |
+| DS2-F11 | Pinned Petrus cannot publicly resume one accepted-and-begun nonterminal source occurrence while preserving separate accepted/folded cuts. | **Requiring revalidation.** DS2 cannot implement until a released public bounded seam is pinned and qualified. |
+| DS2-F12 | Amp's durable relay contract does not prove that GitHub's physical 2xx follows Hamsterdan host retention. | **Requiring revalidation.** DS2 correspondence must establish that ordering through a public supported route or fail closed without claiming it. |
+| DS2-F13 | `AdmissionGrant` is explicitly not effect authority, while the current cross-cutting `AuthorityClaim` contract says “the durable readiness grant” without naming another aggregate. | **Conflicting with current authority.** DS5/DS9 must name the actual durable authority basis without mutating or reusing `AdmissionGrant` as fresh effect authority. |
+| DS2-F14 | DS2's acquisition, observation, admission and custody terms are traced candidates but not accepted glossary language. | **Current pending.** Concept review stopped with no accepted term. It does not block the fixed contract. |
+| DS2-F15 | Early custody research stopped at exact delivery identity and deferred cross-source semantic no-refold behavior. | **Superseded.** The accepted `ObservationKey`/canonical-bytes contract now governs duplicate, corroborating and collision behavior across acquisitions. |
+
+### Concepts and remaining ruling bundles
+
+The minimum aggregates are provider-owned immutable snapshot/provenance,
+readiness-owned immutable manifest/grant/ordered entries and rebuildable History
+admission projection, host-owned delivery custody, and Petrus History as the
+sole workflow admission ledger. `HeadSeen` is one focused workflow observation,
+not a provider payload or authority claim.
+
+| Bundle and concrete scenario | Options | Recommendation |
+|---|---|---|
+| A. One signed delivery projects `HeadSeen` plus later focused facts, then crashes after staging. | One broad process method; speculative class per cut; smallest call-site-proven retain/stage/classify/admit/fold/ack APIs. | Rule the smallest owner-specific calls and strict boundary models with their real producer, durable owner and consumer together. |
+| B. A manifest or tombstone reaches its capacity edge. | Adopt research seed numbers; use silent truncation/TTL; calibrate and fail before partial write. | Calibrate from accepted fixtures, preserve required provenance, and return typed bounded refusal at every edge. |
+| C. History contains accepted/begun work but no terminal after process death. | Retry identified delivery; collapse acceptance/fold; access private `Instance`; use a public exact-occurrence resume seam. | Require the public seam. Retry alone returns prior acknowledgement and private state violates architecture. |
+| D. The relay loses Hamsterdan's response after host retention. | Claim Amp's physical receipt ordering; acknowledge from transport success; prove supported ordering or fail the handler before durable evidence. | Qualify the real relay/host order. Keep HTTP receipt, `InboxReceipt` and terminal acknowledgement separate. |
+| E. DS5 needs durable authority evidence after DS2 admission. | Reuse mutable/latest `AdmissionGrant`; leave “durable readiness grant” undefined; define a separate invocation/operation authority basis. | Preserve immutable manifest-scoped `AdmissionGrant` and make DS5/DS9 name the distinct durable authority source and comparison cut. |
+| F. The concept register lists 23 DS2 terms. | Batch-create glossary entries; accept only parent concepts; keep analysis provisional until one-at-a-time review. | Keep it provisional. Resume concept review only when the Navigator wants canonical language. |
+
+### Identity, equality, authority and provenance
+
+- Webhook acquisition is `(ProviderRouteId, DeliveryId)` and preserves exact
+  `X-GitHub-Delivery`; a read acquisition uses a fresh `ProviderReadId` when it
+  may see changed state. Route/custody generations are provenance/fences, not
+  acquisition or semantic equality.
+- `PullRequestSnapshot` is provider truth. `ObservationProvenance` records how
+  it entered. Neither is workflow meaning or effect authority.
+- `ObservationKey` compares persisted canonical bytes as well as digest over
+  subject, local incarnation, observation family and focused semantics.
+  Provenance, policy, receipt/provider times and generations do not affect it.
+- Same acquisition and bytes is exact duplicate; changed bytes under one
+  acquisition is collision; another acquisition with equal key/bytes is
+  corroboration without a second fold; equal key/unequal bytes is fatal
+  semantic collision.
+- `HistoryAdmissionId` derives from the observation key. History remains
+  authoritative when a local projection is missing; a local accepted mark
+  without matching History fails closed.
+- `AdmissionGrant` authorizes classification/admission of one frozen manifest
+  under one binding. It is not current provider truth or external-effect
+  authority. The separate DS5/DS9 authority basis remains conflicting as noted.
+
+### Cuts, recovery and public API blockers
+
+The named sequence is `delivery_retained` or `delivery_quarantined`,
+`ingress_staged`, one `ingress_entry_classified`, `observation_accepted`,
+`observation_folded`, `readiness_step_returned`, exact guarded
+`delivery_acknowledged`, and terminal `custody_item_disposed` where applicable.
+Corroboration stops after classification. Pending posture cannot acknowledge.
+
+Recovery joins exact host acquisition, immutable manifest/grant/entry,
+identified History occurrence/fold and host acknowledgement. Raw request bytes,
+signatures and headers are transient after verified normalization. Accepted but
+unacknowledged normalized evidence remains until terminal atomic compaction to a
+redacted bounded tombstone.
+
+The public Petrus accepted-unfinished resume seam is a hard implementation
+blocker. Relay receipt ordering is a real-seam correspondence blocker. Concrete
+Python APIs and schemas are Plan blockers. The DS5/DS9 durable-authority wording
+is a cross-story conflict, not permission for DS2 to broaden its grant.
+
+### Bounds and verification obligations
+
+TDD covers HMAC-before-parse, initial incarnation 1, empty manifest, exact
+retry, both collision classes, corroboration/no-fold, atomic manifest/grant,
+History repair, no early acknowledgement, accepted/already-accepted
+acknowledgement, compaction and capacity refusal. Hypothesis/stateful properties
+cover deterministic/NFC codecs, included/excluded key fields, bytes beyond
+digest, source permutations and one manifest/admission/fold. Mutation must
+detect omitted identity/semantic fields, tri-state mergeability collapse,
+timestamp ordering, digest-only equality, early acknowledgement, missing CAS,
+second fold, local-projection trust, silent truncation and secret leakage.
+
+Timeline/DST crashes at every named cut, accepted-begun-unfinished recovery,
+redelivery/collision, route/custody movement and reduced budgets; replay uses
+fresh modules and semantic shrinking. Owner-local checkers derive provider,
+host, readiness and workflow truth separately; edge substitution leaves locals
+green and fails the responsible cross checker. Real seams include raw GitHub
+HMAC/GUID redelivery, tri-state mergeability, strict codecs, SQLite/filesystem
+reopen, process death, the relay retention/receipt route and the qualified
+Petrus seam. DST does not establish GitHub ordering, webhook completeness or
+provider currency.
+
+### Oracle, canonical targets and completion
+
+No Oracle finding is present in the DS2 source archives. The V5 parity oracles
+are historical runtime evidence, not DS2 design authority or completion proof.
+
+Canonical targets after future rulings are DS2 and API contracts for concrete
+APIs/errors/bounds; references and the dependency pin for Petrus qualification;
+and DS5/DS9 plus API contracts for the durable-authority conflict. Architecture
+or the ledger changes only if accepted ownership or placement changes.
+
+**Design-complete** means the already accepted source-neutral model and recovery
+scope are joined to ruled concrete APIs/codecs/errors/cuts, calibrated bounds,
+relay correspondence, a named distinct effect-authority basis and an exact
+qualified Petrus seam. **Implementation-complete** additionally requires
+accepted DS1; a pulled/expanded DS2; the real signed webhook → provider → host
+→ readiness → identified History → workflow fold → exact acknowledgement
+vertical; reconstruction at every cut; checker/mutation/replay/bound evidence;
+public Petrus/storage/relay correspondence; secret scans; project gates; and
+Navigator acceptance. A provider model or workflow unit test is insufficient.
+
+## DS3 — Exercise the dashboard subnet and expose one Activity
+
+### Provenance and drift reconciliation
+
+- Hardening audit:
+  [DS3 archived audit](https://ampcode.com/threads/T-01a04630-a6b1-773a-96c1-56890ff5e5f3)
+- Decision/API review:
+  [DS3 decision thread](https://ampcode.com/threads/T-01a047c5-b437-7033-8ba6-29e92cbd38cd)
+- Audited baseline:
+  `5139af7848de4925c8326da12f7a53066ad76d7b`.
+- Current authority commits: `b15f7c2` (`docs(cv20): rule dashboard subnet
+  behavior`), `8f7511f` (`docs(cv20): generalize subnet-first review`) and
+  `8cf232e5069ee37c652730f05d3dbe9339f501a6`
+  (`docs(cv20): finalize DS3 API contract`).
+- Current story: `Planned`; design and API review accepted. Implementation waits
+  for accepted DS2 and a public bounded Petrus selected-occurrence seam.
+
+The hardening audit was advisory at the older baseline. The later decision
+thread accepted and committed the dashboard model, operation grammar, closure,
+subnet, build/API and pending-view rulings. Those findings are current canonical
+authority, not pending audit recommendations.
+
+### Finding reconciliation
+
+| ID | Supported source finding | Reconciliation at `8cf232e` |
+|---|---|---|
+| DS3-F1 | Dashboard behavior needs distinct event, durable projection, immutable external command and exact terminal outcome, with one pending publication and no V5 healing race. | **Already canonical/resolved.** Current DS3/API contracts fix exactly four colors and the projection's desired/landed/pending/failure invariants. |
+| DS3-F2 | One operation must identify the complete exact command bytes; V5's latest-fact digest can collide under cyclic drift. | **Already canonical/resolved.** The accepted grammar hashes complete subject, document and canonical body. |
+| DS3-F3 | History proves the workflow requested the occurrence; Dispatch proves execution custody; projection pending retains workflow meaning only. | **Already canonical/resolved.** Current API/DS3 state this authority split. |
+| DS3-F4 | Host must see an opaque bounded wait while readiness may inspect exact pending Activity evidence. | **Already canonical/resolved.** `ActivityWait` and `PendingActivity`/`inspect_pending_activity` are fixed with contradiction handling. |
+| DS3-F5 | DS3, DS4 and DS9 need an explicit terminal-ownership split. | **Already canonical/resolved.** DS3 owns closed terminal identities/topology, DS4 provider reason codes/execution/admission, and DS9 terminal-inability/lifecycle-close policy. |
+| DS3-F6 | Provider closure becomes an evidence-timestamped absorbing dashboard event; an older pending publication reconciles before one final closed publication and lifecycle generation close. | **Already canonical/resolved.** The dashboard-closure decision and DS3/DS9 contracts own the ordered behavior. |
+| DS3-F7 | The Navigator should execute and inspect an exact production subnet locally before the full vertical, without creating a separate Capability Value or shadow model. | **Already canonical/resolved.** The production-subnet decision generalizes this three-scale evidence model. |
+| DS3-F8 | Pure folds/reducers own deterministic dashboard transitions; `declare`/`wire`/`seed`, root build and manifest wiring are direct named construction, not a generic registry framework. | **Already canonical/resolved.** Public build, dashboard construction and standalone simulation APIs are fixed. |
+| DS3-F9 | Activity identity compares activity, scoped occurrence, exact work, operation, correlation and idempotency; readiness cannot reconstruct an equal substitute. | **Already canonical/resolved.** The cross-cutting identity and pending inspection contracts require exact comparison and original-occurrence return. |
+| DS3-F10 | The audit proposed a new compact composite root/occurrence reference value because occurrence is Instance-scoped. | **Superseded.** Current APIs scope `ActivityWait` to one subject lifecycle and require `inspect_pending_activity(subject, occurrence)`; no extra aggregate is justified. |
+| DS3-F11 | V5 `DashReq`, latest-fact operation, held projection/healing token and special closing carrier could be adapted. | **Superseded.** Current four-value model, complete-command grammar and ordinary closed event replace those carriers. |
+| DS3-F12 | Pinned Petrus cannot publicly repair one selected unresolved occurrence without reconciling unrelated work. | **Requiring revalidation.** A released public bounded selected-occurrence seam remains the hard implementation dependency. |
+| DS3-F13 | Numeric request/document/History/Dispatch/pending/journal/artifact and scenario limits remain uncalibrated. | **Current pending.** Their categories and 0..1 pending/failure cardinalities are fixed; values remain fixture-calibrated implementation Plan work. |
+| DS3-F14 | DS4 must finalize provider refusal/uncertainty reason codes and DS9 must decide final-publication inability/close policy. | **Already canonical/resolved.** The ownership is explicitly assigned; these are later-story questions, not open DS3 design. |
+| DS3-F15 | Activity/dashboard terms are traced concept candidates. | **Current pending.** No glossary concept has been accepted; this does not reopen the fixed API vocabulary. |
+| DS3-F16 | DS3 cannot implement before accepted DS2. | **Current pending.** This is a predecessor blocker, not missing dashboard design. |
+
+### Concepts and remaining ruling bundles
+
+The minimum dashboard aggregate is one `DashboardProjection` per PR lifecycle,
+fed by `DashboardEvent`, retaining desired/landed and at most one pending or one
+failure, emitting immutable `DashboardPublication` and consuming exact-operation
+`DashboardPublicationOutcome`. History owns request occurrence; Dispatch owns
+execution custody; host posture remains opaque.
+
+| Bundle and concrete scenario | Options | Recommendation |
+|---|---|---|
+| A. Generation 1 dies with request in History and missing or unresolved Dispatch custody while another occurrence is unrelated. | Broad first advancement; readiness correctness ledger; public selected-occurrence repair. | Preserve the accepted DS3 design and require the public seam that repairs at most the selected occurrence while leaving the other unchanged. |
+| B. A final dashboard fixture exceeds the selected document or History budget. | Guess constants in design docs; use permissive/unbounded defaults; calibrate strict limits from accepted scenarios. | Calibrate in implementation Plan and prove −1 / limit / +1 typed refusal without reopening four-color semantics. |
+| C. DS3's dashboard subnet is ready but DS2 is not accepted. | Seed a simulation-only request; bypass the inbound edge; wait for the predecessor. | Keep local subnet evidence reviewable, but do not claim vertical or implementation completion until the real DS2 observation reaches it. |
+| D. `Activity` and `DashboardPublication` are fixed API names but no glossary exists. | Treat fixed API vocabulary as automatic glossary acceptance; batch-accept candidates; retain provisional concept analysis. | Keep glossary acceptance separate and one-at-a-time. Current API names remain canonical without a glossary. |
+
+### Identity, equality, authority and provenance
+
+- `DashboardEvent` carries admitted incarnation/head and one bounded entry or
+  evidence-owned closure. Provider acquisition/provenance does not enter
+  dashboard equality.
+- `DashboardPublication` contains subject, operation, complete document and
+  exact rendered Markdown body. The operation grammar is
+  `dashboard:{repository}:pr:{number}:i{incarnation}:{head}:sha256:{digest}`;
+  complete subject, document and body are hashed.
+- Same operation and canonical request bytes is replay. Same operation with
+  changed bytes is collision before execution. Changed desired content creates
+  a new operation even after cyclic A → B → A drift.
+- Engine assigns the occurrence. Correlation and idempotency equal operation.
+  Readiness compares exact Activity, occurrence, work and identities before
+  terminal admission.
+- History `ActivityRequested` is workflow request provenance; Dispatch is
+  reconstructible execution custody; `DashboardProjection.pending` is exact
+  logical matching state; `ActivityWait` is a detached host hint. None may
+  substitute for another.
+- DS3 introduces no external-effect authority claim or currentness witness.
+  DS4 owns a narrow pre-effect safeguard; DS9 owns complete authority policy.
+
+### Cuts, recovery and public API blockers
+
+The durable DS3 positions are workflow action before request, exact
+`ActivityRequested` in History, Dispatch occurrence retention, one selected
+occurrence repair, detached waiting posture and host posture record. One normal
+advancement may request one Activity and never executes its provider effect.
+The standalone subnet adds one-action event/outcome folds and Timeline-owned
+crash/restart/replay without changing production assembly.
+
+Current public APIs already fix `build_net`, `seed_marking`, `TOKEN_CLASSES`,
+`GATES`, `MANIFEST`, `wire_gates`, dashboard `declare`/`wire`/`seed`, standalone
+commands/observations, `ActivityWait`, `PendingActivity` and
+`inspect_pending_activity`. The only unresolved external API is Petrus's
+released selected-occurrence repair name/result/errors. Private `Instance`,
+complete-History authority, broad advancement and a readiness second ledger are
+forbidden workarounds.
+
+### Bounds and verification obligations
+
+TDD covers first publication, inert equal event, desired drift while pending,
+request-time crash, closure while pending, exact settlement, wrong operation/
+variant and retained refusal/uncertainty. Hypothesis/stateful properties cover
+event sequences, operation/body sensitivity, provenance insensitivity,
+single-flight behavior, strict codec round trips and restart stability. Mutation
+must detect omitted operation inputs, digest-only comparison, defaulted
+correlation/idempotency, missing manifest/token validation, readiness-authored
+substitute work, inline execution, broad occurrence drain, live-object trust and
+host leakage.
+
+Timeline/DST crashes around History, Dispatch, selected repair and posture,
+deletes/corrupts reconstructible Dispatch custody, retains an unrelated second
+occurrence unchanged, lowers budgets and exactly replays a fresh graph. Local
+checkers independently derive dashboard document/operation and
+History/Dispatch consistency; root substitution leaves locals green and fails
+the responsible cross edge. Real seams use the released public Petrus
+Net/Engine/History/Dispatch path, fresh storage/process death and a strict
+provider fake that proves no provider call. Provider-effect correspondence
+belongs to DS4.
+
+### Oracle, canonical targets and completion
+
+The DS3 hardening Oracle selected a public bounded repair-one-selected-
+occurrence seam. It independently found both whole-History cold reconstruction
+and whole-unresolved-set first-advance failures, and ruled that a cache required
+for correctness is a second ledger. Reversal requires a qualified Petrus
+release with page-bounded cold reconstruction and one-occurrence advancement,
+or a proven permanent global one-unresolved-Activity invariant. Neither exists
+at the current pinned revision. Current DS3 canonically adopts the blocker, not
+the audit as a new authority source.
+
+DS3's dashboard design and API are already canonical in DS3, API contracts,
+architecture, delivery sequence, replacement ledger and the two DS3 decisions.
+A future Petrus release updates the pin, references and the concrete dependency
+name/result/error evidence. Numeric limit values belong in the DS3
+implementation Plan and evidence, not a new design decision.
+
+**Design-complete** is achieved at `8cf232e`: dashboard behavior, vocabulary,
+operation grammar, closure, subnet/build APIs, pending views, identity,
+ownership and later-story boundaries are accepted. Fixture-calibrated numbers
+and the Petrus-owned method spelling do not reopen domain design.
+**Implementation-complete** requires accepted DS2 and the released Petrus seam,
+then the exact DS2 observation → real lifecycle/dashboard folds → manifest
+request → History/Dispatch occurrence → bounded opaque wait vertical using the
+same locally accepted production subnet, with all crash/replay/checker/
+mutation/bound/storage/public-Petrus evidence and no provider call. Local subnet
+acceptance alone is insufficient.
 
 ## DS4 — Settle one GitHub Activity lookup-first
 
@@ -1234,8 +1682,14 @@ Opaque old snapshot custody may remain; deletion is outside CV20 completion.
 
 ## Navigator review order
 
-The audits are linear and should not be ruled as ten isolated designs. A safe
-review order is:
+The stories are linear and should not be ruled as isolated designs. Before the
+preserved DS4–DS13 audit order, DS1 must rule its concrete API/gate calibration
+and qualify its public Petrus construction seam; DS2 must rule its concrete
+API/bounds, relay ordering and distinct effect-authority basis and qualify its
+accepted-unfinished seam. DS3 dashboard design is already accepted and should
+not be reopened; it waits for DS2 and its selected-occurrence seam.
+
+The remaining audit review order is:
 
 1. Resolve the adjacent Petrus occurrence/resume seams that block DS2–DS5.
 2. Rule DS4 marker/publication semantics and narrow safeguard.

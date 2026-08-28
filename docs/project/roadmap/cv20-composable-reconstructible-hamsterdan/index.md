@@ -89,7 +89,7 @@ architecture, API contracts or Delivery Stories.
 
 ## Pending audit rulings
 
-The [DS4–DS13 pending-rulings register](pending-rulings.md) preserves
+The [DS1–DS13 pending-rulings register](pending-rulings.md) preserves
 reconciled audit evidence and recommendations for later Navigator review. It is
 not canonical acceptance and changes no Delivery Story or decision.
 
