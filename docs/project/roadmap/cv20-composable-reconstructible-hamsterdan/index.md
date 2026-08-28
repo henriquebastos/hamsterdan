@@ -74,6 +74,15 @@ is reviewable Technical Story work inside that tracer, not a separately
 accepted horizontal layer. Deterministic simulation, observability, crash
 recovery, finite bounds and applicable correspondence ship with every tracer.
 
+## Concept analysis
+
+The [CV20 concept analysis](concept-analysis/index.md) records a reproducible,
+non-authoritative extraction of final-system vocabulary across DS1–DS13. It
+preserves source evidence, later refinements, exclusions and pending Navigator
+questions while terms are reviewed one at a time. Accepted language belongs in
+the project glossary; the analysis does not replace this Value's canonical
+architecture, API contracts or Delivery Stories.
+
 ## Exploration provenance
 
 [ES-010](../../exploration/es10-composable-hamsterdan-architecture/index.md)
