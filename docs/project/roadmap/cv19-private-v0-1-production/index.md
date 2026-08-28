@@ -1,9 +1,9 @@
 ---
 code: CV19
 level: Value
-status: Active
-status_reason: Exact clean-candidate runtime and restart-applied configuration-only operation qualify inactive on exe.dev; approved launch and one controlled monitoring proof remain
-updated: 2026-08-25
+status: Paused
+status_reason: Navigator paused private production before launch to focus delivery on CV21; the qualified inactive candidate and remaining launch proof are retained
+updated: 2026-08-28
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
   - ../../decisions/records/2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
@@ -11,6 +11,12 @@ related:
 ---
 
 # CV19 — Private v0.1 production
+
+> **Paused 2026-08-28:** The Navigator stopped this delivery work before
+> production launch to focus on CV21. This is a roadmap pause, not a live
+> runtime operation; the last recorded systemd posture was disabled and
+> inactive. The qualified candidate and remaining launch, monitoring, and
+> private-release work remain resumable.
 
 ## Intent
 

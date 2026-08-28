@@ -60,26 +60,20 @@ after private production qualification.
 
 ## Current movement
 
-[CV19](roadmap/cv19-private-v0-1-production/index.md) owns the private `0.1.0`
-production checkpoint. The V5-only candidate is locally green and its exact
-archive and image identity qualify idempotently on the owned `hamsterdan-prod`
-exe.dev VM. Private runtime custody validates the HBNetwork App installation and
-`HBNetwork/demo-pr-readiness` from the exact image. The exact-image systemd unit
-is installed but disabled and inactive; no container or application listener
-exists. Restart-applied configuration for multiple installation accounts and
-repositories is accepted locally: the host validates one complete tracked
-snapshot, atomically reconciles all routes before workers start, and the VM
-operation applies only that file without an image deployment. Clean commit
-`7df4426` and its exact image now qualify idempotently on `hamsterdan-prod`;
-changed and unchanged configuration-only applications both preserved the
-disabled and inactive service posture. The next movement is an explicitly
-approved supervised launch and one bounded monitoring proof. Launch still
-requires explicit approval because durable webhook state can cause GitHub
-effects.
+[CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) owns the current
+delivery movement: the non-selectable reconstruction of the outer system over
+one temporary bridge to the current working Net. CV21.DS1 remains Planned until
+its pull and expansion checkpoint. No replacement code, runtime selector, or
+deployment exists yet.
 
-Beyond CV19, [CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) is the
-planned non-selectable reconstruction of the outer system over one temporary
-bridge to the current working Net.
+The Navigator paused
+[CV19](roadmap/cv19-private-v0-1-production/index.md) before production launch.
+Its exact V5-only candidate and configuration remain qualified on the owned
+`hamsterdan-prod` exe.dev VM; its last recorded systemd posture was disabled and
+inactive. This roadmap pause performed no runtime operation. Supervised launch,
+one bounded monitoring proof, and private-release history remain resumable but
+are not the current focus.
+
 [CV22](roadmap/cv22-decomposable-readiness-workflow/index.md) then replaces that
 bridge with recursively independent production subnets and owns final cutover.
 The former integrated

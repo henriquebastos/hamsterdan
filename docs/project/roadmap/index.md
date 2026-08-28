@@ -5,22 +5,16 @@ belongs in each item's own metadata; this index routes to current owners.
 
 ## Active
 
-- [CV19 — Private v0.1 production](cv19-private-v0-1-production/index.md): the
-  V5-only OCI candidate builds locally and its exact archive and image identity
-  qualify idempotently on the owned exe.dev VM. Inactive private runtime custody
-  validates the App and first HBNetwork repository without launch. The tracked
-  restart-applied installation portfolio and configuration-only VM operation
-  also qualify there without redeployment or service activation. Approved
-  supervised launch, one bounded monitoring proof, and private release history
-  remain.
+- [CV21 — Composable outer Hamsterdan over the retained workflow](cv21-composable-outer-hamsterdan/index.md):
+  the Navigator selected the outer-system reconstruction as the current focus.
+  Twelve progressively deepened tracers rebuild GitHub, agents, readiness,
+  host, operator, custody, authority, effects, discovery, fairness, and
+  Hamsterdan-owned DST around one temporary bridge to the current working Net.
+  No workflow loop is reimplemented, and DS1 remains Planned pending its pull
+  and expansion checkpoint.
 
 ## Planned
 
-- [CV21 — Composable outer Hamsterdan over the retained workflow](cv21-composable-outer-hamsterdan/index.md):
-  twelve progressively deepened tracers rebuild GitHub, agents, readiness,
-  host, operator, custody, authority, effects, discovery, fairness, and
-  Hamsterdan-owned DST around one temporary bridge to the current working Net.
-  No workflow loop is reimplemented and no story is pulled.
 - [CV22 — Decomposable PR-readiness workflow](cv22-decomposable-readiness-workflow/index.md):
   replace the bridge with recursively independent production subnets, beginning
   from the accepted dashboard design, then remove V5 and perform the separately
@@ -28,7 +22,13 @@ belongs in each item's own metadata; this index routes to current owners.
   pull order and implementation detail wait for the typed subnet-boundary and
   abstract/concrete conformance ruling.
 
-## Paused until after private v0.1
+## Paused
+
+- [CV19 — Private v0.1 production](cv19-private-v0-1-production/index.md): the
+  exact V5-only candidate, inactive runtime custody, tracked configuration, and
+  exe.dev qualification are retained. The Navigator paused delivery before
+  supervised launch and monitoring to focus on CV21; its last recorded service
+  posture was disabled and inactive.
 
 - [CV18 — Deterministic readiness simulation](cv18-deterministic-readiness-simulation/index.md):
   the accepted model, World, generated authority/lifecycle, reminder-timer, Git

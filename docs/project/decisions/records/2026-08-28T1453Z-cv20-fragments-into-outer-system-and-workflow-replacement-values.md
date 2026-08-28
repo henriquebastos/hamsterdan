@@ -118,6 +118,13 @@ pulling its implementation Delivery Stories.
   general hierarchy.
 - The bridge is deliberate construction scaffolding, not a supported
   compatibility lane. Its deletion is a CV22 acceptance condition.
-- CV19 remains the only Active Value. This planning decision authorizes no
-  runtime selection, deployment, state action, external effect, commit, push,
-  or release.
+- At decision time, CV19 remained the only Active Value. This planning decision
+  authorized no runtime selection, deployment, state action, external effect,
+  commit, push, or release.
+
+## Subsequent delivery movement
+
+Later on 2026-08-28, the Navigator paused CV19 before production launch and
+selected CV21 as the Active Value. This changes delivery focus, not runtime
+authority: V5 remains the sole runtime, CV21 remains non-selectable construction,
+and no deployment, state action, external effect, or release was authorized.

@@ -1,8 +1,8 @@
 ---
 code: CV21
 level: Value
-status: Planned
-status_reason: The outer-system replacement and sole temporary workflow bridge are accepted as twelve planned tracers; none is pulled while CV19 remains active
+status: Active
+status_reason: Navigator paused CV19 and selected the outer-system reconstruction as the delivery focus; CV21.DS1 remains Planned pending pull and expansion
 updated: 2026-08-28
 related:
   - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
@@ -131,7 +131,7 @@ CV21 is complete when:
 - The bridge may translate representations but may not compensate for or
   improve current workflow behavior.
 - CV21 does not cut over, rename packages, delete V5, or alter current state.
-- CV19 remains the only Active Value and the current application remains the
-  only runtime.
+- CV19 is paused before launch. The current V5 application remains the only
+  runtime while CV21 construction stays non-selectable.
 - Provider mutations, deployment, state actions, commit, push, and release keep
   their separate explicit approval boundaries.
