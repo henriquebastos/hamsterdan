@@ -50,7 +50,9 @@ provider owners.
 
 - accepted, refused, ambiguous and collision are outcomes within an effect
   observation, not automatically standalone concepts.
-- `DashLanded` and the other terminal variants are closed workflow API values.
+- `DashboardPublished`, `DashboardPublicationRefused` and
+  `DashboardPublicationUncertain` are closed workflow API values ruled by DS3;
+  DS4 supplies their provider-facing correspondence and reason vocabulary.
 - claim/effect-observed/terminal-recorded and named cuts are durable positions
   or mechanics within Activity settlement.
 - marker syntax, exact-read/list-page method names, pagination/rate metadata and

@@ -215,29 +215,52 @@ The workflow package exposes defining-module construction values used by
 readiness runtime:
 
 ```text
-workflow.net.topology.build_net(...)
-workflow.net.topology.seed_marking(...)
-workflow.net.topology.TOKENS
+workflow.net.topology.build_net() -> BuiltNet
+workflow.net.topology.seed_marking(subject: PRSubject) -> Marking
+workflow.net.topology.TOKEN_CLASSES
+workflow.net.topology.GATES
 workflow.activities.MANIFEST
-workflow.net.gating.wire_gates(...)
+workflow.net.gating.wire_gates(
+  built=...,
+  gates=GATES,
+  definitions=...,
+  manifest=MANIFEST,
+) -> handlers
 ```
 
 `build_net` composes all nine concern loops. `seed_marking` creates the initial
-marking. `TOKENS` is explicit and collision-checked. `MANIFEST` declares every
-Activity once. `wire_gates` binds supplied implementations without importing
-them into workflow.
+marking bound to one immutable subject. Every token-owning module exports an
+explicit `TOKENS: tuple[type, ...]`; topology aggregates those declarations as
+the collision-checked `TOKEN_CLASSES: Mapping[str, type]`. `GATES` maps each
+Activity transition path to one manifest key. `MANIFEST` declares every
+Activity once. `wire_gates` binds supplied Petrus Activity definitions without
+importing their implementations into workflow. Missing/extra definitions,
+duplicate manifest or transition declarations, unregistered colors and a
+request/result disagreement fail during construction.
 
 Each concern module also exposes the smallest DS-ruled construction seam needed
 to mount that exact production subnet independently. `build_net` composes those
 same constructions; owner-local simulation cannot copy a fold or maintain a
-second topology. DS3 rules the first concrete seam from the dashboard module,
-its standalone scenario runner and the root call site together.
+second topology. The first concrete seam is:
 
-- **Fixed names:** `build_net`, `seed_marking`, `TOKENS`, `MANIFEST`,
-  `wire_gates`.
-- **DS review:** DS1 rules the minimal `build_net`/`seed_marking` boundary from
-  real Petrus use; DS3 rules manifest/gate wiring; owning DS5–DS9 tracers extend
-  topology without changing these names.
+```text
+workflow.net.dashboard.declare(spec)
+workflow.net.dashboard.wire(net)
+workflow.net.dashboard.seed(subject)
+workflow.net.dashboard.GATES
+workflow.net.dashboard.TOKENS
+```
+
+Root composition and the standalone dashboard module call these exact
+functions. `declare` owns places, `wire` owns arcs/transitions, and `seed` owns
+the initial `DashboardProjection`; none steps an Engine or constructs an
+Activity implementation.
+
+- **Fixed names/signatures:** `build_net`, `seed_marking`, `TOKEN_CLASSES`,
+  `GATES`, `MANIFEST`, `wire_gates`, and the dashboard construction seam above.
+- **Later strengthening:** owning DS5–DS9 tracers extend the manifest and
+  topology through the same registries and construction protocol; they do not
+  rename or wrap this seam.
 
 ### Value groups
 
@@ -267,6 +290,30 @@ execution lane
 stable operation derivation
 blocked-terminal mapping, when route revocation can block it
 ```
+
+The dashboard entry is:
+
+```text
+GateDeclaration:
+  activity = "dashboard.publish"
+  request = DashboardPublication
+  result = DashboardPublicationOutcome
+  terminals = (
+    DashboardPublished,
+    DashboardPublicationRefused,
+    DashboardPublicationUncertain,
+  )
+  lane = "durable_publication"
+  operation = request.operation
+  blocked = DashboardPublicationRefused only for a readiness-proven
+            pre-effect inability such as route revocation
+```
+
+An Activity timeout or lost response cannot be projected directly to
+`DashboardPublicationRefused`: it may hide provider acceptance and must remain
+unresolved until DS4 performs lookup-first reconciliation. The manifest's
+blocked mapping never turns an unclassified implementation failure into a
+workflow terminal.
 
 Required Activity capabilities are:
 
@@ -319,14 +366,123 @@ publication needed to match outcomes and enforce single-flight publication.
 `DashboardPublication` does not carry held projection/recovery state merely to
 transport it through the effect boundary.
 
+The concrete strict durable values are:
+
+```text
+DashboardEvent:
+  incarnation
+  head
+  change: DashboardEntryAdded | DashboardClosed
+
+DashboardEntryAdded:
+  topic                    # bounded capability-stating text
+  body                     # bounded exact user-visible entry text
+
+DashboardClosed:
+  reason                   # closed | merged
+  closed_at_us             # non-negative UTC microseconds from evidence
+
+DashboardDocument:
+  incarnation
+  head
+  entries: tuple[DashboardEntry, ...]
+  closure: DashboardClosed | none
+
+DashboardEntry:
+  incarnation
+  head
+  topic
+  body
+
+DashboardPublication:
+  subject: PRSubject
+  operation: DashboardOperation
+  document: DashboardDocument
+  body                     # exact canonical Markdown before provider marker
+
+DashboardPublicationOutcome:
+  operation: DashboardOperation
+  result: DashboardPublished
+        | DashboardPublicationRefused(reason)
+        | DashboardPublicationUncertain(reason)
+```
+
+`DashboardEvent` and `DashboardPublicationOutcome` each use one durable token
+color with a strict discriminator for their closed inner variants. A semantic
+variant earns another place/color only when it creates different custody,
+waiting, recovery or enabledness. Published/refused/uncertain all require the
+same projection fold, so they do not create three topology branches.
+
+`DashboardEntryAdded` is the deliberately narrow open projection envelope used
+by sibling workflow loops. It replaces `GateFact(kind, body: dict[str, Any])`
+with bounded exact presentation data and does not let the dashboard import
+sibling state types. Consecutive equal entries are inert; a changed entry is
+appended so the dashboard can show progression. `DashboardClosed` is the only
+absorbing event. Its instant is normalized evidence, never calculated by the
+fold. Later event kinds can add entries but cannot add another `DashboardEvent`
+variant or bypass its bounds.
+
+The canonical workflow renderer derives `DashboardPublication.body` from the
+whole document and refuses a supplied body that does not match. The provider
+adds only its deterministic marker. Stable operation identity is:
+
+```text
+dashboard:{repository}:pr:{number}:i{incarnation}:{head}:sha256:{digest}
+
+digest = sha256(canonical bytes of subject + document + exact body)
+```
+
+The complete subject, including provider-route and stable repository identity,
+is inside the hashed bytes even where the readable prefix uses repository and
+PR number. Replay of the same exact command reuses the operation. Any changed
+document, body, subject, incarnation or head changes the operation. In
+particular, returning from entry A through B to another A cannot reuse an
+operation for the older, shorter document.
+
+The private durable projection is:
+
+```text
+DashboardProjection:
+  subject: PRSubject
+  desired: DashboardDocument | none
+  landed: DashboardPublication | none
+  pending: DashboardPublication | none
+  failure: DashboardPublicationFailure | none
+
+DashboardPublicationFailure:
+  publication: DashboardPublication
+  outcome: DashboardPublicationOutcome  # refused or uncertain only
+```
+
+At most one of `pending` and `failure` exists. `pending` retains workflow
+meaning for exact outcome matching but not occurrence/execution custody;
+History and Dispatch own those. `failure` retains the exact attempted command
+after an admitted unsuccessful terminal. New events may continue changing
+`desired`, but no automatic publication overtakes either pending work or a
+retained failure. DS9 owns the later operator-recovery/terminal-close policy.
+
 The pure behavior is:
 
 ```text
-fold one DashboardEvent or DashboardPublicationOutcome into DashboardProjection
-  -> update desired, landed, pending or retained failure
-  -> emit no publication while one exact publication is unresolved
-  -> otherwise emit one DashboardPublication exactly when desired != landed
+on DashboardEvent(event):
+  require event to match the projection's already-admitted incarnation/head
+  update desired, unless desired is already closed
+  if pending or failure: emit nothing
+  else derive the exact publication for desired
+  if publication != landed: retain it as pending and emit it
+
+on DashboardPublicationOutcome(outcome):
+  require pending and outcome.operation == pending.operation
+  if published: move pending to landed and clear pending
+  if refused or uncertain: move pending plus outcome to failure
+  after published only, derive the exact publication for current desired
+  if it differs from landed: retain it as pending and emit it
 ```
+
+The producer fold that emits `DashboardEvent` owns observation admission and
+currentness. The dashboard checks only consistency with its already-admitted
+lifecycle generation; it does not read provider evidence or decide that a head
+is current.
 
 A provider closure observation carries its evidence-owned close instant into a
 normal dashboard event. That event makes the desired document absorbingly
@@ -337,14 +493,74 @@ close only after that publication lands. A terminal inability remains explicit
 for DS9 policy; it cannot masquerade as alignment. A later fact cannot reopen
 the dashboard, and a pure fold never calls a clock to create the close instant.
 
+The exact production subnet has four durable colors and three transitions:
+
+```text
+(dashboard.events, dashboard.projection)
+  -> dashboard.fold_event
+  -> (dashboard.projection, dashboard.publications?)
+
+dashboard.publications
+  -> dashboard.publish Activity
+  -> dashboard.outcomes
+
+(dashboard.outcomes, dashboard.projection)
+  -> dashboard.fold_outcome
+  -> (dashboard.projection, dashboard.publications?)
+```
+
+The projection remains present while the Activity is unresolved, so later
+events can coalesce desired state. The stored `pending` publication, not a held
+baton or a healing token, prevents concurrent publication. Event/outcome races
+serialize on the projection and converge to the same next exact publication.
+
+Identity, capacity and schema contradictions use workflow-owned errors:
+`DashboardOutcomeMismatch`, `DashboardOperationCollision` and
+`DashboardCapacityExceeded`. They fail before projection mutation. Refusal and
+uncertainty are durable outcomes, not exceptions. Their bounded secret-free
+reason vocabulary is finalized with the real provider mapping in DS4.
+
 - **Fixed names:** `DashboardEvent`, `DashboardProjection`,
-  `DashboardPublication`, `DashboardPublicationOutcome`.
+  `DashboardDocument`, `DashboardPublication`,
+  `DashboardPublicationOutcome`, `DashboardPublished`,
+  `DashboardPublicationRefused`, `DashboardPublicationUncertain` and
+  `DashboardOperation`.
 - **Fixed behavior:** meaning split, immutable publication work, single-flight
-  coalescing, exact outcome matching and final-close convergence order.
-- **DS review:** DS3 rules concrete event variants, document/work/projection and
-  terminal fields, operation grammar, construction seam and local scenario
-  commands/observations. DS4 rules provider execution/admission signatures.
-  DS9 rules terminal inability and lifecycle-close completion policy.
+  coalescing, four-color topology, exact outcome matching, complete-command
+  operation identity and final-close convergence order.
+- **Later strengthening:** DS4 rules provider execution/admission and concrete
+  refusal/uncertainty reason codes. DS9 rules terminal inability and
+  lifecycle-close completion policy without changing these values.
+
+### Standalone dashboard execution
+
+`workflow.simulation.dashboard.build_dashboard_simulation` constructs one
+structural `SimulationModule` from `dashboard.declare`, `dashboard.wire` and
+`dashboard.seed`; it does not copy a fold or use a shadow reducer. Its closed
+local vocabulary is:
+
+| Kind | Name | Exact meaning |
+|---|---|---|
+| command | `deliver.event` | admit one strict `DashboardEvent` through the real dashboard input |
+| command | `complete.publication` | inject one strict `DashboardPublicationOutcome` for the exact pending operation; no provider implementation runs |
+| observation | `state` | projection, pending exact work, marking, bounded History/Dispatch evidence and last action |
+| observation | `topology` | deterministic schema limited to the production dashboard namespace, suitable for Arx/Graphviz |
+| observation | `check` | dashboard local checker report derived from artifact evidence |
+| action | `advance` | execute exactly one real Petrus coordinator action |
+
+Timeline owns crash, restart, artifact and replay operations. The five named DS3
+scenarios are data using this vocabulary, not five code paths. The module's
+resource keys are `dashboard.commands`, `dashboard.entries`,
+`dashboard.document_bytes`, `dashboard.history_records`,
+`dashboard.pending_activities` and `dashboard.retained_failures`. Numeric
+limits remain fixture-calibrated Plan values tested at −1 / limit / +1; the
+cardinality invariants for pending Activity and retained failure are both 0..1.
+
+The local checker independently derives document rendering and operation
+identity from admitted event/outcome evidence, then compares projection and
+History/Dispatch. Root composition adds a cross checker comparing the
+workflow-owned publication with Petrus request/Dispatch evidence. Neither
+checker supplies runtime state or determines enabledness.
 
 ### Mutation causal contract
 
@@ -544,12 +760,50 @@ canonical state.
 delivery. Host acknowledges its inbox row only after accepted/already accepted
 is returned.
 
+DS3 adds one detached primary wait without exposing workflow internals to host:
+
+```text
+ActivityWait:
+  occurrence
+  operation
+```
+
+`Waiting.wait` may carry `ActivityWait`; `WorkPosture` reports one pending
+Activity and no eligible inline effect. It omits Activity name, decoded work,
+History rows and Dispatch objects. Readiness owner-local inspection provides the
+complete bounded diagnostic instead:
+
+```text
+PendingActivity:
+  occurrence
+  activity
+  operation
+  correlation
+  idempotency
+  work                       # exact strict decoded DashboardPublication in DS3
+  request_digest
+  request_bytes
+
+ReadinessApplication.inspect_pending_activity(
+  subject: PRSubject,
+  occurrence: int,
+) -> PendingActivity | none
+```
+
+The projection is derived from the same `ActivityRequested` and Dispatch
+occurrence, never a readiness-authored request copy. It refuses
+`ActivityEvidenceMismatch` when activity, work, operation, correlation or
+idempotency disagree. Absence is `none`; malformed or contradictory retained
+evidence is not reported as absence.
+
 - **Fixed names:** `StepResult`, `Progressed`, `Waiting`, `Quiescent`,
   `Terminal`, `Unavailable`, `CutRef`, `WorkPosture`, `DeliveryPosture`.
 - **Fixed behavior:** detached shape and host acknowledgement rule.
-- **DS review:** concrete dataclass fields and enum/private-value treatment in
-  DS1 for the first lifecycle; later owning tracers add only fields proven by
-  their new calls, with terminal lifecycle fields completed in DS9.
+- **Fixed DS3 additions:** `ActivityWait`, `PendingActivity` and
+  `inspect_pending_activity` with the fields above.
+- **Later strengthening:** concrete dataclass fields and enum/private-value
+  treatment begin in DS1; later owning tracers add only fields proven by their
+  new calls, with terminal lifecycle fields completed in DS9.
 
 ### Workflow-runtime cuts
 
@@ -575,6 +829,17 @@ blocked until Petrus implements, tests and releases a public
 accept/resume-one-accepted-unfinished-occurrence seam and Hamsterdan pins and
 qualifies it. Readiness must not access internal `Instance` state or collapse
 `observation_accepted` and `observation_folded` to avoid this prerequisite.
+
+The same pin exposes `Engine.in_flight`, bounded History pages and snapshots but
+cannot reconstruct and repair one caller-selected unresolved Activity without
+first reconciling every unresolved Activity, projection-pending and pure
+occurrence. DS3 therefore requires a distinct public
+`repair_one_occurrence(instance, occurrence)`-shaped capability whose actual
+Petrus-owned name/result/error types are decided in Petrus. It must perform at
+most one redispatch, projection, pure completion or cancellation action and
+return without advancing unrelated work. Hamsterdan will consume the released
+public seam; it will not implement this pseudocode name as a private adapter,
+scan complete History as authority or access `Instance` internals.
 
 ### Readiness cuts
 
@@ -1047,7 +1312,7 @@ in a chat or plan.
 |---|---|---|
 | DS1 | one-PR ownership, sole composition, bounded step/posture, strict gate and core Timeline/artifact | subject/root/factory/result signatures, minimal Petrus replay cursor, gate diagnostics and first local/root evidence |
 | DS2 | webhook-only snapshot/provenance, host delivery custody, source-neutral observation/key/manifest/grant/classification and real incarnation-1 `HeadSeen` fold | codecs, retain/stage/classify/admit/fold/ack calls, tombstones, collision/corroboration/refusal payloads and calibrated bounds |
-| DS3 | workflow ownership, independently executable dashboard subnet, four dashboard meanings, manifest identity and first durable `DashboardPublication` | event/document/projection/publication/outcome fields, operation grammar, subnet/build/wiring APIs, scenario runner, public bounded repair-one-occurrence seam, occurrence projection and pending posture |
+| DS3 | workflow ownership, independently executable dashboard subnet, four dashboard meanings, manifest identity and first durable `DashboardPublication` | Settled here and in the DS3 record: exact values, operation grammar, subnet/build/wiring APIs, scenario runner, occurrence projection and pending posture. Implementation waits only for DS2 and Petrus's released bounded repair-one-selected-occurrence API; DS4 owns provider reason codes and DS9 owns terminal-inability/close policy. |
 | DS4 | exact PR read, one bounded repository list page, lookup-first one-attempt provider effect and split Activity positions | read/list/transport/gateway/result APIs, pagination/rate metadata, marker lookup, claim/effect/terminal calls, terminal admission and physical metrics |
 | DS5 | credential-free agent protocol, stable execution identity, exact delivery and first protected findings call | review values/codecs, lifecycle/store calls, Pi/workspace/route custody, complete claim/evidence APIs, findings fence, cancellation errors and bounds |
 | DS6 | exact workflow→coding→Git→workflow causal contract | conversation/`MutWork`/coding/`Pushed` shapes, result digest, patch/Git/ref-CAS APIs and sensitivity evidence |

@@ -4,72 +4,107 @@
 
 - Delivery Story: [`../cv20-ds3-expose-workflow-activity.md`](../cv20-ds3-expose-workflow-activity.md)
 - Cross-boundary contracts: [`../api-contracts.md`](../api-contracts.md),
-  "Workflow Activity identity", "Activity manifest", "Workflow-runtime cuts"
-  and "Readiness cuts"
+  "Workflow Activity identity", "Activity manifest", "Dashboard subnet",
+  "Standalone dashboard execution", "Workflow-runtime cuts" and "Readiness
+  cuts"
 - Cumulative sequence: [`../delivery-sequence.md`](../delivery-sequence.md),
-  "DS3 — One durable Activity"
+  "DS3 — Dashboard subnet and one durable Activity"
 
-Reviewed source revision: 2026-08-28 working tree.
+Reviewed source revision: 2026-08-28 working tree after the accepted DS3
+behavior and API review.
 
 ## Extracted behavior
 
-DS3 lets workflow alone declare one external-work request. The request has a
-stable operation identity and an Engine occurrence; correlation and idempotency
-equal the operation identity. Readiness preserves the exact requested work and
-identity from History/Dispatch, exposes bounded waiting posture, and does not
-execute the effect inline. Reconstruction leaves the request pending.
+DS3 first makes the exact production dashboard concern independently
+constructible, step-able, renderable, crash/reconstructable, replayable and
+checkable. The same `declare`/`wire`/`seed` construction is then mounted in the
+whole workflow. This is a Navigator-facing acceptance boundary inside DS3, not
+a separate CV and not a substitute for the vertical path.
+
+The dashboard uses four durable token meanings rather than V5's mixed request
+and recovery carriers:
+
+1. `DashboardEvent` — internal workflow mail changing the desired dashboard;
+2. `DashboardProjection` — desired, landed, one pending publication and one
+   retained failure;
+3. `DashboardPublication` — one immutable exact external command; and
+4. `DashboardPublicationOutcome` — one exact-operation published, refused or
+   uncertain terminal.
+
+Those are also the only four dashboard colors. Entry/close and terminal
+variants remain strict data inside event/outcome because they do not create
+different custody or enabledness. The projection stays available while an
+Activity is unresolved, so later events coalesce desired state while its exact
+`pending` field enforces single flight.
+
+Workflow alone creates `DashboardPublication`. Its stable operation hashes the
+complete subject, document and exact rendered body, so cyclic event drift
+cannot reuse an operation for changed bytes. Readiness preserves the exact
+request and identity from History/Dispatch, exposes a bounded owner-local
+`PendingActivity` plus a host-safe `ActivityWait`, and does not execute the
+effect inline.
+
+Closure is an evidence-timestamped normal dashboard event. It makes desired
+state absorbing, reconciles one older pending publication, and then emits one
+final closed publication. DS9 still owns the terminal-inability and lifecycle
+generation-close policy.
 
 ## Evidence ledger
 
 | Source location | Observed claim | Candidate consequence |
 |---|---|---|
-| Outcome, lines 18–23 | Workflow declares `DashReq`; readiness records its occurrence and reports waiting while Dispatch holds it | workflow Activity, Activity request, Activity occurrence, pending Activity |
-| Vertical path, lines 25–39 | The request crosses workflow, Petrus History/Dispatch and detached host inspection without mutation | durable Activity request and waiting posture |
-| Fixed design, lines 62–77 | Workflow owns request creation; complete identity is retained; one advancement records at most one request and never executes inline | workflow-owned work, operation identity, correlation, idempotency |
-| Acceptance, lines 96–107 | History and Dispatch retain identical occurrence/work/identity and reconstruction preserves it | reconstructible pending Activity |
-| API contracts / Workflow Activity identity, lines 109–130 | Every request carries six identity elements and a terminal must match the exact invocation | Activity identity; operation/correlation/idempotency are subordinate identity fields |
-| API contracts / Activity manifest, lines 252–288 | One manifest entry declares capability, request, closed terminals, lane, operation derivation and blocked mapping | Activity manifest; gate and terminal variants are API vocabulary |
-| API contracts / Workflow-runtime cuts, lines 495–510 | An impure workflow action may record one request but cannot execute an effect inline | durable request boundary; named cuts are mechanics |
-| Delivery sequence / DS3, lines 167–174 | DS3 hands off exact request and identity in History/Dispatch with waiting posture | candidates survive into effect execution |
+| DS3 Outcome and User Story | Exact production dashboard construction is locally executable and inspectable before whole-flow acceptance | production subnet and owner-local acceptance are process vocabulary, not a shadow model |
+| DS3 Fixed design and API contract / Dashboard subnet | Four meanings and four colors separate event, state, exact command and exact outcome | workflow Activity request remains distinct from workflow projection state |
+| API contract / Dashboard subnet | Operation hashes complete subject/document/body; outcome must match exact pending operation | Activity identity contains work and operation; an operation cannot identify changed bytes |
+| DS3 Required standalone scenarios | First publication, drift, request crash, closure and wrong/unsuccessful outcome exercise one runner | scenarios are evidence data over one production assembly, not five implementations |
+| API contract / Standalone dashboard execution | Commands inject only typed events/outcomes; state/topology/check inspect real Petrus evidence | local checker and exact replay remain evidence, not runtime authority |
+| API contract / Shared step result | `PendingActivity` retains complete owner-local detail while host receives only `ActivityWait` | pending Activity is durable work state; posture is a detached hint |
+| DS3 Known implementation blocker | Pinned Petrus cannot repair one selected unresolved occurrence without broad reconciliation | bounded one-occurrence reconstruction remains a Petrus prerequisite, not a Hamsterdan workaround |
 
 ## Later ownership and refinements
 
-- DS4 settles the pending request through distinct claim, effect-observed and
-  terminal-recorded positions and returns a typed terminal to its original
-  occurrence (DS4 Vertical path, lines 26–37; Fixed design, lines 84–87).
-- DS5–DS8 add Activity families without changing the common identity or manifest
-  contract (API contracts / First-use ownership, lines 50–63).
-- DS8 reuses original Activity/operation correlation for deferred work (DS8
-  Fixed design, lines 80–81).
-- DS9 maps stale or revoked work to workflow-declared outcomes and keeps host
-  from decoding Activity work (DS9 Fixed design, lines 90–93).
+- DS4 executes the exact publication lookup-first, finalizes bounded
+  refusal/uncertainty reason codes, and settles the original occurrence through
+  claim, effect-observed and terminal-recorded cuts.
+- DS5–DS8 add Activity families through the same manifest/build boundary
+  without changing dashboard identity or adding a second topology.
+- DS9 owns lifecycle successors, final-dashboard terminal-inability policy and
+  the commit that closes a lifecycle generation after final dashboard landing.
+- Fixture-calibrated numeric byte/row/history/artifact limits are implementation
+  Plan values with −1 / limit / +1 evidence, not unresolved domain design.
 
 ## Subordinate vocabulary to evaluate
 
-- `DashReq` is the first request type, not the general concept.
-- `ActivityRequested` is a Petrus record/API name for request durability.
-- occurrence, operation, correlation and idempotency may be fields within
+- `DashboardEvent`, `DashboardProjection`, `DashboardDocument`,
+  `DashboardPublication`, outcome variants and local scenario command names are
+  concrete API vocabulary under the dashboard concern.
+- `ActivityRequested` is Petrus's record/API name for request durability.
+- occurrence, operation, correlation and idempotency remain fields within
   Activity identity rather than separate glossary concepts.
-- `MANIFEST`, `TOKENS`, gate names, execution lanes and closed terminal variants
-  may remain API vocabulary subordinate to Activity declaration.
+- `MANIFEST`, `TOKEN_CLASSES`, `GATES`, execution lanes and checker/resource
+  keys remain construction/evidence vocabulary subordinate to Activity and
+  production-subnet execution.
 - waiting posture and individual cut names describe bounded runtime reporting,
   not separate workflow concepts.
 
-## Unresolved DS-review items
+## Deliberately unresolved beyond DS3
 
-- final `DashReq` fields and operation grammar;
-- manifest, token, build, seed and gate-wiring signatures;
-- public Petrus request/replay/occurrence structures and errors;
-- readiness advancement and pending-Activity projection names;
-- History/Dispatch diagnostics and request-byte limits; and
-- compact workflow names, checker evidence and resource gauges.
+- Petrus's released public name/result/error types for bounded repair of one
+  selected unresolved occurrence;
+- DS4's concrete provider refusal/uncertainty reason codes and effect
+  correspondence; and
+- DS9's bounded operator-recovery or explicit generation-close policy when the
+  final dashboard publication cannot land.
+
+Private Petrus `Instance` access, complete-History authority, broad advancement
+and a fake shadow reducer are ruled out rather than unresolved alternatives.
 
 ## Construction-only exclusions
 
 - The non-selectable tracer handoff and temporary replacement paths disappear
   at DS13.
-- Petrus dependency qualification and simulation/checker mechanics prove the
-  behavior but are not finished-product concepts.
+- Petrus dependency qualification, simulation commands, checker fields and
+  resource gauges prove behavior but are not finished-product concepts.
 
 ## Trace handoff
 
