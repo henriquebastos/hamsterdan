@@ -50,10 +50,15 @@ the same outer-facing language after ruling its subnet composition contract.
 Paths are admitted by the tracer that first needs them. DS1 does not create an
 empty final skeleton.
 
-DS1 admits this implemented source shape:
+DS1 and the delivered DS2 HTTP-custody task admit this source shape:
 
 ```text
 src/hamsterdan2/
+  github_app/
+    models.py
+    webhooks.py
+    simulation/
+      webhooks.py
   workflow/
     values.py
   readiness/
@@ -63,9 +68,11 @@ src/hamsterdan2/
     simulation/
       lifecycle.py
   host/
+    api.py
     application.py
     catalog.py
     composition.py
+    delivery.py
     values.py
   simulation/
     hamsterdan.py
@@ -266,6 +273,24 @@ No readiness fold, Engine advancement, Dispatch claim, provider mutation,
 agent execution, or terminal admission is required to return that
 acknowledgement. Relay uncertainty may redeliver the same provider identity;
 durable custody classifies it without starting another workflow admission.
+
+DS2 task 2 fixes this boundary more narrowly. `github_app` verifies the exact
+raw bytes before parsing and projects a bounded pull-request snapshot plus
+webhook provenance. Host then binds the envelope to one configured active route
+and acquires `(ProviderRouteId, DeliveryId)` in SQLite. One canonical normalized
+content value is retained per acquisition identity. Identical redelivery is an
+exact duplicate; changed normalized content permanently quarantines that one
+acquisition without overwriting its original evidence. The request receives
+HTTP 202 only after the retained, duplicate, or quarantined disposition is
+durable. Invalid transport, signature, envelope, or route evidence is refused
+without persistence.
+
+The normalized snapshot contains only its immutable PR subject, exact head and
+base branch tips, lifecycle state, draft and merged flags, tri-state
+mergeability, and bounded provider update time. Webhook event, action, and
+delivery identity are provenance. Raw body, signature, secret, arbitrary
+headers, SDK values, branch policy, base currentness, provider currency, and
+workflow decisions are neither retained nor returned.
 
 Outside the request, an authority turn claims one host delivery, advances one
 PR through readiness, and either returns detached posture or publishes a Motus

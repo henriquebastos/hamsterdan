@@ -10,6 +10,13 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler
 from pydantic_core import core_schema
 
+from hamsterdan2.github_app.models import (  # noqa: TC001 -- Pydantic resolves boundary fields at runtime.
+    DeliveryId,
+    NormalizedPullRequestWebhook,
+    PositiveIdentifier,
+    ProviderRouteId,
+    RepositoryFullName,
+)
 from hamsterdan2.workflow.values import (  # noqa: TC001 -- Pydantic resolves boundary fields at runtime.
     AwaitingObservation,
     PullRequestSubject,
@@ -73,3 +80,40 @@ class HostRecord(BaseModel):
     action: Literal["open_pull_request"] = "open_pull_request"
     posture: AwaitingObservation
     cut: Literal["host_recorded"] = "host_recorded"
+
+
+class ConfiguredProviderRoute(BaseModel):
+    """One active host binding for exact provider route evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    provider_route_id: ProviderRouteId
+    installation_id: PositiveIdentifier
+    repository_id: PositiveIdentifier
+    repository_full_name: RepositoryFullName
+
+
+class DeliveryReceipt(BaseModel):
+    """Bounded HTTP acknowledgement of one durable custody disposition."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    custody: Literal["durable"] = "durable"
+    provider_route_id: ProviderRouteId
+    delivery_id: DeliveryId
+    custody_generation: int = Field(strict=True, gt=0)
+    disposition: Literal["retained", "exact_duplicate", "quarantined"]
+
+
+class CustodiedDelivery(BaseModel):
+    """Reconstructed original normalized evidence and its custody posture."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    provider_route_id: ProviderRouteId
+    custody_generation: int = Field(strict=True, gt=0)
+    webhook: NormalizedPullRequestWebhook
+    quarantined: bool
+
+    def is_readiness_eligible(self) -> bool:
+        return not self.quarantined

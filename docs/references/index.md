@@ -78,13 +78,15 @@
   `petrus.testing.dst.runner/v1` outer-process containment contract. A killed
   call yields an acknowledged prefix and unfinished attempt, never a fabricated
   replay artifact.
-- CV21.DS2–DS3 dependency gap at that exact pin: public identified delivery can
-  report prior acknowledgement, but Hamsterdan has no public bounded seam to
-  resume one accepted-and-begun nonterminal occurrence. CV21 must not access
-  internal Petrus `Instance` state or collapse accepted/folded cuts. Crash
-  recovery remains blocked until Petrus implements, tests and releases a public
-  accept/resume-one-accepted-unfinished-occurrence seam and Hamsterdan pins and
-  qualifies that release.
+- Delivered CV21.DS2 phased-delivery prerequisite:
+  `henriquebastos/petrus@4e5c2500af4eb439e8e8f5ec108982c81bfc7427`
+  (`feat(engine): split identified delivery into durable phases`), verified at
+  Petrus `origin/main` on 2026-08-30. It supplies the public bounded phased seam
+  needed to distinguish identified acceptance from later fold and resume one
+  accepted unfinished occurrence without private `Instance` access. The
+  current Hamsterdan dependency remains intentionally pinned to
+  `44cac5ff48ac371ebae56323941983f30db13c0d`; CV21.DS2 task 4 will update and
+  qualify the pin when History acceptance first consumes the new seam.
 - CV22 hierarchy evidence inspected 2026-08-28:
   `henriquebastos/petrus@2d26d34de9a1b34b7489ee2207f3492e777a282a`.
   Public `NetSpec` nested stamping flattens child paths into one built Net and

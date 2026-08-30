@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 from contextlib import closing
+import json
 import sqlite3
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from petrus.testing.dst import (
     ApplyResult,
@@ -30,9 +31,30 @@ from petrus.testing.dst import (
     replay,
 )
 from pydantic import BaseModel, ConfigDict
+from starlette import status
+from starlette.testclient import TestClient
 
-from hamsterdan2.host.composition import build_hamsterdan
-from hamsterdan2.host.values import ActionIdentity, HostRecord, OpenPullRequestCommand, RegisteredPullRequest
+from hamsterdan2.github_app.models import PositiveIdentifier, ProviderRouteId, RepositoryFullName
+from hamsterdan2.github_app.simulation.webhooks import (
+    COLLIDING_HEAD_SHA,
+    DELIVERY_ID,
+    EXPECTED_WEBHOOK,
+    ORIGINAL_HEAD_SHA,
+    WEBHOOK_SIGNING_MATERIAL,
+    signed_webhook_body,
+    signed_webhook_headers,
+)
+from hamsterdan2.host.composition import build_hamsterdan, build_webhook_app
+from hamsterdan2.host.delivery import DeliveryCustody
+from hamsterdan2.host.values import (
+    ActionIdentity,
+    ConfiguredProviderRoute,
+    CustodiedDelivery,
+    DeliveryReceipt,
+    HostRecord,
+    OpenPullRequestCommand,
+    RegisteredPullRequest,
+)
 from hamsterdan2.readiness.simulation.lifecycle import (
     EXPECTED_BRIDGE_IDENTITY,
     INSTANCE_ID,
@@ -70,6 +92,33 @@ EXPECTED_RECORD = HostRecord(
     action_identity=OPEN_PULL_REQUEST_COMMAND.action_identity,
     posture=AwaitingObservation(subject=SUBJECT),
 )
+PROVIDER_ROUTE_ID = ProviderRouteId("github:primary")
+PROVIDER_ROUTE = ConfiguredProviderRoute(
+    provider_route_id=PROVIDER_ROUTE_ID,
+    installation_id=PositiveIdentifier(44),
+    repository_id=PositiveIdentifier(31),
+    repository_full_name=RepositoryFullName("owner/repo"),
+)
+
+
+class ReceiveWebhookCommand(BaseModel):
+    """Choose one exact signed request in the cumulative root tracer."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    fixture: Literal["original", "collision"]
+    action: Literal["receive_signed_webhook"] = "receive_signed_webhook"
+
+
+RECEIVE_WEBHOOK_COMMAND = ReceiveWebhookCommand(fixture="original")
+COLLIDE_WEBHOOK_COMMAND = ReceiveWebhookCommand(fixture="collision")
+EXPECTED_DELIVERY = CustodiedDelivery(
+    provider_route_id=PROVIDER_ROUTE_ID,
+    custody_generation=1,
+    webhook=EXPECTED_WEBHOOK,
+    quarantined=False,
+)
+EXPECTED_QUARANTINED_DELIVERY = EXPECTED_DELIVERY.model_copy(update={"quarantined": True})
 
 
 class HostState(BaseModel):
@@ -81,36 +130,53 @@ class HostState(BaseModel):
     records: list[HostRecord]
 
 
+class DeliveryState(BaseModel):
+    """Detached durable webhook custody observation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    rows: int
+    retained: CustodiedDelivery | None
+
+
 class HamsterdanState(BaseModel):
-    """Detached cross-owner observation for the first root tracer."""
+    """Detached cross-owner observation for the cumulative root tracer."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     host: HostState
     readiness: ReadinessState
+    delivery: DeliveryState
 
 
 PROFILE_IDENTITY = ProfileIdentity(
-    name="hamsterdan2.ds1",
-    version=1,
+    name="hamsterdan2.cv21",
+    version=2,
     digest=digest_json(
         {
-            "command": OPEN_PULL_REQUEST_COMMAND.model_dump(mode="json"),
+            "commands": [
+                OPEN_PULL_REQUEST_COMMAND.model_dump(mode="json"),
+                RECEIVE_WEBHOOK_COMMAND.model_dump(mode="json"),
+                COLLIDE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            ],
             "observation": "hamsterdan.state",
-            "cut": "host_recorded",
-            "owners": ["host", "readiness", "workflow_bridge"],
+            "cuts": ["delivery_custodied", "host_recorded"],
+            "owners": ["github_app", "host", "readiness", "workflow_bridge"],
         }
     ),
 )
 CHECKER_IDENTITY = CheckerIdentity(
-    name="hamsterdan2.ds1.root-checker",
-    version=1,
+    name="hamsterdan2.cv21.root-checker",
+    version=2,
     digest=digest_json(
         {
             "subject": SUBJECT.model_dump(mode="json"),
             "action_identity": str(OPEN_PULL_REQUEST_COMMAND.action_identity),
             "instance_identity": INSTANCE_ID,
             "bridge_identity": EXPECTED_BRIDGE_IDENTITY,
+            "provider_route_identity": str(PROVIDER_ROUTE_ID),
+            "delivery_identity": str(DELIVERY_ID),
+            "delivery_content": EXPECTED_WEBHOOK.model_dump(mode="json"),
             "phases": ["empty", "registered", "readiness_durable", "host_recorded"],
             "relationships": "every retained phase identifies one PR",
         }
@@ -120,12 +186,13 @@ RESOURCE_LIMITS = {
     "pending.motus.tasks": 0,
     "retained.host.records": 1,
     "retained.host.subjects": 1,
+    "retained.host.deliveries": 1,
     "retained.readiness.history_records": READINESS_RESOURCE_LIMITS["retained.readiness.history_records"],
-    "retained.state.bytes": 393_216,
-    "retained.state.files": 5,
+    "retained.state.bytes": 524_288,
+    "retained.state.files": 6,
 }
 DEFAULT_BUDGET = BudgetV4(
-    actions=12,
+    actions=16,
     queued_commands=1,
     timer_advances=0,
     logical_instant=0,
@@ -191,10 +258,25 @@ def host_state(root: Path) -> HostState:
     return HostState(subjects=subjects, records=records)
 
 
+def delivery_state(root: Path) -> DeliveryState:
+    path = root / "deliveries.sqlite3"
+    if not path.is_file():
+        return DeliveryState(rows=0, retained=None)
+    custody = DeliveryCustody.from_path(path=path, provider_routes=(PROVIDER_ROUTE,))
+    return DeliveryState(
+        rows=custody.retained_count(),
+        retained=custody.retained_delivery(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        ),
+    )
+
+
 def observe_hamsterdan(root: Path) -> HamsterdanState:
     return HamsterdanState(
         host=host_state(root),
         readiness=readiness_state(root / EXPECTED_REGISTRATION.readiness_root),
+        delivery=delivery_state(root),
     )
 
 
@@ -214,11 +296,13 @@ def root_resource_usage(root: Path) -> ResourceUsage:
     files = [path for path in root.rglob("*") if path.is_file()] if root.exists() else []
     readiness_root = root / EXPECTED_REGISTRATION.readiness_root
     state = readiness_state(readiness_root)
+    delivery = delivery_state(root)
     return ResourceUsage(
         values={
             "pending.motus.tasks": pending_dispatch_tasks(root / "dispatch.sqlite3"),
             "retained.host.records": len(host_state(root).records),
             "retained.host.subjects": len(host_state(root).subjects),
+            "retained.host.deliveries": delivery.rows,
             "retained.readiness.history_records": state.history_records,
             "retained.state.bytes": sum(path.stat().st_size for path in files),
             "retained.state.files": len(files),
@@ -235,6 +319,33 @@ def validate_open_pull_request(command: Command) -> Command:
     return command
 
 
+def validate_receive_webhook(command: Command) -> Command:
+    if command.name != "hamsterdan.receive_webhook":
+        raise ValueError("CV21 root accepts only admitted host and webhook commands")
+    parsed = ReceiveWebhookCommand.model_validate(command.payload, strict=True)
+    if parsed not in (RECEIVE_WEBHOOK_COMMAND, COLLIDE_WEBHOOK_COMMAND):
+        raise ValueError("DS2 root command must choose one exact admitted signed fixture")
+    if parsed.model_dump(mode="json") != command.payload:
+        raise ValueError("DS2 root webhook command must contain exactly the admitted fields")
+    return command
+
+
+def receive_signed_webhook(root: Path, fixture: Literal["original", "collision"]) -> DeliveryReceipt:
+    head_sha = ORIGINAL_HEAD_SHA if fixture == "original" else COLLIDING_HEAD_SHA
+    body = signed_webhook_body(head_sha=head_sha)
+    headers = {name.decode(): value.decode() for name, value in signed_webhook_headers(body)}
+    app = build_webhook_app(
+        state_root=root,
+        webhook_secret=WEBHOOK_SIGNING_MATERIAL,
+        provider_routes=(PROVIDER_ROUTE,),
+    )
+    with TestClient(app) as client:
+        response = client.post("/github/webhooks", content=body, headers=headers)
+    if response.status_code != status.HTTP_202_ACCEPTED:
+        raise RuntimeError(f"admitted DS2 fixture was refused with HTTP {response.status_code}")
+    return DeliveryReceipt.model_validate(response.json(), strict=True)
+
+
 class HamsterdanScenarioProfile:
     """Petrus profile over the real replacement host composition."""
 
@@ -244,10 +355,12 @@ class HamsterdanScenarioProfile:
         self._root = root
 
     def validate(self, command: Command) -> Command:
-        return validate_open_pull_request(command)
+        if command.name == "hamsterdan.open_pull_request":
+            return validate_open_pull_request(command)
+        return validate_receive_webhook(command)
 
     def validate_fault(self, fault: Fault) -> Fault:
-        raise ValueError(f"DS1 root admits no faults; remove {fault.name!r}")
+        raise ValueError(f"CV21 root admits no faults; remove {fault.name!r}")
 
     def create(self, context: ScenarioContext) -> GenerationStart[Hamsterdan]:
         del context
@@ -263,7 +376,15 @@ class HamsterdanScenarioProfile:
         command: Command,
         context: ScenarioContext,
     ) -> ApplyResult:
-        del command, context
+        del context
+        if command.name == "hamsterdan.receive_webhook":
+            parsed = ReceiveWebhookCommand.model_validate(command.payload, strict=True)
+            receipt = receive_signed_webhook(self._root, parsed.fixture)
+            return ApplyResult(
+                disposition="idempotent" if receipt.disposition == "exact_duplicate" else "applied",
+                value=receipt.model_dump(mode="json"),
+                scheduled=[],
+            )
         replayed = action_was_recorded(self._root, OPEN_PULL_REQUEST_COMMAND.action_identity)
         record = generation.open_pull_request(OPEN_PULL_REQUEST_COMMAND)
         return ApplyResult(
@@ -280,7 +401,7 @@ class HamsterdanScenarioProfile:
     ) -> JsonValue:
         del generation, context
         if request.name != "hamsterdan.state" or request.payload != {}:
-            raise ValueError("DS1 root exposes only the parameterless 'hamsterdan.state' observation")
+            raise ValueError("CV21 root exposes only the parameterless 'hamsterdan.state' observation")
         return cast("JsonValue", observe_hamsterdan(self._root).model_dump(mode="json"))
 
     def resource_usage(self, generation: Hamsterdan | None) -> ResourceUsage:
@@ -301,10 +422,10 @@ class HamsterdanChecker:
     request = ObservationRequest(name="hamsterdan.state", payload={})
 
     def check(self, observation: Observation) -> CheckResult:
-        state = HamsterdanState.model_validate(observation.value, strict=True)
-        empty = state == HamsterdanState(
-            host=HostState(subjects=[], records=[]),
-            readiness=ReadinessState(binding=None, history_records=0),
+        state = HamsterdanState.model_validate_json(json.dumps(observation.value), strict=True)
+        empty_host = state.host == HostState(subjects=[], records=[]) and state.readiness == ReadinessState(
+            binding=None,
+            history_records=0,
         )
         subject_binding = state.host.subjects in ([], [EXPECTED_REGISTRATION])
         action_identity = state.host.records in ([], [EXPECTED_RECORD])
@@ -330,11 +451,31 @@ class HamsterdanChecker:
             and state.readiness.binding is not None
             and state.readiness.history_records > 0
         )
+        delivery = state.delivery.retained
+        delivery_empty = state.delivery == DeliveryState(rows=0, retained=None)
+        delivery_custody = delivery_empty or state.delivery in (
+            DeliveryState(rows=1, retained=EXPECTED_DELIVERY),
+            DeliveryState(rows=1, retained=EXPECTED_QUARANTINED_DELIVERY),
+        )
+        delivery_route = delivery is None or (
+            delivery.provider_route_id == PROVIDER_ROUTE_ID and delivery.webhook.route == EXPECTED_WEBHOOK.route
+        )
+        delivery_identity = delivery is None or delivery.webhook.provenance.delivery_id == DELIVERY_ID
+        delivery_content = delivery is None or (
+            delivery.webhook.snapshot == EXPECTED_WEBHOOK.snapshot
+            and delivery.webhook.provenance.event == EXPECTED_WEBHOOK.provenance.event
+            and delivery.webhook.provenance.action == EXPECTED_WEBHOOK.provenance.action
+        )
+        empty = empty_host and delivery_empty
         return CheckResult(
-            passed=(empty or registered or readiness_durable or opened)
+            passed=(empty_host or registered or readiness_durable or opened)
             and subject_binding
             and action_identity
-            and readiness_result.passed,
+            and readiness_result.passed
+            and delivery_custody
+            and delivery_route
+            and delivery_identity
+            and delivery_content,
             detail={
                 "empty": empty,
                 "registered": registered,
@@ -343,6 +484,10 @@ class HamsterdanChecker:
                 "subject_binding": subject_binding,
                 "action_identity": action_identity,
                 "readiness": readiness_result.passed,
+                "delivery_custody": delivery_custody,
+                "delivery_route": delivery_route,
+                "delivery_identity": delivery_identity,
+                "delivery_content": delivery_content,
             },
         )
 
@@ -354,7 +499,7 @@ def build_hamsterdan_world(*, root: Path, budget: BudgetV4 = DEFAULT_BUDGET) -> 
 
 def replay_hamsterdan(artifact: ScenarioArtifactV3 | ScenarioArtifact, *, root: Path) -> ReplayResult:
     if not isinstance(artifact, ScenarioArtifact):
-        raise TypeError("DS1 root replay requires a version-4 resource artifact")
+        raise TypeError("CV21 root replay requires a version-4 resource artifact")
     registry = ScenarioRegistry()
     registry.register_profile(HamsterdanScenarioProfile(root))
     registry.register_checker(HamsterdanChecker())

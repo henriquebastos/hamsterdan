@@ -2,8 +2,8 @@
 code: CV21
 level: Value
 status: Active
-status_reason: Navigator paused CV19 and selected the outer-system reconstruction as the delivery focus; CV21.DS1 is complete and DS2 is the next planned tracer
-updated: 2026-08-29
+status_reason: CV21.DS2 remains active after delivering signed-webhook-to-durable-custody; source-neutral readiness staging is the next planned task
+updated: 2026-08-30
 related:
   - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
   - ../../decisions/records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md
@@ -100,10 +100,11 @@ DS1 bridged lifecycle -> DS2 ingress -> DS3 retained-Net Activity
 11. [CV21.DS11 — Supervise multiple PRs fairly](cv21-ds11-supervise-multiple-prs-fairly.md)
 12. [CV21.DS12 — Qualify the outer system and workflow bridge](cv21-ds12-qualify-outer-system-and-bridge.md)
 
-CV21.DS1 is complete. DS2 through DS12 remain `Planned`; none is pulled merely
-because its predecessor completed. Each selected tracer must expand into
-reviewable User and Technical Stories and pass its own API-strengthening Plan
-Checkpoint before implementation.
+CV21.DS1 is complete. DS2 is `Active`; tasks 1–2 in its confirmed serial ladder
+are delivered and tasks 3–5 remain. DS3 through DS12 remain `Planned`; none is
+pulled merely because its predecessor completed. Each selected tracer must
+expand into reviewable User and Technical Stories and pass its own API-
+strengthening Plan Checkpoint before implementation.
 
 ## Done condition
 

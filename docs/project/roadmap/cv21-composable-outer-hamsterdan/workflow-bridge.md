@@ -117,6 +117,16 @@ DS10–DS12 add no workflow family unless a real discovery or qualification path
 exposes an omission. An omission updates this census before implementation; it
 does not authorize a generic fallback.
 
+The confirmed later DS2 mapping is fail-closed. The webhook-derived Head
+observation carries the exact head and base branch tips and tri-state
+mergeability. Bridge conversion maps retained `mergeable=True` only when the
+snapshot value is explicitly true, uses the manifest-scoped policy revision,
+and maps webhook-only unproven base evidence to `strict_base=True` and
+`base_current=False` until a later exact provider read refreshes it. Policy and
+provenance do not enter `ObservationKey` semantic equality. Task 2 records this
+rule but does not implement any observation, key, manifest, grant, or bridge
+mapping.
+
 ## Prohibited reuse
 
 The bridge cannot import or call:

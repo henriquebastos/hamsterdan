@@ -16,6 +16,10 @@ ROOT = Path(__file__).parents[1]
 SOURCE = ROOT / "src" / "hamsterdan2"
 BRIDGE = SOURCE / "readiness" / "workflow_bridge.py"
 RUNTIME = SOURCE / "readiness" / "runtime.py"
+GITHUB_WEBHOOKS = SOURCE / "github_app" / "webhooks.py"
+HOST_API = SOURCE / "host" / "api.py"
+HOST_COMPOSITION = SOURCE / "host" / "composition.py"
+PROCESS_SIMULATION = SOURCE / "simulation" / "process.py"
 LEGACY_ALLOWLIST = frozenset(
     {
         "hamsterdan.contracts.readiness_v5",
@@ -137,6 +141,82 @@ def test_workflow_values_have_no_runtime_or_outer_dependencies() -> None:
     for path in (SOURCE / "workflow").rglob("*.py"):
         escaped = {name for name in source_imports(path) if any(matches_module(name, prefix) for prefix in forbidden)}
         assert escaped == set(), f"{path.relative_to(ROOT)} imports outer/runtime concepts: {sorted(escaped)}"
+
+
+def test_github_boundary_has_no_host_workflow_or_runtime_dependencies() -> None:
+    forbidden = (
+        "hamsterdan2.host",
+        "hamsterdan2.readiness",
+        "hamsterdan2.workflow",
+        "petrus",
+        "fastapi",
+        "httpx",
+        "sqlite3",
+    )
+    for path in (SOURCE / "github_app").rglob("*.py"):
+        if "simulation" in path.relative_to(SOURCE).parts:
+            continue
+        escaped = {name for name in source_imports(path) if any(matches_module(name, prefix) for prefix in forbidden)}
+        assert escaped == set(), f"{path.relative_to(ROOT)} imports outer/runtime concepts: {sorted(escaped)}"
+
+
+def test_githubkit_is_confined_to_the_webhook_boundary() -> None:
+    imports = {
+        path: sorted(name for name in source_imports(path) if matches_module(name, "githubkit"))
+        for path in SOURCE.rglob("*.py")
+        if any(matches_module(name, "githubkit") for name in source_imports(path))
+    }
+
+    assert imports == {GITHUB_WEBHOOKS: ["githubkit.webhooks"]}
+
+
+def test_fastapi_and_webhook_app_construction_stay_at_the_host_http_rim() -> None:
+    fastapi_importers = {
+        path for path in SOURCE.rglob("*.py") if any(matches_module(name, "fastapi") for name in source_imports(path))
+    }
+    constructors = []
+    composition_calls = []
+    for path in SOURCE.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
+        constructors.extend(
+            path
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "FastAPI"
+        )
+        composition_calls.extend(
+            path
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "create_webhook_app"
+        )
+
+    assert fastapi_importers == {HOST_API, HOST_COMPOSITION}
+    assert constructors == [HOST_API]
+    assert composition_calls == [HOST_COMPOSITION]
+
+
+def test_webhook_http_rim_cannot_open_workflow_runtime() -> None:
+    forbidden = (
+        "hamsterdan2.readiness",
+        "hamsterdan2.workflow",
+        "petrus",
+    )
+    escaped = {name for name in source_imports(HOST_API) if any(matches_module(name, prefix) for prefix in forbidden)}
+
+    assert escaped == set()
+
+
+def test_process_loss_evidence_drives_the_composed_asgi_boundary() -> None:
+    imports = source_imports(PROCESS_SIMULATION)
+    tree = ast.parse(
+        PROCESS_SIMULATION.read_text(encoding="utf-8"),
+        filename=str(PROCESS_SIMULATION.relative_to(ROOT)),
+    )
+    calls = {node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+
+    assert "hamsterdan2.host.composition" in imports
+    assert "build_webhook_app" in calls
+    assert "hamsterdan2.host.delivery" not in imports
+    assert "hamsterdan2.github_app.webhooks" not in imports
 
 
 def test_readiness_runtime_alone_owns_engine_history_and_dispatch() -> None:
