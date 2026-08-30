@@ -1,0 +1,20 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-function-local-imports
+valid:
+  - |
+    import json
+
+
+    def process():
+        return json.dumps({})
+invalid:
+  - |
+    def process():
+        import json
+        return json.dumps({})
+  - |
+    class Order:
+        def total(self):
+            from decimal import Decimal
+            return Decimal(0)

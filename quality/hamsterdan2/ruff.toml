@@ -1,0 +1,37 @@
+# Copyright (c) 2026 Henrique Bastos
+
+line-length = 120
+target-version = "py314"
+
+[lint]
+select = ["ALL"]
+ignore = [
+  "E731",    # Assigned lambdas are accepted callable contracts.
+  "E501",    # The formatter owns wrapping; long literals retain exact contracts.
+  "D",       # Docstrings are rare and load-bearing rather than mandatory.
+  "ARG",     # Host and framework hooks may legitimately ignore arguments.
+  "RUF012",  # Class-attribute tables are project style.
+  "COM812",  # This conflicts with the formatter.
+  "EM",      # Instructive errors may use direct string literals.
+  "TRY003",  # Instructive errors may carry detailed messages at raise sites.
+  "PLR0904", "PLR0911", "PLR0912", "PLR0913", "PLR0915",
+              # Cyclomatic complexity owns function shape instead of size counters.
+]
+
+[lint.per-file-ignores]
+"tests2/**" = ["ANN", "SLF", "S101", "S105", "S106", "PLR2004"]
+
+[lint.isort]
+case-sensitive = true
+lines-after-imports = 2
+force-sort-within-sections = true
+section-order = [
+  "future", "standard-library", "third-party",
+  "first-party", "local-folder", "testing",
+]
+
+[lint.isort.sections]
+testing = ["pytest", "responses", "freezegun", "unittest", "mock", "time_machine"]
+
+[lint.mccabe]
+max-complexity = 4

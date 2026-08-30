@@ -1,0 +1,25 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-underscore-methods
+valid:
+  - |
+    class Exporter:
+        def export(self):
+            return None
+  - |
+    class Exporter:
+        def __len__(self):
+            return 0
+  - |
+    def _dispatch(hook):
+        return hook
+invalid:
+  - |
+    class Exporter:
+        def _handle_send(self):
+            return None
+  - |
+    class Exporter:
+        @property
+        def _cached(self):
+            return None

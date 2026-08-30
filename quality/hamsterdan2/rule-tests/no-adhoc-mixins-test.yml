@@ -1,0 +1,17 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-adhoc-mixins
+valid:
+  - |
+    class Order(Model):
+        pass
+  - |
+    class CountryField(TypedField, models.CharField):
+        pass
+invalid:
+  - |
+    class TimestampMixin:
+        pass
+  - |
+    class Order(TimestampMixin, Model):
+        pass

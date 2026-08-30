@@ -1,0 +1,18 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: clock-has-one-owner
+language: python
+severity: error
+message: Time is injected. Take now=utc_now (or sleep=...) as a parameter; direct reads live only in the clock module.
+files:
+  - src/hamsterdan2/**/*.py
+rule:
+  any:
+    - pattern: datetime.now($$$)
+    - pattern: datetime.utcnow()
+    - pattern: datetime.today()
+    - pattern: date.today()
+    - pattern: time.time()
+    - pattern: time.monotonic()
+    - pattern: time.sleep($$$)
+    - pattern: asyncio.sleep($$$)

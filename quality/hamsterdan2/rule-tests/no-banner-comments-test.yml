@@ -1,0 +1,12 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-banner-comments
+valid:
+  - "# We can't avoid __contains__ because value may be empty."
+  - "# TODO-free why comment"
+  - "x = 1  # inline why"
+invalid:
+  - "# ==== Public Methods ===="
+  - "# ----------------"
+  - "# ── ADF → Markdown ──"
+  - "# ============================================"

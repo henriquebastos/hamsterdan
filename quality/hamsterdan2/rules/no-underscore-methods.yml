@@ -1,0 +1,21 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-underscore-methods
+language: python
+severity: error
+message: >
+  Underscore-prefixed methods are banned by default. Shrink the public
+  interface or move the helper to module level; justify true internals with a
+  suppression comment at the definition.
+files:
+  - src/hamsterdan2/**/*.py
+  - tests2/**/*.py
+rule:
+  kind: function_definition
+  has:
+    field: name
+    regex: '^_[^_]'
+  inside:
+    kind: class_definition
+    stopBy:
+      kind: function_definition

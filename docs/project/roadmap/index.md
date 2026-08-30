@@ -10,8 +10,8 @@ belongs in each item's own metadata; this index routes to current owners.
   Twelve progressively deepened tracers rebuild GitHub, agents, readiness,
   host, operator, custody, authority, effects, discovery, fairness, and
   Hamsterdan-owned DST around one temporary bridge to the current working Net.
-  No workflow loop is reimplemented, and DS1 remains Planned pending its pull
-  and expansion checkpoint.
+  No workflow loop is reimplemented. DS1's strict gate and first bridged
+  lifecycle are complete; DS2 is the next planned tracer.
 
 ## Planned
 

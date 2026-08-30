@@ -1,0 +1,22 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-adhoc-mixins
+language: python
+severity: error
+message: >
+  Mixins are banned. Compose different types and aggregate types; multiple
+  inheritance only through a framework's own designed composition mechanism.
+files:
+  - src/hamsterdan2/**/*.py
+  - tests2/**/*.py
+rule:
+  kind: class_definition
+  any:
+    - has:
+        field: name
+        regex: '(?i)mixin$'
+    - has:
+        field: superclasses
+        has:
+          kind: identifier
+          regex: '(?i)mixin$'

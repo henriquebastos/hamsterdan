@@ -10,6 +10,7 @@ Python 3.14 is managed with uv.
 - Focused test: `uv run --frozen pytest -q PATH::NODE`
 - Static feedback: `scripts/check quick`
 - Path-scoped static feedback: `scripts/check quick PATH [PATH ...]`
+- Isolated replacement feedback: `scripts/check hamsterdan2`
 - Checkpoint confidence: `scripts/check full`
 - Release confidence: `scripts/check release`
 - Non-blocking broad findings: `scripts/check audit`
@@ -17,9 +18,14 @@ Python 3.14 is managed with uv.
 
 The quick profile lints and format-checks maintained Python paths, type-checks
 all production source, and runs the fast architecture contract. Its default
-paths are `src`, `tests`, and `deployment`; historical executable Exploration
-remains outside the maintained lint surface. The full profile accepts no paths
-and adds Bun, TypeScript, distribution-build, and routine Python-suite evidence.
+paths are `src/hamsterdan`, `tests`, and `deployment`, then the isolated
+replacement gate; a path-scoped quick run does not widen into replacement work.
+The `hamsterdan2` profile accepts no paths and applies its strict Ruff, formatting,
+ty, verified ast-grep, architecture, feedback, deterministic, and pytest
+contracts only to `src/hamsterdan2` and `tests2`. Historical executable
+Exploration remains outside the maintained lint surface. The full profile
+accepts no paths and adds Bun, TypeScript, distribution-build, and routine
+Python-suite evidence.
 Routine tests use deterministic random seed 1729 on four xdist workers and fail
 on any selected skip. `release` repeats the routine suite serially with seed
 20260825.

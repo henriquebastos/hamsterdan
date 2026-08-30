@@ -55,7 +55,7 @@ def test_check_script_is_valid_shell_and_describes_maintained_profiles() -> None
     result = _run("--help")
     assert result.returncode == 0
     assert "scripts/check quick [PATH ...]" in result.stdout
-    for profile in ("full", "release", "audit", "mutation"):
+    for profile in ("hamsterdan2", "full", "release", "audit", "mutation"):
         assert f"scripts/check {profile}" in result.stdout
 
     script = CHECK.read_text(encoding="utf-8")
@@ -77,7 +77,7 @@ def test_quick_resolves_the_repository_and_forwards_selected_paths(tmp_path: Pat
     assert log.read_text(encoding="utf-8").splitlines() == [
         f"{ROOT}|1|run ruff check tests/test_architecture.py",
         f"{ROOT}|1|run ruff format --check tests/test_architecture.py",
-        f"{ROOT}|1|run ty check src deployment",
+        f"{ROOT}|1|run ty check src/hamsterdan deployment",
         f"{ROOT}|1|run pytest -q tests/test_architecture.py",
     ]
 
@@ -90,13 +90,21 @@ def test_quick_defaults_to_maintained_python_paths(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     commands = log.read_text(encoding="utf-8").splitlines()
     assert commands[:2] == [
-        f"{ROOT}|1|run ruff check src tests deployment",
-        f"{ROOT}|1|run ruff format --check src tests deployment",
+        f"{ROOT}|1|run ruff check src/hamsterdan tests deployment",
+        f"{ROOT}|1|run ruff format --check src/hamsterdan tests deployment",
+    ]
+    assert commands[4:] == [
+        f"{ROOT}|1|run ruff check --config quality/hamsterdan2/ruff.toml src/hamsterdan2 tests2",
+        f"{ROOT}|1|run ruff format --check --config quality/hamsterdan2/ruff.toml src/hamsterdan2 tests2",
+        f"{ROOT}|1|run ty check src/hamsterdan2 tests2",
+        f"{ROOT}|1|run ast-grep test --config quality/hamsterdan2/sgconfig.yml --skip-snapshot-tests",
+        f"{ROOT}|1|run ast-grep scan --config quality/hamsterdan2/sgconfig.yml src/hamsterdan2 tests2",
+        f"{ROOT}|1|run pytest -q -o addopts= tests2",
     ]
 
 
 def test_bounded_profiles_reject_paths_without_running_tools() -> None:
-    for profile in ("full", "release", "audit", "mutation"):
+    for profile in ("hamsterdan2", "full", "release", "audit", "mutation"):
         result = _run(profile, "tests/test_architecture.py")
         assert result.returncode == 2
         assert f"scripts/check {profile} does not accept paths" in result.stderr

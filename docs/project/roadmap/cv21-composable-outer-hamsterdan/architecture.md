@@ -50,6 +50,31 @@ the same outer-facing language after ruling its subnet composition contract.
 Paths are admitted by the tracer that first needs them. DS1 does not create an
 empty final skeleton.
 
+DS1 admits this implemented source shape:
+
+```text
+src/hamsterdan2/
+  workflow/
+    values.py
+  readiness/
+    root.py
+    runtime.py
+    workflow_bridge.py
+    simulation/
+      lifecycle.py
+  host/
+    application.py
+    catalog.py
+    composition.py
+    values.py
+  simulation/
+    hamsterdan.py
+    process.py
+```
+
+The following cumulative shape remains directional for later tracers. A later
+story still admits each path only when a real vertical call site needs it.
+
 ```text
 src/hamsterdan2/
   workflow/

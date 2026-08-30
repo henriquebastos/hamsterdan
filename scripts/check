@@ -14,12 +14,14 @@ fi
 usage() {
     cat <<'EOF'
 usage: scripts/check quick [PATH ...]
+       scripts/check hamsterdan2
        scripts/check full
        scripts/check release
        scripts/check audit
        scripts/check mutation
 
 quick     lint and format-check Python PATHs, type-check production source, and enforce architecture rules
+hamsterdan2  enforce the isolated strict replacement gate
 full      quick, Bun, build, and fixed-seed randomized routine tests on four workers
 release   full plus one additional fixed-seed serial routine test run
 audit     report repository lint, complexity, and structural findings; fail only on a broken probe
@@ -38,13 +40,30 @@ reject_paths() {
 
 quick() {
     local paths=("$@")
+    local replacement_gate=false
     if ((${#paths[@]} == 0)); then
-        paths=(src tests deployment)
+        paths=(src/hamsterdan tests deployment)
+        replacement_gate=true
     fi
     uv run ruff check "${paths[@]}"
     uv run ruff format --check "${paths[@]}"
-    uv run ty check src deployment
+    uv run ty check src/hamsterdan deployment
     uv run pytest -q tests/test_architecture.py
+    if [[ "$replacement_gate" == true ]]; then
+        hamsterdan2
+    fi
+}
+
+hamsterdan2() {
+    reject_paths hamsterdan2 "$@" || return
+    local config="quality/hamsterdan2/ruff.toml"
+    local paths=(src/hamsterdan2 tests2)
+    uv run ruff check --config "$config" "${paths[@]}"
+    uv run ruff format --check --config "$config" "${paths[@]}"
+    uv run ty check "${paths[@]}"
+    uv run ast-grep test --config quality/hamsterdan2/sgconfig.yml --skip-snapshot-tests
+    uv run ast-grep scan --config quality/hamsterdan2/sgconfig.yml "${paths[@]}"
+    uv run pytest -q -o addopts= tests2
 }
 
 routine_tests() {
@@ -129,6 +148,9 @@ fi
 case "$profile" in
     quick)
         quick "$@"
+        ;;
+    hamsterdan2)
+        hamsterdan2 "$@"
         ;;
     full)
         full "$@"

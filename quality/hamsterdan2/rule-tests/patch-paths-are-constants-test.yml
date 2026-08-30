@@ -1,0 +1,10 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: patch-paths-are-constants
+valid:
+  - "mocker.patch(SPAWN_PROCESS_SEAM)"
+  - "patch(SPAWN_PROCESS_SEAM, autospec=True)"
+  - "render(\"template.html\")"
+invalid:
+  - "mocker.patch(\"app.agents.runner.spawn_process\")"
+  - "patch(\"app.agents.runner.spawn_process\")"

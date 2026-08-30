@@ -1,0 +1,16 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-underscore-dataclass-fields
+valid:
+  - |
+    @dataclass
+    class Report:
+        title: str
+  - |
+    class Plain:
+        _internal: object
+invalid:
+  - |
+    @dataclass
+    class ReportGenerator:
+        _db: object

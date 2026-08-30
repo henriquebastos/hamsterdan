@@ -62,9 +62,11 @@ after private production qualification.
 
 [CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) owns the current
 delivery movement: the non-selectable reconstruction of the outer system over
-one temporary bridge to the current working Net. CV21.DS1 remains Planned until
-its pull and expansion checkpoint. No replacement code, runtime selector, or
-deployment exists yet.
+one temporary bridge to the current working Net. CV21.DS1 now provides the
+isolated replacement gate and locally qualified host/readiness/bridge lifecycle
+under `src/hamsterdan2`; CV21.DS2 is the next planned tracer. The replacement
+remains non-selectable, uses only fresh disposable state, and has no runtime
+selector or deployment.
 
 The Navigator paused
 [CV19](roadmap/cv19-private-v0-1-production/index.md) before production launch.
