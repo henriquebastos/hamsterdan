@@ -2,6 +2,10 @@
 
 Hamsterdan is a GitHub-native PR-readiness application built on Petrus. It is a
 separate application project, not a Petrus component or runtime identity.
+The plain-language identity page is
+[What Hamsterdan is](../product/what-hamsterdan-is.md); the canonical domain
+language is the [project glossary](glossary/index.md). This briefing predates
+both and still uses retired vocabulary.
 
 The source project lives in the private `henriquebastos/hamsterdan` repository.
 HBNetwork owns the first private GitHub App used for real-provider validation.
