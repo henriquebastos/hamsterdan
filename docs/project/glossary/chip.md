@@ -1,7 +1,7 @@
 # Chip
 
-A reusable subnet packaged with declared inputs and outputs, ready to be stamped onto any Petri net like a chip onto a motherboard. Reserved language: none exist yet; today's nine subnets become chips only when CV22 packages them with proper pins.
+A reusable subnet packaged with declared inputs and outputs, ready to be stamped onto any Petri net like a chip onto a motherboard.
 
-Avoid: using chip for today's unpackaged subnets
-
-Related: [Subnet](subnet.md)
+- Use when: a subnet packaged with proper pins for reuse; none exist yet, CV22 creates the first.
+- Do not use for: today's nine unpackaged subnets.
+- Related: [Subnet](subnet.md)

@@ -1,7 +1,8 @@
 # PR Workflow
 
-The Petri net defining everything the app does for one pull request, from first webhook to close. One workflow instance runs per PR identity. `v5` survives only as the on-disk version label of saved state, never as the workflow's name.
+The Petri net defining everything the app does for one pull request, from first webhook to close. One workflow instance runs per PR identity.
 
-Avoid: V5 (as a name), net_v5 (in prose), topology
-
-Related: [PR Identity](pr-identity.md), [Activity](activity.md)
+- Use when: the net itself, its wiring, or one PR's running instance of it.
+- Do not use for: the server process around it; the workflow decides, the server executes.
+- Avoid: V5 and topology as names; `v5` survives only as the on-disk version label of saved state.
+- Related: [PR Identity](pr-identity.md), [Subnet](subnet.md), [Activity](activity.md)

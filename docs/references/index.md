@@ -3,16 +3,18 @@
 ## Ariad provenance
 
 - Vendored `using-ariad` package from <https://github.com/henriquebastos/ariad>
-  at Git revision `67eecc1c3fdd3ca7db313183a8c24662db3a1de8`
-  (branch `feat/domain-modeling-integration`): package version
-  `0.2.2`, method digest
-  `0ec9ce42a31dcdfb708f9d1492ff98394961f7bae10c65ecba2f85a89377195f`,
+  at Git revision `b70aa8da18c19500c6d3c9c53d3eb9bf5b2f9e47` (`main`):
+  package version `0.3.0`, method digest
+  `c118e38da423a3b07de392e3000b864613e384540b6d5180cfac180426a5b323`,
   package digest
-  `6642d26105aacdf2226a711dc744b6e2bdfed3f91a773a51251d3e9305cf09b3`,
+  `7302f17bec822017dfb00302d5ec0613652e859a8de17899ef81abbca28a873e`,
   copied complete from `skills/using-ariad` to
-  `.agents/skills/using-ariad` on 2026-08-31. This version adds the
-  first-class `docs/project/glossary/` template. Supersedes the 0.2.1 pin
-  at `7521d53983039bd808051d34bdcc56faec3277da` (2026-08-09).
+  `.agents/skills/using-ariad` on 2026-08-31. This version makes
+  `docs/project/glossary/` the domain-language owner with the boundary
+  entry form and adds the `method/domain-language` reference. Supersedes
+  the 0.2.2 pin at `67eecc1c3fdd3ca7db313183a8c24662db3a1de8` (same day)
+  and the 0.2.1 pin at `7521d53983039bd808051d34bdcc56faec3277da`
+  (2026-08-09).
 
 ## Petrus provenance
 

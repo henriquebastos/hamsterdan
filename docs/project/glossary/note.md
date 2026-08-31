@@ -1,7 +1,8 @@
 # Note
 
-Writing one incoming fact into a notebook: a pure function that takes the fact plus the current notebook and returns the updated notebook and any outgoing messages. No I/O ever happens while noting.
+Writing one incoming fact into a notebook: a pure function that takes the fact plus the current notebook and returns the updated notebook and any outgoing messages.
 
-Avoid: fold
-
-Related: [Notebook](notebook.md)
+- Use when: the pure step that folds one fact into a subnet's notebook.
+- Do not use for: activities; noting never does I/O.
+- Avoid: fold.
+- Related: [Notebook](notebook.md), [Activity](activity.md)

@@ -2,6 +2,8 @@
 
 A counter of fresh starts of work on one pull request. It bumps when a new head commit lands and when a draft PR returns to ready; it does not bump on base-branch or settings refreshes. Anything computed under an older generation is discarded.
 
-Avoid: incarnation, epoch, commit generation
-
-Related: [PR Identity](pr-identity.md), [PR Workflow](pr-workflow.md)
+- Use when: scoping work or facts to one fresh start of the PR.
+- Do not use for: review rounds or history sequence numbers; those count other things.
+- Avoid: incarnation, epoch, commit generation.
+- Example: a draft PR going ready starts a new generation even though no commit changed.
+- Related: [PR Identity](pr-identity.md), [Notebook](notebook.md)
