@@ -5,8 +5,16 @@ belongs in each item's own metadata; this index routes to current owners.
 
 ## Active
 
+- [CV19 — Private v0.1 production](cv19-private-v0-1-production/index.md): the
+  delivery focus. The
+  [2026-08-31 alpha decision](../decisions/records/2026-08-31T2056Z-the-alpha-is-the-cv19-v1-launch.md)
+  makes the CV19 v1 launch the first production alpha. The qualified inactive
+  candidate on exe.dev is retained; remaining work is the GitHub Actions
+  billing check, the separately approved supervised launch and monitoring
+  journey, and the `v0.1.0` tag.
+
 - [CV21 — Composable outer Hamsterdan over the retained workflow](cv21-composable-outer-hamsterdan/index.md):
-  the Navigator selected the outer-system reconstruction as the current focus.
+  the quality track; it no longer gates the alpha.
   Twelve progressively deepened tracers rebuild GitHub, agents, readiness,
   host, operator, custody, authority, effects, discovery, fairness, and
   Hamsterdan-owned DST around one temporary bridge to the current working Net.
@@ -24,12 +32,6 @@ belongs in each item's own metadata; this index routes to current owners.
   abstract/concrete conformance ruling.
 
 ## Paused
-
-- [CV19 — Private v0.1 production](cv19-private-v0-1-production/index.md): the
-  exact V5-only candidate, inactive runtime custody, tracked configuration, and
-  exe.dev qualification are retained. The Navigator paused delivery before
-  supervised launch and monitoring to focus on CV21; its last recorded service
-  posture was disabled and inactive.
 
 - [CV18 — Deterministic readiness simulation](cv18-deterministic-readiness-simulation/index.md):
   the accepted model, World, generated authority/lifecycle, reminder-timer, Git

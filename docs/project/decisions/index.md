@@ -24,3 +24,4 @@ settled direction by superseding its record explicitly rather than drifting.
 - [CV20 accepts production subnets locally inside vertical tracers (CV20 placement superseded; recursive rule retained by CV22)](records/2026-08-28T1114Z-cv20-accepts-production-subnets-locally-inside-vertical-tracers.md)
 - [CV20 fragments into outer-system and workflow-replacement Values](records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md)
 - [CV21 Activities run in separately supervised Motus Workers](records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md)
+- [The alpha is the CV19 v1 launch](records/2026-08-31T2056Z-the-alpha-is-the-cv19-v1-launch.md)

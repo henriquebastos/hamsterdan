@@ -2,8 +2,8 @@
 code: CV21
 level: Value
 status: Active
-status_reason: CV21.DS2 remains active after delivering signed-webhook-to-durable-custody; source-neutral readiness staging is the next planned task
-updated: 2026-08-30
+status_reason: the 2026-08-31 alpha decision made CV21 the quality track without production pressure; DS2 remains active with source-neutral readiness staging as the next planned task
+updated: 2026-08-31
 related:
   - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
   - ../../decisions/records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md
