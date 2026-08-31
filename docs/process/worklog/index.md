@@ -105,3 +105,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-25 — Restart-applied installation portfolio accepted locally](entries/2026-08-25T1230Z-restart-applied-installation-portfolio-accepted-locally.md)
 - [2026-08-25 — Restart-applied installation portfolio qualified on exe.dev](entries/2026-08-25T1332Z-restart-applied-installation-portfolio-qualified-on-exe-dev.md)
 - [2026-08-27 — Petrus feedback tools qualified in the Hamsterdan orb](entries/2026-08-27T1441Z-petrus-feedback-tools-qualified-in-orb.md)
+- [2026-08-29 — CV21 first bridged lifecycle completed locally](entries/2026-08-29T2318Z-cv21-first-bridged-lifecycle-completed-locally.md)

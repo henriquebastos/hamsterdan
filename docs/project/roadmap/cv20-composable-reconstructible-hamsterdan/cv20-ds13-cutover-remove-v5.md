@@ -1,8 +1,8 @@
 ---
 code: CV20.DS13
 level: Delivery Story
-status: Planned
-status_reason: Waits for accepted CV20.DS12 plus explicit cutover approval
+status: Dropped
+status_reason: Parent CV20 was superseded before implementation; final bridge removal and cutover move to CV22
 updated: 2026-08-28
 related:
   - index.md

@@ -70,6 +70,7 @@ new state ─────────── replacement only ──────�
 | Bounded execution | Production and simulation expose claim/start, effect-observed/execute, and terminal-recorded/finish cuts | Process-local frames and returned values are never recovery authority |
 | Simulation runtime | Hamsterdan owns one semantic-free synchronous `Timeline`; `CoroutineStepper` is internal | The runtime schedules one owner action and at most one leaf without understanding domain meaning |
 | Simulation ownership | Workflow, readiness, GitHub, agents, and host each own their local simulation and checker | Root composition mounts those unchanged modules and owns only cross-module properties |
+| Workflow subnet review | Each concern is independently constructible and inspectable from its exact production assembly before composition | Local Navigator acceptance stabilizes the subnet but cannot close its vertical tracer |
 | Tracer evidence | Every tracer ships deterministic composition, local/cross checker evidence, named crash cuts, resource gauges and applicable real-seam correspondence | DST, observability and correspondence cannot be deferred to a later integration phase |
 | Causal mutation | Real workflow `MutWork` creates the agent request; the exact delivered `CodingResult` reaches Git publication; `Pushed` returns to the original occurrence | Equality-by-reconstruction or co-mounting is insufficient evidence |
 | Quality gate | The CV20 replacement gate defined in the ledger blocks the replacement tree from DS1 onward | The old tree keeps its current checks until deletion; the target receives no broad suppressions |
@@ -166,6 +167,13 @@ bounded raw webhook input through provider normalization, host custody,
 readiness admission, the real workflow fold and detached posture is a tracer.
 The provider value, custody store and fold may land as small green Technical
 Stories, but the Delivery Story remains open until the vertical result exists.
+
+The same rule applies to workflow subnets. A tracer may first expose one exact
+production subnet through a Navigator-visible owner-local scenario runner that
+steps it, renders its arcs and marking, injects typed boundary values, crashes
+and reconstructs it, and replays its local checker evidence. This is an explicit
+User Story and acceptance boundary inside the tracer, not a separate CV or a
+substitute for the real producer/consumer path.
 
 Each tracer introduces at most one major new effect family, custody state
 machine, authority policy, concurrency dimension, or causal chain. If one
@@ -367,6 +375,8 @@ The gate also requires positive construction:
   modules;
 - `workflow.net.topology` imports every loop by defining module, aggregates all
   explicit tokens, and rejects missing or duplicate color names;
+- every workflow loop introduced as a subnet can be mounted independently from
+  the same production construction used by `workflow.net.topology`;
 - the Activity manifest declares every gate once with request, terminal
   variants, lane, operation identity and blocked mapping;
 - readiness application receives capabilities instead of importing their
@@ -433,6 +443,19 @@ Each owner-local module supplies strict semantic commands, observations,
 eligibility, faults, retained state, resource gauges and its local checker.
 Root composition supplies concrete adapters and checks only relationships
 between owners.
+
+Workflow evidence has three nested scales:
+
+1. a subnet-local runner mounts one exact production concern and checks its
+   internal typed ports, marking, Activities, reconstruction and bounds;
+2. the workflow-owner simulation composes accepted concern modules and checks
+   workflow-owned relationships; and
+3. root composition mounts the unchanged owner modules and checks only the
+   producer, consumer, custody and effect edges between owners.
+
+No scale carries a shadow reducer or copied workflow rule. A typed outcome may
+be supplied at the subnet boundary for local execution, while provider
+correspondence remains owned by the provider tracer and root composition.
 
 This shape exists from the first tracer and thickens with production behavior.
 There is no late simulation-composition phase. Each tracer adds the local

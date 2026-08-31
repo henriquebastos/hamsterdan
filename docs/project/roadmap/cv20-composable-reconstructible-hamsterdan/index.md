@@ -1,16 +1,21 @@
 ---
 code: CV20
 level: Value
-status: Planned
-status_reason: ES-010 is promoted as twelve planned tracer Delivery Stories plus cutover; none is pulled while CV19 remains active
+status: Dropped
+status_reason: Superseded before implementation by CV21 outer-system reconstruction and CV22 workflow replacement; retained as integrated design history
 updated: 2026-08-28
 related:
   - ../../exploration/es10-composable-hamsterdan-architecture/index.md
   - ../../decisions/records/2026-08-27T1604Z-composable-hamsterdan-is-the-planned-replacement-architecture.md
+  - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
   - ../../decisions/records/2026-08-27T1925Z-cv20-delivers-through-vertical-tracer-bullets.md
   - ../../decisions/records/2026-08-28T0152Z-pr-observations-use-source-neutral-admission-and-history-authority.md
   - ../../decisions/records/2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
+  - ../../decisions/records/2026-08-28T1113Z-dashboard-closure-converges-before-generation-close.md
+  - ../../decisions/records/2026-08-28T1114Z-cv20-accepts-production-subnets-locally-inside-vertical-tracers.md
   - ../cv19-private-v0-1-production/index.md
+  - ../cv21-composable-outer-hamsterdan/index.md
+  - ../cv22-decomposable-readiness-workflow/index.md
   - architecture.md
   - api-contracts.md
   - delivery-sequence.md
@@ -18,6 +23,14 @@ related:
 ---
 
 # CV20 — Composable, reconstructible Hamsterdan
+
+> **Superseded 2026-08-28:** CV20 was not implemented. Its integrated
+> complete-replacement plan is preserved for comparison and provenance. Current
+> delivery ownership is [CV21](../cv21-composable-outer-hamsterdan/index.md) for
+> the new outer system over one temporary bridge and
+> [CV22](../cv22-decomposable-readiness-workflow/index.md) for the recursive
+> production-subnet workflow, bridge removal, and final cutover. The remainder
+> of this record describes the superseded CV20 plan and is not pullable work.
 
 ## Intent
 
@@ -70,9 +83,26 @@ change a fixed boundary without a new Navigator ruling.
 Delivery proceeds as a tracer ladder. Each of DS1–DS12 deepens one real
 production spine from an external/operator/simulation command to a bounded
 visible posture, durable workflow request, or accepted effect. Component work
-is reviewable Technical Story work inside that tracer, not a separately
-accepted horizontal layer. Deterministic simulation, observability, crash
-recovery, finite bounds and applicable correspondence ship with every tracer.
+is reviewable inside that tracer, not a separately accepted horizontal layer.
+An exact production subnet may have a Navigator-facing local User Story and
+acceptance checkpoint, but only the composed vertical path accepts Delivery.
+Deterministic simulation, observability, crash recovery, finite bounds and
+applicable correspondence ship with every tracer.
+
+## Concept analysis
+
+The [CV20 concept analysis](concept-analysis/index.md) records a reproducible,
+non-authoritative extraction of final-system vocabulary across DS1–DS13. It
+preserves source evidence, later refinements, exclusions and pending Navigator
+questions while terms are reviewed one at a time. Accepted language belongs in
+the project glossary; the analysis does not replace this Value's canonical
+architecture, API contracts or Delivery Stories.
+
+## Pending audit rulings
+
+The [DS1–DS13 pending-rulings register](pending-rulings.md) preserves
+reconciled audit evidence and recommendations for later Navigator review. It is
+not canonical acceptance and changes no Delivery Story or decision.
 
 ## Exploration provenance
 
@@ -98,7 +128,7 @@ DS1 bounded PR lifecycle -> DS2 observation -> DS3 Activity
 
 1. [CV20.DS1 — Establish the first bounded PR lifecycle](cv20-ds1-first-bounded-pr-lifecycle.md)
 2. [CV20.DS2 — Admit and fold one PR observation](cv20-ds2-admit-fold-pr-observation.md)
-3. [CV20.DS3 — Expose one workflow-declared Activity](cv20-ds3-expose-workflow-activity.md)
+3. [CV20.DS3 — Exercise the dashboard subnet and expose one Activity](cv20-ds3-expose-workflow-activity.md)
 4. [CV20.DS4 — Settle one GitHub Activity lookup-first](cv20-ds4-settle-github-activity.md)
 5. [CV20.DS5 — Settle one reconstructible agent round](cv20-ds5-settle-agent-round.md)
 6. [CV20.DS6 — Publish one causally aligned mutation](cv20-ds6-publish-causal-mutation.md)

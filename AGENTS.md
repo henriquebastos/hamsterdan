@@ -47,14 +47,18 @@ scope.
 
 ## Architecture contract
 
-- `host` is the only runtime composition root. It owns webhook custody,
-  configuration, secrets, Petrus Engine lifecycle, dispatch binding,
-  correlation, and observability.
-- `github_app`, `agents`, and `readiness` are siblings. They may import neutral
-  values from `contracts`; they must not import or hold concrete references to
-  one another.
-- The PR-readiness Net lives under `readiness/net`. It owns workflow decisions
-  and knows no GitHub or agent provider.
+- Current operational `src/hamsterdan` remains the V5-only system described in
+  the project briefing until final cutover. For current-runtime fixes, `host` is
+  the only composition root and owns Petrus runtime custody; `github_app`,
+  `agents`, and `readiness` remain isolated siblings over neutral contracts; and
+  the Net under `readiness/net_v5` owns workflow decisions.
+- Non-selectable `src/hamsterdan2` construction follows the
+  [CV21 outer-system architecture](docs/project/roadmap/cv21-composable-outer-hamsterdan/architecture.md)
+  and [CV22 workflow architecture](docs/project/roadmap/cv22-decomposable-readiness-workflow/architecture.md).
+  There, `host` remains the only concrete application composition root,
+  `readiness` owns one-PR Petrus execution and the sole temporary current-Net
+  bridge, and `workflow` owns pure boundary language before CV22 adds the
+  replacement Net. No other new module may import current `hamsterdan` code.
 - GitHub and agent effects execute as typed Motus Activities. No GitHub
   credential may enter agent territory.
 - Import Petrus concepts from their defining modules. There is no root facade

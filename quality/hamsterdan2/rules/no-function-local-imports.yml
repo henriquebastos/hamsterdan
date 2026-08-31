@@ -1,0 +1,16 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-function-local-imports
+language: python
+severity: error
+message: Imports live at the top of the module. A cycle means the module graph is wrong; fix the graph.
+files:
+  - src/hamsterdan2/**/*.py
+  - tests2/**/*.py
+rule:
+  any:
+    - kind: import_statement
+    - kind: import_from_statement
+  inside:
+    kind: function_definition
+    stopBy: end

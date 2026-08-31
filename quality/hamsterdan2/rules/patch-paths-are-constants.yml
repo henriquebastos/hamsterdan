@@ -1,0 +1,19 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: patch-paths-are-constants
+language: python
+severity: error
+message: >
+  Patch by a named module constant next to the seam, never a string literal:
+  a moved module rots every literal silently until the test patches nothing.
+files:
+  - tests2/**/*.py
+rule:
+  kind: string
+  inside:
+    kind: argument_list
+    inside:
+      kind: call
+      has:
+        field: function
+        regex: '(^|\.)patch$'

@@ -1,0 +1,12 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-banner-comments
+language: python
+severity: error
+message: Banner section headers are banned. Split the module or class instead of captioning regions of one.
+files:
+  - src/hamsterdan2/**/*.py
+  - tests2/**/*.py
+rule:
+  kind: comment
+  regex: '^#\s*([=─—*-]\s*){3,}|^#\s*[=─—*-]{2,}.*[=─—*-]{2,}\s*$'

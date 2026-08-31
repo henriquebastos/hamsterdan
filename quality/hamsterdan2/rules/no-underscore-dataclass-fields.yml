@@ -1,0 +1,22 @@
+# Copyright (c) 2026 Henrique Bastos
+
+id: no-underscore-dataclass-fields
+language: python
+severity: error
+message: >
+  Underscore-prefixed dataclass fields are banned: they surface in the public
+  constructor signature. Name the field publicly or restructure.
+files:
+  - src/hamsterdan2/**/*.py
+  - tests2/**/*.py
+rule:
+  kind: assignment
+  regex: '^_[^_]'
+  inside:
+    kind: class_definition
+    stopBy: end
+    inside:
+      kind: decorated_definition
+      has:
+        kind: decorator
+        regex: 'dataclass'

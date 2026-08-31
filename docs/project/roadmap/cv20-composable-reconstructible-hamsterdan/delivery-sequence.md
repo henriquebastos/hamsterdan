@@ -14,9 +14,10 @@ ends in a bounded visible posture, durable workflow request or accepted effect.
 It includes its deterministic simulation, observability, named crash cuts,
 finite resource bounds and applicable real-seam correspondence.
 
-A component implementation is a Technical Story inside a tracer. It may have
-green unit/type/architecture tests and a reviewable commit, but it does not
-close the Delivery Story. For example:
+A component implementation is normally a Technical Story inside a tracer. An
+exact production subnet may also gain a Navigator-facing User Story for local
+execution and inspection. Either may have green tests, local acceptance and a
+reviewable commit, but neither closes the Delivery Story. For example:
 
 ```text
 provider HeadSeen value                              component work
@@ -87,7 +88,7 @@ DS1 first bounded one-PR lifecycle
 |---|---|---|
 | DS1 | one registered PR can be composed, stepped, inspected, crashed, reconstructed and exactly replayed under the strict gate | provider input, Activity, external effect, service selection |
 | DS2 | one signed PR delivery traverses provider/host/readiness into a real workflow fold and exact host acknowledgement | workflow Activity or provider mutation |
-| DS3 | the real workflow emits one durable correlated `DashReq` and waits visibly | Activity execution |
+| DS3 | the dashboard subnet is independently executable and the real workflow emits one durable correlated `DashboardPublication` and waits visibly | Activity execution |
 | DS4 | that Activity settles through lookup-first GitHub publication and folds at the original occurrence | agent execution and mutation coding |
 | DS5 | one workflow review request completes one reconstructible typed agent round | coding-to-Git causal mutation |
 | DS6 | authorized comment yields real `MutWork`, exact delivered `CodingResult`, one Git publication and original-occurrence `Pushed` | CI escalation, time, complete authority, multi-PR |
@@ -164,11 +165,20 @@ collapsing the cuts are forbidden.
 
 Handoff: durable provider→host→readiness→workflow input and acknowledgement.
 
-### DS3 — One durable Activity
+### DS3 — Dashboard subnet and one durable Activity
 
-DS3 extends real workflow topology/manifest until the retained observation
-declares one `DashReq`. It qualifies the public Petrus/Motus request and
-one-occurrence reconstruction seams but deliberately holds the effect.
+DS3 first accepts the exact production dashboard subnet through a standalone
+step/render/crash/replay User Story. It then extends real workflow
+topology/manifest until the retained observation declares one
+`DashboardPublication`. It qualifies the public Petrus/Motus request and
+one-occurrence reconstruction seams but deliberately holds the effect. Local
+subnet acceptance cannot replace the vertical request path.
+
+Pinned Petrus `44cac5ff48ac371ebae56323941983f30db13c0d` has broad in-flight and
+History inspection but no public bounded reconstruct/repair-one-unresolved-
+occurrence seam; first advancement reconciles all unresolved occurrences. DS3
+is blocked from implementation until that distinct seam exists. Private
+`Instance` access or broad advancement is forbidden.
 
 Handoff: exact request, occurrence, operation, correlation and idempotency in
 History/Dispatch plus host-visible waiting posture.
@@ -178,7 +188,8 @@ History/Dispatch plus host-visible waiting posture.
 DS4 adds bounded provider transport/gateway, one exact PR read, one bounded
 open-PR list page, operation-marker lookup, one publication attempt and split
 claim/effect-observed/terminal-recorded cuts.
-`DashLanded` returns through strict admission to the original occurrence.
+A landed `DashboardPublicationOutcome` returns through strict admission to the
+original occurrence.
 
 Handoff: first accepted effect family with accepted-hidden recovery, physical
 one-effect evidence and provider correspondence.
