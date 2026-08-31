@@ -54,6 +54,14 @@ admission, and fold cuts remain distinct. The bridge translates the accepted
 focused observation into the retained input; it does not become another
 admission ledger.
 
+Tasks 1–3 now implement this chain through immutable source-neutral staging:
+the exact Head observation/key, one acquisition manifest and grant, ordered
+entry, closed durable classification, finite SQLite custody, detached
+reconstruction, and the separate host-composed authority turn. The task-3 cut
+ends before bridge conversion and Petrus History; task 4 owns both first use of
+the phased-delivery prerequisite and the distinction between History acceptance
+and retained fold.
+
 ### DS3
 
 CV21 adopts Activity/occurrence projection, Impetus History request authority,

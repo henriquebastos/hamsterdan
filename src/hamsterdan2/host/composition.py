@@ -9,9 +9,11 @@ from typing import TYPE_CHECKING
 
 from hamsterdan2.github_app.webhooks import MAX_BODY_BYTES, GitHubWebhook
 from hamsterdan2.host.api import create_webhook_app
-from hamsterdan2.host.application import Hamsterdan
+from hamsterdan2.host.application import Hamsterdan, StagingAuthority
 from hamsterdan2.host.catalog import HostCatalog
 from hamsterdan2.host.delivery import MAX_RETAINED_DELIVERIES, DeliveryCustody
+from hamsterdan2.readiness.ingress import IngressCustody
+from hamsterdan2.readiness.ingress_values import MAX_MANIFESTS, PolicyRevision
 from hamsterdan2.readiness.runtime import build_readiness_runtime
 
 
@@ -67,3 +69,25 @@ def build_webhook_app(
         maximum_deliveries=maximum_deliveries,
     )
     return create_webhook_app(webhook=webhook, custody=custody)
+
+
+def build_staging_authority(
+    *,
+    state_root: Path,
+    provider_routes: tuple[ConfiguredProviderRoute, ...],
+    policy_revision: PolicyRevision,
+    maximum_deliveries: int = MAX_RETAINED_DELIVERIES,
+    maximum_manifests: int = MAX_MANIFESTS,
+) -> StagingAuthority:
+    return StagingAuthority(
+        delivery_custody=DeliveryCustody.from_path(
+            path=state_root / "deliveries.sqlite3",
+            provider_routes=provider_routes,
+            maximum_deliveries=maximum_deliveries,
+        ),
+        ingress_custody=IngressCustody.from_path(
+            path=state_root / "readiness-ingress.sqlite3",
+            policy_revision=policy_revision,
+            maximum_manifests=maximum_manifests,
+        ),
+    )

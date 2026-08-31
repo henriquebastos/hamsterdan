@@ -64,8 +64,9 @@ after private production qualification.
 delivery movement: the non-selectable reconstruction of the outer system over
 one temporary bridge to the current working Net. CV21.DS1 now provides the
 isolated replacement gate and locally qualified host/readiness/bridge lifecycle
-under `src/hamsterdan2`; CV21.DS2 is active, its signed-webhook-to-durable-
-custody task is delivered, and source-neutral readiness staging is next. The
+under `src/hamsterdan2`; CV21.DS2 is active, its signed-webhook custody and
+source-neutral readiness staging tasks are delivered, and bridge conversion
+with identified History acceptance is next. The
 replacement remains non-selectable, uses only fresh disposable state, and has
 no runtime selector or deployment.
 

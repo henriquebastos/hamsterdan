@@ -2,8 +2,8 @@
 code: CV21.DS2
 level: Delivery Story
 status: Active
-status_reason: Tasks 1 and 2 are delivered; source-neutral readiness staging is the next planned task and tasks 3 through 5 remain
-updated: 2026-08-30
+status_reason: Tasks 1 through 3 are delivered; bridge conversion and identified History acceptance are next and tasks 4 and 5 remain
+updated: 2026-08-31
 related:
   - index.md
   - cv21-ds1-first-bridged-pr-lifecycle.md
@@ -58,10 +58,11 @@ Delivery Story:
 2. **Signed webhook to durable HTTP custody — delivered.** One real ASGI
    request ends after new GitHub normalization and host-owned durable
    acquisition.
-3. **Source-neutral readiness staging and classification — next planned.** Add
-   the common snapshot/provenance projection, manifest, grant, and closed
-   admission classifications outside the request.
-4. **Bridge and identified History acceptance — planned.** Pin the delivered
+3. **Source-neutral readiness staging and classification — delivered.** The
+   common snapshot projection, focused Head observation/key, manifest, grant,
+   closed classifications, SQLite custody, detached reconstruction, and
+   authority-side host composition now run outside the request.
+4. **Bridge and identified History acceptance — next planned.** Pin the delivered
    Petrus revision, map the accepted observation through the sole bridge, and
    qualify the distinct accepted and folded cuts.
 5. **Retained fold, host completion, and process/DST qualification — planned.**
@@ -127,12 +128,110 @@ one collision digest. It never retains raw body, signatures, secrets, arbitrary
 headers, provider dictionaries, SDK objects, or unbounded diagnostics. A fresh
 process can reconstruct the original normalized delivery and quarantine state.
 
+## Delivered task 3 contract
+
+A caller now uses the sole host composition root to reconstruct one task-2
+`CustodiedDelivery` and run a separate readiness staging turn. HTTP does not
+invoke this path. The turn projects the retained provider snapshot into a
+workflow-owned `HeadObservation` for immutable subject and local incarnation 1,
+then commits one immutable `IngressManifest`, one exact manifest-scoped
+`AdmissionGrant`, its ordered unique-key `IngressEntry`, and one closed durable
+classification in a single readiness-owned SQLite transaction. The returned
+`StagingPosture` is detached and strictly reconstructible from a fresh object
+graph.
+
+The focused Head semantics are exactly the subject, local incarnation, head and
+base branch tips, provider lifecycle state, draft, merged, and tri-state
+mergeability. Provider update time, webhook event/action/delivery identity,
+provider route, custody generation, policy revision, and provenance remain
+acquisition or diagnostic facts and do not enter the observation canonical
+bytes or semantic equality. Task 3 neither claims provider currency or base
+currentness nor implements ancestry, lifecycle successor, or
+`CurrentnessWitness`.
+
+`ObservationKey` v1 is `obs:v1:sha256:<digest>` over finite deterministic
+canonical JSON containing the complete focused semantics. Equality requires
+both key and canonical bytes: identical key and bytes from another acquisition
+are `corroborating`, while identical key with different bytes is a fatal
+`semantic_collision` that retains both canonical observations. The complete
+closed classification family is `exact_duplicate`, `acquisition_collision`,
+`novel`, `corroborating`, `stale`, `semantic_collision`, `conflicting`, and
+`incomparable`. Head evidence does not use timestamps, delivery order, custody
+generation, or Git ancestry as an ordering source. Changed tips are therefore
+`incomparable` and refresh-required; contradictory focused semantics at the
+same tips are bounded non-retryable `conflicting` failure data. `stale` remains
+available for a later orderable family and is not manufactured for Head.
+
+An exact acquisition reoffer returns `exact_duplicate` without another
+manifest, grant, entry, or durable decision. A task-2 quarantined acquisition
+gets one empty manifest and grant with durable `acquisition_collision`; it is
+never readiness-eligible and creates no observation entry. Changed facts under
+an already staged acquisition identity return `acquisition_collision` while
+the original immutable staging authority remains unchanged. Policy revision is
+captured once in the manifest and therefore in its grant, but never in semantic
+equality. No observation or admission ledger was introduced; Petrus History
+remains the sole future workflow-admission ledger.
+
+The authority turn linearizes at a final bounded host-custody read after strict
+reconstruction of the initially fetched row. A collision completed before that
+final read, including one concurrent with reconstruction, is reconstructed as
+quarantine and produces empty fatal staging. A collision after the final read
+is later than the staging turn: HTTP can complete without waiting for readiness,
+and the changed custody fact cannot rewrite the original acquisition being
+staged. Readiness serializes staging turns before selecting host custody, so a
+later quarantine selector cannot overtake an earlier eligible selector at
+manifest retention; HTTP never uses that readiness lock. If staging is
+interrupted before the readiness commit, no staging authority is durable; a
+fresh turn reconstructs the then-current host custody.
+
+Ingress enforces 16,768 canonical acquisition bytes, 8,192 canonical bytes per
+observation, eight ordered entries per manifest, 65,536 canonical manifest
+bytes, 10,000 manifests by default, and 131,072 SQLite pages. Detached resource
+observations report manifest, entry, grant, decision, acquisition-byte,
+canonical-byte, and page usage with their ceilings. Serial SQLite authority
+covering selection and retention prevents concurrent duplicate or inverted
+manifests or grants. Strict reconstruction
+revalidates acquisition canonical bytes and digest, identity, contiguous entry
+order, key-to-bytes relation, canonical observation, manifest identity, exact
+grant digest, and ruled decision shape. An immutable transaction-assigned
+staging sequence reconstructs manifests in original retention order and exactly
+recomputes each decision from preceding reconstructed entries. This sequence is
+classification context only; it does not order Head semantics.
+Reconstruction queries read at most the configured manifest ceiling plus one,
+the entry ceiling plus one, and two decision rows before rejecting excess
+cardinality. Every first-acquisition path, including quarantine, reconstructs
+the complete prior authority and rejects orphan entry, grant, or decision rows
+before inserting anything. Opening existing ingress also verifies that both the
+effective SQLite maximum and current page count remain within the configured
+page ceiling. Before any retained delivery can feed staging, host custody also
+verifies its configured row ceiling and both its effective SQLite maximum and
+current page count; host composition carries the same configured row ceiling
+into HTTP acquisition and staging reconstruction. Singleton host acquisition,
+readiness acquisition, and grant lookups read at most two rows and reject
+malformed existing schemas that contain duplicate authority.
+
+Owner-local and cumulative Petrus Worlds exactly replay staging from fresh
+roots with independent key/bytes/order/manifest/grant/decision/acquisition
+checker sensitivity and explicit resource budgets. The cumulative root first
+proves signed HTTP custody leaves staging and History empty, then runs the
+separate authority command exactly once while History, fold, and Dispatch stay
+untouched. Real process evidence kills after the staging transaction commits
+but before caller success; a fresh host/readiness composition reconstructs the
+same authority and reoffers it as an exact duplicate without a second manifest,
+grant, entry, or decision.
+
+Task 3 stops before bridge conversion, Petrus History acceptance, retained-Net
+fold, host completion, Dispatch, Worker, provider read/effect, agent work, or
+workflow advancement. It leaves the Hamsterdan Petrus pin unchanged; task 4
+owns the prerequisite pin and first use of identified phased delivery.
+
 ## Acceptance
 
 - exact duplicate, corroboration, collision, incomparable evidence, and refusal
   have closed finite outcomes;
-- the HTTP response requires only durable host custody and never waits for a
-  readiness fold, Dispatch claim, provider effect, or Worker;
+- the HTTP response requires only durable host custody and neither invokes nor
+  waits for staging, a readiness fold, Dispatch claim, provider effect, or
+  Worker;
 - History is the sole workflow-admission ledger;
 - same accepted input reaches the current Net exactly once across every named
   crash cut without old value leakage;
@@ -140,5 +239,5 @@ process can reconstruct the original normalized delivery and quarantine state.
   equality; and
 - owner-local/root replay and mutation-sensitive checks prove the full path.
 
-Task 2 alone does not satisfy this Delivery Story acceptance. Tasks 3–5 remain
+Tasks 1–3 do not yet satisfy this Delivery Story acceptance. Tasks 4–5 remain
 required before DS2 can become `Completed` or receive a completion worklog.

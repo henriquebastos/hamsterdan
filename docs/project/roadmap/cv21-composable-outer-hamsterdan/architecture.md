@@ -50,7 +50,8 @@ the same outer-facing language after ruling its subnet composition contract.
 Paths are admitted by the tracer that first needs them. DS1 does not create an
 empty final skeleton.
 
-DS1 and the delivered DS2 HTTP-custody task admit this source shape:
+DS1 and the delivered DS2 tasks through source-neutral staging admit this source
+shape:
 
 ```text
 src/hamsterdan2/
@@ -61,11 +62,16 @@ src/hamsterdan2/
       webhooks.py
   workflow/
     values.py
+    observations.py
   readiness/
+    ingress.py
+    ingress_values.py
+    projection.py
     root.py
     runtime.py
     workflow_bridge.py
     simulation/
+      ingress.py
       lifecycle.py
   host/
     api.py
@@ -292,6 +298,49 @@ delivery identity are provenance. Raw body, signature, secret, arbitrary
 headers, SDK values, branch policy, base currentness, provider currency, and
 workflow decisions are neither retained nor returned.
 
+DS2 task 3 adds a separate host-composed authority turn over reconstructed
+delivery custody. Readiness projects the retained snapshot into the first
+source-neutral Head observation for local incarnation 1, canonicalizes its
+complete focused semantics, derives `ObservationKey` v1, and atomically retains
+an immutable manifest, exact manifest-scoped grant, ordered entry, and closed
+classification. Provider time, route, delivery/custody identity, provenance,
+and policy revision stay outside semantic equality. A quarantined acquisition
+gets an empty manifest and grant with `acquisition_collision`; identical
+semantics from another acquisition are `corroborating`; key/bytes disagreement
+is fatal `semantic_collision`; changed Head tips are `incomparable`; and
+same-tip contradictions are non-retryable `conflicting` failure data.
+
+Readiness assigns each first-retained manifest an immutable transaction
+sequence so restart reconstruction can replay prior staged evidence and
+recompute every classification exactly. The sequence orders classification
+context only. It does not make delivery order, custody generation, provider
+time, or webhook receipt order into semantic Head ordering.
+
+Host staging linearizes at a final bounded delivery-custody read after strict
+reconstruction of the initially fetched row. A collision completed before that
+final read, including one concurrent with reconstruction, stages quarantine; a
+collision after that read is later and cannot rewrite the original acquisition
+being staged. Readiness obtains its staging-turn lock before host selection, so
+another staging turn cannot overtake the selected acquisition before manifest
+retention. HTTP uses no readiness lock and neither invokes nor waits for
+readiness staging.
+Reconstruction also limits every manifest, entry, and decision query before
+model or BLOB decoding and rejects an existing database above its effective
+SQLite page ceiling. Host selection likewise rejects delivery custody above its
+configured row or effective page ceiling before readiness can mutate, and host
+composition forwards that configured row ceiling to both HTTP custody and
+staging reconstruction. Singleton acquisition and grant reads detect duplicate
+authority even when an existing SQLite schema lacks the declared uniqueness
+constraints.
+
+The task-3 turn returns only detached staging posture and finite resource
+counts. It neither calls the bridge nor opens readiness runtime, Petrus History,
+Dispatch, or the retained Net. The existing webhook HTTP path still constructs
+only GitHub normalization and host delivery custody, so acknowledgement neither
+invokes nor waits for staging. Fresh-process reconstruction after staging
+commit reoffers the exact acquisition without creating another manifest,
+grant, entry, or decision.
+
 Outside the request, an authority turn claims one host delivery, advances one
 PR through readiness, and either returns detached posture or publishes a Motus
 Activity. A Worker turn may continue while ingress or the authority role is
@@ -321,6 +370,11 @@ acknowledgement, readiness staging, History acceptance, and workflow fold are
 distinct observable cuts. Later exact reads and discovery use the same common
 admission seam. `AdmissionGrant` is manifest-scoped admission authority, never
 fresh effect authority.
+
+The delivered task-3 staging cut stops at the manifest-scoped grant. Task 4
+first converts that staged focused observation through the sole bridge and
+offers identified delivery to Petrus History; task 3 neither updates the Petrus
+pin nor claims History acceptance or retained-Net fold.
 
 ## Authority and effects
 

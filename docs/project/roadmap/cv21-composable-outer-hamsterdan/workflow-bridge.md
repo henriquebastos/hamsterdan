@@ -124,8 +124,10 @@ snapshot value is explicitly true, uses the manifest-scoped policy revision,
 and maps webhook-only unproven base evidence to `strict_base=True` and
 `base_current=False` until a later exact provider read refreshes it. Policy and
 provenance do not enter `ObservationKey` semantic equality. Task 2 records this
-rule but does not implement any observation, key, manifest, grant, or bridge
-mapping.
+rule. Task 3 now implements the source-neutral Head observation, key, manifest,
+grant, classification, and detached staging posture, but does not call or change
+the bridge. Task 4 owns the first bridge mapping, Petrus pin update, and
+identified History acceptance.
 
 ## Prohibited reuse
 

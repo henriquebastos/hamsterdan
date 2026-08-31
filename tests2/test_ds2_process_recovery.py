@@ -15,8 +15,13 @@ from petrus.testing.dst import (
 )
 
 from hamsterdan2.readiness.simulation.lifecycle import ReadinessState
-from hamsterdan2.simulation.hamsterdan import EXPECTED_DELIVERY, HostState, observe_hamsterdan
-from hamsterdan2.simulation.process import CUSTODY_DEATH_SCENARIO, CUSTODY_RECOVERY_SCENARIO
+from hamsterdan2.simulation.hamsterdan import EXPECTED_DELIVERY, EXPECTED_STAGING, HostState, observe_hamsterdan
+from hamsterdan2.simulation.process import (
+    CUSTODY_DEATH_SCENARIO,
+    CUSTODY_RECOVERY_SCENARIO,
+    STAGING_DEATH_SCENARIO,
+    STAGING_RECOVERY_SCENARIO,
+)
 
 
 if TYPE_CHECKING:
@@ -91,4 +96,57 @@ class TestProcessDeathBeforeWebhookAcknowledgement:
         assert reconstructed == interrupted
         assert sorted(str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()) == [
             "deliveries.sqlite3"
+        ]
+
+
+class TestProcessDeathBeforeStagingAcknowledgement:
+    """Committed source-neutral staging survives SIGKILL before caller success."""
+
+    def test_fresh_authority_reconstructs_and_reoffers_without_second_authority(self, tmp_path: Path) -> None:
+        root = tmp_path / "state"
+        custody = run_custody_process(
+            scenario_id=CUSTODY_RECOVERY_SCENARIO,
+            entrypoint="hamsterdan2.simulation.process:recover_delivery_custody",
+            root=root,
+        )
+
+        death = run_custody_process(
+            scenario_id=STAGING_DEATH_SCENARIO,
+            entrypoint="hamsterdan2.simulation.process:die_after_staging_durable",
+            root=root,
+        )
+        interrupted = observe_hamsterdan(root)
+        recovery = run_custody_process(
+            scenario_id=STAGING_RECOVERY_SCENARIO,
+            entrypoint="hamsterdan2.simulation.process:recover_staging_custody",
+            root=root,
+        )
+        reconstructed = observe_hamsterdan(root)
+
+        assert custody.outcome == "completed"
+        assert death.outcome == "harness_failure"
+        assert death.returncode == -9
+        assert isinstance(death.unfinished_attempt, SubmitAttempt)
+        assert death.unfinished_attempt.command.name == "hamsterdan.stage_webhook"
+        assert death.prefix.operations == []
+        assert interrupted.ingress.posture == EXPECTED_STAGING
+        assert interrupted.ingress.resources.manifests == 1
+        assert interrupted.ingress.resources.entries == 1
+        assert interrupted.ingress.resources.grants == 1
+        assert interrupted.ingress.resources.decisions == 1
+        assert interrupted.readiness == ReadinessState(binding=None, history_records=0)
+        assert recovery.outcome == "completed"
+        assert recovery.artifact is not None
+        executions = [
+            operation for operation in recovery.artifact.operations if isinstance(operation, ExecuteOperation)
+        ]
+        assert [execution.result.disposition for execution in executions] == ["idempotent"]
+        posture = cast("dict[str, JsonValue]", executions[0].result.value)
+        assert posture["disposition"] == "exact_duplicate"
+        assert reconstructed == interrupted
+        assert reconstructed.ingress.resources.manifests == 1
+        assert not list(root.rglob("history.sqlite3"))
+        assert sorted(str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()) == [
+            "deliveries.sqlite3",
+            "readiness-ingress.sqlite3",
         ]

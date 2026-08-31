@@ -18,7 +18,12 @@ BRIDGE = SOURCE / "readiness" / "workflow_bridge.py"
 RUNTIME = SOURCE / "readiness" / "runtime.py"
 GITHUB_WEBHOOKS = SOURCE / "github_app" / "webhooks.py"
 HOST_API = SOURCE / "host" / "api.py"
+HOST_APPLICATION = SOURCE / "host" / "application.py"
 HOST_COMPOSITION = SOURCE / "host" / "composition.py"
+INGRESS = SOURCE / "readiness" / "ingress.py"
+INGRESS_VALUES = SOURCE / "readiness" / "ingress_values.py"
+PROJECTION = SOURCE / "readiness" / "projection.py"
+WORKFLOW_OBSERVATIONS = SOURCE / "workflow" / "observations.py"
 PROCESS_SIMULATION = SOURCE / "simulation" / "process.py"
 LEGACY_ALLOWLIST = frozenset(
     {
@@ -129,6 +134,7 @@ def test_production_never_imports_simulation() -> None:
 
 def test_workflow_values_have_no_runtime_or_outer_dependencies() -> None:
     forbidden = (
+        "hamsterdan2.github_app",
         "hamsterdan2.host",
         "hamsterdan2.readiness",
         "hamsterdan2.simulation",
@@ -203,6 +209,64 @@ def test_webhook_http_rim_cannot_open_workflow_runtime() -> None:
     escaped = {name for name in source_imports(HOST_API) if any(matches_module(name, prefix) for prefix in forbidden)}
 
     assert escaped == set()
+
+
+def test_http_acknowledgement_cannot_invoke_staging_bridge_history_or_fold() -> None:
+    forbidden_names = {
+        "build_staging_authority",
+        "stage",
+        "stage_delivery",
+        "open_readiness",
+        "build_readiness_runtime",
+        "accept",
+        "fold",
+    }
+    tree = ast.parse(HOST_API.read_text(encoding="utf-8"), filename=str(HOST_API.relative_to(ROOT)))
+    calls = {
+        node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    } | {
+        node.func.attr for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+    assert calls.isdisjoint(forbidden_names)
+
+    composition = ast.parse(
+        HOST_COMPOSITION.read_text(encoding="utf-8"),
+        filename=str(HOST_COMPOSITION.relative_to(ROOT)),
+    )
+    webhook_builder = next(
+        node for node in composition.body if isinstance(node, ast.FunctionDef) and node.name == "build_webhook_app"
+    )
+    calls = {
+        node.func.id
+        for node in ast.walk(webhook_builder)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert calls == {"GitHubWebhook", "create_webhook_app"}
+
+
+def test_staging_path_stops_before_bridge_history_fold_and_petrus() -> None:
+    forbidden = (
+        "hamsterdan2.readiness.runtime",
+        "hamsterdan2.readiness.workflow_bridge",
+        "hamsterdan",
+        "petrus",
+    )
+    for path in (HOST_APPLICATION, INGRESS, INGRESS_VALUES, PROJECTION, WORKFLOW_OBSERVATIONS):
+        escaped = {name for name in source_imports(path) if any(matches_module(name, prefix) for prefix in forbidden)}
+        assert escaped == set(), f"{path.relative_to(ROOT)} crosses the task-3 stopping boundary: {sorted(escaped)}"
+
+
+def test_concrete_staging_authority_construction_stays_in_host_composition() -> None:
+    constructors = []
+    for path in SOURCE.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
+        constructors.extend(
+            path
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "StagingAuthority"
+        )
+
+    assert constructors == [HOST_COMPOSITION]
 
 
 def test_process_loss_evidence_drives_the_composed_asgi_boundary() -> None:
