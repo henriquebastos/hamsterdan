@@ -11,7 +11,8 @@ over packaged method guidance; surface consequential differences during
 coherence review.
 
 Before meaningful work, progressively read the existing local documents and
-indexes: `docs/project/briefing.md`, `docs/process/development-guide.md`,
+indexes: `docs/project/briefing.md`, `docs/project/glossary/index.md`,
+`docs/process/development-guide.md`,
 `docs/product/principles.md`, `docs/project/decisions/index.md`,
 `docs/project/roadmap/index.md`, `docs/project/exploration/index.md`,
 `docs/project/debt/index.md`, `docs/process/worklog/index.md`, and

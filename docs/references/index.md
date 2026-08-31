@@ -3,13 +3,16 @@
 ## Ariad provenance
 
 - Vendored `using-ariad` package from <https://github.com/henriquebastos/ariad>
-  at Git revision `7521d53983039bd808051d34bdcc56faec3277da`: package version
-  `0.2.1`, method digest
-  `9257e4a6b9542dc5536af2bd17e7d60a9784711faaaa926591278f4be7f8371f`,
+  at Git revision `67eecc1c3fdd3ca7db313183a8c24662db3a1de8`
+  (branch `feat/domain-modeling-integration`): package version
+  `0.2.2`, method digest
+  `0ec9ce42a31dcdfb708f9d1492ff98394961f7bae10c65ecba2f85a89377195f`,
   package digest
-  `82abd3545b6d456649bc33fddb19671939ab512dd0249050a25fe7600df25572`,
+  `6642d26105aacdf2226a711dc744b6e2bdfed3f91a773a51251d3e9305cf09b3`,
   copied complete from `skills/using-ariad` to
-  `.agents/skills/using-ariad` on 2026-08-09.
+  `.agents/skills/using-ariad` on 2026-08-31. This version adds the
+  first-class `docs/project/glossary/` template. Supersedes the 0.2.1 pin
+  at `7521d53983039bd808051d34bdcc56faec3277da` (2026-08-09).
 
 ## Petrus provenance
 
