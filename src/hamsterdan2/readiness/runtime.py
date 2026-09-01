@@ -13,7 +13,13 @@ from petrus.impetus.instance import AcceptedDelivery, PriorAcknowledgement, Scop
 from petrus.motus.dispatch import LocalDispatch
 
 from hamsterdan2.readiness.ingress import IngressCustody
-from hamsterdan2.readiness.ingress_values import MAX_MANIFESTS, HistoryAcceptancePosture, IngressEntry, StagingPosture
+from hamsterdan2.readiness.ingress_values import (
+    MAX_MANIFESTS,
+    HistoryAcceptancePosture,
+    IngressEntry,
+    ObservationFoldPosture,
+    StagingPosture,
+)
 from hamsterdan2.readiness.root import ReadinessRoot
 from hamsterdan2.readiness.workflow_bridge import (
     BridgedDelivery,
@@ -21,6 +27,8 @@ from hamsterdan2.readiness.workflow_bridge import (
     bridge_head_delivery,
     build_workflow,
     project_awaiting_observation,
+    project_observation_fold,
+    validate_firing_outcome,
 )
 from hamsterdan2.workflow.values import PullRequestSubject
 
@@ -38,6 +46,7 @@ MAX_HISTORY_BYTES = 2_097_152
 MAX_HISTORY_RECORDS = 4_096
 MAX_HISTORY_ENGINE_LOAD_HEADROOM = 131_072
 MAX_HISTORY_ACCEPTANCE_HEADROOM = 1_048_576
+MAX_HISTORY_COMPLETION_HEADROOM = 1_048_576
 DELIVERY_ACCEPTANCE_RECORDS = frozenset(
     {"ExternalEventDelivered", "ScopedDeliveryDropped", "ScopedDeliveryQuarantined"}
 )
@@ -65,6 +74,18 @@ class HistoryCapacityError(HistoryAcceptanceError):
 
 class HistoryCorruptionError(HistoryAcceptanceError):
     """Canonical History cannot be reconstructed through the public Engine."""
+
+
+class AcceptedObservationNotFoundError(HistoryAcceptanceError):
+    """The selected staged observation has no prior unfinished History cut."""
+
+
+class ObservationNotFoldedError(HistoryAcceptanceError):
+    """Host completion was requested before the exact source occurrence ended."""
+
+
+class ObservationFoldCommitError(HistoryAcceptanceError):
+    """The exact completion result is unknown until canonical History reloads."""
 
 
 @dataclass(frozen=True)
@@ -210,6 +231,53 @@ def history_contains_delivery_identity(page: dict[str, object], identity: str) -
     )
 
 
+def recorded_delivery_occurrence(page: dict[str, object], context: AcceptanceContext) -> int | None:
+    records = cast("list[dict[str, object]]", page["records"])
+    identity = str(context.bridged.identity)
+    matches = [
+        (position, cast("dict[str, object]", item["record"]))
+        for position, item in enumerate(records)
+        if cast("dict[str, object]", item["record"]).get("record") == "ExternalEventDelivered"
+        and cast("dict[str, object]", item["record"]).get("identity") == identity
+    ]
+    if not matches:
+        return None
+    if len(matches) != 1:
+        raise HistoryAcceptanceError("accepted_delivery_history_mismatch")
+    position, delivered = matches[0]
+    occurrence = delivered.get("occurrence")
+    expected_delivery = {
+        "record": "ExternalEventDelivered",
+        "schema": 5,
+        "source": context.bridged.source,
+        "tokens": [{"color": context.bridged.token.color, "data": context.bridged.token.data}],
+        "identity": identity,
+        "occurrence": occurrence,
+        "scope": None,
+        "instant": 0,
+    }
+    begun_item = records[position + 1] if position + 1 < len(records) else None
+    begun = None if begun_item is None else cast("dict[str, object]", begun_item["record"])
+    expected_begun = {
+        "record": "FiringBegun",
+        "schema": 5,
+        "transition": context.bridged.source,
+        "occurrence": occurrence,
+        "scope": None,
+        "instant": 0,
+    }
+    if (
+        isinstance(occurrence, bool)
+        or not isinstance(occurrence, int)
+        or occurrence != 1
+        or delivered != expected_delivery
+        or begun != expected_begun
+    ):
+        reason = "accepted_delivery_occurrence_mismatch" if occurrence != 1 else "accepted_delivery_history_mismatch"
+        raise HistoryAcceptanceError(reason)
+    return occurrence
+
+
 def load_history_engine(
     path: Path,
     instance_id: str,
@@ -338,6 +406,118 @@ def scoped_history_posture(
         finished=False,
         folded=False,
     )
+
+
+def accepted_fold_occurrence(
+    context: AcceptanceContext,
+    result: AcceptedDelivery,
+    *,
+    instance_id: str,
+    bridge_identity: str,
+    recorded_occurrence: int,
+    complete_unfinished: bool,
+) -> int:
+    accepted = accepted_history_posture(
+        context,
+        result,
+        instance_id=instance_id,
+        bridge_identity=bridge_identity,
+    )
+    if accepted.occurrence != recorded_occurrence:
+        raise HistoryAcceptanceError("accepted_delivery_correlation_mismatch")
+    if not complete_unfinished:
+        raise ObservationNotFoldedError(
+            "observation_not_folded",
+            "fold the accepted observation before completing its host delivery",
+        )
+    return recorded_occurrence
+
+
+def complete_source_occurrence(
+    engine: Engine,
+    result: AcceptedDelivery,
+    context: AcceptanceContext,
+    history_page: dict[str, object],
+    *,
+    history_path: Path,
+    instance_id: str,
+    occurrence: int,
+) -> None:
+    require_history_record_capacity(history_page, reserved_records=2)
+    require_history_file_capacity(
+        history_path,
+        reserved_bytes=MAX_HISTORY_COMPLETION_HEADROOM,
+    )
+    outcome = None
+    completion_refused = False
+    try:
+        outcome = engine.complete_delivery(result)
+    except OSError, RuntimeError, sqlite3.Error:
+        completion_refused = True
+    if completion_refused or outcome is None:
+        raise ObservationFoldCommitError(
+            "observation_fold_commit_unknown",
+            instance_id,
+            "reload canonical History before deciding whether the observation folded",
+        )
+    validate_firing_outcome(
+        outcome,
+        bridged=context.bridged,
+        occurrence=occurrence,
+    )
+
+
+def recovered_fold_occurrence(
+    engine: Engine,
+    context: AcceptanceContext,
+    history_page: dict[str, object],
+    *,
+    history_path: Path,
+    instance_id: str,
+    bridge_identity: str,
+    recorded_occurrence: int,
+    complete_unfinished: bool,
+) -> tuple[int, bool]:
+    result = engine.accept_delivery(
+        context.bridged.source,
+        context.bridged.token,
+        identity=str(context.bridged.identity),
+    )
+    if type(result) is AcceptedDelivery:
+        occurrence = accepted_fold_occurrence(
+            context,
+            result,
+            instance_id=instance_id,
+            bridge_identity=bridge_identity,
+            recorded_occurrence=recorded_occurrence,
+            complete_unfinished=complete_unfinished,
+        )
+        complete_source_occurrence(
+            engine,
+            result,
+            context,
+            history_page,
+            history_path=history_path,
+            instance_id=instance_id,
+            occurrence=occurrence,
+        )
+        return occurrence, True
+    if type(result) is PriorAcknowledgement:
+        return prior_fold_occurrence(result, context, recorded_occurrence=recorded_occurrence), False
+    if type(result) is ScopedDeliveryAcknowledgement:
+        raise HistoryAcceptanceError("unexpected_scoped_acknowledgement")
+    raise TypeError("Engine.accept_delivery returned an unsupported result")
+
+
+def prior_fold_occurrence(
+    result: PriorAcknowledgement,
+    context: AcceptanceContext,
+    *,
+    recorded_occurrence: int,
+) -> int:
+    if result.identity != context.bridged.identity or result.occurrence != recorded_occurrence:
+        raise HistoryAcceptanceError("prior_acknowledgement_correlation_mismatch")
+    return result.occurrence
 
 
 def translate_history_acceptance(
@@ -484,6 +664,96 @@ class HistoryAcceptanceRuntime:
                 result,
                 instance_id=self._instance_id,
                 bridge_identity=self._workflow.identity,
+            )
+        finally:
+            engine.close()
+
+    def fold_accepted_observation(
+        self,
+        *,
+        provider_route_id: ProviderRouteId,
+        delivery_id: DeliveryId,
+        subject: PullRequestSubject,
+    ) -> ObservationFoldPosture | HistoryAcceptancePosture:
+        return self.observation_fold(
+            provider_route_id=provider_route_id,
+            delivery_id=delivery_id,
+            subject=subject,
+            complete_unfinished=True,
+        )
+
+    def verify_folded_observation(
+        self,
+        *,
+        provider_route_id: ProviderRouteId,
+        delivery_id: DeliveryId,
+        subject: PullRequestSubject,
+    ) -> ObservationFoldPosture | HistoryAcceptancePosture:
+        return self.observation_fold(
+            provider_route_id=provider_route_id,
+            delivery_id=delivery_id,
+            subject=subject,
+            complete_unfinished=False,
+        )
+
+    def observation_fold(
+        self,
+        *,
+        provider_route_id: ProviderRouteId,
+        delivery_id: DeliveryId,
+        subject: PullRequestSubject,
+        complete_unfinished: bool,
+    ) -> ObservationFoldPosture | HistoryAcceptancePosture:
+        self._root.require_bound(instance_id=self._instance_id, bridge_identity=self._workflow.identity)
+        staging, entry = reconstruct_staged_authority(
+            self._ingress,
+            provider_route_id=provider_route_id,
+            delivery_id=delivery_id,
+            subject=subject,
+        )
+        if staging.disposition != "novel":
+            return non_novel_acceptance_posture(
+                subject,
+                staging,
+                entry,
+                bridge_identity=self._workflow.identity,
+            )
+        context = prepare_history_acceptance(subject, staging, entry)
+        require_canonical_history(self._history_path, self._instance_id)
+        engine = load_history_engine(
+            self._history_path,
+            self._instance_id,
+            self._workflow,
+            self._dispatch,
+        )
+        try:
+            history_page = bounded_history_page(engine)
+            recorded_occurrence = recorded_delivery_occurrence(history_page, context)
+            if recorded_occurrence is None:
+                raise AcceptedObservationNotFoundError(
+                    "accepted_observation_not_found",
+                    "accept the staged observation in a separate authority turn before folding it",
+                )
+            occurrence, completed_now = recovered_fold_occurrence(
+                engine,
+                context,
+                history_page,
+                history_path=self._history_path,
+                instance_id=self._instance_id,
+                bridge_identity=self._workflow.identity,
+                recorded_occurrence=recorded_occurrence,
+                complete_unfinished=complete_unfinished,
+            )
+            completed_page = bounded_history_page(engine) if completed_now else history_page
+            return project_observation_fold(
+                snapshot=engine.snapshot(),
+                history_page=completed_page,
+                subject=subject,
+                instance_id=self._instance_id,
+                manifest=context.staging.manifest,
+                grant=context.staging.grant,
+                entry=context.entry,
+                occurrence=occurrence,
             )
         finally:
             engine.close()

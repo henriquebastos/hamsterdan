@@ -42,7 +42,9 @@ from hamsterdan2.host.composition import (
 from hamsterdan2.host.values import DeliveryReceipt
 from hamsterdan2.simulation.hamsterdan import (
     ACCEPT_STAGED_OBSERVATION_COMMAND,
+    COMPLETE_OBSERVATION_DELIVERY_COMMAND,
     DEFAULT_BUDGET,
+    FOLD_ACCEPTED_OBSERVATION_COMMAND,
     OPEN_PULL_REQUEST_COMMAND,
     PROVIDER_ROUTE,
     RECEIVE_WEBHOOK_COMMAND,
@@ -53,6 +55,8 @@ from hamsterdan2.simulation.hamsterdan import (
     observe_hamsterdan,
     root_resource_usage,
     validate_accept_staged_observation,
+    validate_complete_observation_delivery,
+    validate_fold_accepted_observation,
     validate_open_pull_request,
     validate_receive_webhook,
     validate_stage_webhook,
@@ -82,6 +86,10 @@ STAGING_DEATH_SCENARIO = "ds2.process.after-staging-durable.death"
 STAGING_RECOVERY_SCENARIO = "ds2.process.after-staging-durable.recovery"
 HISTORY_ACCEPTANCE_DEATH_SCENARIO = "ds2.process.after-history-accepted.death"
 HISTORY_ACCEPTANCE_RECOVERY_SCENARIO = "ds2.process.history-acceptance-recovery"
+OBSERVATION_FOLD_DEATH_SCENARIO = "ds2.process.after-observation-folded.death"
+OBSERVATION_FOLD_RECOVERY_SCENARIO = "ds2.process.observation-fold-recovery"
+HOST_COMPLETION_DEATH_SCENARIO = "ds2.process.after-host-completion.death"
+HOST_COMPLETION_RECOVERY_SCENARIO = "ds2.process.host-completion-recovery"
 BEFORE_PROFILE_IDENTITY = ProfileIdentity(
     name="hamsterdan2.ds1.before-host-recorded-process",
     version=1,
@@ -159,6 +167,46 @@ HISTORY_ACCEPTANCE_RECOVERY_PROFILE_IDENTITY = ProfileIdentity(
         {
             "command": ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
             "recovery": "fresh authority reconstructs staging and exact-reoffers the unfinished occurrence",
+        }
+    ),
+)
+OBSERVATION_FOLD_DEATH_PROFILE_IDENTITY = ProfileIdentity(
+    name="hamsterdan2.ds2.after-observation-folded-process",
+    version=1,
+    digest=digest_json(
+        {
+            "command": FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            "death_cut": "TokensProduced and FiringCompleted committed; caller acknowledgement absent",
+        }
+    ),
+)
+OBSERVATION_FOLD_RECOVERY_PROFILE_IDENTITY = ProfileIdentity(
+    name="hamsterdan2.ds2.observation-fold-recovery-process",
+    version=1,
+    digest=digest_json(
+        {
+            "command": FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            "recovery": "fresh authority exact-reoffers and validates the folded occurrence",
+        }
+    ),
+)
+HOST_COMPLETION_DEATH_PROFILE_IDENTITY = ProfileIdentity(
+    name="hamsterdan2.ds2.after-host-completion-process",
+    version=1,
+    digest=digest_json(
+        {
+            "command": COMPLETE_OBSERVATION_DELIVERY_COMMAND.model_dump(mode="json"),
+            "death_cut": "host delivery completion committed; caller acknowledgement absent",
+        }
+    ),
+)
+HOST_COMPLETION_RECOVERY_PROFILE_IDENTITY = ProfileIdentity(
+    name="hamsterdan2.ds2.host-completion-recovery-process",
+    version=1,
+    digest=digest_json(
+        {
+            "command": COMPLETE_OBSERVATION_DELIVERY_COMMAND.model_dump(mode="json"),
+            "recovery": "fresh authority reconstructs the exact host completion receipt",
         }
     ),
 )
@@ -520,6 +568,146 @@ class HistoryAcceptanceProcessProfile:
         del generation
 
 
+class ObservationFoldProcessProfile:
+    """Drive exact source completion around caller acknowledgement loss."""
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        identity: ProfileIdentity,
+        terminate_after_fold: bool,
+    ) -> None:
+        self._root = root
+        self.identity = identity
+        self._terminate_after_fold = terminate_after_fold
+
+    def validate(self, command: Command) -> Command:
+        return validate_fold_accepted_observation(command)
+
+    def validate_fault(self, fault: Fault) -> Fault:
+        raise ValueError(f"DS2 observation-fold process admits no World faults; remove {fault.name!r}")
+
+    def create(self, context: ScenarioContext) -> GenerationStart[ObservationAcceptanceAuthority]:
+        del context
+        return GenerationStart(build_observation_acceptance_authority(state_root=self._root))
+
+    def load(self, context: ScenarioContext) -> GenerationStart[ObservationAcceptanceAuthority]:
+        return self.create(context)
+
+    def apply(
+        self,
+        generation: ObservationAcceptanceAuthority,
+        command: Command,
+        context: ScenarioContext,
+    ) -> ApplyResult:
+        del command, context
+        before = observe_hamsterdan(self._root).readiness.history_records
+        posture = generation.fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE.provider_route_id,
+            delivery_id=STAGE_WEBHOOK_COMMAND.delivery_id,
+        )
+        if self._terminate_after_fold:
+            terminate_child()
+        after = observe_hamsterdan(self._root).readiness.history_records
+        return ApplyResult(
+            disposition="idempotent" if after == before else "applied",
+            value=posture.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def observe(
+        self,
+        generation: ObservationAcceptanceAuthority,
+        request: ObservationRequest,
+        context: ScenarioContext,
+    ) -> JsonValue:
+        del generation, context
+        if request.name != "hamsterdan.state" or request.payload != {}:
+            raise ValueError("CV21 root exposes only the parameterless 'hamsterdan.state' observation")
+        return cast("JsonValue", observe_hamsterdan(self._root).model_dump(mode="json"))
+
+    def resource_usage(self, generation: ObservationAcceptanceAuthority | None) -> ResourceUsage:
+        del generation
+        return root_resource_usage(self._root)
+
+    def drop(self, generation: ObservationAcceptanceAuthority) -> None:
+        del generation
+
+    def close(self, generation: ObservationAcceptanceAuthority) -> None:
+        del generation
+
+
+class HostCompletionProcessProfile:
+    """Drive separate host completion around caller acknowledgement loss."""
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        identity: ProfileIdentity,
+        terminate_after_completion: bool,
+    ) -> None:
+        self._root = root
+        self.identity = identity
+        self._terminate_after_completion = terminate_after_completion
+
+    def validate(self, command: Command) -> Command:
+        return validate_complete_observation_delivery(command)
+
+    def validate_fault(self, fault: Fault) -> Fault:
+        raise ValueError(f"DS2 host-completion process admits no World faults; remove {fault.name!r}")
+
+    def create(self, context: ScenarioContext) -> GenerationStart[ObservationAcceptanceAuthority]:
+        del context
+        return GenerationStart(build_observation_acceptance_authority(state_root=self._root))
+
+    def load(self, context: ScenarioContext) -> GenerationStart[ObservationAcceptanceAuthority]:
+        return self.create(context)
+
+    def apply(
+        self,
+        generation: ObservationAcceptanceAuthority,
+        command: Command,
+        context: ScenarioContext,
+    ) -> ApplyResult:
+        del command, context
+        before = observe_hamsterdan(self._root).delivery.completion_rows
+        receipt = generation.complete_observation_delivery(
+            provider_route_id=PROVIDER_ROUTE.provider_route_id,
+            delivery_id=STAGE_WEBHOOK_COMMAND.delivery_id,
+        )
+        if self._terminate_after_completion:
+            terminate_child()
+        after = observe_hamsterdan(self._root).delivery.completion_rows
+        return ApplyResult(
+            disposition="idempotent" if after == before else "applied",
+            value=receipt.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def observe(
+        self,
+        generation: ObservationAcceptanceAuthority,
+        request: ObservationRequest,
+        context: ScenarioContext,
+    ) -> JsonValue:
+        del generation, context
+        if request.name != "hamsterdan.state" or request.payload != {}:
+            raise ValueError("CV21 root exposes only the parameterless 'hamsterdan.state' observation")
+        return cast("JsonValue", observe_hamsterdan(self._root).model_dump(mode="json"))
+
+    def resource_usage(self, generation: ObservationAcceptanceAuthority | None) -> ResourceUsage:
+        del generation
+        return root_resource_usage(self._root)
+
+    def drop(self, generation: ObservationAcceptanceAuthority) -> None:
+        del generation
+
+    def close(self, generation: ObservationAcceptanceAuthority) -> None:
+        del generation
+
+
 async def execute_webhook_request(
     app: ASGIApp,
     *,
@@ -733,6 +921,86 @@ def recover_history_acceptance(session: ProcessSession, payload: JsonValue) -> S
     artifact = world.artifact(HISTORY_ACCEPTANCE_RECOVERY_SCENARIO)
     if not isinstance(artifact, ScenarioArtifact):
         raise TypeError("DS2 History-acceptance recovery requires a version-4 resource artifact")
+    return artifact
+
+
+def die_after_observation_folded(session: ProcessSession, payload: JsonValue) -> ScenarioArtifact:
+    root = state_root(payload)
+    world = session.world(
+        ObservationFoldProcessProfile(
+            root,
+            identity=OBSERVATION_FOLD_DEATH_PROFILE_IDENTITY,
+            terminate_after_fold=True,
+        ),
+        DEFAULT_BUDGET,
+        checkers=(HamsterdanChecker(),),
+    )
+    world.timeline().command(
+        "hamsterdan.fold_accepted_observation",
+        FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+    )
+    raise AssertionError("the post-observation-fold process survived before acknowledgement")
+
+
+def recover_observation_fold(session: ProcessSession, payload: JsonValue) -> ScenarioArtifact:
+    root = state_root(payload)
+    world = session.world(
+        ObservationFoldProcessProfile(
+            root,
+            identity=OBSERVATION_FOLD_RECOVERY_PROFILE_IDENTITY,
+            terminate_after_fold=False,
+        ),
+        DEFAULT_BUDGET,
+        checkers=(HamsterdanChecker(),),
+    )
+    world.timeline().command(
+        "hamsterdan.fold_accepted_observation",
+        FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+    )
+    world.timeline().finish(Disposition.QUIESCENT)
+    artifact = world.artifact(OBSERVATION_FOLD_RECOVERY_SCENARIO)
+    if not isinstance(artifact, ScenarioArtifact):
+        raise TypeError("DS2 observation-fold recovery requires a version-4 resource artifact")
+    return artifact
+
+
+def die_after_host_completion(session: ProcessSession, payload: JsonValue) -> ScenarioArtifact:
+    root = state_root(payload)
+    world = session.world(
+        HostCompletionProcessProfile(
+            root,
+            identity=HOST_COMPLETION_DEATH_PROFILE_IDENTITY,
+            terminate_after_completion=True,
+        ),
+        DEFAULT_BUDGET,
+        checkers=(HamsterdanChecker(),),
+    )
+    world.timeline().command(
+        "hamsterdan.complete_observation_delivery",
+        COMPLETE_OBSERVATION_DELIVERY_COMMAND.model_dump(mode="json"),
+    )
+    raise AssertionError("the post-host-completion process survived before acknowledgement")
+
+
+def recover_host_completion(session: ProcessSession, payload: JsonValue) -> ScenarioArtifact:
+    root = state_root(payload)
+    world = session.world(
+        HostCompletionProcessProfile(
+            root,
+            identity=HOST_COMPLETION_RECOVERY_PROFILE_IDENTITY,
+            terminate_after_completion=False,
+        ),
+        DEFAULT_BUDGET,
+        checkers=(HamsterdanChecker(),),
+    )
+    world.timeline().command(
+        "hamsterdan.complete_observation_delivery",
+        COMPLETE_OBSERVATION_DELIVERY_COMMAND.model_dump(mode="json"),
+    )
+    world.timeline().finish(Disposition.QUIESCENT)
+    artifact = world.artifact(HOST_COMPLETION_RECOVERY_SCENARIO)
+    if not isinstance(artifact, ScenarioArtifact):
+        raise TypeError("DS2 host-completion recovery requires a version-4 resource artifact")
     return artifact
 
 

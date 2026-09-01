@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from contextlib import closing
 import sqlite3
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from hamsterdan2.host.values import HostRecord, RegisteredPullRequest
 from hamsterdan2.workflow.values import AwaitingObservation, PullRequestSubject
@@ -17,7 +17,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from hamsterdan2.host.values import OpenPullRequestCommand
-    from hamsterdan2.readiness.ingress_values import HistoryAcceptancePosture
+
+
+AuthorityResult = TypeVar("AuthorityResult")
 
 
 SCHEMA = """
@@ -309,8 +311,8 @@ class HostCatalog:
     def run_readiness_authority(
         self,
         subject: PullRequestSubject,
-        action: Callable[[RegisteredPullRequest], HistoryAcceptancePosture],
-    ) -> HistoryAcceptancePosture:
+        action: Callable[[RegisteredPullRequest], AuthorityResult],
+    ) -> AuthorityResult:
         """Fence one existing subject root while readiness owns its Engine."""
         with closing(connect(self._path)) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")

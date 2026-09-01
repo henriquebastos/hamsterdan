@@ -51,12 +51,13 @@ from hamsterdan2.host.composition import (
     build_staging_authority,
     build_webhook_app,
 )
-from hamsterdan2.host.delivery import DeliveryCustody
+from hamsterdan2.host.delivery import DeliveryCompletionCustody, DeliveryCustody
 from hamsterdan2.host.values import (
     ActionIdentity,
     ConfiguredProviderRoute,
     CustodiedDelivery,
     DeliveryReceipt,
+    HostDeliveryCompletionReceipt,
     HostRecord,
     OpenPullRequestCommand,
     RegisteredPullRequest,
@@ -75,6 +76,7 @@ from hamsterdan2.readiness.ingress_values import (
     IngressManifest,
     IngressResources,
     ManifestId,
+    ObservationFoldPosture,
     ObservationKey,
     PolicyRevision,
     StagingAcquisition,
@@ -89,10 +91,13 @@ from hamsterdan2.readiness.simulation.lifecycle import (
     ACCEPT_STAGED_OBSERVATION_COMMAND,
     EXPECTED_BRIDGE_IDENTITY,
     EXPECTED_HEAD_SEEN_COLOR,
+    FOLDED_HISTORY_RECORDS,
+    FOLD_ACCEPTED_OBSERVATION_COMMAND,
     INSTANCE_ID,
     OPEN_HISTORY_RECORDS,
     SUBJECT,
     AcceptStagedObservationCommand,
+    FoldAcceptedObservationCommand,
     ReadinessChecker,
     ReadinessState,
     SimulationCapacityError,
@@ -161,12 +166,21 @@ class StageWebhookCommand(BaseModel):
     action: Literal["stage_retained_webhook"] = "stage_retained_webhook"
 
 
+class CompleteObservationDeliveryCommand(BaseModel):
+    """Choose one folded occurrence for separate host completion."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    action: Literal["complete_observation_delivery"] = "complete_observation_delivery"
+
+
 RECEIVE_WEBHOOK_COMMAND = ReceiveWebhookCommand(fixture="original")
 COLLIDE_WEBHOOK_COMMAND = ReceiveWebhookCommand(fixture="collision")
 STAGE_WEBHOOK_COMMAND = StageWebhookCommand(
     provider_route_id=PROVIDER_ROUTE_ID,
     delivery_id=DELIVERY_ID,
 )
+COMPLETE_OBSERVATION_DELIVERY_COMMAND = CompleteObservationDeliveryCommand()
 STAGING_POLICY_REVISION = PolicyRevision("policy:cv21-ds2-v1")
 ROOT_OBSERVATION_REQUEST = ObservationRequest(name="hamsterdan.state", payload={})
 ORIGINAL_WEBHOOK_FIXTURE_DIGEST = f"sha256:{sha256(signed_webhook_body(head_sha=ORIGINAL_HEAD_SHA)).hexdigest()}"
@@ -268,6 +282,8 @@ class DeliveryState(BaseModel):
 
     rows: int
     retained: CustodiedDelivery | None
+    completion_rows: int = 0
+    completion: HostDeliveryCompletionReceipt | None = None
 
 
 class IngressState(BaseModel):
@@ -344,22 +360,63 @@ def history_acceptance_corresponds(state: HamsterdanState) -> bool:
         "strict_base": True,
         "base_current": False,
     }
-    return (
+    common = (
         posture == EXPECTED_STAGING
         and observation.subject == SUBJECT
         and binding.instance_id == INSTANCE_ID
         and binding.bridge_identity == EXPECTED_BRIDGE_IDENTITY
-        and readiness.history_records == ACCEPTED_HISTORY_RECORDS
-        and readiness.in_flight_occurrences == 1
         and delivery.source == "on_head"
         and delivery.token_color == EXPECTED_HEAD_SEEN_COLOR
         and delivery.token_payload == expected_payload
         and delivery.delivery_identity == expected_history_delivery_identity(posture)
         and delivery.occurrence == 1
+    )
+    accepted = (
+        readiness.history_records == ACCEPTED_HISTORY_RECORDS
+        and readiness.in_flight_occurrences == 1
         and delivery.record_order == ("ExternalEventDelivered", "FiringBegun")
         and not delivery.folded
         and not readiness.folded
+        and readiness.fold_posture is None
     )
+    fold = readiness.fold_posture
+    folded = (
+        readiness.history_records == FOLDED_HISTORY_RECORDS
+        and readiness.in_flight_occurrences == 0
+        and delivery.record_order == ("ExternalEventDelivered", "FiringBegun", "TokensProduced", "FiringCompleted")
+        and delivery.produced_place == "life.heads"
+        and delivery.produced_entries == ()
+        and delivery.produced_tokens is not None
+        and len(delivery.produced_tokens) == 1
+        and delivery.produced_tokens[0].color == delivery.token_color
+        and delivery.produced_tokens[0].data == delivery.token_payload
+        and delivery.completed_transition == delivery.source
+        and delivery.folded
+        and readiness.folded
+        and fold is not None
+        and fold.subject == observation.subject
+        and fold.instance_id == binding.instance_id
+        and fold.bridge_identity == binding.bridge_identity
+        and fold.manifest_id == posture.manifest.manifest_id
+        and fold.grant_id == posture.grant.grant_id
+        and fold.manifest_digest == posture.grant.manifest_digest
+        and fold.entry_order == entry.order
+        and fold.observation_key == entry.observation_key
+        and fold.delivery_identity == delivery.delivery_identity
+        and fold.occurrence == delivery.occurrence
+        and fold.phase == "running"
+        and fold.local_incarnation == observation.local_incarnation
+        and fold.head == observation.head
+        and fold.base == observation.base
+        and fold.mergeable == (observation.mergeable is True)
+        and fold.policy_revision == posture.manifest.policy_revision
+        and fold.strict_base
+        and not fold.base_current
+        and fold.finished
+        and fold.folded
+        and fold.cut == "observation_folded"
+    )
+    return common and (accepted or folded)
 
 
 def hamsterdan_checker_identity(
@@ -405,6 +462,25 @@ def hamsterdan_checker_identity(
                     "finished": False,
                     "folded": False,
                 },
+                "history_fold": {
+                    "record_order": [
+                        "ExternalEventDelivered",
+                        "FiringBegun",
+                        "TokensProduced",
+                        "FiringCompleted",
+                    ],
+                    "produced_place": "life.heads",
+                    "history_records": FOLDED_HISTORY_RECORDS,
+                    "in_flight_occurrences": 0,
+                    "cut": "observation_folded",
+                },
+                "host_completion": {
+                    "custody_generation": 1,
+                    "history_delivery_identity": expected_history_delivery_identity(EXPECTED_STAGING),
+                    "occurrence": 1,
+                    "workflow_cut": "observation_folded",
+                    "cut": "host_delivery_completed",
+                },
                 "ingress_checker": ingress_checker_identity.model_dump(mode="json"),
                 "readiness_checker": readiness_checker_identity.model_dump(mode="json"),
                 "phases": [
@@ -412,6 +488,8 @@ def hamsterdan_checker_identity(
                     "delivery_custodied",
                     "readiness_staged",
                     "history_accepted",
+                    "observation_folded",
+                    "host_delivery_completed",
                     "host_recorded",
                 ],
                 "relationships": "every retained phase identifies one PR",
@@ -429,6 +507,7 @@ RESOURCE_LIMITS = {
     "retained.host.records": 1,
     "retained.host.subjects": 1,
     "retained.host.deliveries": 1,
+    "retained.host.delivery_completions": 1,
     "retained.readiness.ingress.manifests": 1,
     "retained.readiness.ingress.entries": 1,
     "retained.readiness.ingress.grants": 1,
@@ -463,6 +542,8 @@ def hamsterdan_profile_identity(
                     COLLIDE_WEBHOOK_COMMAND.model_dump(mode="json"),
                     STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
                     ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+                    FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+                    COMPLETE_OBSERVATION_DELIVERY_COMMAND.model_dump(mode="json"),
                 ],
                 "webhook_fixtures": {
                     "original": original_webhook_fixture_digest,
@@ -479,7 +560,8 @@ def hamsterdan_profile_identity(
                     "delivery_custodied",
                     "readiness_staged",
                     "history_accepted_unfinished",
-                    "retained_fold_not_implemented",
+                    "observation_folded",
+                    "host_delivery_completed",
                     "host_recorded",
                 ],
                 "owners": ["github_app", "host", "readiness", "workflow_bridge"],
@@ -631,11 +713,27 @@ def delivery_state(root: Path) -> DeliveryState:
     if not path.is_file():
         return DeliveryState(rows=0, retained=None)
     custody = DeliveryCustody.from_path(path=path, provider_routes=(PROVIDER_ROUTE,))
+    completions = DeliveryCompletionCustody.from_path(path=path)
+    staged = ingress_state(root).acquisition
+    expected_delivery = None
+    if staged is not None:
+        expected_delivery = CustodiedDelivery(
+            provider_route_id=staged.identity.provider_route_id,
+            custody_generation=staged.custody_generation,
+            webhook=staged.webhook,
+            quarantined=staged.quarantined,
+        )
     return DeliveryState(
         rows=custody.retained_count(),
         retained=custody.retained_delivery(
             provider_route_id=PROVIDER_ROUTE_ID,
             delivery_id=DELIVERY_ID,
+        ),
+        completion_rows=completions.completion_count(),
+        completion=completions.completion_receipt(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+            expected_delivery=expected_delivery,
         ),
     )
 
@@ -708,7 +806,11 @@ def root_resource_usage(root: Path) -> ResourceUsage:
         maximum_bytes=RESOURCE_LIMITS["retained.state.bytes"],
     )
     readiness_root = root / EXPECTED_REGISTRATION.readiness_root
-    state = readiness_state(readiness_root, dispatch_path=root / "dispatch.sqlite3")
+    state = readiness_state(
+        readiness_root,
+        dispatch_path=root / "dispatch.sqlite3",
+        ingress_path=root / "readiness-ingress.sqlite3",
+    )
     host = host_state(root)
     delivery = delivery_state(root)
     ingress = ingress_state(root)
@@ -718,6 +820,7 @@ def root_resource_usage(root: Path) -> ResourceUsage:
             "retained.host.records": len(host.records),
             "retained.host.subjects": len(host.subjects),
             "retained.host.deliveries": delivery.rows,
+            "retained.host.delivery_completions": delivery.completion_rows,
             "retained.readiness.ingress.manifests": ingress.resources.manifests,
             "retained.readiness.ingress.entries": ingress.resources.entries,
             "retained.readiness.ingress.grants": ingress.resources.grants,
@@ -771,6 +874,24 @@ def validate_accept_staged_observation(command: Command) -> Command:
     return command
 
 
+def validate_fold_accepted_observation(command: Command) -> Command:
+    if command.name != "hamsterdan.fold_accepted_observation":
+        raise ValueError("CV21 root accepts only admitted host, webhook, staging, acceptance, and fold commands")
+    parsed = FoldAcceptedObservationCommand.model_validate(command.payload, strict=True)
+    if parsed != FOLD_ACCEPTED_OBSERVATION_COMMAND or parsed.model_dump(mode="json") != command.payload:
+        raise ValueError("DS2 root fold command must contain exactly the admitted fields")
+    return command
+
+
+def validate_complete_observation_delivery(command: Command) -> Command:
+    if command.name != "hamsterdan.complete_observation_delivery":
+        raise ValueError("CV21 root accepts only the six admitted cumulative tracer commands")
+    parsed = CompleteObservationDeliveryCommand.model_validate(command.payload, strict=True)
+    if parsed != COMPLETE_OBSERVATION_DELIVERY_COMMAND or parsed.model_dump(mode="json") != command.payload:
+        raise ValueError("DS2 root host-completion command must contain exactly the admitted fields")
+    return command
+
+
 def stage_retained_webhook(root: Path) -> StagingPosture:
     return build_staging_authority(
         state_root=root,
@@ -784,6 +905,20 @@ def stage_retained_webhook(root: Path) -> StagingPosture:
 
 def accept_staged_observation(root: Path) -> HistoryAcceptancePosture:
     return build_observation_acceptance_authority(state_root=root).accept_staged_observation(
+        provider_route_id=PROVIDER_ROUTE_ID,
+        delivery_id=DELIVERY_ID,
+    )
+
+
+def fold_accepted_observation(root: Path) -> ObservationFoldPosture | HistoryAcceptancePosture:
+    return build_observation_acceptance_authority(state_root=root).fold_accepted_observation(
+        provider_route_id=PROVIDER_ROUTE_ID,
+        delivery_id=DELIVERY_ID,
+    )
+
+
+def complete_observation_delivery(root: Path) -> HostDeliveryCompletionReceipt:
+    return build_observation_acceptance_authority(state_root=root).complete_observation_delivery(
         provider_route_id=PROVIDER_ROUTE_ID,
         delivery_id=DELIVERY_ID,
     )
@@ -814,13 +949,17 @@ class HamsterdanScenarioProfile:
         self._root = root
 
     def validate(self, command: Command) -> Command:
-        if command.name == "hamsterdan.open_pull_request":
-            return validate_open_pull_request(command)
-        if command.name == "hamsterdan.receive_webhook":
-            return validate_receive_webhook(command)
-        if command.name == "hamsterdan.stage_webhook":
-            return validate_stage_webhook(command)
-        return validate_accept_staged_observation(command)
+        validator = {
+            "hamsterdan.open_pull_request": validate_open_pull_request,
+            "hamsterdan.receive_webhook": validate_receive_webhook,
+            "hamsterdan.stage_webhook": validate_stage_webhook,
+            "hamsterdan.accept_staged_observation": validate_accept_staged_observation,
+            "hamsterdan.fold_accepted_observation": validate_fold_accepted_observation,
+            "hamsterdan.complete_observation_delivery": validate_complete_observation_delivery,
+        }.get(command.name)
+        if validator is None:
+            raise ValueError("CV21 root accepts only the six admitted cumulative tracer commands")
+        return validator(command)
 
     def validate_fault(self, fault: Fault) -> Fault:
         raise ValueError(f"CV21 root admits no faults; remove {fault.name!r}")
@@ -840,36 +979,84 @@ class HamsterdanScenarioProfile:
         context: ScenarioContext,
     ) -> ApplyResult:
         del context
-        if command.name == "hamsterdan.receive_webhook":
-            parsed = ReceiveWebhookCommand.model_validate(command.payload, strict=True)
-            receipt = receive_signed_webhook(self._root, parsed.fixture)
-            return ApplyResult(
-                disposition="idempotent" if receipt.disposition == "exact_duplicate" else "applied",
-                value=receipt.model_dump(mode="json"),
-                scheduled=[],
-            )
-        if command.name == "hamsterdan.stage_webhook":
-            posture = stage_retained_webhook(self._root)
-            return ApplyResult(
-                disposition="idempotent" if posture.disposition == "exact_duplicate" else "applied",
-                value=posture.model_dump(mode="json"),
-                scheduled=[],
-            )
-        if command.name == "hamsterdan.accept_staged_observation":
-            before = readiness_state(
-                self._root / EXPECTED_REGISTRATION.readiness_root,
-                dispatch_path=self._root / "dispatch.sqlite3",
-            ).history_records
-            posture = accept_staged_observation(self._root)
-            after = readiness_state(
-                self._root / EXPECTED_REGISTRATION.readiness_root,
-                dispatch_path=self._root / "dispatch.sqlite3",
-            ).history_records
-            return ApplyResult(
-                disposition="idempotent" if after == before else "applied",
-                value=posture.model_dump(mode="json"),
-                scheduled=[],
-            )
+        operation = {
+            "hamsterdan.receive_webhook": self.apply_receive,
+            "hamsterdan.stage_webhook": self.apply_staging,
+            "hamsterdan.accept_staged_observation": self.apply_acceptance,
+            "hamsterdan.fold_accepted_observation": self.apply_fold,
+            "hamsterdan.complete_observation_delivery": self.apply_completion,
+            "hamsterdan.open_pull_request": self.apply_open,
+        }[command.name]
+        return operation(generation, command)
+
+    def apply_receive(self, generation: Hamsterdan, command: Command) -> ApplyResult:
+        del generation
+        parsed = ReceiveWebhookCommand.model_validate(command.payload, strict=True)
+        receipt = receive_signed_webhook(self._root, parsed.fixture)
+        return ApplyResult(
+            disposition="idempotent" if receipt.disposition == "exact_duplicate" else "applied",
+            value=receipt.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def apply_staging(self, generation: Hamsterdan, command: Command) -> ApplyResult:
+        del generation, command
+        posture = stage_retained_webhook(self._root)
+        return ApplyResult(
+            disposition="idempotent" if posture.disposition == "exact_duplicate" else "applied",
+            value=posture.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def apply_acceptance(self, generation: Hamsterdan, command: Command) -> ApplyResult:
+        del generation, command
+        before = readiness_state(
+            self._root / EXPECTED_REGISTRATION.readiness_root,
+            dispatch_path=self._root / "dispatch.sqlite3",
+        ).history_records
+        posture = accept_staged_observation(self._root)
+        after = readiness_state(
+            self._root / EXPECTED_REGISTRATION.readiness_root,
+            dispatch_path=self._root / "dispatch.sqlite3",
+        ).history_records
+        return ApplyResult(
+            disposition="idempotent" if after == before else "applied",
+            value=posture.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def apply_fold(self, generation: Hamsterdan, command: Command) -> ApplyResult:
+        del generation, command
+        before = readiness_state(
+            self._root / EXPECTED_REGISTRATION.readiness_root,
+            dispatch_path=self._root / "dispatch.sqlite3",
+            ingress_path=self._root / "readiness-ingress.sqlite3",
+        ).history_records
+        posture = fold_accepted_observation(self._root)
+        after = readiness_state(
+            self._root / EXPECTED_REGISTRATION.readiness_root,
+            dispatch_path=self._root / "dispatch.sqlite3",
+            ingress_path=self._root / "readiness-ingress.sqlite3",
+        ).history_records
+        return ApplyResult(
+            disposition="idempotent" if after == before else "applied",
+            value=posture.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def apply_completion(self, generation: Hamsterdan, command: Command) -> ApplyResult:
+        del generation, command
+        before = delivery_state(self._root).completion_rows
+        receipt = complete_observation_delivery(self._root)
+        after = delivery_state(self._root).completion_rows
+        return ApplyResult(
+            disposition="idempotent" if after == before else "applied",
+            value=receipt.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def apply_open(self, generation: Hamsterdan, command: Command) -> ApplyResult:
+        del command
         replayed = action_was_recorded(self._root, OPEN_PULL_REQUEST_COMMAND.action_identity)
         record = generation.open_pull_request(OPEN_PULL_REQUEST_COMMAND)
         return ApplyResult(
@@ -943,9 +1130,8 @@ class HamsterdanChecker:
         )
         delivery = state.delivery.retained
         delivery_empty = state.delivery == DeliveryState(rows=0, retained=None)
-        delivery_custody = delivery_empty or state.delivery in (
-            DeliveryState(rows=1, retained=EXPECTED_DELIVERY),
-            DeliveryState(rows=1, retained=EXPECTED_QUARANTINED_DELIVERY),
+        delivery_custody = delivery_empty or (
+            state.delivery.rows == 1 and state.delivery.retained in (EXPECTED_DELIVERY, EXPECTED_QUARANTINED_DELIVERY)
         )
         delivery_route = delivery is None or (
             delivery.provider_route_id == PROVIDER_ROUTE_ID and delivery.webhook.route == EXPECTED_WEBHOOK.route
@@ -955,6 +1141,36 @@ class HamsterdanChecker:
             delivery.webhook.snapshot == EXPECTED_WEBHOOK.snapshot
             and delivery.webhook.provenance.event == EXPECTED_WEBHOOK.provenance.event
             and delivery.webhook.provenance.action == EXPECTED_WEBHOOK.provenance.action
+        )
+        completion = state.delivery.completion
+        expected_completion = (
+            completion is not None
+            and completion.provider_route_id == PROVIDER_ROUTE_ID
+            and completion.delivery_id == DELIVERY_ID
+            and completion.custody_generation == 1
+            and completion.subject == SUBJECT
+            and completion.instance_id == INSTANCE_ID
+            and completion.bridge_identity == EXPECTED_BRIDGE_IDENTITY
+            and str(completion.manifest_id) == str(EXPECTED_STAGING.manifest.manifest_id)
+            and str(completion.grant_id) == str(EXPECTED_STAGING.grant.grant_id)
+            and completion.manifest_digest == EXPECTED_STAGING.grant.manifest_digest
+            and completion.entry_order == 0
+            and str(completion.observation_key) == str(EXPECTED_STAGING.manifest.entries[0].observation_key)
+            and str(completion.history_delivery_identity) == expected_history_delivery_identity(EXPECTED_STAGING)
+            and completion.occurrence == 1
+            and completion.workflow_cut == "observation_folded"
+            and completion.cut == "host_delivery_completed"
+        )
+        completion_correspondence = (state.delivery.completion_rows == 0 and completion is None) or (
+            state.delivery.completion_rows == 1
+            and expected_completion
+            and state.readiness.folded
+            and state.readiness.delivery is not None
+            and state.readiness.fold_posture is not None
+            and state.readiness.delivery.delivery_identity == completion.history_delivery_identity
+            and state.readiness.delivery.occurrence == completion.occurrence
+            and state.readiness.fold_posture.delivery_identity == completion.history_delivery_identity
+            and state.readiness.fold_posture.occurrence == completion.occurrence
         )
         posture = state.ingress.posture
         ingress_result = IngressChecker().check(
@@ -1024,7 +1240,8 @@ class HamsterdanChecker:
             and (ingress_empty or ingress_staged)
             and ingress_result.passed
             and ingress_delivery
-            and history_acceptance,
+            and history_acceptance
+            and completion_correspondence,
             detail={
                 "empty": empty,
                 "staged_without_host": staged_without_host,
@@ -1043,6 +1260,7 @@ class HamsterdanChecker:
                 "ingress": ingress_result.passed,
                 "ingress_delivery": ingress_delivery,
                 "history_acceptance": history_acceptance,
+                "host_completion": completion_correspondence,
                 "ingress_acquisition": ingress_detail["acquisition"],
                 "ingress_manifest": ingress_detail["manifest"],
                 "ingress_entry_order": ingress_detail["entry_order"],

@@ -2,8 +2,8 @@
 code: CV21.DS2
 level: Delivery Story
 status: Active
-status_reason: Tasks 1 through 4 are delivered; retained fold and host completion remain in task 5
-updated: 2026-08-31
+status_reason: Tasks 1–5 are delivered; awaiting Navigator Experience Report acceptance and closure
+updated: 2026-09-01
 related:
   - index.md
   - cv21-ds1-first-bridged-pr-lifecycle.md
@@ -20,7 +20,8 @@ host delivery custody, then acknowledge the HTTP request without waiting for
 readiness. A later authority turn performs source-neutral readiness admission,
 bridge conversion, and identified Petrus History delivery until the current
 Net folds the exact observation. Custodied, acknowledged, admitted, and folded
-remain distinct reconstructible cuts.
+remain distinct reconstructible cuts, followed by a separately durable host
+completion receipt.
 
 ## Vertical path
 
@@ -66,11 +67,12 @@ Delivery Story:
    revision is pinned. One eligible Head entry maps through the sole bridge and
    public `Engine.accept_delivery` into durable unfinished History. Acceptance
    and fold are now independently observable; this task stops at acceptance.
-5. **Retained fold, host completion, and process/DST qualification — planned.**
-   Recover the exact accepted carrier, complete only its occurrence, fold it in
-   the retained Net, project detached posture, and mark host completion while
-   extending the already established correspondence, crash, replay, checker-
-   sensitivity, and resource evidence.
+5. **Retained fold, host completion, and process/DST qualification — delivered.**
+   Exact immutable staging recovers the accepted carrier, public Petrus
+   completion ends only that occurrence, bounded actual retained state becomes
+   a detached fold posture, and a later fresh proof records one host completion
+   receipt. Correspondence, crash/replay, concurrency, checker sensitivity, and
+   finite-resource evidence cover both new cuts.
 
 ## Delivered task 2 contract
 
@@ -350,6 +352,98 @@ same immutable staging, load the Engine, exact-reoffer to recover the
 `AcceptedDelivery` carrier, call `Engine.complete_delivery` for only that
 occurrence, then prove retained fold and host completion as later cuts.
 
+## Delivered task 5 contract
+
+`ObservationAcceptanceAuthority` exposes two later bounded operations selected
+only by task 2's `(ProviderRouteId, DeliveryId)`:
+`fold_accepted_observation(...)` and `complete_observation_delivery(...)`.
+Each operation derives the selected subject, enters the existing host catalog
+writer fence, reconstructs task-3 staging and task-1 registration/root binding,
+and revalidates manifest/grant/entry/key/order authority. No caller-provided
+posture, carrier, occurrence, outcome, receipt, token, source, policy, or
+identity becomes authority. Non-`novel` staging remains a no-fold/no-completion
+posture. A collision that arrives after unfinished acceptance preserves that
+immutable staging and History authority while retaining separate host
+quarantine evidence; pre-staging quarantine cannot initiate acceptance.
+
+The fold operation rebuilds the bridge-private source/token and versioned
+History delivery identity, loads the exact registered one-PR Engine, and calls
+public `Engine.accept_delivery(...)` with no scope. Exact unfinished return must
+be an `AcceptedDelivery` matching instance, source, identity, and the recorded
+occurrence; only then does readiness call public
+`Engine.complete_delivery(accepted)` exactly once. It validates the resulting
+`FiringOutcome` as no consumption, the exact `life.heads` token production, and
+the exact ordered `FiringBegun`, `TokensProduced`, `FiringCompleted` facts for
+that source occurrence. Completion appends only the two terminal facts after
+task 4's acceptance facts, removes the unfinished occurrence, emits no
+`FiringFailed`, and does not advance the newly enabled `life.admit_head`
+transition. Dispatch pending count therefore remains zero and DS3 behavior is
+not entered.
+
+After response loss, exact reoffer returns `PriorAcknowledgement` instead of an
+accepted carrier. Readiness performs no completion call. It uses one finite
+complete public History page plus bounded public runtime inspection to prove
+that exactly this identity/source/token/occurrence ended in the four-fact
+delivery/terminal suffix and the exact retained `life.heads` state. Failure,
+quarantine, a different occurrence, malformed/partial/unrelated terminal facts,
+wrong source/token/content, scoped acknowledgement, mismatched root/subject/
+grant/key/order, or changed identity fails closed without host completion or
+unrelated progress.
+
+The complete mapping identity is deliberately
+`workflow-bridge/head-seen-history-fold@3`, replacing task 4's
+acceptance-only `@2` contract and changing the derived delivery identity. Fresh
+construction has no old roots to migrate. The bridge alone projects bounded
+actual retained state into strict immutable `ObservationFoldPosture`. It proves
+the exact subject and instance; delivery identity and occurrence; running phase;
+local incarnation 1; source-neutral head/base repository, ref, and SHA values
+whose SHAs match the retained token; explicit-true mergeability; exact manifest
+policy; `strict_base=True`; `base_current=False`; finished/folded status; no
+unfinished source occurrence; and cut `observation_folded`. The posture exposes
+no retained class, module/topology name, generic marking/token dictionary,
+Petrus carrier/outcome, or provider object, and claims no provider currentness.
+
+Host completion is a later operation. It freshly runs the same exact fold proof
+with completion disabled, then asks `DeliveryCompletionCustody` to record one
+`HostDeliveryCompletionReceipt` in the existing host delivery database. The
+receipt is keyed by the original route/delivery and binds custody generation,
+subject/instance, `@3` bridge, manifest/grant/digest/entry/key, History delivery
+identity/occurrence, workflow cut `observation_folded`, and host cut
+`host_delivery_completed`. It is only a host acknowledgement/index; History is
+the sole ledger that says the observation folded. First exact completion inserts
+once, exact retry reconstructs without a write, and changed correlation fails
+without overwrite. Strict singleton reads use `LIMIT 2`, validate SQL types and
+bounded bytes before model construction, and reject duplicate or malformed rows.
+Original normalized custody and quarantine evidence are never rewritten; the
+completion schema retains no raw body/signature/header/provider object, retained
+type, generic marking/token, Petrus outcome, or exception representation.
+
+History inspection is capped at 4,096 records and one complete page. Retained
+projection is capped at 64 places and 128 tokens. Existing database/WAL/shared-
+memory and 2 MiB aggregate History bounds remain authoritative. An unfinished
+occurrence remeasures and reserves one MiB for the finite two-record completion
+transaction immediately before public completion; an already ended exact
+reoffer reserves no append headroom. Host completion limits singleton reads to
+two rows and remains under the configured SQLite page ceiling. Backend refusal
+or ambiguous acknowledgement creates neither a projected fold nor completion;
+fresh load determines whether History remains unfinished or contains the exact
+successful terminal, and host completion remains a later cut.
+
+Owner-local readiness and cumulative root Worlds expose strict separate fold
+and host-completion commands after custody, staging, and unfinished acceptance.
+They exactly replay all six durable cuts from fresh roots, refuse or replay
+out-of-order commands without hidden work, preserve late quarantine, and bind
+terminal order/content, produced token, disappearance of unfinished occurrence,
+every fold-posture field, receipt correlation, and cross-owner equality.
+Independent mutation checks alter each mapped/correlated field and detect the
+change. Real SQLite concurrent fold/completion calls serialize under the host
+fence and converge on one terminal occurrence and one receipt. Actual child
+processes receive `SIGKILL` after `Engine.complete_delivery` commits and after
+host completion commits, both before acknowledgement; fresh compositions
+reconstruct the same fold or receipt without another History or host append.
+The earlier custody, staging, and acceptance interruption scenarios remain in
+the cumulative process evidence.
+
 ## Acceptance
 
 - exact duplicate, corroboration, collision, incomparable evidence, and refusal
@@ -364,5 +458,7 @@ occurrence, then prove retained fold and host completion as later cuts.
   equality; and
 - owner-local/root replay and mutation-sensitive checks prove the full path.
 
-Tasks 1–4 do not yet satisfy this Delivery Story acceptance. Task 5 remains
-required before DS2 can become `Completed` or receive a completion worklog.
+Tasks 1–5 now deliver the planned implementation and local qualification, but
+CV21.DS2 remains `Active`. The orchestrated Navigator Experience Report,
+acceptance, and closure are still required before this Delivery Story can become
+`Completed` or receive its final completion worklog. DS3 remains unpulled.

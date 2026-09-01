@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from hamsterdan2.host.values import CustodiedDelivery, HostDeliveryCompletionReceipt
+from hamsterdan2.readiness.ingress_values import ObservationFoldPosture
 from hamsterdan2.workflow.values import PullRequestSubject
 
 
@@ -15,8 +17,8 @@ if TYPE_CHECKING:
 
     from hamsterdan2.github_app.models import DeliveryId, ProviderRouteId
     from hamsterdan2.host.catalog import HostCatalog
-    from hamsterdan2.host.delivery import DeliveryCustody
-    from hamsterdan2.host.values import CustodiedDelivery, HostRecord, OpenPullRequestCommand, RegisteredPullRequest
+    from hamsterdan2.host.delivery import DeliveryCompletionCustody, DeliveryCustody
+    from hamsterdan2.host.values import HostRecord, OpenPullRequestCommand, RegisteredPullRequest
     from hamsterdan2.readiness.ingress import IngressCustody
     from hamsterdan2.readiness.ingress_values import (
         HistoryAcceptancePosture,
@@ -34,6 +36,15 @@ if TYPE_CHECKING:
             provider_route_id: ProviderRouteId,
             delivery_id: DeliveryId,
         ) -> HistoryAcceptancePosture: ...
+
+    class FoldReadinessObservation(Protocol):
+        def __call__(
+            self,
+            registered: RegisteredPullRequest,
+            *,
+            provider_route_id: ProviderRouteId,
+            delivery_id: DeliveryId,
+        ) -> ObservationFoldPosture | HistoryAcceptancePosture: ...
 
 
 class Hamsterdan:
@@ -65,6 +76,10 @@ class DeliveryNotFoundError(Exception):
 
 class StagedObservationNotFoundError(Exception):
     """The requested task-2 identity has no durable readiness staging."""
+
+
+class ObservationDeliveryNotFoldedError(Exception):
+    """Host completion requires the exact successful retained fold."""
 
 
 class StagingAuthority:
@@ -129,18 +144,24 @@ class ObservationAcceptanceAuthority:
         *,
         catalog: HostCatalog,
         ingress_custody: IngressCustody,
+        completion_custody: DeliveryCompletionCustody,
         accept_readiness: AcceptReadinessObservation,
+        fold_readiness: FoldReadinessObservation,
+        verify_readiness: FoldReadinessObservation,
     ) -> None:
         self._catalog = catalog
         self._ingress_custody = ingress_custody
+        self._completion_custody = completion_custody
         self._accept_readiness = accept_readiness
+        self._fold_readiness = fold_readiness
+        self._verify_readiness = verify_readiness
 
-    def accept_staged_observation(
+    def selected_subject(
         self,
         *,
         provider_route_id: ProviderRouteId,
         delivery_id: DeliveryId,
-    ) -> HistoryAcceptancePosture:
+    ) -> PullRequestSubject:
         reconstructed = self._ingress_custody.reconstructed_staging(
             provider_route_id=provider_route_id,
             delivery_id=delivery_id,
@@ -149,15 +170,23 @@ class ObservationAcceptanceAuthority:
             raise StagedObservationNotFoundError(
                 provider_route_id,
                 delivery_id,
-                "stage this acquired delivery before requesting History acceptance",
+                "stage this acquired delivery before requesting observation authority",
             )
         acquisition, _ = reconstructed
         source_subject = acquisition.webhook.snapshot.subject
-        subject = PullRequestSubject(
+        return PullRequestSubject(
             installation_id=source_subject.installation_id,
             repository_id=source_subject.repository_id,
             pull_request_number=source_subject.pull_request_number,
         )
+
+    def accept_staged_observation(
+        self,
+        *,
+        provider_route_id: ProviderRouteId,
+        delivery_id: DeliveryId,
+    ) -> HistoryAcceptancePosture:
+        subject = self.selected_subject(provider_route_id=provider_route_id, delivery_id=delivery_id)
 
         def accept(registered: RegisteredPullRequest) -> HistoryAcceptancePosture:
             return self._accept_readiness(
@@ -167,3 +196,79 @@ class ObservationAcceptanceAuthority:
             )
 
         return self._catalog.run_readiness_authority(subject, accept)
+
+    def fold_accepted_observation(
+        self,
+        *,
+        provider_route_id: ProviderRouteId,
+        delivery_id: DeliveryId,
+    ) -> ObservationFoldPosture | HistoryAcceptancePosture:
+        subject = self.selected_subject(provider_route_id=provider_route_id, delivery_id=delivery_id)
+
+        def fold(registered: RegisteredPullRequest) -> ObservationFoldPosture | HistoryAcceptancePosture:
+            return self._fold_readiness(
+                registered,
+                provider_route_id=provider_route_id,
+                delivery_id=delivery_id,
+            )
+
+        return self._catalog.run_readiness_authority(subject, fold)
+
+    def complete_observation_delivery(
+        self,
+        *,
+        provider_route_id: ProviderRouteId,
+        delivery_id: DeliveryId,
+    ) -> HostDeliveryCompletionReceipt:
+        subject = self.selected_subject(provider_route_id=provider_route_id, delivery_id=delivery_id)
+
+        def complete(registered: RegisteredPullRequest) -> HostDeliveryCompletionReceipt:
+            folded = self._verify_readiness(
+                registered,
+                provider_route_id=provider_route_id,
+                delivery_id=delivery_id,
+            )
+            if not isinstance(folded, ObservationFoldPosture):
+                raise ObservationDeliveryNotFoldedError(
+                    provider_route_id,
+                    delivery_id,
+                    "only a novel History-proven fold can complete host delivery",
+                )
+            reconstructed = self._ingress_custody.reconstructed_staging(
+                provider_route_id=provider_route_id,
+                delivery_id=delivery_id,
+            )
+            if reconstructed is None:
+                raise StagedObservationNotFoundError(
+                    provider_route_id,
+                    delivery_id,
+                    "staging authority disappeared during host completion",
+                )
+            acquisition, _ = reconstructed
+            expected_delivery = CustodiedDelivery(
+                provider_route_id=acquisition.identity.provider_route_id,
+                custody_generation=acquisition.custody_generation,
+                webhook=acquisition.webhook,
+                quarantined=acquisition.quarantined,
+            )
+            receipt = HostDeliveryCompletionReceipt(
+                provider_route_id=provider_route_id,
+                delivery_id=delivery_id,
+                custody_generation=acquisition.custody_generation,
+                subject=folded.subject,
+                instance_id=folded.instance_id,
+                bridge_identity=folded.bridge_identity,
+                manifest_id=str(folded.manifest_id),
+                grant_id=str(folded.grant_id),
+                manifest_digest=folded.manifest_digest,
+                entry_order=folded.entry_order,
+                observation_key=str(folded.observation_key),
+                history_delivery_identity=str(folded.delivery_identity),
+                occurrence=folded.occurrence,
+            )
+            return self._completion_custody.record_completion(
+                receipt,
+                expected_delivery=expected_delivery,
+            )
+
+        return self._catalog.run_readiness_authority(subject, complete)

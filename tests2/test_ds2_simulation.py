@@ -27,6 +27,7 @@ from hamsterdan2.github_app.simulation.webhooks import (
     replay_github_webhook,
 )
 from hamsterdan2.readiness.ingress_values import PolicyRevision
+from hamsterdan2.readiness.runtime import AcceptedObservationNotFoundError, ObservationNotFoldedError
 from hamsterdan2.readiness.simulation.ingress import (
     DEFAULT_BUDGET as INGRESS_BUDGET,
 )
@@ -50,9 +51,14 @@ from hamsterdan2.readiness.simulation.ingress import (
 )
 from hamsterdan2.readiness.simulation.lifecycle import (
     EXPECTED_HISTORY_DELIVERY_IDENTITY,
+    FOLDED_HISTORY_RECORDS,
+    FOLD_ACCEPTED_OBSERVATION_COMMAND,
+    OPEN_READINESS_COMMAND,
     ReadinessChecker,
     ReadinessState,
+    build_readiness_world,
     readiness_state,
+    replay_readiness,
 )
 from hamsterdan2.readiness.simulation.lifecycle import (
     PROFILE_IDENTITY as READINESS_PROFILE_IDENTITY,
@@ -61,10 +67,12 @@ from hamsterdan2.simulation.hamsterdan import (
     ACCEPT_STAGED_OBSERVATION_COMMAND,
     COLLIDE_WEBHOOK_COMMAND,
     COLLISION_WEBHOOK_FIXTURE_DIGEST,
+    COMPLETE_OBSERVATION_DELIVERY_COMMAND,
     DEFAULT_BUDGET,
     EXPECTED_DELIVERY,
     EXPECTED_QUARANTINED_DELIVERY,
     EXPECTED_RECORD,
+    EXPECTED_STAGING,
     OPEN_PULL_REQUEST_COMMAND,
     ORIGINAL_WEBHOOK_FIXTURE_DIGEST,
     RECEIVE_WEBHOOK_COMMAND,
@@ -166,6 +174,41 @@ def accepted_state(root: Path) -> dict[str, JsonValue]:
             "hamsterdan.accept_staged_observation",
             ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
         )
+        return cast("dict[str, JsonValue]", observe_hamsterdan(root).model_dump(mode="json"))
+    finally:
+        world.close()
+
+
+def folded_state(root: Path) -> dict[str, JsonValue]:
+    world = build_hamsterdan_world(root=root)
+    try:
+        timeline = world.timeline()
+        for command_name, command in (
+            ("hamsterdan.open_pull_request", OPEN_PULL_REQUEST_COMMAND),
+            ("hamsterdan.receive_webhook", RECEIVE_WEBHOOK_COMMAND),
+            ("hamsterdan.stage_webhook", STAGE_WEBHOOK_COMMAND),
+            ("hamsterdan.accept_staged_observation", ACCEPT_STAGED_OBSERVATION_COMMAND),
+            ("hamsterdan.fold_accepted_observation", FOLD_ACCEPTED_OBSERVATION_COMMAND),
+        ):
+            timeline.command(command_name, command.model_dump(mode="json"))
+        return cast("dict[str, JsonValue]", observe_hamsterdan(root).model_dump(mode="json"))
+    finally:
+        world.close()
+
+
+def completed_state(root: Path) -> dict[str, JsonValue]:
+    world = build_hamsterdan_world(root=root)
+    try:
+        timeline = world.timeline()
+        for command_name, command in (
+            ("hamsterdan.open_pull_request", OPEN_PULL_REQUEST_COMMAND),
+            ("hamsterdan.receive_webhook", RECEIVE_WEBHOOK_COMMAND),
+            ("hamsterdan.stage_webhook", STAGE_WEBHOOK_COMMAND),
+            ("hamsterdan.accept_staged_observation", ACCEPT_STAGED_OBSERVATION_COMMAND),
+            ("hamsterdan.fold_accepted_observation", FOLD_ACCEPTED_OBSERVATION_COMMAND),
+            ("hamsterdan.complete_observation_delivery", COMPLETE_OBSERVATION_DELIVERY_COMMAND),
+        ):
+            timeline.command(command_name, command.model_dump(mode="json"))
         return cast("dict[str, JsonValue]", observe_hamsterdan(root).model_dump(mode="json"))
     finally:
         world.close()
@@ -573,6 +616,233 @@ class TestWebhookRootSimulation:
         assert replayed.operations == len(artifact.operations)
         assert replayed.journal_digest == artifact.expected.journal_digest
 
+    def test_full_cumulative_tracer_exposes_fold_and_host_completion_as_separate_replay_cuts(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        record_root = tmp_path / "record"
+        world = build_hamsterdan_world(root=record_root)
+        try:
+            timeline = world.timeline()
+            timeline.command(
+                "hamsterdan.open_pull_request",
+                OPEN_PULL_REQUEST_COMMAND.model_dump(mode="json"),
+            )
+            opened = observe_hamsterdan(record_root)
+            timeline.command(
+                "hamsterdan.receive_webhook",
+                RECEIVE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            )
+            custody = observe_hamsterdan(record_root)
+            timeline.command(
+                "hamsterdan.stage_webhook",
+                STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            )
+            staged = observe_hamsterdan(record_root)
+            timeline.command(
+                "hamsterdan.accept_staged_observation",
+                ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+            accepted = observe_hamsterdan(record_root)
+            fold_result = timeline.command(
+                "hamsterdan.fold_accepted_observation",
+                FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+            folded = observe_hamsterdan(record_root)
+            completion_result = timeline.command(
+                "hamsterdan.complete_observation_delivery",
+                COMPLETE_OBSERVATION_DELIVERY_COMMAND.model_dump(mode="json"),
+            )
+            timeline.finish(Disposition.QUIESCENT)
+            artifact = world.artifact("cv21.ds2.complete-tracer")
+        finally:
+            world.close()
+
+        completed = observe_hamsterdan(record_root)
+        replayed = replay_hamsterdan(artifact, root=tmp_path / "replay")
+        fold_value = cast("dict[str, JsonValue]", fold_result.value)
+        completion_value = cast("dict[str, JsonValue]", completion_result.value)
+        assert opened.readiness.history_records == 21
+        assert opened.delivery.rows == 0
+        assert custody.delivery.rows == 1
+        assert custody.ingress.posture is None
+        assert staged.ingress.posture == EXPECTED_STAGING
+        assert staged.readiness.history_records == 21
+        assert accepted.readiness.history_records == 23
+        assert accepted.readiness.in_flight_occurrences == 1
+        assert accepted.readiness.fold_posture is None
+        assert accepted.delivery.completion_rows == 0
+        assert fold_result.disposition == "applied"
+        assert fold_value["cut"] == "observation_folded"
+        assert folded.readiness.history_records == FOLDED_HISTORY_RECORDS
+        assert folded.readiness.in_flight_occurrences == 0
+        assert folded.readiness.fold_posture is not None
+        assert folded.readiness.fold_posture.cut == "observation_folded"
+        assert folded.readiness.delivery is not None
+        assert folded.readiness.delivery.record_order == (
+            "ExternalEventDelivered",
+            "FiringBegun",
+            "TokensProduced",
+            "FiringCompleted",
+        )
+        assert folded.readiness.delivery.produced_place == "life.heads"
+        assert folded.readiness.delivery.produced_entries == ()
+        assert folded.readiness.delivery.completed_transition == "on_head"
+        assert folded.delivery.completion_rows == 0
+        assert completion_result.disposition == "applied"
+        assert completion_value["cut"] == "host_delivery_completed"
+        assert completed.readiness == folded.readiness
+        assert completed.delivery.completion_rows == 1
+        assert completed.delivery.completion is not None
+        assert completed.delivery.completion.history_delivery_identity == EXPECTED_HISTORY_DELIVERY_IDENTITY
+        assert completed.delivery.completion.workflow_cut == "observation_folded"
+        assert completed.delivery.completion.cut == "host_delivery_completed"
+        assert root_resource_usage(record_root).values["pending.motus.tasks"] == 0
+        assert replayed.outcome == "pass"
+        assert replayed.operations == len(artifact.operations)
+        assert replayed.journal_digest == artifact.expected.journal_digest
+
+    def test_fresh_root_exact_retries_append_neither_fold_nor_host_completion(self, tmp_path: Path) -> None:
+        root = tmp_path / "state"
+        completed_state(root)
+        before = observe_hamsterdan(root)
+        world = build_hamsterdan_world(root=root)
+        try:
+            folded = world.timeline().command(
+                "hamsterdan.fold_accepted_observation",
+                FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+            completed = world.timeline().command(
+                "hamsterdan.complete_observation_delivery",
+                COMPLETE_OBSERVATION_DELIVERY_COMMAND.model_dump(mode="json"),
+            )
+            world.timeline().finish(Disposition.QUIESCENT)
+        finally:
+            world.close()
+
+        assert folded.disposition == "idempotent"
+        assert completed.disposition == "idempotent"
+        assert observe_hamsterdan(root) == before
+
+    def test_fold_and_host_completion_refuse_out_of_order_without_hidden_action(self, tmp_path: Path) -> None:
+        root = tmp_path / "state"
+        world = build_hamsterdan_world(root=root)
+        try:
+            timeline = world.timeline()
+            for name, command in (
+                ("hamsterdan.open_pull_request", OPEN_PULL_REQUEST_COMMAND),
+                ("hamsterdan.receive_webhook", RECEIVE_WEBHOOK_COMMAND),
+                ("hamsterdan.stage_webhook", STAGE_WEBHOOK_COMMAND),
+            ):
+                timeline.command(name, command.model_dump(mode="json"))
+            with pytest.raises(AcceptedObservationNotFoundError):
+                timeline.command(
+                    "hamsterdan.fold_accepted_observation",
+                    FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+                )
+            assert observe_hamsterdan(root).readiness.history_records == 21
+            timeline.command(
+                "hamsterdan.accept_staged_observation",
+                ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+            with pytest.raises(ObservationNotFoldedError):
+                timeline.command(
+                    "hamsterdan.complete_observation_delivery",
+                    COMPLETE_OBSERVATION_DELIVERY_COMMAND.model_dump(mode="json"),
+                )
+        finally:
+            world.close()
+
+        state = observe_hamsterdan(root)
+        assert state.readiness.history_records == 23
+        assert state.readiness.in_flight_occurrences == 1
+        assert state.delivery.completion_rows == 0
+
+    def test_late_collision_preserves_fold_completion_and_quarantine_evidence(self, tmp_path: Path) -> None:
+        root = tmp_path / "state"
+        world = build_hamsterdan_world(root=root)
+        try:
+            timeline = world.timeline()
+            for name, command in (
+                ("hamsterdan.open_pull_request", OPEN_PULL_REQUEST_COMMAND),
+                ("hamsterdan.receive_webhook", RECEIVE_WEBHOOK_COMMAND),
+                ("hamsterdan.stage_webhook", STAGE_WEBHOOK_COMMAND),
+                ("hamsterdan.accept_staged_observation", ACCEPT_STAGED_OBSERVATION_COMMAND),
+                ("hamsterdan.fold_accepted_observation", FOLD_ACCEPTED_OBSERVATION_COMMAND),
+                ("hamsterdan.receive_webhook", COLLIDE_WEBHOOK_COMMAND),
+                ("hamsterdan.complete_observation_delivery", COMPLETE_OBSERVATION_DELIVERY_COMMAND),
+            ):
+                timeline.command(name, command.model_dump(mode="json"))
+            timeline.finish(Disposition.QUIESCENT)
+        finally:
+            world.close()
+
+        state = observe_hamsterdan(root)
+        assert state.delivery.retained == EXPECTED_QUARANTINED_DELIVERY
+        assert state.ingress.posture == EXPECTED_STAGING
+        assert state.readiness.fold_posture is not None
+        assert state.readiness.fold_posture.head.sha == "a" * 40
+        assert state.delivery.completion_rows == 1
+        assert state.delivery.completion is not None
+        assert state.delivery.completion.history_delivery_identity == EXPECTED_HISTORY_DELIVERY_IDENTITY
+
+
+class TestReadinessLifecycleOwnerSimulation:
+    """The readiness owner proves unfinished acceptance and exact fold separately."""
+
+    def test_owner_world_folds_only_after_acceptance_and_replays_from_a_fresh_root(self, tmp_path: Path) -> None:
+        record_root = tmp_path / "record"
+        world = build_readiness_world(root=record_root)
+        try:
+            timeline = world.timeline()
+            timeline.command(
+                "readiness.open_lifecycle",
+                OPEN_READINESS_COMMAND.model_dump(mode="json"),
+            )
+            timeline.command(
+                "readiness.stage_acquisition",
+                STAGE_ACQUISITION_COMMAND.model_dump(mode="json"),
+            )
+            timeline.command(
+                "readiness.accept_staged_observation",
+                ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+            accepted = readiness_state(
+                record_root / "instance",
+                dispatch_path=record_root / "dispatch.sqlite3",
+                ingress_path=record_root / "readiness-ingress.sqlite3",
+            )
+            fold = timeline.command(
+                "readiness.fold_accepted_observation",
+                FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+            timeline.finish(Disposition.QUIESCENT)
+            artifact = world.artifact("cv21.ds2.readiness-fold")
+        finally:
+            world.close()
+
+        state = readiness_state(
+            record_root / "instance",
+            dispatch_path=record_root / "dispatch.sqlite3",
+            ingress_path=record_root / "readiness-ingress.sqlite3",
+        )
+        replayed = replay_readiness(artifact, root=tmp_path / "replay")
+        assert accepted.history_records == 23
+        assert accepted.in_flight_occurrences == 1
+        assert accepted.fold_posture is None
+        assert fold.disposition == "applied"
+        assert state.history_records == FOLDED_HISTORY_RECORDS
+        assert state.in_flight_occurrences == 0
+        assert state.fold_posture is not None
+        assert state.fold_posture.cut == "observation_folded"
+        assert replayed.outcome == "pass"
+        assert replayed.operations == len(artifact.operations)
+        assert replayed.journal_digest == artifact.expected.journal_digest
+
+
+class TestWebhookRootCollisionSimulation:
+    """The cumulative root preserves quarantine separately from readiness authority."""
+
     def test_quarantined_acquisition_stages_one_empty_collision_manifest_and_replays(self, tmp_path: Path) -> None:
         record_root = tmp_path / "record"
         world = build_hamsterdan_world(root=record_root)
@@ -926,6 +1196,229 @@ class TestWebhookCheckerSensitivity:
 
         assert not result.passed
         assert cast("dict[str, JsonValue]", result.detail)["history_acceptance"] is False
+
+    @pytest.mark.parametrize(
+        ("path", "replacement"),
+        [
+            pytest.param(("readiness", "history_records"), 24, id="record-count"),
+            pytest.param(("readiness", "in_flight_occurrences"), 1, id="unfinished-remains"),
+            pytest.param(
+                ("readiness", "delivery", "record_order"),
+                ["ExternalEventDelivered", "FiringBegun", "FiringCompleted", "TokensProduced"],
+                id="terminal-order",
+            ),
+            pytest.param(("readiness", "delivery", "produced_place"), "life.other", id="produced-place"),
+            pytest.param(("readiness", "delivery", "produced_entries"), [None], id="produced-entries"),
+            pytest.param(
+                ("readiness", "delivery", "produced_tokens", 0, "color"),
+                "Mutated",
+                id="produced-color",
+            ),
+            pytest.param(
+                ("readiness", "delivery", "produced_tokens", 0, "data", "head"),
+                "c" * 40,
+                id="produced-token",
+            ),
+            pytest.param(
+                ("readiness", "delivery", "completed_transition"),
+                "on_mutated",
+                id="completed-transition",
+            ),
+            pytest.param(("readiness", "delivery", "folded"), False, id="delivery-folded"),
+            pytest.param(("readiness", "folded"), False, id="readiness-folded"),
+            pytest.param(
+                ("readiness", "fold_posture", "subject", "installation_id"),
+                45,
+                id="posture-subject",
+            ),
+            pytest.param(
+                ("readiness", "fold_posture", "instance_id"),
+                "github:45:31:pr:7",
+                id="posture-instance",
+            ),
+            pytest.param(
+                ("readiness", "fold_posture", "bridge_identity"),
+                "workflow-bridge/mutated@3",
+                id="posture-bridge",
+            ),
+            pytest.param(
+                ("readiness", "fold_posture", "manifest_id"),
+                f"manifest:v1:sha256:{'f' * 64}",
+                id="posture-manifest",
+            ),
+            pytest.param(
+                ("readiness", "fold_posture", "grant_id"),
+                f"grant:v1:sha256:{'f' * 64}",
+                id="posture-grant",
+            ),
+            pytest.param(
+                ("readiness", "fold_posture", "manifest_digest"),
+                "f" * 64,
+                id="posture-manifest-digest",
+            ),
+            pytest.param(("readiness", "fold_posture", "entry_order"), 1, id="posture-entry"),
+            pytest.param(
+                ("readiness", "fold_posture", "observation_key"),
+                f"obs:v1:sha256:{'f' * 64}",
+                id="posture-key",
+            ),
+            pytest.param(
+                ("readiness", "fold_posture", "delivery_identity"),
+                f"history-delivery:v1:sha256:{'f' * 64}",
+                id="posture-delivery",
+            ),
+            pytest.param(("readiness", "fold_posture", "occurrence"), 2, id="posture-occurrence"),
+            pytest.param(("readiness", "fold_posture", "phase"), "stopped", id="posture-phase"),
+            pytest.param(("readiness", "fold_posture", "local_incarnation"), 2, id="posture-incarnation"),
+            pytest.param(("readiness", "fold_posture", "head", "repository_id"), 33, id="posture-head-repository"),
+            pytest.param(("readiness", "fold_posture", "head", "ref"), "mutated", id="posture-head-ref"),
+            pytest.param(("readiness", "fold_posture", "head", "sha"), "c" * 40, id="posture-head-sha"),
+            pytest.param(("readiness", "fold_posture", "base", "repository_id"), 33, id="posture-base-repository"),
+            pytest.param(("readiness", "fold_posture", "base", "ref"), "mutated", id="posture-base-ref"),
+            pytest.param(("readiness", "fold_posture", "base", "sha"), "c" * 40, id="posture-base-sha"),
+            pytest.param(("readiness", "fold_posture", "mergeable"), True, id="posture-mergeable"),
+            pytest.param(
+                ("readiness", "fold_posture", "policy_revision"),
+                "policy:mutated",
+                id="posture-policy",
+            ),
+            pytest.param(("readiness", "fold_posture", "strict_base"), False, id="posture-strict-base"),
+            pytest.param(("readiness", "fold_posture", "base_current"), True, id="posture-base-current"),
+            pytest.param(("readiness", "fold_posture", "finished"), False, id="posture-finished"),
+            pytest.param(("readiness", "fold_posture", "folded"), False, id="posture-folded"),
+            pytest.param(("readiness", "fold_posture", "cut"), "mutated", id="posture-cut"),
+        ],
+    )
+    def test_readiness_checker_rejects_each_changed_terminal_or_fold_projection_field(
+        self,
+        tmp_path: Path,
+        path: tuple[str | int, ...],
+        replacement: JsonValue,
+    ) -> None:
+        value = folded_state(tmp_path)
+        replace_path_value(value, path, replacement)
+        readiness = cast("dict[str, JsonValue]", value["readiness"])
+
+        try:
+            result = ReadinessChecker().check(checker_observation(readiness))
+        except ValueError:
+            return
+
+        assert not result.passed
+
+    @pytest.mark.parametrize(
+        ("path", "replacement"),
+        [
+            pytest.param(("delivery", "completion_rows"), 2, id="row-count"),
+            pytest.param(
+                ("delivery", "completion", "provider_route_id"),
+                "github:mutated",
+                id="provider-route",
+            ),
+            pytest.param(
+                ("delivery", "completion", "delivery_id"),
+                "22222222-2222-4222-8222-222222222222",
+                id="delivery",
+            ),
+            pytest.param(("delivery", "completion", "custody_generation"), 2, id="generation"),
+            pytest.param(
+                ("delivery", "completion", "subject", "repository_id"),
+                32,
+                id="subject",
+            ),
+            pytest.param(
+                ("delivery", "completion", "instance_id"),
+                "github:44:32:pr:7",
+                id="instance",
+            ),
+            pytest.param(
+                ("delivery", "completion", "bridge_identity"),
+                "workflow-bridge/mutated@3",
+                id="bridge",
+            ),
+            pytest.param(
+                ("delivery", "completion", "manifest_id"),
+                f"manifest:v1:sha256:{'f' * 64}",
+                id="manifest",
+            ),
+            pytest.param(
+                ("delivery", "completion", "grant_id"),
+                f"grant:v1:sha256:{'f' * 64}",
+                id="grant",
+            ),
+            pytest.param(
+                ("delivery", "completion", "manifest_digest"),
+                "f" * 64,
+                id="manifest-digest",
+            ),
+            pytest.param(("delivery", "completion", "entry_order"), 1, id="entry"),
+            pytest.param(
+                ("delivery", "completion", "observation_key"),
+                f"obs:v1:sha256:{'f' * 64}",
+                id="key",
+            ),
+            pytest.param(
+                ("delivery", "completion", "history_delivery_identity"),
+                f"history-delivery:v1:sha256:{'f' * 64}",
+                id="history-delivery",
+            ),
+            pytest.param(("delivery", "completion", "occurrence"), 2, id="occurrence"),
+            pytest.param(
+                ("delivery", "completion", "workflow_cut"),
+                "mutated",
+                id="workflow-cut",
+            ),
+            pytest.param(("delivery", "completion", "cut"), "mutated", id="completion-cut"),
+            pytest.param(
+                ("readiness", "fold_posture", "delivery_identity"),
+                f"history-delivery:v1:sha256:{'f' * 64}",
+                id="cross-owner-history",
+            ),
+            pytest.param(("readiness", "delivery", "occurrence"), 2, id="cross-owner-occurrence"),
+        ],
+    )
+    def test_root_checker_rejects_each_changed_host_completion_correlation(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        path: tuple[str | int, ...],
+        replacement: JsonValue,
+    ) -> None:
+        value = completed_state(tmp_path)
+        replace_path_value(value, path, replacement)
+
+        def accept_readiness(checker: ReadinessChecker, observation: Observation) -> CheckResult:
+            del checker, observation
+            return CheckResult(passed=True, detail={})
+
+        def accept_ingress(checker: IngressChecker, observation: Observation) -> CheckResult:
+            del checker, observation
+            return CheckResult(
+                passed=True,
+                detail={
+                    "acquisition": True,
+                    "manifest": True,
+                    "entry_order": True,
+                    "key": True,
+                    "canonical_bytes": True,
+                    "observation": True,
+                    "grant": True,
+                    "decision": True,
+                    "acquisition_bytes": True,
+                    "resources": True,
+                },
+            )
+
+        monkeypatch.setattr(ReadinessChecker, "check", accept_readiness)
+        monkeypatch.setattr(IngressChecker, "check", accept_ingress)
+
+        try:
+            result = HamsterdanChecker().check(checker_observation(value))
+        except ValueError:
+            return
+
+        assert not result.passed
+        assert cast("dict[str, JsonValue]", result.detail)["host_completion"] is False
 
     def test_ingress_checker_identity_binds_the_resource_contract(self) -> None:
         changed_resources = {
@@ -1379,10 +1872,10 @@ class TestWebhookRootResources:
                 """
                 CREATE TABLE root_binding (singleton, instance_id, bridge_identity);
                 INSERT INTO root_binding VALUES (
-                    1, 'github:44:31:pr:7', 'workflow-bridge/head-seen-history-acceptance@2'
+                    1, 'github:44:31:pr:7', 'workflow-bridge/head-seen-history-fold@3'
                 );
                 INSERT INTO root_binding VALUES (
-                    2, 'github:44:31:pr:8', 'workflow-bridge/head-seen-history-acceptance@2'
+                    2, 'github:44:31:pr:8', 'workflow-bridge/head-seen-history-fold@3'
                 );
                 """
             )
@@ -1399,7 +1892,7 @@ class TestWebhookRootResources:
         with sqlite3.connect(instance_root / "readiness.sqlite3") as connection:
             connection.executescript("CREATE TABLE root_binding (singleton, instance_id, bridge_identity)")
             connection.execute(
-                "INSERT INTO root_binding VALUES (1, ?, 'workflow-bridge/head-seen-history-acceptance@2')",
+                "INSERT INTO root_binding VALUES (1, ?, 'workflow-bridge/head-seen-history-fold@3')",
                 (sentinel,),
             )
 

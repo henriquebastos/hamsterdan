@@ -56,7 +56,10 @@ runtime and the first real call sites present. They must not expose a generic
 `dict`, legacy model, topology path, or untyped terminal. DS2 task 4 now supplies
 the first input signature: exact reconstructed `IngressManifest`,
 `AdmissionGrant`, and `IngressEntry` become a bridge-private delivery while the
-caller receives only detached `HistoryAcceptancePosture`.
+caller receives only detached `HistoryAcceptancePosture`. Task 5 adds the
+narrow post-completion signature: the same exact authority plus one bounded
+public runtime snapshot and complete finite History page become immutable
+`ObservationFoldPosture`.
 
 ## Translation laws
 
@@ -107,7 +110,7 @@ removal replacement in CV22
 | Family | First CV21 tracer | Required direction |
 |---|---:|---|
 | subject, seed, lifecycle posture | DS1 | retained runtime state → detached new posture |
-| Head observation | DS2 task 4 | `HeadObservation` → retained `HeadSeen` at `on_head`; open incarnation 1 only; exact SHAs; explicit-true mergeability; manifest policy; strict/current base true/false; versioned identified unfinished History acceptance |
+| Head observation | DS2 tasks 4–5 | `HeadObservation` → retained `HeadSeen` at `on_head`; open incarnation 1 only; exact SHAs; explicit-true mergeability; manifest policy; strict/current base true/false; versioned identified unfinished History acceptance, exact source completion, and bounded detached post-fold projection |
 | draft/ready/comment/human acquisition as first used | later owning tracer | focused new observation → exact retained ingress token; no family is implied by the Head mapping |
 | dashboard publication | DS3 | retained request → typed new Activity; typed new terminal → retained variant |
 | provider publication and recovery outcomes | DS4 | new effect outcome → exact retained terminal |
@@ -121,8 +124,13 @@ DS10–DS12 add no workflow family unless a real discovery or qualification path
 exposes an omission. An omission updates this census before implementation; it
 does not authorize a generic fallback.
 
-The first DS2 mapping is delivered and fail-closed under
-`workflow-bridge/head-seen-history-acceptance@2`. The webhook-derived Head
+The complete first DS2 mapping is delivered and fail-closed under
+`workflow-bridge/head-seen-history-fold@3`. Task 5 deliberately replaces the
+task-4 acceptance-only `workflow-bridge/head-seen-history-acceptance@2`
+identity because post-completion History correspondence and retained-state
+projection are now part of the complete mapping. This changes the derived
+History delivery identity; fresh construction has no old roots to migrate. The
+webhook-derived Head
 observation carries exact repository/ref/lifecycle semantics in canonical
 source-neutral staging, while retained `HeadSeen` consumes only the exact head
 and base SHAs. Bridge conversion maps `mergeable=True` only when the observation
@@ -146,36 +154,56 @@ identity without storing a second acceptance record. Public
 `Engine.accept_delivery` receives the private source/token and that identity
 once per authority turn with no scope. Fresh delivery appends exactly
 `ExternalEventDelivered` then `FiringBegun`; exact unfinished reoffer returns
-the same occurrence without append. `PriorAcknowledgement` and unexpected
-scoped acknowledgement are bounded refusals, never implicit completion.
+the same occurrence without append. The fold turn validates that returned
+carrier's instance, source, identity, and occurrence, then calls public
+`Engine.complete_delivery` exactly once. Its `FiringOutcome` must consume
+nothing, produce only the exact `HeadSeen` at `life.heads`, and contain the
+ordered `FiringBegun`, `TokensProduced`, `FiringCompleted` batch for the same
+occurrence. No broad advancement or convenience drain is used.
 
 Task 4 correspondence drives only new CV21 inputs through host/readiness into
-the real retained production Net and independently inspects neutral History
-facts. The owner and root Worlds distinguish custody, staging, unfinished
-acceptance, and not-yet-implemented fold, then exactly replay from fresh roots.
-Checker mutations cover every bridge field and authority identity. Actual
-`SIGKILL` after durable acceptance but before caller acknowledgement proves
-fresh exact reoffer converges on the same occurrence with no append. Task 5
-must exact-reoffer to recover the `AcceptedDelivery` carrier, then call
-`Engine.complete_delivery` only for that occurrence; task 4 has no fold or host
-completion. The correspondence also caps History files before Engine load,
-uses one finite public History page for frontier and prior-terminal inspection,
-and budgets the neutral unfinished-firing count at zero before acceptance and
-one afterward. Cumulative root observation mounts the unchanged owner-local
-staging posture, and accepted correspondence requires exact equality with the
-original `novel` ingress authority. File/byte and host-catalog scans stop at
-their ceilings rather than materializing unbounded state. Malformed History
-load has one fixed secret-free readiness error, while direct public-seam tests
-pin one source/token/identity acceptance without scope and explicit prior/
-scoped acknowledgement handling.
+the real retained production Net and independently inspects unfinished neutral
+History facts. Task 5 continues that exact path through source completion and
+bounded actual retained-state projection. The owner and root Worlds distinguish
+custody, staging, unfinished acceptance, fold, and host completion, then exactly
+replay each command from fresh roots. Checker mutations cover every bridge
+field, authority identity, terminal fact, projected posture field, and host
+receipt correlation.
+
+`PriorAcknowledgement` after response loss never causes another completion
+call. One complete finite History page must prove a unique exact
+`ExternalEventDelivered`, `FiringBegun`, `TokensProduced`, `FiringCompleted`
+suffix with no failure, partial, malformed, or unrelated terminal. Bounded
+runtime inspection must then prove status `running`, no in-flight occurrence,
+one exact `life.heads` token, and retained `LifeState` at running incarnation 0.
+The bridge combines those retained facts with source-neutral staging to return
+only the strict new-facing subject/instance, identity/occurrence, local
+incarnation 1, repository/ref/SHA branch tips, explicit mergeability, policy,
+strict/current-base falsehood, finished/folded state, and
+`observation_folded` cut. It does not execute the newly enabled retained
+transition or claim provider currency.
+
+Actual `SIGKILL` after durable acceptance, after source completion, and after
+later host completion proves fresh exact reoffer converges on the same
+occurrence/fold/receipt without another append. Cumulative root observation
+mounts unchanged owner-local staging and requires exact equality from the
+original `novel` ingress authority through History and completion. The
+correspondence caps History files before Engine load, uses one finite public
+History page, and bounds unfinished firings, retained marking, completion rows,
+files, bytes, SQLite pages, diagnostics, and checker materialization. Direct
+public-seam tests pin source/token/identity acceptance without scope, exact
+selected-carrier completion, and prior/scoped acknowledgement handling.
 
 The 2 MiB aggregate History file ceiling is pre-write authority, not only an
 observation bound. Every public Engine load reserves 128 KiB for WAL and
 shared-memory establishment. After the finite identity scan, a fresh identity
 is accepted only when the remeasured database/WAL/shared-memory footprint also
 leaves 1 MiB for the two-record acceptance transaction; a durable exact reoffer
-reserves no append bytes. Strict staging reconstruction and malformed History
-load replace decoder failures with fixed cause-free readiness diagnostics.
+reserves no append bytes. An unfinished completion remeasures and reserves the
+same 1 MiB headroom for its two terminal records immediately before mutation;
+an already ended reoffer reserves none. Strict staging reconstruction,
+malformed History/runtime projection, and host receipt reconstruction replace
+decoder failures with fixed cause-free owner diagnostics.
 
 ## Prohibited reuse
 

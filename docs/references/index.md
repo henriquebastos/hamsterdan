@@ -89,11 +89,15 @@
   Petrus `origin/main` on 2026-08-30 and pinned by Hamsterdan on 2026-08-31. It
   preserves the v4 deterministic-simulation surface and supplies public
   `Engine.accept_delivery(...)` and `Engine.complete_delivery(...)` phases.
-  CV21.DS2 task 4 consumes only acceptance: a first identified delivery commits
+  CV21.DS2 task 4 consumes acceptance: a first identified delivery commits
   adjacent `ExternalEventDelivered` and `FiringBegun`, while an exact unfinished
   reoffer reconstructs the same `AcceptedDelivery` without another append or
-  empty provider commit. Task 5 owns completion of that exact carrier. No
-  private `Instance` access or broad Engine advancement is used.
+  empty provider commit. Task 5 calls `complete_delivery` only with that exact
+  public carrier, validates its exact `FiringOutcome`, and handles an ended
+  reoffer through public `PriorAcknowledgement`, one finite History page, and
+  bounded public runtime inspection. No carrier is forged or deserialized; no
+  private `Instance`, `Engine._instance`, broad Engine advancement, drain, or
+  convenience delivery API is used.
 - CV22 hierarchy evidence inspected 2026-08-28:
   `henriquebastos/petrus@2d26d34de9a1b34b7489ee2207f3492e777a282a`.
   Public `NetSpec` nested stamping flattens child paths into one built Net and

@@ -64,24 +64,22 @@ after private production qualification.
 
 ## Current movement
 
-[CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) owns the current
-delivery movement: the non-selectable reconstruction of the outer system over
-one temporary bridge to the current working Net. CV21.DS1 now provides the
-isolated replacement gate and locally qualified host/readiness/bridge lifecycle
-under `src/hamsterdan2`; CV21.DS2 is active, its signed-webhook custody and
-source-neutral readiness staging, first bridge conversion, and identified
-History-acceptance tasks are delivered, and retained-Net fold plus host
-completion is next. The
-replacement remains non-selectable, uses only fresh disposable state, and has
-no runtime selector or deployment.
+[CV19](roadmap/cv19-private-v0-1-production/index.md) owns the current delivery
+movement: the private `v0.1.0` launch of the current V5 runtime is the first
+production alpha. Its exact candidate and configuration remain qualified on the
+owned `hamsterdan-prod` exe.dev VM; its last recorded systemd posture was
+disabled and inactive. The supervised launch still requires separate explicit
+Navigator approval, followed by one bounded monitoring proof and the tag.
 
-The Navigator paused
-[CV19](roadmap/cv19-private-v0-1-production/index.md) before production launch.
-Its exact V5-only candidate and configuration remain qualified on the owned
-`hamsterdan-prod` exe.dev VM; its last recorded systemd posture was disabled and
-inactive. This roadmap pause performed no runtime operation. Supervised launch,
-one bounded monitoring proof, and private-release history remain resumable but
-are not the current focus.
+[CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) continues as the
+quality track without gating that alpha. Its non-selectable outer-system
+reconstruction uses one temporary bridge to the current working Net. CV21.DS1
+provides the isolated replacement gate and locally qualified host/readiness/
+bridge lifecycle under `src/hamsterdan2`; CV21.DS2 is active, with tasks 1–5
+delivered through exact retained fold, detached post-fold projection, and
+separate host completion. Navigator Experience Report acceptance and DS2
+closure remain; DS3 is not pulled. The replacement uses only fresh disposable
+state and has no runtime selector or deployment.
 
 [CV22](roadmap/cv22-decomposable-readiness-workflow/index.md) then replaces that
 bridge with recursively independent production subnets and owns final cutover.
