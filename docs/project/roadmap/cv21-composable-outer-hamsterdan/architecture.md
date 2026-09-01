@@ -50,8 +50,8 @@ the same outer-facing language after ruling its subnet composition contract.
 Paths are admitted by the tracer that first needs them. DS1 does not create an
 empty final skeleton.
 
-DS1 and the delivered DS2 tasks through unfinished identified History
-acceptance admit this source shape:
+DS1 and the five delivered DS2 implementation tasks through exact retained fold
+and separate host completion admit this source shape:
 
 ```text
 src/hamsterdan2/
@@ -196,8 +196,9 @@ Activity implementation:
 provider acquisition
   -> host delivery custody
   -> readiness manifest/admission
-  -> bridge translation and identified History admission
-  -> retained workflow fold
+  -> bridge translation and unfinished identified History admission
+  -> exact retained source completion and detached fold projection
+  -> host delivery completion
   -> bridge projection of pending typed Activity
   -> Impetus Activity request/occurrence
   -> Motus Dispatch publication
@@ -371,7 +372,10 @@ only workflow-admission ledger.
 
 The sole bridge maps the first admitted family, `HeadObservation` to retained
 `HeadSeen` at source `on_head`, under bridge identity
-`workflow-bridge/head-seen-history-acceptance@2`. It accepts only local
+`workflow-bridge/head-seen-history-fold@3`. Task 5 replaced task 4's
+acceptance-only `@2` identity because the complete mapping now includes exact
+terminal correspondence and post-fold projection; fresh construction has no
+old roots to migrate. The bridge accepts only local
 incarnation 1, lifecycle `open`, `draft=False`, and `merged=False`. It carries
 the exact head and base SHAs, maps mergeability true only when the observation
 is explicitly true, takes policy only from the reconstructed manifest, and
@@ -407,13 +411,16 @@ postures and correlation checks. Owner and root observations independently
 count zero unfinished firings before acceptance and exactly one afterward, and
 budget that neutral count as `retained.readiness.in_flight_occurrences`.
 
-Task 4 deliberately leaves the occurrence unfinished. It creates no
-`FiringCompleted`, `TokensProduced`, retained-Net fold, host completion,
-Dispatch task, Worker turn, provider read or effect, agent work, currentness
-witness, lifecycle successor, or second admission ledger. Task 5 must
-reconstruct staging, load the Engine, exact-reoffer to recover the same
-`AcceptedDelivery` carrier, and call `Engine.complete_delivery` for only that
-occurrence before it may project the retained fold or complete host custody.
+Task 4 deliberately leaves the occurrence unfinished. Task 5 reconstructs
+staging, exact-reoffers to recover that public `AcceptedDelivery`, and calls
+`Engine.complete_delivery` only for its occurrence. A response-loss retry sees
+`PriorAcknowledgement` and instead proves the exact successful terminal from
+one finite History page and bounded runtime inspection. The bridge projects the
+actual retained `life.heads` result into a detached `observation_folded`
+posture. A separate host turn repeats that proof before recording one exact
+completion receipt. Neither turn advances `life.admit_head`, creates Dispatch,
+runs a Worker, reads or mutates the provider, starts agents, establishes
+currentness, increments lifecycle, or creates another admission ledger.
 
 Outside the request, an authority turn claims one host delivery, advances one
 PR through readiness, and either returns detached posture or publishes a Motus
@@ -446,11 +453,13 @@ admission seam. `AdmissionGrant` is manifest-scoped admission authority, never
 fresh effect authority.
 
 The delivered task-3 staging cut stops at the manifest-scoped grant. Task 4
-now converts that staged focused observation through the sole bridge and offers
-identified delivery to Petrus History. Its unfinished acceptance is a third
-observable cut after HTTP custody and source-neutral staging. Task 5 still owns
-the fourth cut, retained-Net fold, plus later host completion; task 4 does not
-collapse those facts.
+converts that staged focused observation through the sole bridge and offers
+identified delivery to Petrus History, ending at unfinished acceptance. Task 5
+exact-reoffers that same immutable authority, completes only the recovered
+source occurrence, projects actual retained state, and later records host
+completion. Custody, HTTP acknowledgement, source-neutral staging, unfinished
+acceptance, retained fold, and host completion remain separately reconstructible
+cuts.
 
 ## Authority and effects
 
@@ -478,6 +487,8 @@ enter agent values, state, processes, or diagnostics.
 | Activity execution and operational report | Motus Worker using the host-composed Activity registry |
 | bridge mapping/version and retained workflow identity | fresh CV21 readiness root |
 | exact observation delivery acceptance and unfinished occurrence | Impetus History through public `Engine.accept_delivery` |
+| exact observation source fold and terminal occurrence | Impetus History through public `Engine.complete_delivery` |
+| delivery completion receipt after fresh fold proof | host delivery custody |
 | ingress manifest and admission grant | readiness ingress custody |
 | review request and attempt | readiness review custody |
 | timer command, acknowledgement, maturity, and delivery | readiness timer custody |
@@ -526,6 +537,29 @@ observation, or History content cannot enter diagnostics. The owner checker
 identity also binds the independently decoded canonical `HeadObservation`, so
 changing the bridge-consumed observation while retaining its key/bytes cannot
 pass.
+
+Task 5 adds strict, separate fold and host-completion commands. A fold turn
+reconstructs staging, exact-reoffers source/token/identity, and either completes
+the returned unfinished carrier once or proves from one finite History page
+that a prior acknowledgement ended in the exact successful terminal batch. It
+then projects only bounded actual retained state into an immutable new-facing
+posture. A later host-completion turn repeats that fold proof itself before
+inserting or reconstructing one finite completion receipt keyed by the original
+acquisition. Real `SIGKILL` scenarios cover process loss after source completion
+and after host completion but before caller acknowledgement. Fresh processes
+append neither another History terminal nor another completion row. Real SQLite
+concurrency serializes both turns through the host catalog writer fence; late
+custody quarantine preserves the original fold/receipt while remaining visible
+separately.
+
+Independent owner and root checkers pin terminal order/content, produced token,
+occurrence disappearance, every detached projection field, every completion
+correlation, and cross-owner custody→staging→History→fold→completion equality.
+Mutation sensitivity covers each mapped field. Bounded inspection limits one
+History page, terminal batch, in-flight set, retained marking place/token count,
+completion singleton rows, SQLite pages, state files/bytes, diagnostics, and
+checker materialization. The source completion does not advance the newly
+enabled retained dashboard transition, so Dispatch pending count remains zero.
 
 The shared Timeline understands only action identity, logical time,
 deterministic choices, process generations, generic occurrence faults, one-leaf

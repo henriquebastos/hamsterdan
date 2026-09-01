@@ -2,8 +2,8 @@
 code: CV21
 level: Value
 status: Active
-status_reason: the 2026-08-31 alpha decision made CV21 the quality track without production pressure; DS2 remains active after delivering unfinished identified History acceptance, with retained-Net fold and host completion next
-updated: 2026-08-31
+status_reason: the alpha decision keeps CV21 as the quality track without production pressure; DS2 tasks 1–5 are delivered and await Navigator Experience Report acceptance and closure
+updated: 2026-09-01
 related:
   - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
   - ../../decisions/records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md
@@ -100,11 +100,12 @@ DS1 bridged lifecycle -> DS2 ingress -> DS3 retained-Net Activity
 11. [CV21.DS11 — Supervise multiple PRs fairly](cv21-ds11-supervise-multiple-prs-fairly.md)
 12. [CV21.DS12 — Qualify the outer system and workflow bridge](cv21-ds12-qualify-outer-system-and-bridge.md)
 
-CV21.DS1 is complete. DS2 is `Active`; tasks 1–4 in its confirmed serial ladder
-are delivered and task 5 remains. DS3 through DS12 remain `Planned`; none is
-pulled merely because its predecessor completed. Each selected tracer must
-expand into reviewable User and Technical Stories and pass its own API-
-strengthening Plan Checkpoint before implementation.
+CV21.DS1 is complete. DS2 remains `Active`; tasks 1–5 in its confirmed serial
+ladder are delivered and await Navigator Experience Report acceptance and
+closure. DS3 through DS12 remain `Planned`; none is pulled merely because its
+predecessor's implementation completed. Each selected tracer must expand into
+reviewable User and Technical Stories and pass its own API-strengthening Plan
+Checkpoint before implementation.
 
 ## Done condition
 
@@ -134,7 +135,8 @@ CV21 is complete when:
 - The bridge may translate representations but may not compensate for or
   improve current workflow behavior.
 - CV21 does not cut over, rename packages, delete V5, or alter current state.
-- CV19 is paused before launch. The current V5 application remains the only
-  runtime while CV21 construction stays non-selectable.
+- CV19 is the resumed alpha delivery focus and still requires separate launch
+  approval. The current V5 application remains the only runtime while CV21
+  construction stays non-selectable.
 - Provider mutations, deployment, state actions, commit, push, and release keep
   their separate explicit approval boundaries.

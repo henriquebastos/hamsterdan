@@ -20,6 +20,8 @@ GITHUB_WEBHOOKS = SOURCE / "github_app" / "webhooks.py"
 HOST_API = SOURCE / "host" / "api.py"
 HOST_APPLICATION = SOURCE / "host" / "application.py"
 HOST_COMPOSITION = SOURCE / "host" / "composition.py"
+HOST_DELIVERY = SOURCE / "host" / "delivery.py"
+HOST_VALUES = SOURCE / "host" / "values.py"
 INGRESS = SOURCE / "readiness" / "ingress.py"
 INGRESS_VALUES = SOURCE / "readiness" / "ingress_values.py"
 PROJECTION = SOURCE / "readiness" / "projection.py"
@@ -214,6 +216,8 @@ def test_webhook_http_rim_cannot_open_workflow_runtime() -> None:
 def test_http_acknowledgement_cannot_invoke_staging_bridge_history_or_fold() -> None:
     forbidden_names = {
         "accept_staged_observation",
+        "fold_accepted_observation",
+        "complete_observation_delivery",
         "build_observation_acceptance_authority",
         "build_staging_authority",
         "stage",
@@ -300,7 +304,7 @@ def test_process_loss_evidence_drives_the_composed_asgi_boundary() -> None:
     assert "hamsterdan2.github_app.webhooks" not in imports
 
 
-def test_readiness_runtime_alone_owns_engine_history_and_dispatch() -> None:
+def test_runtime_owns_engine_history_and_dispatch_while_bridge_validates_public_outcomes() -> None:
     runtime_modules = (
         "petrus.engine",
         "petrus.impetus.history_store",
@@ -317,7 +321,7 @@ def test_readiness_runtime_alone_owns_engine_history_and_dispatch() -> None:
         and any(matches_module(name, module) for name in source_imports(path) for module in runtime_modules)
     }
 
-    assert escaped == {}
+    assert escaped == {BRIDGE: ["petrus.impetus.instance"]}
     assert {
         name for name in source_imports(RUNTIME) if any(matches_module(name, module) for module in runtime_modules)
     } == {
@@ -371,13 +375,15 @@ def test_history_acceptance_uses_only_the_identified_public_petrus_cut() -> None
     paths = tuple(path for path in SOURCE.rglob("*.py") if "simulation" not in path.relative_to(SOURCE).parts)
     calls, private_accesses, private_instance_names = petrus_acceptance_usage(paths)
 
-    assert calls == {RUNTIME: ["accept_delivery"]}
+    assert {path: sorted(values) for path, values in calls.items()} == {
+        RUNTIME: ["accept_delivery", "accept_delivery", "complete_delivery"]
+    }
     assert private_accesses == {}
     assert private_instance_names == {}
 
 
 def test_history_is_the_only_workflow_admission_ledger() -> None:
-    schema_paths = (SOURCE / "host" / "catalog.py", INGRESS)
+    schema_paths = (SOURCE / "host" / "catalog.py", HOST_DELIVERY, INGRESS)
     for path in schema_paths:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
         schemas = [
@@ -391,6 +397,72 @@ def test_history_is_the_only_workflow_admission_ledger() -> None:
         assert "history_accept" not in normalized
         assert "accepted_delivery" not in normalized
         assert "admission_pointer" not in normalized
+
+
+def test_host_completion_schema_retains_correlation_not_workflow_outcomes() -> None:
+    tree = ast.parse(HOST_DELIVERY.read_text(encoding="utf-8"), filename=str(HOST_DELIVERY.relative_to(ROOT)))
+    schema = next(
+        ast.literal_eval(node.value)
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "SCHEMA" for target in node.targets)
+    ).lower()
+
+    assert "delivery_completions" in schema
+    assert "history_delivery_identity" in schema
+    assert "workflow_cut" in schema
+    assert "token" not in schema
+    assert "firing" not in schema
+    assert "marking" not in schema
+    assert "outcome" not in schema
+
+
+def test_new_facing_fold_and_completion_values_do_not_import_or_name_runtime_values() -> None:
+    for path in (INGRESS_VALUES, HOST_VALUES):
+        imports = source_imports(path)
+        assert not any(matches_module(name, "petrus") for name in imports)
+        assert not any(matches_module(name, "hamsterdan") for name in imports)
+
+    forbidden_fields = {
+        "carrier",
+        "firing_outcome",
+        "marking",
+        "petrus_token",
+        "provider",
+        "runtime_snapshot",
+    }
+    for path, class_name in (
+        (INGRESS_VALUES, "ObservationFoldPosture"),
+        (HOST_VALUES, "HostDeliveryCompletionReceipt"),
+    ):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
+        model = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name)
+        fields = {
+            node.target.id
+            for node in model.body
+            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+        }
+        assert fields.isdisjoint(forbidden_fields)
+
+
+def test_task_5_runtime_never_broadly_advances_or_executes_downstream_work() -> None:
+    forbidden_calls = {
+        "advance",
+        "deliver",
+        "drain",
+        "reconcile",
+        "run_activity",
+        "run_worker",
+        "start_worker",
+    }
+    for path in (RUNTIME, BRIDGE, HOST_APPLICATION, HOST_COMPOSITION):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
+        calls = {
+            node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        } | {node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+        assert calls.isdisjoint(forbidden_calls), f"{path.relative_to(ROOT)} invokes broad/downstream work"
 
 
 def test_simulation_is_the_only_petrus_testing_consumer() -> None:

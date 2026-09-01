@@ -54,36 +54,55 @@ admission, and fold cuts remain distinct. The bridge translates the accepted
 focused observation into the retained input; it does not become another
 admission ledger.
 
-Tasks 1–4 now implement this chain through immutable source-neutral staging and
-unfinished identified History acceptance: the exact Head observation/key, one
-acquisition manifest and grant, ordered entry, closed durable classification,
-finite SQLite custody, detached reconstruction, the separate host-composed
-authority turn, one exact bridge conversion, and public Petrus acceptance. The
-task-4 cut ends after adjacent `ExternalEventDelivered` and `FiringBegun`, with
-the retained occurrence still unfinished. Task 5 owns
-`Engine.complete_delivery` for the exact reconstructed carrier, retained fold,
-detached post-fold posture, and host completion.
+Tasks 1–5 now implement this chain through immutable source-neutral staging,
+unfinished identified History acceptance, exact source completion, detached
+post-fold projection, and separate host completion. The chain includes the
+exact Head observation/key, one acquisition manifest and grant, ordered entry,
+closed durable classification, finite SQLite custody, detached reconstruction,
+separate host-composed authority turns, one exact bridge conversion, and public
+Petrus acceptance/completion. The task-4 cut ends after adjacent
+`ExternalEventDelivered` and `FiringBegun`; task 5 exact-reoffers immutable
+authority to recover that carrier, completes only its occurrence, validates the
+terminal History batch and real retained marking, then records host completion
+only after a fresh fold proof.
 
-The first bridge correspondence is now fixed under
-`workflow-bridge/head-seen-history-acceptance@2`: source-neutral
+The complete first bridge correspondence is fixed under
+`workflow-bridge/head-seen-history-fold@3`: source-neutral
 `HeadObservation` maps to retained `HeadSeen` at `on_head` only for local
 incarnation 1, open, non-draft, non-merged evidence. Head/base SHAs are exact;
 only explicit true mergeability maps true; policy comes from the exact
 manifest; and strict-base/base-current map to true/false. The stable version-1
 delivery identity binds bridge, manifest, grant digest, entry order, and key.
-Exact reoffer recovers one unfinished occurrence from History; no host or
-readiness accepted pointer exists. The host registration and readiness-root
-singletons are reconstructed through type-valid, byte-bounded projections;
-malformed stored values never cross the boundary or enter detached diagnostics.
-The cumulative root mounts the unchanged owner-local staging posture and
-requires exact equality among ingress authority, readiness observation, and
-accepted History correspondence. All History, catalog-row, file, and byte
-observations stop at fixed ceilings before complete materialization. History
-load reserves 128 KiB of aggregate database/WAL/shared-memory capacity, and a
-new identified acceptance remeasures and reserves 1 MiB for its exact
-two-record transaction before calling Petrus. Strict retained acquisition,
-observation, and History decoder failures become fixed cause-free readiness
-diagnostics.
+Task 5 deliberately supersedes task 4's acceptance-only `@2` identity because
+the complete mapping now includes terminal-order validation and post-fold
+projection; fresh construction has no old roots to migrate. Exact reoffer
+recovers one unfinished occurrence from History or proves its exact successful
+terminal. No host or readiness accepted pointer exists. The strict detached
+fold posture proves subject/instance, identity/occurrence, running phase, local
+incarnation 1, source-neutral branch tips, retained folded SHAs, mergeability,
+policy, strict/current-base posture, no unfinished occurrence, and the
+`observation_folded` cut without leaking retained or Petrus values.
+
+History remains the sole admission/fold ledger. The finite host completion
+receipt is only a custody acknowledgement keyed by the original route and
+delivery. It binds custody generation, subject/instance, bridge,
+manifest/grant/digest/entry/key, History delivery/occurrence, and both cut
+identities. A first exact write inserts once; exact replay reconstructs without
+write; changed correlation never overwrites. The original normalized delivery
+and any late quarantine evidence remain intact.
+
+The host registration and readiness-root singletons are reconstructed through
+type-valid, byte-bounded projections; malformed stored values never cross the
+boundary or enter detached diagnostics. The cumulative root mounts unchanged
+owner-local staging and requires exact equality from ingress authority through
+History fold and host completion. All History, catalog/completion rows, files,
+bytes, marking places/tokens, and diagnostics stop at fixed ceilings before
+complete materialization. History load reserves 128 KiB of aggregate database/
+WAL/shared-memory capacity. New acceptance reserves 1 MiB for two records;
+unfinished completion remeasures and reserves 1 MiB for its two terminal
+records, while ended exact reoffer reserves no append headroom. Strict retained
+acquisition, observation, History, runtime-snapshot, and host-receipt decoder
+failures become fixed cause-free owner diagnostics.
 
 ### DS3
 

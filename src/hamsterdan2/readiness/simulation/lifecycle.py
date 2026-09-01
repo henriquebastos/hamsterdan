@@ -33,7 +33,10 @@ from petrus.testing.dst import (
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from hamsterdan2.readiness.ingress import IngressCustody
-from hamsterdan2.readiness.ingress_values import StagingPosture  # noqa: TC001  # Pydantic resolves it at runtime.
+from hamsterdan2.readiness.ingress_values import (  # Pydantic resolves at runtime.
+    ObservationFoldPosture,
+    StagingPosture,
+)
 from hamsterdan2.readiness.runtime import (
     ReadinessRuntime,
     build_history_acceptance_runtime,
@@ -64,13 +67,15 @@ if TYPE_CHECKING:
     from petrus.testing.dst import ScenarioProfile
 
 
-EXPECTED_BRIDGE_IDENTITY = "workflow-bridge/head-seen-history-acceptance@2"
+EXPECTED_BRIDGE_IDENTITY = "workflow-bridge/head-seen-history-fold@3"
 EXPECTED_HISTORY_DELIVERY_IDENTITY = (
-    "history-delivery:v1:sha256:c138153e9c97ecba82ecc09aa9be0e85f187600538715ef68496a7b993c7b7cd"
+    "history-delivery:v1:sha256:8c3e5786eea3374b8cfb2003d96b9546e89b2b4562524ec649bc2823ae84d151"
 )
 EXPECTED_HEAD_SEEN_COLOR = "HeadSeen"
 OPEN_HISTORY_RECORDS = 21
 ACCEPTED_HISTORY_RECORDS = 23
+FOLDED_HISTORY_RECORDS = 25
+FOLD_TERMINAL_RECORDS = 2
 SUBJECT = PullRequestSubject(installation_id=44, repository_id=31, pull_request_number=7)
 INSTANCE_ID = "github:44:31:pr:7"
 EXPECTED_HEAD_OBSERVATION = HeadObservation.model_validate_json(EXPECTED_CANONICAL_BYTES, strict=True)
@@ -111,6 +116,14 @@ class AcceptStagedObservationCommand(BaseModel):
     action: Literal["accept_staged_observation"] = "accept_staged_observation"
 
 
+class FoldAcceptedObservationCommand(BaseModel):
+    """Complete only the exact unfinished source occurrence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    action: Literal["fold_accepted_observation"] = "fold_accepted_observation"
+
+
 class ReadinessBinding(BaseModel):
     """Detached readiness-owned root identity."""
 
@@ -130,7 +143,11 @@ class HistoryDeliveryFact(BaseModel):
     token_payload: dict[str, JsonValue] = Field(max_length=16)
     delivery_identity: str = Field(min_length=1, max_length=128)
     occurrence: int = Field(strict=True, gt=0)
-    record_order: tuple[str, str]
+    record_order: tuple[str, ...] = Field(min_length=2, max_length=4)
+    produced_place: str | None = Field(default=None, min_length=1, max_length=64)
+    produced_entries: tuple[JsonValue, ...] | None = Field(default=None, max_length=0)
+    produced_tokens: tuple[HistoryToken, ...] | None = Field(default=None, min_length=1, max_length=1)
+    completed_transition: str | None = Field(default=None, min_length=1, max_length=64)
     folded: bool
 
 
@@ -180,6 +197,33 @@ class BegunHistoryRecord(BaseModel):
     instant: int = Field(strict=True, ge=0)
 
 
+class TokensProducedHistoryRecord(BaseModel):
+    """Strict neutral shape of the exact retained fold output."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    record: Literal["TokensProduced"]
+    schema_version: Literal[5] = Field(alias="schema")
+    place: Literal["life.heads"]
+    tokens: list[HistoryToken] = Field(min_length=1, max_length=1)
+    entries: list[JsonValue] = Field(max_length=0)
+    occurrence: int = Field(strict=True, gt=0)
+    scope: None
+    instant: int = Field(strict=True, ge=0)
+
+
+class CompletedHistoryRecord(BaseModel):
+    """Strict neutral shape of the exact source terminal fact."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    record: Literal["FiringCompleted"]
+    schema_version: Literal[5] = Field(alias="schema")
+    transition: str = Field(min_length=1, max_length=64)
+    occurrence: int = Field(strict=True, gt=0)
+    instant: int = Field(strict=True, ge=0)
+
+
 class ReadinessState(BaseModel):
     """Detached local observation used by readiness and root checkers."""
 
@@ -190,12 +234,14 @@ class ReadinessState(BaseModel):
     in_flight_occurrences: int = Field(strict=True, ge=0)
     staging: StagingPosture | None = None
     delivery: HistoryDeliveryFact | None = None
+    fold_posture: ObservationFoldPosture | None = None
     accepted: bool = False
     folded: bool = False
 
 
 OPEN_READINESS_COMMAND = OpenReadinessCommand(subject=SUBJECT)
 ACCEPT_STAGED_OBSERVATION_COMMAND = AcceptStagedObservationCommand()
+FOLD_ACCEPTED_OBSERVATION_COMMAND = FoldAcceptedObservationCommand()
 PROFILE_IDENTITY = ProfileIdentity(
     name="hamsterdan2.readiness.ds1",
     version=4,
@@ -205,6 +251,7 @@ PROFILE_IDENTITY = ProfileIdentity(
                 OPEN_READINESS_COMMAND.model_dump(mode="json"),
                 STAGE_ACQUISITION_COMMAND.model_dump(mode="json"),
                 ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+                FOLD_ACCEPTED_OBSERVATION_COMMAND.model_dump(mode="json"),
             ],
             "observation": "readiness.state",
             "resources": [
@@ -255,13 +302,27 @@ CHECKER_IDENTITY = CheckerIdentity(
                     "observation": EXPECTED_HEAD_OBSERVATION.model_dump(mode="json"),
                 },
             },
+            "folded": {
+                "history_records": FOLDED_HISTORY_RECORDS,
+                "in_flight_occurrences": 0,
+                "record_order": [
+                    "ExternalEventDelivered",
+                    "FiringBegun",
+                    "TokensProduced",
+                    "FiringCompleted",
+                ],
+                "produced_place": "life.heads",
+                "phase": "running",
+                "local_incarnation": 1,
+                "cut": "observation_folded",
+            },
         }
     ),
 )
 RESOURCE_LIMITS = {
     "pending.motus.tasks": 0,
     "retained.readiness.bindings": 1,
-    "retained.readiness.history_records": ACCEPTED_HISTORY_RECORDS,
+    "retained.readiness.history_records": FOLDED_HISTORY_RECORDS,
     "retained.readiness.in_flight_occurrences": 1,
     "retained.state.bytes": 262_144,
     "retained.state.files": 5,
@@ -344,6 +405,13 @@ def history_delivery_fact(records: Sequence[HistoryPageRecord]) -> HistoryDelive
     index, delivered, begun = delivery_pair
     if delivered.occurrence != begun.occurrence or delivered.source != begun.transition:
         raise ValueError("DS2 readiness History acceptance correlation is malformed")
+    terminal_records = records[index + 2 :]
+    if not terminal_records:
+        return unfinished_history_delivery_fact(delivered)
+    return folded_history_delivery_fact(delivered, terminal_records)
+
+
+def unfinished_history_delivery_fact(delivered: DeliveredHistoryRecord) -> HistoryDeliveryFact:
     token = delivered.tokens[0]
     return HistoryDeliveryFact(
         source=delivered.source,
@@ -352,10 +420,43 @@ def history_delivery_fact(records: Sequence[HistoryPageRecord]) -> HistoryDelive
         delivery_identity=delivered.identity,
         occurrence=delivered.occurrence,
         record_order=("ExternalEventDelivered", "FiringBegun"),
-        folded=any(
-            record.record.get("record") == "FiringCompleted" and record.record.get("occurrence") == delivered.occurrence
-            for record in records[index + 2 :]
+        folded=False,
+    )
+
+
+def folded_history_delivery_fact(
+    delivered: DeliveredHistoryRecord,
+    terminal_records: Sequence[HistoryPageRecord],
+) -> HistoryDeliveryFact:
+    if len(terminal_records) != FOLD_TERMINAL_RECORDS:
+        raise ValueError("DS2 readiness History terminal batch has the wrong size")
+    produced = TokensProducedHistoryRecord.model_validate(terminal_records[0].record, strict=True)
+    completed = CompletedHistoryRecord.model_validate(terminal_records[1].record, strict=True)
+    if (
+        produced.occurrence != delivered.occurrence
+        or completed.occurrence != delivered.occurrence
+        or completed.transition != delivered.source
+        or produced.tokens != delivered.tokens
+    ):
+        raise ValueError("DS2 readiness History terminal correlation is malformed")
+    token = delivered.tokens[0]
+    return HistoryDeliveryFact(
+        source=delivered.source,
+        token_color=token.color,
+        token_payload=token.data,
+        delivery_identity=delivered.identity,
+        occurrence=delivered.occurrence,
+        record_order=(
+            "ExternalEventDelivered",
+            "FiringBegun",
+            "TokensProduced",
+            "FiringCompleted",
         ),
+        produced_place=produced.place,
+        produced_entries=tuple(produced.entries),
+        produced_tokens=tuple(produced.tokens),
+        completed_transition=completed.transition,
+        folded=True,
     )
 
 
@@ -420,6 +521,23 @@ def readiness_state(
 ) -> ReadinessState:
     records = load_history_records(instance_root, dispatch_path=dispatch_path)
     delivery = history_delivery_fact(records)
+    fold_posture = None
+    if delivery is not None and delivery.folded:
+        if ingress_path is None:
+            raise ValueError("folded readiness observation requires its immutable ingress authority")
+        projected = build_history_acceptance_runtime(
+            root_path=instance_root,
+            dispatch_path=dispatch_path,
+            ingress_path=ingress_path,
+            instance_id=INSTANCE_ID,
+        ).verify_folded_observation(
+            provider_route_id=EXPECTED_ACQUISITION.identity.provider_route_id,
+            delivery_id=EXPECTED_ACQUISITION.identity.delivery_id,
+            subject=SUBJECT,
+        )
+        if not isinstance(projected, ObservationFoldPosture):
+            raise ValueError("folded History did not reconstruct its exact detached posture")
+        fold_posture = projected
     binding_path = instance_root / "readiness.sqlite3"
     return ReadinessState(
         binding=readiness_binding(binding_path) if binding_path.is_file() else None,
@@ -427,6 +545,7 @@ def readiness_state(
         in_flight_occurrences=in_flight_occurrence_count(records),
         staging=None if ingress_path is None else staged_posture(ingress_path),
         delivery=delivery,
+        fold_posture=fold_posture,
         accepted=delivery is not None,
         folded=False if delivery is None else delivery.folded,
     )
@@ -475,10 +594,14 @@ class ReadinessScenarioProfile:
                 AcceptStagedObservationCommand,
                 ACCEPT_STAGED_OBSERVATION_COMMAND,
             ),
+            "readiness.fold_accepted_observation": (
+                FoldAcceptedObservationCommand,
+                FOLD_ACCEPTED_OBSERVATION_COMMAND,
+            ),
         }
         contract = contracts.get(command.name)
         if contract is None:
-            raise ValueError("DS2 readiness accepts only open, stage, and History-acceptance commands")
+            raise ValueError("DS2 readiness accepts only open, stage, acceptance, and fold commands")
         model, expected = contract
         parsed = model.model_validate(command.payload, strict=True)
         if parsed != expected or parsed.model_dump(mode="json") != command.payload:
@@ -504,42 +627,77 @@ class ReadinessScenarioProfile:
     ) -> ApplyResult:
         del context
         if command.name == "readiness.stage_acquisition":
-            posture = IngressCustody.from_path(
-                path=self._root / "readiness-ingress.sqlite3",
-                policy_revision=POLICY_REVISION,
-            ).stage(
-                provider_route_id=EXPECTED_ACQUISITION.identity.provider_route_id,
-                custody_generation=EXPECTED_ACQUISITION.custody_generation,
-                webhook=EXPECTED_ACQUISITION.webhook,
-                quarantined=EXPECTED_ACQUISITION.quarantined,
-            )
-            return ApplyResult(disposition="applied", value=posture.model_dump(mode="json"), scheduled=[])
+            return self.apply_staging()
         if command.name == "readiness.accept_staged_observation":
-            before = history_records(
-                self._root / "instance",
-                dispatch_path=self._root / "dispatch.sqlite3",
-            )
-            accepted = build_history_acceptance_runtime(
-                root_path=self._root / "instance",
-                dispatch_path=self._root / "dispatch.sqlite3",
-                ingress_path=self._root / "readiness-ingress.sqlite3",
-                instance_id=INSTANCE_ID,
-            ).accept_staged_observation(
-                provider_route_id=EXPECTED_ACQUISITION.identity.provider_route_id,
-                delivery_id=EXPECTED_ACQUISITION.identity.delivery_id,
-                subject=SUBJECT,
-            )
-            after = history_records(
-                self._root / "instance",
-                dispatch_path=self._root / "dispatch.sqlite3",
-            )
-            return ApplyResult(
-                disposition="idempotent" if after == before else "applied",
-                value=accepted.model_dump(mode="json"),
-                scheduled=[],
-            )
+            return self.apply_acceptance()
+        if command.name == "readiness.fold_accepted_observation":
+            return self.apply_fold()
         posture = generation.open(SUBJECT)
         return ApplyResult(disposition="applied", value=posture.model_dump(mode="json"), scheduled=[])
+
+    def apply_staging(self) -> ApplyResult:
+        posture = IngressCustody.from_path(
+            path=self._root / "readiness-ingress.sqlite3",
+            policy_revision=POLICY_REVISION,
+        ).stage(
+            provider_route_id=EXPECTED_ACQUISITION.identity.provider_route_id,
+            custody_generation=EXPECTED_ACQUISITION.custody_generation,
+            webhook=EXPECTED_ACQUISITION.webhook,
+            quarantined=EXPECTED_ACQUISITION.quarantined,
+        )
+        return ApplyResult(disposition="applied", value=posture.model_dump(mode="json"), scheduled=[])
+
+    def apply_acceptance(self) -> ApplyResult:
+        before = history_records(
+            self._root / "instance",
+            dispatch_path=self._root / "dispatch.sqlite3",
+        )
+        accepted = build_history_acceptance_runtime(
+            root_path=self._root / "instance",
+            dispatch_path=self._root / "dispatch.sqlite3",
+            ingress_path=self._root / "readiness-ingress.sqlite3",
+            instance_id=INSTANCE_ID,
+        ).accept_staged_observation(
+            provider_route_id=EXPECTED_ACQUISITION.identity.provider_route_id,
+            delivery_id=EXPECTED_ACQUISITION.identity.delivery_id,
+            subject=SUBJECT,
+        )
+        after = history_records(
+            self._root / "instance",
+            dispatch_path=self._root / "dispatch.sqlite3",
+        )
+        return ApplyResult(
+            disposition="idempotent" if after == before else "applied",
+            value=accepted.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def apply_fold(self) -> ApplyResult:
+        before = history_records(
+            self._root / "instance",
+            dispatch_path=self._root / "dispatch.sqlite3",
+        )
+        folded = build_history_acceptance_runtime(
+            root_path=self._root / "instance",
+            dispatch_path=self._root / "dispatch.sqlite3",
+            ingress_path=self._root / "readiness-ingress.sqlite3",
+            instance_id=INSTANCE_ID,
+        ).fold_accepted_observation(
+            provider_route_id=EXPECTED_ACQUISITION.identity.provider_route_id,
+            delivery_id=EXPECTED_ACQUISITION.identity.delivery_id,
+            subject=SUBJECT,
+        )
+        if not isinstance(folded, ObservationFoldPosture):
+            raise TypeError("the admitted novel staging did not produce a fold posture")
+        after = history_records(
+            self._root / "instance",
+            dispatch_path=self._root / "dispatch.sqlite3",
+        )
+        return ApplyResult(
+            disposition="idempotent" if after == before else "applied",
+            value=folded.model_dump(mode="json"),
+            scheduled=[],
+        )
 
     def observe(
         self,
@@ -577,13 +735,14 @@ class ReadinessChecker:
             and state.in_flight_occurrences == 0
             and state.staging is None
             and state.delivery is None
+            and state.fold_posture is None
             and not state.accepted
             and not state.folded
         )
         opened = state.binding == ReadinessBinding(
             instance_id=INSTANCE_ID,
             bridge_identity=EXPECTED_BRIDGE_IDENTITY,
-        ) and state.history_records in (OPEN_HISTORY_RECORDS, ACCEPTED_HISTORY_RECORDS)
+        ) and state.history_records in (OPEN_HISTORY_RECORDS, ACCEPTED_HISTORY_RECORDS, FOLDED_HISTORY_RECORDS)
         delivery = state.delivery
         staging = state.staging
         entry = None if staging is None or len(staging.manifest.entries) != 1 else staging.manifest.entries[0]
@@ -646,6 +805,10 @@ class ReadinessChecker:
             and delivery.delivery_identity == EXPECTED_HISTORY_DELIVERY_IDENTITY
             and delivery.occurrence == 1
             and delivery.record_order == ("ExternalEventDelivered", "FiringBegun")
+            and delivery.produced_place is None
+            and delivery.produced_entries is None
+            and delivery.produced_tokens is None
+            and delivery.completed_transition is None
             and not delivery.folded
         )
         accepted = (
@@ -656,6 +819,64 @@ class ReadinessChecker:
             and state.accepted
             and not state.folded
             and expected_delivery
+            and state.fold_posture is None
+        )
+        fold_posture = state.fold_posture
+        expected_fold_posture = (
+            fold_posture is not None
+            and fold_posture.subject == SUBJECT
+            and fold_posture.instance_id == INSTANCE_ID
+            and fold_posture.bridge_identity == EXPECTED_BRIDGE_IDENTITY
+            and str(fold_posture.manifest_id) == EXPECTED_MANIFEST_ID
+            and str(fold_posture.grant_id) == EXPECTED_GRANT_ID
+            and fold_posture.manifest_digest == EXPECTED_GRANT_DIGEST
+            and fold_posture.entry_order == 0
+            and str(fold_posture.observation_key) == EXPECTED_KEY
+            and str(fold_posture.delivery_identity) == EXPECTED_HISTORY_DELIVERY_IDENTITY
+            and fold_posture.occurrence == 1
+            and fold_posture.phase == "running"
+            and fold_posture.local_incarnation == 1
+            and fold_posture.head == EXPECTED_HEAD_OBSERVATION.head
+            and fold_posture.base == EXPECTED_HEAD_OBSERVATION.base
+            and not fold_posture.mergeable
+            and fold_posture.policy_revision == POLICY_REVISION
+            and fold_posture.strict_base
+            and not fold_posture.base_current
+            and fold_posture.finished
+            and fold_posture.folded
+            and fold_posture.cut == "observation_folded"
+        )
+        folded_delivery = (
+            delivery is not None
+            and delivery.source == "on_head"
+            and delivery.token_color == EXPECTED_HEAD_SEEN_COLOR
+            and delivery.token_payload
+            == {
+                "head": "a" * 40,
+                "base": "b" * 40,
+                "mergeable": False,
+                "policy": str(POLICY_REVISION),
+                "strict_base": True,
+                "base_current": False,
+            }
+            and delivery.delivery_identity == EXPECTED_HISTORY_DELIVERY_IDENTITY
+            and delivery.occurrence == 1
+            and delivery.record_order == ("ExternalEventDelivered", "FiringBegun", "TokensProduced", "FiringCompleted")
+            and delivery.produced_place == "life.heads"
+            and delivery.produced_entries == ()
+            and delivery.produced_tokens == (HistoryToken(color=EXPECTED_HEAD_SEEN_COLOR, data=delivery.token_payload),)
+            and delivery.completed_transition == "on_head"
+            and delivery.folded
+        )
+        folded = (
+            opened
+            and exact_staging
+            and state.history_records == FOLDED_HISTORY_RECORDS
+            and state.in_flight_occurrences == 0
+            and state.accepted
+            and state.folded
+            and folded_delivery
+            and expected_fold_posture
         )
         plain_opened = (
             opened
@@ -663,6 +884,7 @@ class ReadinessChecker:
             and state.in_flight_occurrences == 0
             and state.staging is None
             and state.delivery is None
+            and state.fold_posture is None
             and not state.accepted
             and not state.folded
         )
@@ -672,6 +894,7 @@ class ReadinessChecker:
             and state.in_flight_occurrences == 0
             and known_staging
             and state.delivery is None
+            and state.fold_posture is None
             and not state.accepted
             and not state.folded
         )
@@ -681,11 +904,12 @@ class ReadinessChecker:
             and state.in_flight_occurrences == 0
             and known_staging
             and state.delivery is None
+            and state.fold_posture is None
             and not state.accepted
             and not state.folded
         )
         return CheckResult(
-            passed=empty or plain_opened or staged_without_lifecycle or staged or accepted,
+            passed=empty or plain_opened or staged_without_lifecycle or staged or accepted or folded,
             detail={
                 "empty": empty,
                 "opened": opened,
@@ -693,11 +917,14 @@ class ReadinessChecker:
                 "staged_without_lifecycle": staged_without_lifecycle,
                 "staged": staged,
                 "accepted": accepted,
+                "folded_posture": folded,
                 "instance_identity": state.binding is None or state.binding.instance_id == INSTANCE_ID,
                 "bridge_identity": (state.binding is None or state.binding.bridge_identity == EXPECTED_BRIDGE_IDENTITY),
                 "history_records": state.history_records,
                 "in_flight_occurrences": state.in_flight_occurrences in (0, 1),
                 "history_delivery": expected_delivery,
+                "history_fold": folded_delivery,
+                "fold_projection": expected_fold_posture,
                 "staging_authority": staging_authority,
                 "manifest": state.staging is None or str(state.staging.manifest.manifest_id) == EXPECTED_MANIFEST_ID,
                 "grant": state.staging is None

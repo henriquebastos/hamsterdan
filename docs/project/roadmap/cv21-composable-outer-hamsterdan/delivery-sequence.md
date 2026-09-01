@@ -53,18 +53,19 @@ provider observation or external effect exists.
 ### After DS2
 
 One signed provider delivery is normalized and durably retained by new
-provider/host owners, then the HTTP request ends. A later authority turn stages
-it in one readiness manifest, accepts it in identified History, translates it
-through the bridge, folds it in the current Net, and marks host delivery
-completion at a distinct cut. Duplicate, corroborating, colliding, and
-incomparable evidence is visible without a second admission ledger.
+provider/host owners, then the HTTP request ends. Separate authority turns
+stage it in one readiness manifest, accept it unfinished in identified History,
+exact-reoffer immutable staging to recover and complete only that source
+occurrence, project its actual retained post-fold state, and finally record
+host delivery completion. Duplicate, corroborating, colliding, and incomparable
+evidence is visible without a second admission ledger.
 
-The current partial DS2 state has delivered tasks 1–4 only. It reaches the
-identified History cut through the real first Head bridge mapping and leaves
-the accepted occurrence unfinished after `ExternalEventDelivered` and
-`FiringBegun`. Task 5 must exact-reoffer immutable staging to recover that same
-carrier, complete only its occurrence, then establish the retained fold and
-host completion described by the full “After DS2” state above.
+All five planned DS2 implementation tasks are delivered. Custody, HTTP
+acknowledgement, staging, unfinished History acceptance, retained source fold,
+and host completion remain separately reconstructible cuts. DS2 remains
+`Active` until the Navigator accepts the Experience Report and closes it; this
+implementation state does not pull DS3 or advance the retained dashboard
+transition.
 
 ### After DS3
 

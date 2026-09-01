@@ -157,7 +157,7 @@ class TestReadinessRuntimePhases:
         assert raised.value.args == (
             "root_binding_mismatch",
             "github:44:31:pr:7",
-            "workflow-bridge/head-seen-history-acceptance@2",
+            "workflow-bridge/head-seen-history-fold@3",
             "use a fresh readiness root when the instance or bridge identity differs",
         )
         assert canonical_history(history_path, "github:44:31:pr:7") == created_history

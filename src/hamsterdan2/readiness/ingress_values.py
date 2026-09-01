@@ -15,7 +15,10 @@ from hamsterdan2.github_app.models import (  # noqa: TC001 -- Pydantic resolves 
     NormalizedPullRequestWebhook,
     ProviderRouteId,
 )
-from hamsterdan2.workflow.observations import HeadObservation  # noqa: TC001 -- Pydantic resolves at runtime.
+from hamsterdan2.workflow.observations import (  # noqa: TC001 -- Pydantic resolves at runtime.
+    BranchTip,
+    HeadObservation,
+)
 from hamsterdan2.workflow.values import PullRequestSubject  # noqa: TC001 -- Pydantic resolves at runtime.
 
 
@@ -356,6 +359,34 @@ class HistoryAcceptancePosture(BaseModel):
         if (self.reason == "staging_not_novel") == (self.staging_disposition == "novel"):
             raise ValueError("only non-novel staging may produce the non-admission posture")
         return self
+
+
+class ObservationFoldPosture(BaseModel):
+    """Detached new-facing proof of one exact retained source fold."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    subject: PullRequestSubject
+    instance_id: str = Field(min_length=1, max_length=128)
+    bridge_identity: Literal["workflow-bridge/head-seen-history-fold@3"]
+    manifest_id: ManifestId
+    grant_id: AdmissionGrantId
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    entry_order: int = Field(strict=True, ge=0, lt=MAX_ENTRIES_PER_MANIFEST)
+    observation_key: ObservationKey
+    delivery_identity: HistoryDeliveryIdentity
+    occurrence: Literal[1]
+    phase: Literal["running"] = "running"
+    local_incarnation: Literal[1] = 1
+    head: BranchTip
+    base: BranchTip
+    mergeable: bool
+    policy_revision: PolicyRevision
+    strict_base: Literal[True] = True
+    base_current: Literal[False] = False
+    finished: Literal[True] = True
+    folded: Literal[True] = True
+    cut: Literal["observation_folded"] = "observation_folded"
 
 
 class IngressResources(BaseModel):

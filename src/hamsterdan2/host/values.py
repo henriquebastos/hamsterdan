@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler
+from pydantic import BaseModel, ConfigDict, Field, GetCoreSchemaHandler, model_validator
 from pydantic_core import core_schema
 
 from hamsterdan2.github_app.models import (  # noqa: TC001 -- Pydantic resolves boundary fields at runtime.
@@ -121,3 +121,38 @@ class CustodiedDelivery(BaseModel):
 
     def is_readiness_eligible(self) -> bool:
         return not self.quarantined
+
+
+class HostDeliveryCompletionReceipt(BaseModel):
+    """Detached host receipt for one History-proven observation fold."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    provider_route_id: ProviderRouteId
+    delivery_id: DeliveryId
+    custody_generation: int = Field(strict=True, gt=0)
+    subject: PullRequestSubject
+    instance_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^github:[1-9][0-9]*:[1-9][0-9]*:pr:[1-9][0-9]*$",
+    )
+    bridge_identity: Literal["workflow-bridge/head-seen-history-fold@3"]
+    manifest_id: str = Field(pattern=r"^manifest:v1:sha256:[0-9a-f]{64}$")
+    grant_id: str = Field(pattern=r"^grant:v1:sha256:[0-9a-f]{64}$")
+    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    entry_order: int = Field(strict=True, ge=0, lt=8)
+    observation_key: str = Field(pattern=r"^obs:v1:sha256:[0-9a-f]{64}$")
+    history_delivery_identity: str = Field(pattern=r"^history-delivery:v1:sha256:[0-9a-f]{64}$")
+    occurrence: Literal[1]
+    workflow_cut: Literal["observation_folded"] = "observation_folded"
+    cut: Literal["host_delivery_completed"] = "host_delivery_completed"
+
+    @model_validator(mode="after")
+    def matches_subject_instance(self) -> HostDeliveryCompletionReceipt:
+        expected = (
+            f"github:{self.subject.installation_id}:{self.subject.repository_id}:pr:{self.subject.pull_request_number}"
+        )
+        if self.instance_id != expected:
+            raise ValueError("host delivery completion instance must match its exact subject")
+        return self

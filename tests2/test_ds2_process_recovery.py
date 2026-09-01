@@ -16,6 +16,7 @@ from petrus.testing.dst import (
 
 from hamsterdan2.readiness.simulation.lifecycle import EXPECTED_HISTORY_DELIVERY_IDENTITY, ReadinessState
 from hamsterdan2.simulation.hamsterdan import (
+    ACCEPT_STAGED_OBSERVATION_COMMAND,
     EXPECTED_DELIVERY,
     EXPECTED_STAGING,
     OPEN_PULL_REQUEST_COMMAND,
@@ -30,6 +31,10 @@ from hamsterdan2.simulation.process import (
     CUSTODY_RECOVERY_SCENARIO,
     HISTORY_ACCEPTANCE_DEATH_SCENARIO,
     HISTORY_ACCEPTANCE_RECOVERY_SCENARIO,
+    HOST_COMPLETION_DEATH_SCENARIO,
+    HOST_COMPLETION_RECOVERY_SCENARIO,
+    OBSERVATION_FOLD_DEATH_SCENARIO,
+    OBSERVATION_FOLD_RECOVERY_SCENARIO,
     STAGING_DEATH_SCENARIO,
     STAGING_RECOVERY_SCENARIO,
 )
@@ -245,3 +250,113 @@ class TestProcessDeathBeforeHistoryAcceptanceAcknowledgement:
             "instances/44/31/7/readiness.sqlite3",
             "readiness-ingress.sqlite3",
         ]
+
+
+def prepare_accepted_occurrence(root: Path) -> None:
+    world = build_hamsterdan_world(root=root)
+    try:
+        timeline = world.timeline()
+        for name, command in (
+            ("hamsterdan.open_pull_request", OPEN_PULL_REQUEST_COMMAND),
+            ("hamsterdan.receive_webhook", RECEIVE_WEBHOOK_COMMAND),
+            ("hamsterdan.stage_webhook", STAGE_WEBHOOK_COMMAND),
+            ("hamsterdan.accept_staged_observation", ACCEPT_STAGED_OBSERVATION_COMMAND),
+        ):
+            timeline.command(name, command.model_dump(mode="json"))
+    finally:
+        world.close()
+
+
+class TestProcessDeathBeforeObservationFoldAcknowledgement:
+    """The exact source fold survives SIGKILL while host completion remains absent."""
+
+    def test_fresh_authority_validates_prior_acknowledgement_without_appending(self, tmp_path: Path) -> None:
+        root = tmp_path / "state"
+        prepare_accepted_occurrence(root)
+
+        death = run_custody_process(
+            scenario_id=OBSERVATION_FOLD_DEATH_SCENARIO,
+            entrypoint="hamsterdan2.simulation.process:die_after_observation_folded",
+            root=root,
+        )
+        interrupted = observe_hamsterdan(root)
+        recovery = run_custody_process(
+            scenario_id=OBSERVATION_FOLD_RECOVERY_SCENARIO,
+            entrypoint="hamsterdan2.simulation.process:recover_observation_fold",
+            root=root,
+        )
+        reconstructed = observe_hamsterdan(root)
+
+        assert death.outcome == "harness_failure"
+        assert death.returncode == -9
+        assert isinstance(death.unfinished_attempt, SubmitAttempt)
+        assert death.unfinished_attempt.command.name == "hamsterdan.fold_accepted_observation"
+        assert death.prefix.operations == []
+        assert interrupted.readiness.history_records == 25
+        assert interrupted.readiness.in_flight_occurrences == 0
+        assert interrupted.readiness.fold_posture is not None
+        assert interrupted.readiness.fold_posture.cut == "observation_folded"
+        assert interrupted.delivery.completion_rows == 0
+        assert interrupted.delivery.completion is None
+        assert recovery.outcome == "completed"
+        assert recovery.artifact is not None
+        executions = [
+            operation for operation in recovery.artifact.operations if isinstance(operation, ExecuteOperation)
+        ]
+        assert [execution.command.name for execution in executions] == ["hamsterdan.fold_accepted_observation"]
+        assert [execution.result.disposition for execution in executions] == ["idempotent"]
+        posture = cast("dict[str, JsonValue]", executions[0].result.value)
+        assert posture["delivery_identity"] == EXPECTED_HISTORY_DELIVERY_IDENTITY
+        assert posture["occurrence"] == 1
+        assert posture["cut"] == "observation_folded"
+        assert reconstructed == interrupted
+
+
+class TestProcessDeathBeforeHostCompletionAcknowledgement:
+    """The host receipt survives SIGKILL without another History or host append."""
+
+    def test_fresh_authority_reconstructs_the_same_receipt_without_appending(self, tmp_path: Path) -> None:
+        root = tmp_path / "state"
+        prepare_accepted_occurrence(root)
+        folded = run_custody_process(
+            scenario_id=OBSERVATION_FOLD_RECOVERY_SCENARIO,
+            entrypoint="hamsterdan2.simulation.process:recover_observation_fold",
+            root=root,
+        )
+
+        death = run_custody_process(
+            scenario_id=HOST_COMPLETION_DEATH_SCENARIO,
+            entrypoint="hamsterdan2.simulation.process:die_after_host_completion",
+            root=root,
+        )
+        interrupted = observe_hamsterdan(root)
+        recovery = run_custody_process(
+            scenario_id=HOST_COMPLETION_RECOVERY_SCENARIO,
+            entrypoint="hamsterdan2.simulation.process:recover_host_completion",
+            root=root,
+        )
+        reconstructed = observe_hamsterdan(root)
+
+        assert folded.outcome == "completed"
+        assert death.outcome == "harness_failure"
+        assert death.returncode == -9
+        assert isinstance(death.unfinished_attempt, SubmitAttempt)
+        assert death.unfinished_attempt.command.name == "hamsterdan.complete_observation_delivery"
+        assert death.prefix.operations == []
+        assert interrupted.readiness.history_records == 25
+        assert interrupted.delivery.completion_rows == 1
+        assert interrupted.delivery.completion is not None
+        assert interrupted.delivery.completion.cut == "host_delivery_completed"
+        assert recovery.outcome == "completed"
+        assert recovery.artifact is not None
+        executions = [
+            operation for operation in recovery.artifact.operations if isinstance(operation, ExecuteOperation)
+        ]
+        assert [execution.command.name for execution in executions] == ["hamsterdan.complete_observation_delivery"]
+        assert [execution.result.disposition for execution in executions] == ["idempotent"]
+        receipt = cast("dict[str, JsonValue]", executions[0].result.value)
+        assert receipt["history_delivery_identity"] == EXPECTED_HISTORY_DELIVERY_IDENTITY
+        assert receipt["occurrence"] == 1
+        assert receipt["workflow_cut"] == "observation_folded"
+        assert receipt["cut"] == "host_delivery_completed"
+        assert reconstructed == interrupted

@@ -6,18 +6,26 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from dataclasses import dataclass
+from copy import deepcopy
+from dataclasses import dataclass, replace
 from hashlib import sha256
 import json
 import sqlite3
 from threading import Event
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from fastapi.testclient import TestClient
 from petrus.engine import Engine
-from petrus.impetus.history import ExternalEventDelivered, FiringBegun, FiringCompleted, TokensProduced
+from petrus.impetus.history import ExternalEventDelivered, FiringBegun, FiringCompleted, FiringFailed, TokensProduced
 from petrus.impetus.history_store import SqliteHistoryStore
-from petrus.impetus.instance import DeliveryDisposition, PriorAcknowledgement, ScopedDeliveryAcknowledgement
+from petrus.impetus.instance import (
+    AcceptedDelivery,
+    DeliveryDisposition,
+    FiringOutcome,
+    PriorAcknowledgement,
+    ScopedDeliveryAcknowledgement,
+)
+from petrus.impetus.petrinet import NetPath, Token
 from pydantic import ValidationError
 
 from hamsterdan2.github_app.models import (
@@ -34,7 +42,11 @@ from hamsterdan2.github_app.simulation.webhooks import (
     signed_webhook_headers,
 )
 from hamsterdan2.host import delivery as host_delivery
-from hamsterdan2.host.application import DeliveryNotFoundError, StagingAuthority
+from hamsterdan2.host.application import (
+    DeliveryNotFoundError,
+    ObservationDeliveryNotFoldedError,
+    StagingAuthority,
+)
 from hamsterdan2.host.catalog import (
     HostCatalogCorruptionError,
     PullRequestNotRegisteredError,
@@ -46,8 +58,22 @@ from hamsterdan2.host.composition import (
     build_staging_authority,
     build_webhook_app,
 )
-from hamsterdan2.host.delivery import MAX_NORMALIZED_BYTES, DeliveryCustody, DeliveryCustodyCorruptionError
-from hamsterdan2.host.values import ActionIdentity, ConfiguredProviderRoute, OpenPullRequestCommand
+from hamsterdan2.host.delivery import (
+    MAX_NORMALIZED_BYTES,
+    DeliveryCompletionCommitError,
+    DeliveryCompletionConflictError,
+    DeliveryCompletionCorruptionError,
+    DeliveryCompletionCustody,
+    DeliveryCustody,
+    DeliveryCustodyCorruptionError,
+)
+from hamsterdan2.host.values import (
+    ActionIdentity,
+    ConfiguredProviderRoute,
+    CustodiedDelivery,
+    HostDeliveryCompletionReceipt,
+    OpenPullRequestCommand,
+)
 from hamsterdan2.readiness import ingress as readiness_ingress
 from hamsterdan2.readiness import projection as readiness_projection
 from hamsterdan2.readiness import runtime as readiness_runtime
@@ -58,6 +84,7 @@ from hamsterdan2.readiness.ingress_values import (
     AdmissionDecision,
     CanonicalObservation,
     IngressManifest,
+    ObservationFoldPosture,
     ObservationKey,
     PolicyRevision,
     StagingAcquisition,
@@ -68,9 +95,11 @@ from hamsterdan2.readiness.projection import (
     observation_entry,
 )
 from hamsterdan2.readiness.root import ReadinessRootCorruptionError, ReadinessRootMissingError
-from hamsterdan2.readiness.runtime import HistoryCapacityError
+from hamsterdan2.readiness.runtime import HistoryCapacityError, ObservationFoldCommitError, ObservationNotFoldedError
 from hamsterdan2.readiness.workflow_bridge import (
+    RetainedSnapshotRejectedError,
     UnsupportedHeadObservationError,
+    WorkflowBridgeError,
     bridge_head_delivery,
     history_delivery_identity,
 )
@@ -83,9 +112,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
-    from petrus.impetus.petrinet import Token
-
-    from hamsterdan2.host.values import CustodiedDelivery, RegisteredPullRequest
+    from hamsterdan2.host.values import RegisteredPullRequest
 
 
 PROVIDER_ROUTE_ID = ProviderRouteId("github:primary")
@@ -214,6 +241,133 @@ def webhook_body(
     return json.dumps(payload, separators=(",", ":")).encode()
 
 
+def reverse_terminal_records(records: list[dict[str, object]], page: dict[str, object]) -> None:
+    del page
+    records[-2], records[-1] = records[-1], records[-2]
+    records[-2]["position"], records[-1]["position"] = records[-1]["position"], records[-2]["position"]
+
+
+def change_produced_content(records: list[dict[str, object]], page: dict[str, object]) -> None:
+    del page
+    payload = cast("dict[str, object]", records[-2]["record"])
+    tokens = cast("list[dict[str, object]]", payload["tokens"])
+    data = cast("dict[str, object]", tokens[0]["data"])
+    data["head"] = "c" * 40
+
+
+def remove_produced_terminal(records: list[dict[str, object]], page: dict[str, object]) -> None:
+    records.pop(-2)
+    for position, item in enumerate(records):
+        item["position"] = position
+    page["frontier"] = page["next"] = len(records)
+
+
+def replace_completed_with_failure(records: list[dict[str, object]], page: dict[str, object]) -> None:
+    del page
+    records[-1]["record"] = {
+        "record": "FiringFailed",
+        "schema": 5,
+        "transition": "on_head",
+        "error": "fixed failure",
+        "occurrence": 1,
+        "instant": 0,
+    }
+
+
+def append_unrelated_terminal(records: list[dict[str, object]], page: dict[str, object]) -> None:
+    records.append(
+        {
+            "position": len(records),
+            "record": {
+                "record": "FiringCompleted",
+                "schema": 5,
+                "transition": "unrelated",
+                "occurrence": 99,
+                "instant": 0,
+            },
+        }
+    )
+    page["frontier"] = page["next"] = len(records)
+
+
+def insert_prior_failure(records: list[dict[str, object]], page: dict[str, object]) -> None:
+    records.insert(
+        len(records) - 4,
+        {
+            "position": 0,
+            "record": {
+                "record": "FiringFailed",
+                "schema": 5,
+                "transition": "on_head",
+                "error": "fixed prior failure",
+                "occurrence": 99,
+                "instant": 0,
+            },
+        },
+    )
+    for position, item in enumerate(records):
+        item["position"] = position
+    page["frontier"] = page["next"] = len(records)
+
+
+def mutate_history_page(page: dict[str, object], mutation: str) -> dict[str, object]:
+    records = cast("list[dict[str, object]]", page["records"])
+    mutations = {
+        "terminal-order": reverse_terminal_records,
+        "produced-content": change_produced_content,
+        "partial-terminal": remove_produced_terminal,
+        "failed-terminal": replace_completed_with_failure,
+        "unrelated-terminal": append_unrelated_terminal,
+        "prior-failure": insert_prior_failure,
+    }
+    mutations[mutation](records, page)
+    return page
+
+
+def replace_accepted_occurrence(page: dict[str, object], occurrence: int) -> dict[str, object]:
+    records = cast("list[dict[str, object]]", page["records"])
+    for item in records[-2:]:
+        record = cast("dict[str, object]", item["record"])
+        record["occurrence"] = occurrence
+    return page
+
+
+def change_snapshot_status(current: dict[str, object]) -> None:
+    current["status"] = "awaiting"
+
+
+def change_snapshot_in_flight(current: dict[str, object]) -> None:
+    current["in_flight"] = [{"occurrence": 1}]
+
+
+def change_snapshot_token(current: dict[str, object], *, place: str, field: str, value: str) -> None:
+    marking = cast("list[dict[str, object]]", current["marking"])
+    selected = next(item for item in marking if item["place"] == place)
+    tokens = cast("list[dict[str, object]]", selected["tokens"])
+    data = cast("dict[str, object]", tokens[0]["data"])
+    data[field] = value
+
+
+def change_snapshot_life_phase(current: dict[str, object]) -> None:
+    change_snapshot_token(current, place="life.state", field="phase", value="quiescent")
+
+
+def change_snapshot_head_token(current: dict[str, object]) -> None:
+    change_snapshot_token(current, place="life.heads", field="head", value="c" * 40)
+
+
+def mutate_runtime_snapshot(snapshot: dict[str, object], mutation: str) -> dict[str, object]:
+    current = cast("dict[str, object]", snapshot["current"])
+    mutations = {
+        "status": change_snapshot_status,
+        "in-flight": change_snapshot_in_flight,
+        "life-phase": change_snapshot_life_phase,
+        "head-token": change_snapshot_head_token,
+    }
+    mutations[mutation](current)
+    return snapshot
+
+
 def acquire_signed_delivery(
     root: Path,
     *,
@@ -293,6 +447,27 @@ def prepare_acceptance(
         registered=registered,
         staged=staged,
         initial_history_records=len(history_records(fixture)),
+    )
+
+
+def reconstructed_acquisition(fixture: AcceptanceFixture) -> StagingAcquisition:
+    reconstructed = IngressCustody.for_reconstruction(
+        path=fixture.root / "readiness-ingress.sqlite3",
+    ).reconstructed_staging(
+        provider_route_id=PROVIDER_ROUTE_ID,
+        delivery_id=DELIVERY_ID,
+    )
+    assert reconstructed is not None
+    return reconstructed[0]
+
+
+def reconstructed_custodied_delivery(fixture: AcceptanceFixture) -> CustodiedDelivery:
+    acquisition = reconstructed_acquisition(fixture)
+    return CustodiedDelivery(
+        provider_route_id=acquisition.identity.provider_route_id,
+        custody_generation=acquisition.custody_generation,
+        webhook=acquisition.webhook,
+        quarantined=acquisition.quarantined,
     )
 
 
@@ -614,7 +789,7 @@ class TestFirstReadinessStagingTurn:
         assert accepted.subject == subject
         assert accepted.disposition == "accepted"
         assert accepted.reason == "accepted_unfinished"
-        assert accepted.bridge_identity == "workflow-bridge/head-seen-history-acceptance@2"
+        assert accepted.bridge_identity == "workflow-bridge/head-seen-history-fold@3"
         assert accepted.manifest_id == staged.manifest.manifest_id
         assert accepted.grant_id == staged.grant.grant_id
         assert accepted.entry_order == 0
@@ -651,6 +826,104 @@ class TestFirstReadinessStagingTurn:
             assert connection.execute("SELECT COUNT(*) FROM host_records").fetchone()[0] == 1
         with closing(sqlite3.connect(tmp_path / "dispatch.sqlite3")) as connection:
             assert connection.execute("SELECT COUNT(*) FROM impetus_local_dispatch_tasks").fetchone()[0] == 0
+
+    def test_accepted_head_folds_before_separate_host_delivery_completion(self, tmp_path: Path) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+
+        accepted = authority.accept_staged_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        accepted_records = history_records(fixture)
+        folded = authority.fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        folded_records = history_records(fixture)
+
+        assert not accepted.finished
+        assert not accepted.folded
+        assert len(accepted_records) == fixture.initial_history_records + 2
+        assert isinstance(folded, ObservationFoldPosture)
+        assert folded.model_dump(mode="json") == {
+            "subject": fixture.registered.subject.model_dump(mode="json"),
+            "instance_id": fixture.registered.instance_id,
+            "bridge_identity": "workflow-bridge/head-seen-history-fold@3",
+            "manifest_id": str(fixture.staged.manifest.manifest_id),
+            "grant_id": str(fixture.staged.grant.grant_id),
+            "manifest_digest": fixture.staged.grant.manifest_digest,
+            "entry_order": 0,
+            "observation_key": str(fixture.staged.manifest.entries[0].observation_key),
+            "delivery_identity": str(accepted.delivery_identity),
+            "occurrence": accepted.occurrence,
+            "phase": "running",
+            "local_incarnation": 1,
+            "head": {
+                "repository_id": 32,
+                "ref": "feature/custody",
+                "sha": "a" * 40,
+            },
+            "base": {"repository_id": 31, "ref": "main", "sha": "b" * 40},
+            "mergeable": False,
+            "policy_revision": str(POLICY_REVISION),
+            "strict_base": True,
+            "base_current": False,
+            "finished": True,
+            "folded": True,
+            "cut": "observation_folded",
+        }
+        assert folded_records[: len(accepted_records)] == accepted_records
+        produced, completed = folded_records[-2:]
+        assert isinstance(produced, TokensProduced)
+        assert isinstance(completed, FiringCompleted)
+        assert produced.occurrence == completed.occurrence == accepted.occurrence
+        assert str(produced.place) == "life.heads"
+        assert len(produced.tokens) == 1
+        assert produced.tokens[0].color == "HeadSeen"
+        assert produced.tokens[0].data == {
+            "head": "a" * 40,
+            "base": "b" * 40,
+            "mergeable": False,
+            "policy": str(POLICY_REVISION),
+            "strict_base": True,
+            "base_current": False,
+        }
+        assert produced.entries == ()
+        assert produced.scope is None
+        assert produced.instant == 0
+        assert str(completed.transition) == "on_head"
+        assert completed.instant == 0
+        assert not any(isinstance(record, FiringFailed) for record in folded_records)
+
+        completed_delivery = authority.complete_observation_delivery(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+
+        assert completed_delivery.model_dump(mode="json") == {
+            "provider_route_id": str(PROVIDER_ROUTE_ID),
+            "delivery_id": str(DELIVERY_ID),
+            "custody_generation": 1,
+            "subject": fixture.registered.subject.model_dump(mode="json"),
+            "instance_id": fixture.registered.instance_id,
+            "bridge_identity": folded.bridge_identity,
+            "manifest_id": folded.manifest_id,
+            "grant_id": folded.grant_id,
+            "manifest_digest": folded.manifest_digest,
+            "entry_order": folded.entry_order,
+            "observation_key": folded.observation_key,
+            "history_delivery_identity": folded.delivery_identity,
+            "occurrence": folded.occurrence,
+            "workflow_cut": "observation_folded",
+            "cut": "host_delivery_completed",
+        }
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 1
+            assert connection.execute("SELECT COUNT(*) FROM delivery_custody").fetchone()[0] == 1
+        with closing(sqlite3.connect(tmp_path / "dispatch.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM impetus_local_dispatch_tasks").fetchone()[0] == 0
+        assert history_records(fixture) == folded_records
 
 
 class TestFirstHistoryAcceptance:
@@ -1555,7 +1828,7 @@ class TestFirstHistoryAcceptance:
             pytest.param(
                 1,
                 "github:44:31:pr:7",
-                "workflow-bridge/head-seen-history-acceptance@2",
+                "workflow-bridge/head-seen-history-fold@3",
                 id="duplicate",
             ),
             pytest.param(
@@ -1602,13 +1875,13 @@ class TestFirstHistoryAcceptance:
             pytest.param(
                 2,
                 "github:44:31:pr:7",
-                "workflow-bridge/head-seen-history-acceptance@2",
+                "workflow-bridge/head-seen-history-fold@3",
                 id="invalid-singleton",
             ),
             pytest.param(
                 1,
                 7,
-                "workflow-bridge/head-seen-history-acceptance@2",
+                "workflow-bridge/head-seen-history-fold@3",
                 id="wrong-type-instance",
             ),
             pytest.param(
@@ -1749,6 +2022,865 @@ class TestFirstHistoryAcceptance:
 
         with closing(sqlite3.connect(fixture.history_path)) as connection:
             assert connection.execute("SELECT COUNT(*) FROM impetus_history_events").fetchone()[0] == before
+
+
+class TestExactObservationFoldAndHostCompletion:
+    """The accepted occurrence folds once before a separate host receipt exists."""
+
+    def test_fold_reoffers_and_completes_the_exact_public_carrier_once(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        accepted = authority.accept_staged_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        real_accept = Engine.accept_delivery
+        real_complete = Engine.complete_delivery
+        recovered: list[AcceptedDelivery] = []
+        completed: list[AcceptedDelivery] = []
+        offers: list[tuple[object, object, dict[str, object]]] = []
+
+        def record_offer(engine: Engine, source: object, token: object, **arguments: object) -> object:
+            result = real_accept(engine, source, token, **arguments)  # ty: ignore[invalid-argument-type]
+            offers.append((source, token, arguments))
+            assert isinstance(result, AcceptedDelivery)
+            recovered.append(result)
+            return result
+
+        def record_completion(engine: Engine, carrier: AcceptedDelivery) -> object:
+            completed.append(carrier)
+            return real_complete(engine, carrier)
+
+        monkeypatch.setattr(Engine, "accept_delivery", record_offer)
+        monkeypatch.setattr(Engine, "complete_delivery", record_completion)
+
+        folded = authority.fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+
+        assert isinstance(folded, ObservationFoldPosture)
+        assert len(offers) == len(recovered) == len(completed) == 1
+        source, token, arguments = offers[0]
+        assert source == "on_head"
+        assert (
+            token
+            == bridge_head_delivery(
+                manifest=fixture.staged.manifest,
+                grant=fixture.staged.grant,
+                entry=fixture.staged.manifest.entries[0],
+            ).token
+        )
+        assert arguments == {"identity": str(accepted.delivery_identity)}
+        assert completed[0] is recovered[0]
+        assert recovered[0].instance == fixture.registered.instance_id
+        assert recovered[0].identity == accepted.delivery_identity
+        assert recovered[0].occurrence == accepted.occurrence
+
+    def test_fresh_fold_retry_validates_prior_success_without_completing_or_appending(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        first = authority.fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        before = history_records(fixture)
+        real_history_page = Engine.history_page
+        history_pages = 0
+
+        def count_history_page(engine: Engine, after: int, limit: int) -> dict[str, object]:
+            nonlocal history_pages
+            history_pages += 1
+            return real_history_page(engine, after, limit)
+
+        def reject_completion(*args: object, **kwargs: object) -> object:
+            del args, kwargs
+            raise AssertionError("an ended exact reoffer must not call completion")
+
+        monkeypatch.setattr(Engine, "history_page", count_history_page)
+        monkeypatch.setattr(Engine, "complete_delivery", reject_completion)
+
+        replayed = build_observation_acceptance_authority(state_root=tmp_path).fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+
+        assert replayed == first
+        assert history_pages == 1
+        assert history_records(fixture) == before
+
+    def test_host_completion_before_fold_refuses_without_writing(self, tmp_path: Path) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        before = history_records(fixture)
+
+        with pytest.raises(ObservationNotFoldedError) as raised:
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert raised.value.args[0] == "observation_not_folded"
+        assert history_records(fixture) == before
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 0
+
+    def test_changed_canonical_custody_after_fold_cannot_authorize_host_completion(self, tmp_path: Path) -> None:
+        prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection, connection:
+            stored = json.loads(connection.execute("SELECT canonical_content FROM delivery_custody").fetchone()[0])
+            stored["snapshot"]["head"]["sha"] = "c" * 40
+            changed = json.dumps(stored, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+            connection.execute(
+                "UPDATE delivery_custody SET canonical_content = ?, content_digest = ?",
+                (changed, sha256(changed.encode()).hexdigest()),
+            )
+
+        with pytest.raises(DeliveryCompletionCorruptionError):
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 0
+
+    def test_changed_custody_digest_after_fold_cannot_authorize_host_completion(self, tmp_path: Path) -> None:
+        prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection, connection:
+            connection.execute("UPDATE delivery_custody SET content_digest = ?", ("f" * 64,))
+
+        with pytest.raises(DeliveryCompletionCorruptionError):
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 0
+
+    def test_malformed_custody_collision_after_fold_cannot_authorize_host_completion(self, tmp_path: Path) -> None:
+        prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection, connection:
+            connection.execute("PRAGMA ignore_check_constraints = ON")
+            connection.execute("UPDATE delivery_custody SET disposition = 'quarantined', collision_digest = NULL")
+
+        with pytest.raises(DeliveryCompletionCorruptionError):
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 0
+
+    def test_orphaned_host_completion_cannot_be_reconstructed(self, tmp_path: Path) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        expected_delivery = reconstructed_custodied_delivery(fixture)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.complete_observation_delivery(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection, connection:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute("DELETE FROM delivery_custody")
+
+        with pytest.raises(DeliveryCompletionCorruptionError):
+            DeliveryCompletionCustody.from_path(path=tmp_path / "deliveries.sqlite3").completion_receipt(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+                expected_delivery=expected_delivery,
+            )
+
+    def test_fresh_exact_host_completion_retry_returns_receipt_without_insert_or_history_append(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        first = authority.complete_observation_delivery(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        before = history_records(fixture)
+
+        def reject_append(*args: object, **kwargs: object) -> None:
+            del args, kwargs
+            raise AssertionError("an exact host completion retry must not insert")
+
+        monkeypatch.setattr(DeliveryCompletionCustody, "append_completion", reject_append)
+
+        replayed = build_observation_acceptance_authority(state_root=tmp_path).complete_observation_delivery(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+
+        assert replayed == first
+        assert history_records(fixture) == before
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 1
+
+    def test_host_completion_backend_refusal_exposes_only_fixed_cause_and_fresh_load_decides(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        sentinel = "backend-secret-sentinel"
+
+        def refuse_append(*args: object, **kwargs: object) -> None:
+            del args, kwargs
+            raise sqlite3.OperationalError(sentinel)
+
+        monkeypatch.setattr(DeliveryCompletionCustody, "append_completion", refuse_append)
+
+        with pytest.raises(DeliveryCompletionCommitError) as raised:
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert raised.value.args == (
+            "host_completion_commit_unknown",
+            "reload host delivery custody before deciding whether completion committed",
+        )
+        assert sentinel not in repr(raised.value)
+        assert raised.value.__cause__ is None
+        assert raised.value.__context__ is None
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 0
+        monkeypatch.undo()
+        recovered = build_observation_acceptance_authority(state_root=tmp_path).complete_observation_delivery(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        assert recovered.cut == "host_delivery_completed"
+        assert len(history_records(fixture)) == fixture.initial_history_records + 4
+
+    def test_non_novel_staging_cannot_fold_or_complete_host_delivery(self, tmp_path: Path) -> None:
+        registered = open_registered_readiness(tmp_path)
+        acquire_signed_delivery(tmp_path)
+        acquire_signed_delivery(tmp_path, body=webhook_body(head_sha=CommitSha("c" * 40)))
+        staged = build_staging_authority(
+            state_root=tmp_path,
+            provider_routes=(PROVIDER_ROUTE,),
+            policy_revision=POLICY_REVISION,
+        ).stage_delivery(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        fixture = AcceptanceFixture(
+            root=tmp_path,
+            registered=registered,
+            staged=staged,
+            initial_history_records=0,
+        )
+        before = history_records(fixture)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+
+        folded = authority.fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        with pytest.raises(ObservationDeliveryNotFoldedError):
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert staged.disposition == "acquisition_collision"
+        assert not isinstance(folded, ObservationFoldPosture)
+        assert folded.reason == "staging_not_novel"
+        assert not folded.folded
+        assert history_records(fixture) == before
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 0
+
+    def test_late_custody_collision_preserves_original_fold_and_host_completion(self, tmp_path: Path) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        accepted = authority.accept_staged_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+
+        collision = acquire_signed_delivery(
+            tmp_path,
+            body=webhook_body(head_sha=CommitSha("c" * 40)),
+        )
+        folded = authority.fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        completed = authority.complete_observation_delivery(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        retained = DeliveryCustody.from_path(
+            path=tmp_path / "deliveries.sqlite3",
+            provider_routes=(PROVIDER_ROUTE,),
+        ).retained_delivery(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+
+        assert collision["disposition"] == "quarantined"
+        assert retained is not None
+        assert retained.quarantined
+        assert retained.webhook.snapshot.head.sha == DEFAULT_HEAD_SHA
+        assert isinstance(folded, ObservationFoldPosture)
+        assert folded.delivery_identity == accepted.delivery_identity
+        assert folded.head.sha == DEFAULT_HEAD_SHA
+        assert completed.history_delivery_identity == accepted.delivery_identity
+        assert completed.custody_generation == retained.custody_generation == 1
+        assert fixture.staged == build_staging_authority(
+            state_root=tmp_path,
+            provider_routes=(PROVIDER_ROUTE,),
+            policy_revision=PolicyRevision("policy:later"),
+        ).staging_posture(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+
+    def test_changed_accepted_occurrence_is_rejected_before_completion(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        accepted = authority.accept_staged_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        real_accept = Engine.accept_delivery
+        completion_calls = 0
+
+        def changed_occurrence(engine: Engine, *args: object, **kwargs: object) -> AcceptedDelivery:
+            result = real_accept(engine, *args, **kwargs)  # ty: ignore[invalid-argument-type]
+            assert isinstance(result, AcceptedDelivery)
+            return AcceptedDelivery(result.instance, result.source, result.identity, result.occurrence + 1)
+
+        def reject_completion(*args: object, **kwargs: object) -> object:
+            del args, kwargs
+            nonlocal completion_calls
+            completion_calls += 1
+            raise AssertionError("mismatched recovered occurrence must fail before completion")
+
+        monkeypatch.setattr(Engine, "accept_delivery", changed_occurrence)
+        monkeypatch.setattr(Engine, "complete_delivery", reject_completion)
+
+        with pytest.raises(readiness_runtime.HistoryAcceptanceError, match="accepted_delivery_correlation_mismatch"):
+            authority.fold_accepted_observation(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert completion_calls == 0
+        assert len(history_records(fixture)) == fixture.initial_history_records + 2
+        assert accepted.occurrence is not None
+
+    def test_recorded_occurrence_two_is_rejected_before_completion(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        accepted = authority.accept_staged_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        real_history_page = Engine.history_page
+        completion_calls = 0
+
+        def changed_history_page(engine: Engine, after: int, limit: int) -> dict[str, object]:
+            page = deepcopy(real_history_page(engine, after, limit))
+            return replace_accepted_occurrence(page, 2)
+
+        def changed_acceptance(*args: object, **kwargs: object) -> AcceptedDelivery:
+            del args, kwargs
+            assert accepted.delivery_identity is not None
+            return AcceptedDelivery(
+                fixture.registered.instance_id,
+                "on_head",
+                str(accepted.delivery_identity),
+                2,
+            )
+
+        def reject_completion(*args: object, **kwargs: object) -> object:
+            del args, kwargs
+            nonlocal completion_calls
+            completion_calls += 1
+            raise AssertionError("occurrence 2 must fail before completion")
+
+        monkeypatch.setattr(Engine, "history_page", changed_history_page)
+        monkeypatch.setattr(Engine, "accept_delivery", changed_acceptance)
+        monkeypatch.setattr(Engine, "complete_delivery", reject_completion)
+
+        with pytest.raises(readiness_runtime.HistoryAcceptanceError, match="accepted_delivery_occurrence_mismatch"):
+            authority.fold_accepted_observation(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert completion_calls == 0
+        assert len(history_records(fixture)) == fixture.initial_history_records + 2
+
+    def test_prior_acknowledgement_for_another_occurrence_fails_closed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        accepted = authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        before = history_records(fixture)
+
+        def wrong_occurrence(*args: object, **kwargs: object) -> PriorAcknowledgement:
+            del args, kwargs
+            assert accepted.delivery_identity is not None
+            assert accepted.occurrence is not None
+            return PriorAcknowledgement(str(accepted.delivery_identity), accepted.occurrence + 1)
+
+        monkeypatch.setattr(Engine, "accept_delivery", wrong_occurrence)
+
+        with pytest.raises(
+            readiness_runtime.HistoryAcceptanceError, match="prior_acknowledgement_correlation_mismatch"
+        ):
+            build_observation_acceptance_authority(state_root=tmp_path).fold_accepted_observation(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert history_records(fixture) == before
+
+    def test_changed_host_completion_correlation_never_overwrites(self, tmp_path: Path) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        original = authority.complete_observation_delivery(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection, connection:
+            connection.execute("UPDATE delivery_completions SET occurrence = occurrence + 1")
+
+        with pytest.raises(DeliveryCompletionCorruptionError):
+            build_observation_acceptance_authority(state_root=tmp_path).complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            row = connection.execute("SELECT occurrence FROM delivery_completions").fetchone()
+        assert row == (original.occurrence + 1,)
+        assert len(history_records(fixture)) == fixture.initial_history_records + 4
+
+    def test_duplicate_host_completion_rows_fail_bounded_reconstruction(self, tmp_path: Path) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.complete_observation_delivery(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection, connection:
+            connection.execute("ALTER TABLE delivery_completions RENAME TO original_delivery_completions")
+            connection.execute("CREATE TABLE delivery_completions AS SELECT * FROM original_delivery_completions")
+            connection.execute("INSERT INTO delivery_completions SELECT * FROM original_delivery_completions")
+            connection.execute("DROP TABLE original_delivery_completions")
+
+        with pytest.raises(DeliveryCompletionCorruptionError) as raised:
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert raised.value.args == ("duplicate_host_completion", PROVIDER_ROUTE_ID, DELIVERY_ID)
+        assert len(history_records(fixture)) == fixture.initial_history_records + 4
+
+    @pytest.mark.parametrize(
+        "statement",
+        [
+            "UPDATE delivery_completions SET custody_generation = 'bad'",
+            "UPDATE delivery_completions SET installation_id = 'bad'",
+            "UPDATE delivery_completions SET repository_id = 'bad'",
+            "UPDATE delivery_completions SET pull_request_number = 'bad'",
+            "UPDATE delivery_completions SET instance_id = zeroblob(129)",
+            "UPDATE delivery_completions SET bridge_identity = 'wrong'",
+            "UPDATE delivery_completions SET manifest_id = zeroblob(1000000)",
+            "UPDATE delivery_completions SET grant_id = zeroblob(1000000)",
+            "UPDATE delivery_completions SET manifest_digest = zeroblob(1000000)",
+            "UPDATE delivery_completions SET entry_order = 'bad'",
+            "UPDATE delivery_completions SET observation_key = zeroblob(1000000)",
+            "UPDATE delivery_completions SET history_delivery_identity = zeroblob(1000000)",
+            "UPDATE delivery_completions SET occurrence = 'bad'",
+            "UPDATE delivery_completions SET workflow_cut = 'wrong'",
+            "UPDATE delivery_completions SET cut = 'wrong'",
+        ],
+    )
+    def test_each_malformed_host_completion_field_fails_bounded_reconstruction(
+        self,
+        tmp_path: Path,
+        statement: str,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.complete_observation_delivery(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection, connection:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute("PRAGMA ignore_check_constraints = ON")
+            connection.execute(statement)
+
+        with pytest.raises(DeliveryCompletionCorruptionError):
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 1
+        assert len(history_records(fixture)) == fixture.initial_history_records + 4
+
+    @pytest.mark.parametrize(
+        ("statement", "parameters"),
+        [
+            ("UPDATE delivery_completions SET custody_generation = custody_generation + 1", ()),
+            (
+                "UPDATE delivery_completions SET installation_id = ?, instance_id = ?",
+                (45, "github:45:31:pr:7"),
+            ),
+            ("UPDATE delivery_completions SET manifest_id = ?", (f"manifest:v1:sha256:{'f' * 64}",)),
+            ("UPDATE delivery_completions SET grant_id = ?", (f"grant:v1:sha256:{'f' * 64}",)),
+            ("UPDATE delivery_completions SET manifest_digest = ?", ("f" * 64,)),
+            ("UPDATE delivery_completions SET entry_order = ?", (1,)),
+            ("UPDATE delivery_completions SET observation_key = ?", (f"obs:v1:sha256:{'f' * 64}",)),
+            (
+                "UPDATE delivery_completions SET history_delivery_identity = ?",
+                (f"history-delivery:v1:sha256:{'f' * 64}",),
+            ),
+        ],
+    )
+    def test_each_changed_host_completion_correlation_fails_without_overwrite(
+        self,
+        tmp_path: Path,
+        statement: str,
+        parameters: tuple[object, ...],
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.complete_observation_delivery(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection, connection:
+            connection.execute(statement, parameters)
+            changed = connection.execute("SELECT * FROM delivery_completions").fetchone()
+
+        with pytest.raises(DeliveryCompletionConflictError):
+            authority.complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT * FROM delivery_completions").fetchone() == changed
+        assert len(history_records(fixture)) == fixture.initial_history_records + 4
+
+    @pytest.mark.parametrize("field", ["transition", "occurrence", "consumed", "produced", "records"])
+    def test_each_firing_outcome_correlation_field_is_validated(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        field: str,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        real_complete = Engine.complete_delivery
+
+        def changed_outcome(engine: Engine, carrier: AcceptedDelivery) -> FiringOutcome:
+            outcome = real_complete(engine, carrier)
+            changes = {
+                "transition": {"transition": NetPath("on_runs")},
+                "occurrence": {"occurrence": outcome.occurrence + 1},
+                "consumed": {"consumed": (Token.black(),)},
+                "produced": {"produced": ()},
+                "records": {"records": outcome.records[:-1]},
+            }
+            return replace(outcome, **changes[field])
+
+        monkeypatch.setattr(Engine, "complete_delivery", changed_outcome)
+
+        with pytest.raises(WorkflowBridgeError, match="firing_outcome_correlation_mismatch"):
+            authority.fold_accepted_observation(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert len(history_records(fixture)) == fixture.initial_history_records + 4
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 0
+        recovered = build_observation_acceptance_authority(state_root=tmp_path).fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        assert isinstance(recovered, ObservationFoldPosture)
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            "terminal-order",
+            "produced-content",
+            "partial-terminal",
+            "failed-terminal",
+            "unrelated-terminal",
+            "prior-failure",
+        ],
+    )
+    def test_prior_success_requires_exact_complete_terminal_history(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        mutation: str,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        before = history_records(fixture)
+        real_history_page = Engine.history_page
+
+        def changed_history_page(engine: Engine, after: int, limit: int) -> dict[str, object]:
+            page = deepcopy(real_history_page(engine, after, limit))
+            return mutate_history_page(page, mutation)
+
+        monkeypatch.setattr(Engine, "history_page", changed_history_page)
+
+        with pytest.raises(RetainedSnapshotRejectedError):
+            build_observation_acceptance_authority(state_root=tmp_path).fold_accepted_observation(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert history_records(fixture) == before
+
+    def test_fold_record_capacity_refuses_before_completion_write(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        before = history_records(fixture)
+        monkeypatch.setattr(readiness_runtime, "MAX_HISTORY_RECORDS", len(before) + 1)
+        completion_calls = 0
+
+        def reject_completion(*args: object, **kwargs: object) -> object:
+            del args, kwargs
+            nonlocal completion_calls
+            completion_calls += 1
+            raise AssertionError("record capacity must fail before completion")
+
+        monkeypatch.setattr(Engine, "complete_delivery", reject_completion)
+
+        with pytest.raises(HistoryCapacityError) as raised:
+            authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+
+        assert raised.value.args == (
+            "history_capacity_exceeded",
+            "records",
+            len(before),
+            len(before) + 1,
+        )
+        assert completion_calls == 0
+        assert history_records(fixture) == before
+
+    def test_fold_remeasures_wal_headroom_before_completion_write(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        before = history_records(fixture)
+        measurements = iter(
+            (
+                readiness_runtime.MAX_HISTORY_BYTES - readiness_runtime.MAX_HISTORY_ENGINE_LOAD_HEADROOM,
+                readiness_runtime.MAX_HISTORY_BYTES - readiness_runtime.MAX_HISTORY_COMPLETION_HEADROOM + 1,
+            )
+        )
+        completion_calls = 0
+
+        def measured_storage(path: Path) -> int:
+            del path
+            return next(measurements)
+
+        def reject_completion(*args: object, **kwargs: object) -> object:
+            del args, kwargs
+            nonlocal completion_calls
+            completion_calls += 1
+            raise AssertionError("byte capacity must fail before completion")
+
+        monkeypatch.setattr(readiness_runtime, "history_storage_bytes", measured_storage)
+        monkeypatch.setattr(Engine, "complete_delivery", reject_completion)
+
+        with pytest.raises(HistoryCapacityError) as raised:
+            authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+
+        assert raised.value.args[0:2] == ("history_capacity_exceeded", "bytes")
+        assert completion_calls == 0
+        assert history_records(fixture) == before
+
+    def test_ended_fold_retry_reserves_no_completion_append_headroom(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        first = authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        before = history_records(fixture)
+        monkeypatch.setattr(readiness_runtime, "MAX_HISTORY_RECORDS", len(before))
+        monkeypatch.setattr(readiness_runtime, "MAX_HISTORY_COMPLETION_HEADROOM", readiness_runtime.MAX_HISTORY_BYTES)
+
+        replayed = build_observation_acceptance_authority(state_root=tmp_path).fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+
+        assert replayed == first
+        assert history_records(fixture) == before
+
+    def test_concurrent_exact_fold_and_host_completion_serialize_and_converge(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        entered_completion = Event()
+        allow_completion = Event()
+        completion_started = Event()
+        real_complete = Engine.complete_delivery
+
+        def paused_completion(engine: Engine, carrier: AcceptedDelivery) -> FiringOutcome:
+            entered_completion.set()
+            assert allow_completion.wait(timeout=5)
+            return real_complete(engine, carrier)
+
+        def complete_host() -> HostDeliveryCompletionReceipt:
+            completion_started.set()
+            return build_observation_acceptance_authority(state_root=tmp_path).complete_observation_delivery(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        monkeypatch.setattr(Engine, "complete_delivery", paused_completion)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            folded_future = executor.submit(
+                authority.fold_accepted_observation,
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+            assert entered_completion.wait(timeout=5)
+            completed_future = executor.submit(complete_host)
+            assert completion_started.wait(timeout=5)
+            allow_completion.set()
+            folded = folded_future.result(timeout=5)
+            completed = completed_future.result(timeout=5)
+
+        assert isinstance(folded, ObservationFoldPosture)
+        assert completed.history_delivery_identity == folded.delivery_identity
+        assert len(history_records(fixture)) == fixture.initial_history_records + 4
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 1
+
+    def test_ambiguous_completion_error_exposes_no_backend_content_and_fresh_load_decides(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        real_complete = Engine.complete_delivery
+        sentinel = "backend-secret-sentinel"
+
+        def commit_then_lose_ack(engine: Engine, carrier: AcceptedDelivery) -> object:
+            real_complete(engine, carrier)
+            raise RuntimeError(sentinel)
+
+        monkeypatch.setattr(Engine, "complete_delivery", commit_then_lose_ack)
+
+        with pytest.raises(ObservationFoldCommitError) as raised:
+            authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+
+        assert raised.value.args == (
+            "observation_fold_commit_unknown",
+            fixture.registered.instance_id,
+            "reload canonical History before deciding whether the observation folded",
+        )
+        assert sentinel not in repr(raised.value)
+        assert raised.value.__cause__ is None
+        assert raised.value.__context__ is None
+        assert len(history_records(fixture)) == fixture.initial_history_records + 4
+        monkeypatch.setattr(Engine, "complete_delivery", real_complete)
+        recovered = build_observation_acceptance_authority(state_root=tmp_path).fold_accepted_observation(
+            provider_route_id=PROVIDER_ROUTE_ID,
+            delivery_id=DELIVERY_ID,
+        )
+        assert isinstance(recovered, ObservationFoldPosture)
+        with closing(sqlite3.connect(tmp_path / "deliveries.sqlite3")) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM delivery_completions").fetchone()[0] == 0
+
+    @pytest.mark.parametrize("mutation", ["status", "in-flight", "life-phase", "head-token"])
+    def test_each_retained_projection_field_is_proven_from_actual_runtime_state(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        mutation: str,
+    ) -> None:
+        fixture = prepare_acceptance(tmp_path)
+        authority = build_observation_acceptance_authority(state_root=tmp_path)
+        authority.accept_staged_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        authority.fold_accepted_observation(provider_route_id=PROVIDER_ROUTE_ID, delivery_id=DELIVERY_ID)
+        before = history_records(fixture)
+        real_snapshot = Engine.snapshot
+
+        def changed_snapshot(engine: Engine) -> dict[str, object]:
+            snapshot = deepcopy(real_snapshot(engine))
+            return mutate_runtime_snapshot(snapshot, mutation)
+
+        monkeypatch.setattr(Engine, "snapshot", changed_snapshot)
+
+        with pytest.raises(RetainedSnapshotRejectedError):
+            build_observation_acceptance_authority(state_root=tmp_path).fold_accepted_observation(
+                provider_route_id=PROVIDER_ROUTE_ID,
+                delivery_id=DELIVERY_ID,
+            )
+
+        assert history_records(fixture) == before
 
 
 class TestStagingClassification:
