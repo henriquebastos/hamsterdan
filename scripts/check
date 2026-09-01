@@ -76,7 +76,15 @@ routine_tests() {
 
 tests() {
     reject_paths tests "$@" || return
-    routine_tests 1729 -n 4 --dist load --maxschedchunk=1 --durations=20 --durations-min=0.5
+    # Hosted CI must stay apt-free, and neither its 2-vCPU runner nor a
+    # many-core laptop tolerates oversubscribed process-forking DST tests:
+    # provisioning tests stay with the full gate, and workers are capped at
+    # the proven four without exceeding the machine's CPUs.
+    ROUTINE_TESTS="$ROUTINE_TESTS and not linux_orb_setup"
+    local workers
+    workers=$(getconf _NPROCESSORS_ONLN)
+    ((workers > 4)) && workers=4
+    routine_tests 1729 -n "$workers" --dist load --maxschedchunk=1 --durations=20 --durations-min=0.5
     uv run pytest -q -o addopts= tests2
 }
 
