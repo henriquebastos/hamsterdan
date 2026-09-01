@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import closing, suppress
 import sqlite3
 from typing import TYPE_CHECKING
 
@@ -214,7 +214,7 @@ class IngressCustody:
         self,
         *,
         path: Path,
-        policy_revision: PolicyRevision,
+        policy_revision: PolicyRevision | None,
         maximum_manifests: int,
     ) -> None:
         self._path = path
@@ -239,6 +239,21 @@ class IngressCustody:
             policy_revision=policy_revision,
             maximum_manifests=maximum_manifests,
         )
+
+    @classmethod
+    def for_reconstruction(
+        cls,
+        *,
+        path: Path,
+        maximum_manifests: int = MAX_MANIFESTS,
+    ) -> IngressCustody:
+        """Open existing authority for reads without supplying mutable policy."""
+        if not 1 <= maximum_manifests <= MAX_MANIFESTS:
+            raise ValueError(f"maximum manifests must be between 1 and {MAX_MANIFESTS}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(connect(path)) as connection, connection:
+            connection.executescript(SCHEMA)
+        return cls(path=path, policy_revision=None, maximum_manifests=maximum_manifests)
 
     def stage(
         self,
@@ -387,6 +402,8 @@ class IngressCustody:
         acquisition_bytes: bytes,
         acquisition_digest: str,
     ) -> None:
+        if self._policy_revision is None:
+            raise IngressError("reconstruction-only ingress custody cannot stage a new acquisition")
         prior_entries = self.prior_entries(connection)
         entry = None if acquisition.quarantined else observation_entry(project_head(acquisition.webhook.snapshot))
         admission_decision = self.classify(entry, prior_entries)
@@ -501,12 +518,13 @@ class IngressCustody:
         )
 
     def prior_entries(self, connection: sqlite3.Connection) -> tuple[IngressEntry, ...]:
-        try:
+        authorities: tuple[tuple[StagingAcquisition, StagingPosture], ...] | None = None
+        with suppress(RecursionError, TypeError, ValueError):
             authorities = self.reconstruct_authorities(connection)
-        except (TypeError, ValueError) as error:
+        if authorities is None:
             raise IngressCorruptionError(
                 "use a fresh state root; prior durable ingress rows failed strict reconstruction",
-            ) from error
+            )
         return tuple(entry for _, posture in authorities for entry in posture.manifest.entries)
 
     def reconstructed_staging(
@@ -516,14 +534,15 @@ class IngressCustody:
         delivery_id: DeliveryId,
     ) -> tuple[StagingAcquisition, StagingPosture] | None:
         with closing(connect(self._path)) as connection:
-            try:
+            authorities: tuple[tuple[StagingAcquisition, StagingPosture], ...] | None = None
+            with suppress(RecursionError, TypeError, ValueError):
                 authorities = self.reconstruct_authorities(connection)
-            except (TypeError, ValueError) as error:
+            if authorities is None:
                 raise IngressCorruptionError(
                     provider_route_id,
                     delivery_id,
                     "use a fresh state root; durable ingress rows failed strict reconstruction",
-                ) from error
+                )
         identity = AcquisitionIdentity(provider_route_id=provider_route_id, delivery_id=delivery_id)
         return next(
             ((acquisition, posture) for acquisition, posture in authorities if acquisition.identity == identity),

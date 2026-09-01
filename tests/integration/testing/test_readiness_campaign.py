@@ -913,6 +913,7 @@ def test_generated_v5_git_publication_recovery_schedules_replay_exactly(
                     raise
 
 
+@pytest.mark.timeout(60)
 def test_generated_delivery_recovery_schedules_replay_exactly() -> None:
     run_state_machine_as_test(
         _DeliveryRecoveryMachine,

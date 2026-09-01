@@ -54,13 +54,36 @@ admission, and fold cuts remain distinct. The bridge translates the accepted
 focused observation into the retained input; it does not become another
 admission ledger.
 
-Tasks 1–3 now implement this chain through immutable source-neutral staging:
-the exact Head observation/key, one acquisition manifest and grant, ordered
-entry, closed durable classification, finite SQLite custody, detached
-reconstruction, and the separate host-composed authority turn. The task-3 cut
-ends before bridge conversion and Petrus History; task 4 owns both first use of
-the phased-delivery prerequisite and the distinction between History acceptance
-and retained fold.
+Tasks 1–4 now implement this chain through immutable source-neutral staging and
+unfinished identified History acceptance: the exact Head observation/key, one
+acquisition manifest and grant, ordered entry, closed durable classification,
+finite SQLite custody, detached reconstruction, the separate host-composed
+authority turn, one exact bridge conversion, and public Petrus acceptance. The
+task-4 cut ends after adjacent `ExternalEventDelivered` and `FiringBegun`, with
+the retained occurrence still unfinished. Task 5 owns
+`Engine.complete_delivery` for the exact reconstructed carrier, retained fold,
+detached post-fold posture, and host completion.
+
+The first bridge correspondence is now fixed under
+`workflow-bridge/head-seen-history-acceptance@2`: source-neutral
+`HeadObservation` maps to retained `HeadSeen` at `on_head` only for local
+incarnation 1, open, non-draft, non-merged evidence. Head/base SHAs are exact;
+only explicit true mergeability maps true; policy comes from the exact
+manifest; and strict-base/base-current map to true/false. The stable version-1
+delivery identity binds bridge, manifest, grant digest, entry order, and key.
+Exact reoffer recovers one unfinished occurrence from History; no host or
+readiness accepted pointer exists. The host registration and readiness-root
+singletons are reconstructed through type-valid, byte-bounded projections;
+malformed stored values never cross the boundary or enter detached diagnostics.
+The cumulative root mounts the unchanged owner-local staging posture and
+requires exact equality among ingress authority, readiness observation, and
+accepted History correspondence. All History, catalog-row, file, and byte
+observations stop at fixed ceilings before complete materialization. History
+load reserves 128 KiB of aggregate database/WAL/shared-memory capacity, and a
+new identified acceptance remeasures and reserves 1 MiB for its exact
+two-record transaction before calling Petrus. Strict retained acquisition,
+observation, and History decoder failures become fixed cause-free readiness
+diagnostics.
 
 ### DS3
 

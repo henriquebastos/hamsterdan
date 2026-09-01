@@ -107,3 +107,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-27 — Petrus feedback tools qualified in the Hamsterdan orb](entries/2026-08-27T1441Z-petrus-feedback-tools-qualified-in-orb.md)
 - [2026-08-29 — CV21 first bridged lifecycle completed locally](entries/2026-08-29T2318Z-cv21-first-bridged-lifecycle-completed-locally.md)
 - [2026-08-31 — CV21 source-neutral readiness staging qualified locally](entries/2026-08-31T1140Z-cv21-source-neutral-readiness-staging-qualified.md)
+- [2026-08-31 — CV21 Head History acceptance qualified locally](entries/2026-08-31T2024Z-cv21-head-history-acceptance-qualified.md)

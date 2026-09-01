@@ -53,7 +53,10 @@ The bridge supplies readiness runtime with one workflow definition containing:
 
 Concrete Python signatures are DS1–DS3 Plan decisions made with readiness
 runtime and the first real call sites present. They must not expose a generic
-`dict`, legacy model, topology path, or untyped terminal.
+`dict`, legacy model, topology path, or untyped terminal. DS2 task 4 now supplies
+the first input signature: exact reconstructed `IngressManifest`,
+`AdmissionGrant`, and `IngressEntry` become a bridge-private delivery while the
+caller receives only detached `HistoryAcceptancePosture`.
 
 ## Translation laws
 
@@ -104,7 +107,8 @@ removal replacement in CV22
 | Family | First CV21 tracer | Required direction |
 |---|---:|---|
 | subject, seed, lifecycle posture | DS1 | retained runtime state → detached new posture |
-| head/draft/ready/comment/human acquisition as first used | DS2 | focused new observation → exact retained ingress token |
+| Head observation | DS2 task 4 | `HeadObservation` → retained `HeadSeen` at `on_head`; open incarnation 1 only; exact SHAs; explicit-true mergeability; manifest policy; strict/current base true/false; versioned identified unfinished History acceptance |
+| draft/ready/comment/human acquisition as first used | later owning tracer | focused new observation → exact retained ingress token; no family is implied by the Head mapping |
 | dashboard publication | DS3 | retained request → typed new Activity; typed new terminal → retained variant |
 | provider publication and recovery outcomes | DS4 | new effect outcome → exact retained terminal |
 | review and conversation agent work | DS5 | retained work ↔ typed new request/result terminal |
@@ -117,17 +121,61 @@ DS10–DS12 add no workflow family unless a real discovery or qualification path
 exposes an omission. An omission updates this census before implementation; it
 does not authorize a generic fallback.
 
-The confirmed later DS2 mapping is fail-closed. The webhook-derived Head
-observation carries the exact head and base branch tips and tri-state
-mergeability. Bridge conversion maps retained `mergeable=True` only when the
-snapshot value is explicitly true, uses the manifest-scoped policy revision,
-and maps webhook-only unproven base evidence to `strict_base=True` and
-`base_current=False` until a later exact provider read refreshes it. Policy and
-provenance do not enter `ObservationKey` semantic equality. Task 2 records this
-rule. Task 3 now implements the source-neutral Head observation, key, manifest,
-grant, classification, and detached staging posture, but does not call or change
-the bridge. Task 4 owns the first bridge mapping, Petrus pin update, and
-identified History acceptance.
+The first DS2 mapping is delivered and fail-closed under
+`workflow-bridge/head-seen-history-acceptance@2`. The webhook-derived Head
+observation carries exact repository/ref/lifecycle semantics in canonical
+source-neutral staging, while retained `HeadSeen` consumes only the exact head
+and base SHAs. Bridge conversion maps `mergeable=True` only when the observation
+is explicitly true, uses the exact manifest-scoped policy revision, and maps
+webhook-only unproven base evidence to `strict_base=True` and
+`base_current=False`. Policy and provenance do not enter `ObservationKey`
+semantic equality. Provider time, route, custody generation, and receipt order
+never enter the token or key.
+
+Only local incarnation 1, lifecycle `open`, `draft=False`, and `merged=False`
+are admitted by this family. Closed, merged, and draft snapshots fail before
+History with a bounded bridge diagnostic. The bridge does not fabricate
+`DraftSeen`, `ReadySeen`, or `CloseSeen` and does not infer currentness, policy,
+ordering, retry, effect authority, or a workflow decision.
+
+`history-delivery:v1:sha256:<digest>` binds the bridge identity, exact manifest
+ID, grant ID and manifest digest, entry order, and observation key. The
+manifest/grant reconstruction already binds canonical acquisition, observation
+bytes, subject, policy, and decision shape, so process loss can derive the same
+identity without storing a second acceptance record. Public
+`Engine.accept_delivery` receives the private source/token and that identity
+once per authority turn with no scope. Fresh delivery appends exactly
+`ExternalEventDelivered` then `FiringBegun`; exact unfinished reoffer returns
+the same occurrence without append. `PriorAcknowledgement` and unexpected
+scoped acknowledgement are bounded refusals, never implicit completion.
+
+Task 4 correspondence drives only new CV21 inputs through host/readiness into
+the real retained production Net and independently inspects neutral History
+facts. The owner and root Worlds distinguish custody, staging, unfinished
+acceptance, and not-yet-implemented fold, then exactly replay from fresh roots.
+Checker mutations cover every bridge field and authority identity. Actual
+`SIGKILL` after durable acceptance but before caller acknowledgement proves
+fresh exact reoffer converges on the same occurrence with no append. Task 5
+must exact-reoffer to recover the `AcceptedDelivery` carrier, then call
+`Engine.complete_delivery` only for that occurrence; task 4 has no fold or host
+completion. The correspondence also caps History files before Engine load,
+uses one finite public History page for frontier and prior-terminal inspection,
+and budgets the neutral unfinished-firing count at zero before acceptance and
+one afterward. Cumulative root observation mounts the unchanged owner-local
+staging posture, and accepted correspondence requires exact equality with the
+original `novel` ingress authority. File/byte and host-catalog scans stop at
+their ceilings rather than materializing unbounded state. Malformed History
+load has one fixed secret-free readiness error, while direct public-seam tests
+pin one source/token/identity acceptance without scope and explicit prior/
+scoped acknowledgement handling.
+
+The 2 MiB aggregate History file ceiling is pre-write authority, not only an
+observation bound. Every public Engine load reserves 128 KiB for WAL and
+shared-memory establishment. After the finite identity scan, a fresh identity
+is accepted only when the remeasured database/WAL/shared-memory footprint also
+leaves 1 MiB for the two-record acceptance transaction; a durable exact reoffer
+reserves no append bytes. Strict staging reconstruction and malformed History
+load replace decoder failures with fixed cause-free readiness diagnostics.
 
 ## Prohibited reuse
 

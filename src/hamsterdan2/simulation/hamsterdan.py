@@ -45,7 +45,12 @@ from hamsterdan2.github_app.simulation.webhooks import (
     signed_webhook_body,
     signed_webhook_headers,
 )
-from hamsterdan2.host.composition import build_hamsterdan, build_staging_authority, build_webhook_app
+from hamsterdan2.host.composition import (
+    build_hamsterdan,
+    build_observation_acceptance_authority,
+    build_staging_authority,
+    build_webhook_app,
+)
 from hamsterdan2.host.delivery import DeliveryCustody
 from hamsterdan2.host.values import (
     ActionIdentity,
@@ -65,6 +70,7 @@ from hamsterdan2.readiness.ingress_values import (
     AdmissionGrant,
     AdmissionGrantId,
     CanonicalObservation,
+    HistoryAcceptancePosture,
     IngressEntry,
     IngressManifest,
     IngressResources,
@@ -79,11 +85,18 @@ from hamsterdan2.readiness.simulation.ingress import (
 )
 from hamsterdan2.readiness.simulation.ingress import IngressChecker
 from hamsterdan2.readiness.simulation.lifecycle import (
+    ACCEPTED_HISTORY_RECORDS,
+    ACCEPT_STAGED_OBSERVATION_COMMAND,
     EXPECTED_BRIDGE_IDENTITY,
+    EXPECTED_HEAD_SEEN_COLOR,
     INSTANCE_ID,
+    OPEN_HISTORY_RECORDS,
     SUBJECT,
+    AcceptStagedObservationCommand,
     ReadinessChecker,
     ReadinessState,
+    SimulationCapacityError,
+    bounded_state_storage,
     pending_dispatch_tasks,
     readiness_state,
 )
@@ -278,6 +291,77 @@ class HamsterdanState(BaseModel):
     ingress: IngressState
 
 
+def expected_history_delivery_identity(posture: StagingPosture) -> str | None:
+    if len(posture.manifest.entries) != 1:
+        return None
+    entry = posture.manifest.entries[0]
+    material = json.dumps(
+        {
+            "bridge_identity": EXPECTED_BRIDGE_IDENTITY,
+            "entry_order": entry.order,
+            "grant_id": str(posture.grant.grant_id),
+            "manifest_digest": posture.grant.manifest_digest,
+            "manifest_id": str(posture.manifest.manifest_id),
+            "observation_key": str(entry.observation_key),
+            "version": 1,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return f"history-delivery:v1:sha256:{sha256(material).hexdigest()}"
+
+
+def history_acceptance_corresponds(state: HamsterdanState) -> bool:
+    readiness = state.readiness
+    delivery = readiness.delivery
+    if readiness.staging != state.ingress.posture:
+        return False
+    if not readiness.accepted:
+        return (
+            delivery is None
+            and readiness.history_records in (0, OPEN_HISTORY_RECORDS)
+            and readiness.in_flight_occurrences == 0
+            and not readiness.folded
+        )
+    posture = state.ingress.posture
+    binding = readiness.binding
+    if (
+        posture is None
+        or binding is None
+        or delivery is None
+        or len(posture.manifest.entries) != 1
+        or len(posture.decisions) != 1
+    ):
+        return False
+    entry = posture.manifest.entries[0]
+    observation = entry.observation
+    expected_payload = {
+        "head": str(observation.head.sha),
+        "base": str(observation.base.sha),
+        "mergeable": observation.mergeable is True,
+        "policy": str(posture.manifest.policy_revision),
+        "strict_base": True,
+        "base_current": False,
+    }
+    return (
+        posture == EXPECTED_STAGING
+        and observation.subject == SUBJECT
+        and binding.instance_id == INSTANCE_ID
+        and binding.bridge_identity == EXPECTED_BRIDGE_IDENTITY
+        and readiness.history_records == ACCEPTED_HISTORY_RECORDS
+        and readiness.in_flight_occurrences == 1
+        and delivery.source == "on_head"
+        and delivery.token_color == EXPECTED_HEAD_SEEN_COLOR
+        and delivery.token_payload == expected_payload
+        and delivery.delivery_identity == expected_history_delivery_identity(posture)
+        and delivery.occurrence == 1
+        and delivery.record_order == ("ExternalEventDelivered", "FiringBegun")
+        and not delivery.folded
+        and not readiness.folded
+    )
+
+
 def hamsterdan_checker_identity(
     *,
     ingress_checker_identity: CheckerIdentity,
@@ -285,7 +369,7 @@ def hamsterdan_checker_identity(
 ) -> CheckerIdentity:
     return CheckerIdentity(
         name="hamsterdan2.cv21.root-checker",
-        version=2,
+        version=6,
         digest=digest_json(
             {
                 "subject": SUBJECT.model_dump(mode="json"),
@@ -300,9 +384,36 @@ def hamsterdan_checker_identity(
                     "eligible": EXPECTED_STAGING_ACQUISITION.model_dump(mode="json"),
                     "collision": EXPECTED_COLLISION_ACQUISITION.model_dump(mode="json"),
                 },
+                "history_acceptance": {
+                    "bridge_identity": EXPECTED_BRIDGE_IDENTITY,
+                    "source": "on_head",
+                    "token": {
+                        "color": EXPECTED_HEAD_SEEN_COLOR,
+                        "payload": {
+                            "head": "a" * 40,
+                            "base": "b" * 40,
+                            "mergeable": False,
+                            "policy": str(STAGING_POLICY_REVISION),
+                            "strict_base": True,
+                            "base_current": False,
+                        },
+                    },
+                    "delivery_identity": expected_history_delivery_identity(EXPECTED_STAGING),
+                    "occurrence": 1,
+                    "record_order": ["ExternalEventDelivered", "FiringBegun"],
+                    "in_flight_occurrences": 1,
+                    "finished": False,
+                    "folded": False,
+                },
                 "ingress_checker": ingress_checker_identity.model_dump(mode="json"),
                 "readiness_checker": readiness_checker_identity.model_dump(mode="json"),
-                "phases": ["empty", "delivery_custodied", "readiness_staged", "host_recorded"],
+                "phases": [
+                    "empty",
+                    "delivery_custodied",
+                    "readiness_staged",
+                    "history_accepted",
+                    "host_recorded",
+                ],
                 "relationships": "every retained phase identifies one PR",
             }
         ),
@@ -326,8 +437,9 @@ RESOURCE_LIMITS = {
     "retained.readiness.ingress.canonical_bytes": len(EXPECTED_CANONICAL_HEAD),
     "retained.readiness.ingress.database_pages": MAX_SQLITE_PAGES,
     "retained.readiness.history_records": READINESS_RESOURCE_LIMITS["retained.readiness.history_records"],
+    "retained.readiness.in_flight_occurrences": READINESS_RESOURCE_LIMITS["retained.readiness.in_flight_occurrences"],
     "retained.state.bytes": 524_288,
-    "retained.state.files": 6,
+    "retained.state.files": 7,
 }
 
 
@@ -342,7 +454,7 @@ def hamsterdan_profile_identity(
 ) -> ProfileIdentity:
     return ProfileIdentity(
         name="hamsterdan2.cv21",
-        version=2,
+        version=5,
         digest=digest_json(
             {
                 "commands": [
@@ -350,6 +462,7 @@ def hamsterdan_profile_identity(
                     RECEIVE_WEBHOOK_COMMAND.model_dump(mode="json"),
                     COLLIDE_WEBHOOK_COMMAND.model_dump(mode="json"),
                     STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+                    ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
                 ],
                 "webhook_fixtures": {
                     "original": original_webhook_fixture_digest,
@@ -362,7 +475,13 @@ def hamsterdan_profile_identity(
                     "ingress": ingress_profile_identity.model_dump(mode="json"),
                     "readiness": readiness_profile_identity.model_dump(mode="json"),
                 },
-                "cuts": ["delivery_custodied", "readiness_staged", "host_recorded"],
+                "cuts": [
+                    "delivery_custodied",
+                    "readiness_staged",
+                    "history_accepted_unfinished",
+                    "retained_fold_not_implemented",
+                    "host_recorded",
+                ],
                 "owners": ["github_app", "host", "readiness", "workflow_bridge"],
                 "resources": dict(resource_limits),
             }
@@ -394,27 +513,41 @@ def start_hamsterdan(root: Path) -> GenerationStart[Hamsterdan]:
     return GenerationStart(build_hamsterdan(state_root=root))
 
 
-def host_state(root: Path) -> HostState:
-    path = root / "catalog.sqlite3"
-    if not path.is_file():
-        return HostState(subjects=[], records=[])
-    with closing(sqlite3.connect(path)) as connection:
-        connection.row_factory = sqlite3.Row
-        subject_rows = connection.execute(
-            """
-            SELECT installation_id, repository_id, pull_request_number, instance_id, readiness_root
+def observed_host_subjects(connection: sqlite3.Connection) -> list[RegisteredPullRequest]:
+    rows = connection.execute(
+        """
+            SELECT CASE WHEN typeof(installation_id) = 'integer' AND installation_id > 0
+                        THEN installation_id END AS installation_id,
+                   CASE WHEN typeof(repository_id) = 'integer' AND repository_id > 0
+                        THEN repository_id END AS repository_id,
+                   CASE WHEN typeof(pull_request_number) = 'integer' AND pull_request_number > 0
+                        THEN pull_request_number END AS pull_request_number,
+                   CASE WHEN typeof(instance_id) = 'text'
+                              AND length(CAST(instance_id AS BLOB)) BETWEEN 1 AND 128
+                              AND instance_id = printf(
+                                  'github:%d:%d:pr:%d', installation_id, repository_id, pull_request_number
+                              )
+                        THEN instance_id END AS instance_id,
+                   CASE WHEN typeof(readiness_root) = 'text'
+                              AND length(CAST(readiness_root AS BLOB)) BETWEEN 1 AND 128
+                              AND readiness_root = printf(
+                                  'instances/%d/%d/%d', installation_id, repository_id, pull_request_number
+                              )
+                        THEN readiness_root END AS readiness_root
             FROM subject_roots
             ORDER BY installation_id, repository_id, pull_request_number
-            """
-        ).fetchall()
-        record_rows = connection.execute(
-            """
-            SELECT action_identity, installation_id, repository_id, pull_request_number, action, posture, cut
-            FROM host_records
-            ORDER BY action_identity
-            """
-        ).fetchall()
-    subjects = [
+            LIMIT ?
+            """,
+        (RESOURCE_LIMITS["retained.host.subjects"] + 1,),
+    ).fetchall()
+    if len(rows) > RESOURCE_LIMITS["retained.host.subjects"]:
+        raise SimulationCapacityError(
+            "host_subject_capacity_exceeded",
+            RESOURCE_LIMITS["retained.host.subjects"],
+        )
+    if any(value is None for row in rows for value in row):
+        raise SimulationCapacityError("invalid_host_subject_observation")
+    return [
         RegisteredPullRequest(
             subject=PullRequestSubject(
                 installation_id=row["installation_id"],
@@ -424,9 +557,46 @@ def host_state(root: Path) -> HostState:
             instance_id=row["instance_id"],
             readiness_root=row["readiness_root"],
         )
-        for row in subject_rows
+        for row in rows
     ]
-    records = [
+
+
+def observed_host_records(connection: sqlite3.Connection) -> list[HostRecord]:
+    rows = connection.execute(
+        """
+            SELECT CASE WHEN typeof(action_identity) = 'text'
+                              AND length(CAST(action_identity AS BLOB)) BETWEEN 1 AND 128
+                              AND action_identity = ?
+                        THEN action_identity END AS action_identity,
+                   CASE WHEN typeof(installation_id) = 'integer' AND installation_id > 0
+                        THEN installation_id END AS installation_id,
+                   CASE WHEN typeof(repository_id) = 'integer' AND repository_id > 0
+                        THEN repository_id END AS repository_id,
+                   CASE WHEN typeof(pull_request_number) = 'integer' AND pull_request_number > 0
+                        THEN pull_request_number END AS pull_request_number,
+                   CASE WHEN typeof(action) = 'text' AND action = 'open_pull_request'
+                        THEN action END AS action,
+                   CASE WHEN typeof(posture) = 'text' AND posture = 'awaiting_observation'
+                        THEN posture END AS posture,
+                   CASE WHEN typeof(cut) = 'text' AND cut = 'host_recorded'
+                        THEN cut END AS cut
+            FROM host_records
+            ORDER BY action_identity
+            LIMIT ?
+            """,
+        (
+            str(OPEN_PULL_REQUEST_COMMAND.action_identity),
+            RESOURCE_LIMITS["retained.host.records"] + 1,
+        ),
+    ).fetchall()
+    if len(rows) > RESOURCE_LIMITS["retained.host.records"]:
+        raise SimulationCapacityError(
+            "host_record_capacity_exceeded",
+            RESOURCE_LIMITS["retained.host.records"],
+        )
+    if any(value is None for row in rows for value in row):
+        raise SimulationCapacityError("invalid_host_record_observation")
+    return [
         HostRecord(
             action_identity=ActionIdentity(row["action_identity"]),
             action=row["action"],
@@ -440,9 +610,20 @@ def host_state(root: Path) -> HostState:
             ),
             cut=row["cut"],
         )
-        for row in record_rows
+        for row in rows
     ]
-    return HostState(subjects=subjects, records=records)
+
+
+def host_state(root: Path) -> HostState:
+    path = root / "catalog.sqlite3"
+    if not path.is_file():
+        return HostState(subjects=[], records=[])
+    with closing(sqlite3.connect(path)) as connection:
+        connection.row_factory = sqlite3.Row
+        return HostState(
+            subjects=observed_host_subjects(connection),
+            records=observed_host_records(connection),
+        )
 
 
 def delivery_state(root: Path) -> DeliveryState:
@@ -498,7 +679,11 @@ def ingress_state(root: Path) -> IngressState:
 def observe_hamsterdan(root: Path) -> HamsterdanState:
     return HamsterdanState(
         host=host_state(root),
-        readiness=readiness_state(root / EXPECTED_REGISTRATION.readiness_root),
+        readiness=readiness_state(
+            root / EXPECTED_REGISTRATION.readiness_root,
+            dispatch_path=root / "dispatch.sqlite3",
+            ingress_path=root / "readiness-ingress.sqlite3",
+        ),
         delivery=delivery_state(root),
         ingress=ingress_state(root),
     )
@@ -517,16 +702,21 @@ def action_was_recorded(root: Path, action_identity: ActionIdentity) -> bool:
 
 
 def root_resource_usage(root: Path) -> ResourceUsage:
-    files = [path for path in root.rglob("*") if path.is_file()] if root.exists() else []
+    file_count, retained_bytes = bounded_state_storage(
+        root,
+        maximum_files=RESOURCE_LIMITS["retained.state.files"],
+        maximum_bytes=RESOURCE_LIMITS["retained.state.bytes"],
+    )
     readiness_root = root / EXPECTED_REGISTRATION.readiness_root
-    state = readiness_state(readiness_root)
+    state = readiness_state(readiness_root, dispatch_path=root / "dispatch.sqlite3")
+    host = host_state(root)
     delivery = delivery_state(root)
     ingress = ingress_state(root)
     return ResourceUsage(
         values={
             "pending.motus.tasks": pending_dispatch_tasks(root / "dispatch.sqlite3"),
-            "retained.host.records": len(host_state(root).records),
-            "retained.host.subjects": len(host_state(root).subjects),
+            "retained.host.records": len(host.records),
+            "retained.host.subjects": len(host.subjects),
             "retained.host.deliveries": delivery.rows,
             "retained.readiness.ingress.manifests": ingress.resources.manifests,
             "retained.readiness.ingress.entries": ingress.resources.entries,
@@ -536,8 +726,9 @@ def root_resource_usage(root: Path) -> ResourceUsage:
             "retained.readiness.ingress.canonical_bytes": ingress.resources.canonical_bytes,
             "retained.readiness.ingress.database_pages": ingress.resources.database_pages,
             "retained.readiness.history_records": state.history_records,
-            "retained.state.bytes": sum(path.stat().st_size for path in files),
-            "retained.state.files": len(files),
+            "retained.readiness.in_flight_occurrences": state.in_flight_occurrences,
+            "retained.state.bytes": retained_bytes,
+            "retained.state.files": file_count,
         }
     )
 
@@ -571,12 +762,28 @@ def validate_stage_webhook(command: Command) -> Command:
     return command
 
 
+def validate_accept_staged_observation(command: Command) -> Command:
+    if command.name != "hamsterdan.accept_staged_observation":
+        raise ValueError("CV21 root accepts only admitted host, webhook, staging, and acceptance commands")
+    parsed = AcceptStagedObservationCommand.model_validate(command.payload, strict=True)
+    if parsed != ACCEPT_STAGED_OBSERVATION_COMMAND or parsed.model_dump(mode="json") != command.payload:
+        raise ValueError("DS2 root acceptance command must contain exactly the admitted fields")
+    return command
+
+
 def stage_retained_webhook(root: Path) -> StagingPosture:
     return build_staging_authority(
         state_root=root,
         provider_routes=(PROVIDER_ROUTE,),
         policy_revision=STAGING_POLICY_REVISION,
     ).stage_delivery(
+        provider_route_id=PROVIDER_ROUTE_ID,
+        delivery_id=DELIVERY_ID,
+    )
+
+
+def accept_staged_observation(root: Path) -> HistoryAcceptancePosture:
+    return build_observation_acceptance_authority(state_root=root).accept_staged_observation(
         provider_route_id=PROVIDER_ROUTE_ID,
         delivery_id=DELIVERY_ID,
     )
@@ -611,7 +818,9 @@ class HamsterdanScenarioProfile:
             return validate_open_pull_request(command)
         if command.name == "hamsterdan.receive_webhook":
             return validate_receive_webhook(command)
-        return validate_stage_webhook(command)
+        if command.name == "hamsterdan.stage_webhook":
+            return validate_stage_webhook(command)
+        return validate_accept_staged_observation(command)
 
     def validate_fault(self, fault: Fault) -> Fault:
         raise ValueError(f"CV21 root admits no faults; remove {fault.name!r}")
@@ -643,6 +852,21 @@ class HamsterdanScenarioProfile:
             posture = stage_retained_webhook(self._root)
             return ApplyResult(
                 disposition="idempotent" if posture.disposition == "exact_duplicate" else "applied",
+                value=posture.model_dump(mode="json"),
+                scheduled=[],
+            )
+        if command.name == "hamsterdan.accept_staged_observation":
+            before = readiness_state(
+                self._root / EXPECTED_REGISTRATION.readiness_root,
+                dispatch_path=self._root / "dispatch.sqlite3",
+            ).history_records
+            posture = accept_staged_observation(self._root)
+            after = readiness_state(
+                self._root / EXPECTED_REGISTRATION.readiness_root,
+                dispatch_path=self._root / "dispatch.sqlite3",
+            ).history_records
+            return ApplyResult(
+                disposition="idempotent" if after == before else "applied",
                 value=posture.model_dump(mode="json"),
                 scheduled=[],
             )
@@ -687,6 +911,7 @@ class HamsterdanChecker:
         empty_host = state.host == HostState(subjects=[], records=[]) and state.readiness == ReadinessState(
             binding=None,
             history_records=0,
+            in_flight_occurrences=0,
         )
         subject_binding = state.host.subjects in ([], [EXPECTED_REGISTRATION])
         action_identity = state.host.records in ([], [EXPECTED_RECORD])
@@ -701,7 +926,11 @@ class HamsterdanChecker:
         )
         registered = state.host == HostState(
             subjects=[EXPECTED_REGISTRATION], records=[]
-        ) and state.readiness == ReadinessState(binding=None, history_records=0)
+        ) and state.readiness == ReadinessState(
+            binding=None,
+            history_records=0,
+            in_flight_occurrences=0,
+        )
         readiness_durable = (
             state.host == HostState(subjects=[EXPECTED_REGISTRATION], records=[])
             and state.readiness.binding is not None
@@ -770,9 +999,21 @@ class HamsterdanChecker:
             == 0
         )
         ingress_staged = posture is not None and state.ingress.resources.manifests == 1
+        staged_without_host = (
+            state.host == HostState(subjects=[], records=[])
+            and posture is not None
+            and state.readiness
+            == ReadinessState(
+                binding=None,
+                history_records=0,
+                in_flight_occurrences=0,
+                staging=posture,
+            )
+        )
+        history_acceptance = history_acceptance_corresponds(state)
         empty = empty_host and delivery_empty
         return CheckResult(
-            passed=(empty_host or registered or readiness_durable or opened)
+            passed=(empty_host or staged_without_host or registered or readiness_durable or opened)
             and subject_binding
             and action_identity
             and readiness_result.passed
@@ -782,9 +1023,11 @@ class HamsterdanChecker:
             and delivery_content
             and (ingress_empty or ingress_staged)
             and ingress_result.passed
-            and ingress_delivery,
+            and ingress_delivery
+            and history_acceptance,
             detail={
                 "empty": empty,
+                "staged_without_host": staged_without_host,
                 "registered": registered,
                 "readiness_durable": readiness_durable,
                 "opened": opened,
@@ -799,6 +1042,7 @@ class HamsterdanChecker:
                 "ingress_staged": ingress_staged,
                 "ingress": ingress_result.passed,
                 "ingress_delivery": ingress_delivery,
+                "history_acceptance": history_acceptance,
                 "ingress_acquisition": ingress_detail["acquisition"],
                 "ingress_manifest": ingress_detail["manifest"],
                 "ingress_entry_order": ingress_detail["entry_order"],

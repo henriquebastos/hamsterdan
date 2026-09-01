@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from hamsterdan2.host.values import OpenPullRequestCommand
+    from hamsterdan2.readiness.ingress_values import HistoryAcceptancePosture
 
 
 SCHEMA = """
@@ -41,6 +42,8 @@ CREATE TABLE IF NOT EXISTS host_records (
 );
 """
 
+MAX_REGISTRATION_IDENTITY_BYTES = 128
+
 
 class HostCatalogError(Exception):
     """A host command conflicts with durable host custody."""
@@ -52,6 +55,10 @@ class ActionIdentityConflictError(HostCatalogError):
 
 class SubjectRootConflictError(HostCatalogError):
     """A PR subject is already bound to a different readiness root."""
+
+
+class HostCatalogCorruptionError(HostCatalogError):
+    """Durable host authority has an impossible cardinality."""
 
 
 class PullRequestNotRegisteredError(HostCatalogError):
@@ -113,25 +120,74 @@ def reject_action_conflict(
         )
 
 
+def reconstruct_registration(
+    row: sqlite3.Row,
+    expected: RegisteredPullRequest,
+) -> RegisteredPullRequest:
+    correlation = (
+        row["installation_id"],
+        row["repository_id"],
+        row["pull_request_number"],
+        row["instance_id"],
+        row["readiness_root"],
+    )
+    expected_key = subject_key(expected.subject)
+    if any(value is None for value in correlation):
+        raise HostCatalogCorruptionError(
+            "invalid_subject_registration",
+            expected_key,
+            "replace the malformed host catalog before requesting readiness authority",
+        )
+    expected_correlation = (*expected_key, expected.instance_id, expected.readiness_root)
+    if correlation != expected_correlation:
+        raise SubjectRootConflictError(
+            "subject_root_mismatch",
+            expected_key,
+            expected.instance_id,
+            expected.readiness_root,
+            "use the subject's derived readiness root or a fresh state root",
+        )
+    return expected
+
+
 def registered_pull_request(
     connection: sqlite3.Connection,
     subject: PullRequestSubject,
 ) -> RegisteredPullRequest | None:
-    row = connection.execute(
+    rows = connection.execute(
         """
-        SELECT installation_id, repository_id, pull_request_number, instance_id, readiness_root
+        SELECT CASE WHEN typeof(installation_id) = 'integer' AND installation_id > 0
+                    THEN installation_id END AS installation_id,
+               CASE WHEN typeof(repository_id) = 'integer' AND repository_id > 0
+                    THEN repository_id END AS repository_id,
+               CASE WHEN typeof(pull_request_number) = 'integer' AND pull_request_number > 0
+                    THEN pull_request_number END AS pull_request_number,
+               CASE WHEN typeof(instance_id) = 'text'
+                          AND length(CAST(instance_id AS BLOB)) BETWEEN 1 AND ?
+                    THEN instance_id END AS instance_id,
+               CASE WHEN typeof(readiness_root) = 'text'
+                          AND length(CAST(readiness_root AS BLOB)) BETWEEN 1 AND ?
+                    THEN readiness_root END AS readiness_root
         FROM subject_roots
         WHERE installation_id = ? AND repository_id = ? AND pull_request_number = ?
+        LIMIT 2
         """,
-        subject_key(subject),
-    ).fetchone()
-    if row is None:
+        (
+            MAX_REGISTRATION_IDENTITY_BYTES,
+            MAX_REGISTRATION_IDENTITY_BYTES,
+            *subject_key(subject),
+        ),
+    ).fetchmany(2)
+    if len(rows) > 1:
+        raise HostCatalogCorruptionError(
+            "duplicate_subject_registration",
+            subject_key(subject),
+            len(rows),
+            "replace the malformed host catalog before requesting readiness authority",
+        )
+    if not rows:
         return None
-    return RegisteredPullRequest(
-        subject=subject_from_row(row),
-        instance_id=row["instance_id"],
-        readiness_root=row["readiness_root"],
-    )
+    return reconstruct_registration(rows[0], registration_for(subject))
 
 
 def bind_subject(
@@ -151,9 +207,8 @@ def bind_subject(
         return expected
     if recorded != expected:
         raise SubjectRootConflictError(
+            "subject_root_mismatch",
             subject_key(expected.subject),
-            recorded.instance_id,
-            recorded.readiness_root,
             expected.instance_id,
             expected.readiness_root,
             "use the subject's original readiness root or a fresh state root",
@@ -250,3 +305,19 @@ class HostCatalog:
             )
             append_record(connection, record)
             return record
+
+    def run_readiness_authority(
+        self,
+        subject: PullRequestSubject,
+        action: Callable[[RegisteredPullRequest], HistoryAcceptancePosture],
+    ) -> HistoryAcceptancePosture:
+        """Fence one existing subject root while readiness owns its Engine."""
+        with closing(connect(self._path)) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            registered = registered_pull_request(connection, subject)
+            if registered is None:
+                raise PullRequestNotRegisteredError(
+                    subject_key(subject),
+                    "register and open this pull request before requesting History acceptance",
+                )
+            return action(registered)

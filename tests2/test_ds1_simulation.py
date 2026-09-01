@@ -7,12 +7,22 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING, cast
 
+from petrus.engine import Engine
 from petrus.testing.dst import BudgetExhausted, Disposition, ExecuteOperation, Observation, encode_artifact
 
+from hamsterdan2.readiness.runtime import MAX_HISTORY_RECORDS, HistoryCapacityError
+from hamsterdan2.readiness.simulation.ingress import STAGE_ACQUISITION_COMMAND
 from hamsterdan2.readiness.simulation.lifecycle import (
+    ACCEPT_STAGED_OBSERVATION_COMMAND,
     OPEN_READINESS_COMMAND,
+    ReadinessChecker,
     build_readiness_world,
+    observe_readiness,
+    readiness_resource_usage,
     replay_readiness,
+)
+from hamsterdan2.readiness.simulation.lifecycle import (
+    DEFAULT_BUDGET as READINESS_BUDGET,
 )
 from hamsterdan2.simulation.hamsterdan import (
     DEFAULT_BUDGET,
@@ -80,6 +90,222 @@ class TestReadinessOwnerSimulation:
         assert b"hamsterdan." not in encoded
         assert b"net_v5" not in encoded
         assert b"readiness_v5" not in encoded
+
+    def test_staging_and_history_acceptance_are_separate_fresh_root_replay_cuts(self, tmp_path: Path) -> None:
+        record_root = tmp_path / "record"
+        world = build_readiness_world(root=record_root)
+        try:
+            timeline = world.timeline()
+            timeline.command(
+                "readiness.open_lifecycle",
+                OPEN_READINESS_COMMAND.model_dump(mode="json"),
+            )
+            timeline.command(
+                "readiness.stage_acquisition",
+                STAGE_ACQUISITION_COMMAND.model_dump(mode="json"),
+            )
+            staged = observe_readiness(record_root)
+            accepted = timeline.command(
+                "readiness.accept_staged_observation",
+                ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+            timeline.finish(Disposition.QUIESCENT)
+            artifact = world.artifact("cv21.ds2.readiness-history-acceptance")
+        finally:
+            world.close()
+
+        state = observe_readiness(record_root)
+        replayed = replay_readiness(artifact, root=tmp_path / "replay")
+        accepted_value = cast("dict[str, JsonValue]", accepted.value)
+        assert staged.staging is not None
+        assert staged.history_records == 21
+        assert staged.in_flight_occurrences == 0
+        assert not staged.accepted
+        assert staged.delivery is None
+        assert accepted.disposition == "applied"
+        assert accepted_value["disposition"] == "accepted"
+        assert accepted_value["finished"] is False
+        assert accepted_value["folded"] is False
+        assert state.history_records == 23
+        assert state.in_flight_occurrences == 1
+        assert state.accepted
+        assert not state.folded
+        assert state.delivery is not None
+        assert state.delivery.record_order == ("ExternalEventDelivered", "FiringBegun")
+        assert replayed.outcome == "pass"
+        assert replayed.operations == len(artifact.operations)
+        assert replayed.journal_digest == artifact.expected.journal_digest
+
+    @pytest.mark.parametrize(
+        ("path", "replacement", "detail"),
+        [
+            pytest.param(("binding", "bridge_identity"), "workflow-bridge/mutated@1", "bridge_identity"),
+            pytest.param(("staging", "manifest", "policy_revision"), "policy:mutated", "staging_authority"),
+            pytest.param(
+                ("staging", "grant", "grant_id"),
+                f"grant:v1:sha256:{'f' * 64}",
+                "grant",
+            ),
+            pytest.param(
+                ("staging", "manifest", "entries", 0, "observation_key"),
+                f"obs:v1:sha256:{'f' * 64}",
+                "observation_key",
+            ),
+            pytest.param(
+                ("staging", "manifest", "entries", 0, "observation", "head", "sha"),
+                "c" * 40,
+                "staging_authority",
+                id="bridge-input-observation",
+            ),
+            pytest.param(("delivery", "source"), "on_mutated", "history_delivery"),
+            pytest.param(("delivery", "token_color"), "Mutated", "history_delivery"),
+            pytest.param(("delivery", "token_payload", "head"), "c" * 40, "history_delivery"),
+            pytest.param(
+                ("delivery", "delivery_identity"),
+                f"history-delivery:v1:sha256:{'f' * 64}",
+                "delivery_identity",
+            ),
+            pytest.param(("delivery", "occurrence"), 2, "occurrence"),
+            pytest.param(("in_flight_occurrences",), 2, "in_flight_occurrences"),
+            pytest.param(("staging",), None, "staging_authority", id="missing-staging"),
+            pytest.param(
+                ("delivery", "record_order"),
+                ["FiringBegun", "ExternalEventDelivered"],
+                "history_delivery",
+            ),
+            pytest.param(("accepted",), False, "accepted"),
+            pytest.param(("folded",), True, "accepted"),
+        ],
+    )
+    def test_owner_checker_rejects_changed_acceptance_evidence(
+        self,
+        tmp_path: Path,
+        path: tuple[str | int, ...],
+        replacement: JsonValue,
+        detail: str,
+    ) -> None:
+        root = tmp_path / detail
+        world = build_readiness_world(root=root)
+        try:
+            timeline = world.timeline()
+            timeline.command("readiness.open_lifecycle", OPEN_READINESS_COMMAND.model_dump(mode="json"))
+            timeline.command("readiness.stage_acquisition", STAGE_ACQUISITION_COMMAND.model_dump(mode="json"))
+            timeline.command(
+                "readiness.accept_staged_observation",
+                ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+        finally:
+            world.close()
+        value = cast("dict[str, JsonValue]", observe_readiness(root).model_dump(mode="json"))
+        target: object = value
+        for part in path[:-1]:
+            if isinstance(part, int):
+                assert isinstance(target, list)
+                target = target[part]
+            else:
+                assert isinstance(target, dict)
+                target = target[part]
+        final = path[-1]
+        assert isinstance(final, str)
+        assert isinstance(target, dict)
+        target[final] = replacement
+
+        result = ReadinessChecker().check(
+            Observation(name="readiness.state", value=value, instant=0, generation=1, sequence=0)
+        )
+
+        assert not result.passed
+        if detail in cast("dict[str, JsonValue]", result.detail):
+            assert cast("dict[str, JsonValue]", result.detail)[detail] is False
+
+    def test_owner_checker_rejects_an_added_entry_order(self, tmp_path: Path) -> None:
+        root = tmp_path / "entry-order"
+        world = build_readiness_world(root=root)
+        try:
+            timeline = world.timeline()
+            timeline.command("readiness.open_lifecycle", OPEN_READINESS_COMMAND.model_dump(mode="json"))
+            timeline.command("readiness.stage_acquisition", STAGE_ACQUISITION_COMMAND.model_dump(mode="json"))
+            timeline.command(
+                "readiness.accept_staged_observation",
+                ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+        finally:
+            world.close()
+        value = cast("dict[str, JsonValue]", observe_readiness(root).model_dump(mode="json"))
+        staging = cast("dict[str, JsonValue]", value["staging"])
+        manifest = cast("dict[str, JsonValue]", staging["manifest"])
+        entries = cast("list[JsonValue]", manifest["entries"])
+        second = deepcopy(cast("dict[str, JsonValue]", entries[0]))
+        second["order"] = 1
+        second["observation_key"] = f"obs:v1:sha256:{'f' * 64}"
+        entries.append(second)
+
+        result = ReadinessChecker().check(
+            Observation(name="readiness.state", value=value, instant=0, generation=1, sequence=0)
+        )
+
+        assert not result.passed
+        assert cast("dict[str, JsonValue]", result.detail)["staging_authority"] is False
+
+    def test_history_observation_uses_one_bounded_public_page(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        root = tmp_path / "history-page"
+        world = build_readiness_world(root=root)
+        try:
+            world.timeline().command(
+                "readiness.open_lifecycle",
+                OPEN_READINESS_COMMAND.model_dump(mode="json"),
+            )
+        finally:
+            world.close()
+        calls: list[tuple[int, int]] = []
+        original = Engine.history_page
+
+        def observed_page(engine: Engine, after: int, limit: int) -> dict[str, object]:
+            calls.append((after, limit))
+            return original(engine, after, limit)
+
+        monkeypatch.setattr(Engine, "history_page", observed_page)
+
+        state = observe_readiness(root)
+
+        assert state.history_records == 21
+        assert calls == [(0, MAX_HISTORY_RECORDS)]
+
+    def test_history_observation_rejects_an_oversized_frontier_before_checker_scans(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        root = tmp_path / "history-frontier"
+        world = build_readiness_world(root=root)
+        try:
+            world.timeline().command(
+                "readiness.open_lifecycle",
+                OPEN_READINESS_COMMAND.model_dump(mode="json"),
+            )
+        finally:
+            world.close()
+
+        def oversized_page(engine: Engine, after: int, limit: int) -> dict[str, object]:
+            del engine
+            assert (after, limit) == (0, MAX_HISTORY_RECORDS)
+            return {"frontier": MAX_HISTORY_RECORDS + 1, "records": []}
+
+        monkeypatch.setattr(Engine, "history_page", oversized_page)
+
+        with pytest.raises(HistoryCapacityError) as raised:
+            observe_readiness(root)
+
+        assert raised.value.args == (
+            "history_capacity_exceeded",
+            "records",
+            MAX_HISTORY_RECORDS + 1,
+            MAX_HISTORY_RECORDS,
+        )
 
 
 class TestHamsterdanRootSimulation:
@@ -202,6 +428,28 @@ class TestHamsterdanResourceBounds:
             assert set(usage) == expected_names
             assert all(usage[name] <= DEFAULT_BUDGET.profile_resources[name] for name in expected_names)
 
+    def test_zero_in_flight_budget_rejects_the_unfinished_acceptance(self, tmp_path: Path) -> None:
+        resources = {
+            **READINESS_BUDGET.profile_resources,
+            "retained.readiness.in_flight_occurrences": 0,
+        }
+        budget = READINESS_BUDGET.model_copy(update={"profile_resources": resources})
+        world = build_readiness_world(root=tmp_path, budget=budget)
+        try:
+            timeline = world.timeline()
+            timeline.command("readiness.open_lifecycle", OPEN_READINESS_COMMAND.model_dump(mode="json"))
+            timeline.command("readiness.stage_acquisition", STAGE_ACQUISITION_COMMAND.model_dump(mode="json"))
+            with pytest.raises(BudgetExhausted) as raised:
+                timeline.command(
+                    "readiness.accept_staged_observation",
+                    ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+                )
+        finally:
+            world.close()
+
+        assert raised.value.bound == "profile_resources:retained.readiness.in_flight_occurrences"
+        assert raised.value.limit == 0
+
     def test_lowered_file_budget_fails_at_the_first_created_file(self, tmp_path: Path) -> None:
         resources = {**DEFAULT_BUDGET.profile_resources, "retained.state.files": 0}
         budget = DEFAULT_BUDGET.model_copy(update={"profile_resources": resources})
@@ -211,3 +459,24 @@ class TestHamsterdanResourceBounds:
 
         assert raised.value.bound == "profile_resources:retained.state.files"
         assert raised.value.limit == 0
+
+    def test_owner_resource_observation_stops_at_the_fixed_file_ceiling(self, tmp_path: Path) -> None:
+        for index in range(READINESS_BUDGET.profile_resources["retained.state.files"] + 1):
+            (tmp_path / f"state-{index}").touch()
+
+        with pytest.raises(RuntimeError) as raised:
+            readiness_resource_usage(tmp_path)
+
+        assert raised.value.args == (
+            "state_file_capacity_exceeded",
+            READINESS_BUDGET.profile_resources["retained.state.files"],
+        )
+
+    def test_owner_resource_observation_stops_at_the_fixed_byte_ceiling(self, tmp_path: Path) -> None:
+        maximum_bytes = READINESS_BUDGET.profile_resources["retained.state.bytes"]
+        (tmp_path / "oversized-state").write_bytes(b"x" * (maximum_bytes + 1))
+
+        with pytest.raises(RuntimeError) as raised:
+            readiness_resource_usage(tmp_path)
+
+        assert raised.value.args == ("state_byte_capacity_exceeded", maximum_bytes)

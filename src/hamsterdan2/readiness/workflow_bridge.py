@@ -6,8 +6,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from hashlib import sha256
+import json
 from typing import TYPE_CHECKING, Never
 
+from petrus.impetus.petrinet import Token
 from petrus.motus.activity import ActivityDeclaration, ActivityDefinition
 
 from hamsterdan.contracts.readiness_v5 import (
@@ -25,6 +28,7 @@ from hamsterdan.contracts.readiness_v5 import (
     DashReq,
     DeclinedM,
     FaultM,
+    HeadSeen,
     MovedM,
     MutWork,
     Publishable,
@@ -52,10 +56,16 @@ from hamsterdan.contracts.readiness_v5 import (
 )
 from hamsterdan.readiness.net_v5.gating import VariantPayloadConverter, wire_gates
 from hamsterdan.readiness.net_v5.topology import DERIVED, GATES, build_net_v5, seed_marking
+from hamsterdan2.readiness.ingress_values import (
+    AdmissionGrant,
+    HistoryDeliveryIdentity,
+    IngressEntry,
+    IngressManifest,
+)
 from hamsterdan2.workflow.values import AwaitingObservation, PullRequestSubject
 
 
-BRIDGE_IDENTITY = "workflow-bridge/subject-seed-posture@1"
+BRIDGE_IDENTITY = "workflow-bridge/head-seen-history-acceptance@2"
 
 
 if TYPE_CHECKING:
@@ -69,6 +79,76 @@ class WorkflowBridgeError(Exception):
 
 class RetainedSnapshotRejectedError(WorkflowBridgeError):
     """The retained snapshot does not map to an admitted CV21 posture."""
+
+
+class UnsupportedHeadObservationError(WorkflowBridgeError):
+    """A Head observation requires a bridge family not implemented in this cut."""
+
+
+@dataclass(frozen=True)
+class BridgedDelivery:
+    """Private retained representation of one exact source-neutral entry."""
+
+    source: str
+    token: Token
+    identity: HistoryDeliveryIdentity
+
+
+def history_delivery_identity(
+    *,
+    manifest: IngressManifest,
+    grant: AdmissionGrant,
+    entry: IngressEntry,
+) -> HistoryDeliveryIdentity:
+    """Bind the exact manifest-scoped grant and entry to this bridge contract."""
+    material = json.dumps(
+        {
+            "bridge_identity": BRIDGE_IDENTITY,
+            "entry_order": entry.order,
+            "grant_id": str(grant.grant_id),
+            "manifest_digest": grant.manifest_digest,
+            "manifest_id": str(manifest.manifest_id),
+            "observation_key": str(entry.observation_key),
+            "version": 1,
+        },
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return HistoryDeliveryIdentity(f"history-delivery:v1:sha256:{sha256(material).hexdigest()}")
+
+
+def bridge_head_delivery(
+    *,
+    manifest: IngressManifest,
+    grant: AdmissionGrant,
+    entry: IngressEntry,
+) -> BridgedDelivery:
+    """Convert the one admitted Head family without making a workflow decision."""
+    if grant.manifest_id != manifest.manifest_id or entry not in manifest.entries:
+        raise WorkflowBridgeError("manifest_entry_authority_mismatch")
+    observation = entry.observation
+    lifecycle_shape = (
+        observation.local_incarnation,
+        observation.lifecycle_state,
+        observation.draft,
+        observation.merged,
+    )
+    if lifecycle_shape != (1, "open", False, False):
+        raise UnsupportedHeadObservationError("unsupported_head_lifecycle", lifecycle_shape)
+    retained = HeadSeen(
+        head=str(observation.head.sha),
+        base=str(observation.base.sha),
+        mergeable=observation.mergeable is True,
+        policy=str(manifest.policy_revision),
+        strict_base=True,
+        base_current=False,
+    )
+    return BridgedDelivery(
+        source="on_head",
+        token=Token("HeadSeen", retained.dump()),
+        identity=history_delivery_identity(manifest=manifest, grant=grant, entry=entry),
+    )
 
 
 def activity_execution_requires_a_worker(**arguments: object) -> Never:

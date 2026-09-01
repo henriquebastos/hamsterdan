@@ -155,10 +155,9 @@ class TestReadinessRuntimePhases:
             build_hamsterdan(state_root=tmp_path).open_pull_request(next_command)
 
         assert raised.value.args == (
+            "root_binding_mismatch",
             "github:44:31:pr:7",
-            "github:44:31:pr:7",
-            "mutated",
-            "workflow-bridge/subject-seed-posture@1",
+            "workflow-bridge/head-seen-history-acceptance@2",
             "use a fresh readiness root when the instance or bridge identity differs",
         )
         assert canonical_history(history_path, "github:44:31:pr:7") == created_history

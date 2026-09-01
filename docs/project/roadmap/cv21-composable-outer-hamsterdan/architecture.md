@@ -50,8 +50,8 @@ the same outer-facing language after ruling its subnet composition contract.
 Paths are admitted by the tracer that first needs them. DS1 does not create an
 empty final skeleton.
 
-DS1 and the delivered DS2 tasks through source-neutral staging admit this source
-shape:
+DS1 and the delivered DS2 tasks through unfinished identified History
+acceptance admit this source shape:
 
 ```text
 src/hamsterdan2/
@@ -341,6 +341,80 @@ invokes nor waits for staging. Fresh-process reconstruction after staging
 commit reoffers the exact acquisition without creating another manifest,
 grant, entry, or decision.
 
+DS2 task 4 adds a later host authority operation selected only by the task-2
+`(ProviderRouteId, DeliveryId)` identity. Host reconstructs the task-3 staging
+authority, derives its subject, requires the existing subject/root registration,
+requires the catalog row to equal the instance/root deterministically derived
+from that subject, and requires exactly one matching catalog row. Readiness
+likewise requires exactly one singleton root-binding row before Engine load.
+Both reads project type-valid, byte-bounded identities before strict value
+construction; exact-one malformed rows therefore produce fixed bounded
+corruption diagnostics rather than raw validation failures or stored content.
+Duplicate, conflicting, or out-of-domain rows in constraint-free malformed
+schemas fail closed. Host holds the existing catalog authority transaction
+while readiness owns the one canonical Engine writer.
+Even a corrupted redirect to a different internally valid opened root therefore
+fails before History. The operation never auto-registers a subject, never
+accepts caller-supplied staging, subject, grant, entry, policy, token, source,
+identity, or occurrence, and remains absent from the HTTP call tree.
+
+Readiness reconstructs the complete manifest, grant, entry, canonical
+observation, acquisition, decision, policy, subject, and local incarnation
+before opening History. Only the original durable `novel` posture with one
+exact entry can cross the bridge. Every other closed task-3 classification
+returns bounded non-admission posture, while malformed custody or History fails
+loud without manufacturing success. The host-configured manifest ceiling is
+preserved across both the outer subject selection and the inner authoritative
+read, so an intervening append cannot enter through a wider default. Neither
+ingress nor host storage records an accepted pointer: Petrus History remains the
+only workflow-admission ledger.
+
+The sole bridge maps the first admitted family, `HeadObservation` to retained
+`HeadSeen` at source `on_head`, under bridge identity
+`workflow-bridge/head-seen-history-acceptance@2`. It accepts only local
+incarnation 1, lifecycle `open`, `draft=False`, and `merged=False`. It carries
+the exact head and base SHAs, maps mergeability true only when the observation
+is explicitly true, takes policy only from the reconstructed manifest, and
+sets `strict_base=True` and `base_current=False`. Closed, merged, or draft
+snapshots fail before History; no `DraftSeen`, `ReadySeen`, or `CloseSeen` is
+fabricated.
+
+The versioned delivery identity hashes bridge identity plus exact manifest ID,
+grant ID and digest, entry order, and observation key. Because those authority
+identifiers are reconstructed from canonical source-neutral staging, the
+identity is stable across process loss and binds the complete staged semantics
+without using timestamps, receipt order, mutable configuration, or retained
+token rendering alone. Readiness calls public `Engine.accept_delivery` once,
+without scope. A first offer commits adjacent `ExternalEventDelivered` and
+`FiringBegun`; an exact unfinished reoffer reconstructs the same occurrence
+without another append. The detached `HistoryAcceptancePosture` exposes only
+strict new values and is never persisted as another authority record.
+
+History load is finite before Petrus materialization: the canonical SQLite
+database plus WAL and shared-memory companions may occupy at most 2 MiB. A
+public `Engine.history_page` inspection then caps the accepted frontier at
+4,096 records. The bounded page reserves two records only when the offered
+delivery identity has no durable acceptance fact; an exact unfinished or ended
+reoffer at the ceiling reserves none because it appends nothing. The same
+page translates an ended prior acknowledgement; no `Engine.records`
+full-copy inspection remains. Malformed Engine load/replay is translated to a
+fixed readiness-owned corruption error with no stored payload in its exception
+chain, including recursive JSON decode failures; changed-content collision
+after a valid load remains distinct. The
+public acceptance call is independently pinned to one source/token/identity
+offer with no scope, and prior/scoped result branches have explicit bounded
+postures and correlation checks. Owner and root observations independently
+count zero unfinished firings before acceptance and exactly one afterward, and
+budget that neutral count as `retained.readiness.in_flight_occurrences`.
+
+Task 4 deliberately leaves the occurrence unfinished. It creates no
+`FiringCompleted`, `TokensProduced`, retained-Net fold, host completion,
+Dispatch task, Worker turn, provider read or effect, agent work, currentness
+witness, lifecycle successor, or second admission ledger. Task 5 must
+reconstruct staging, load the Engine, exact-reoffer to recover the same
+`AcceptedDelivery` carrier, and call `Engine.complete_delivery` for only that
+occurrence before it may project the retained fold or complete host custody.
+
 Outside the request, an authority turn claims one host delivery, advances one
 PR through readiness, and either returns detached posture or publishes a Motus
 Activity. A Worker turn may continue while ingress or the authority role is
@@ -372,9 +446,11 @@ admission seam. `AdmissionGrant` is manifest-scoped admission authority, never
 fresh effect authority.
 
 The delivered task-3 staging cut stops at the manifest-scoped grant. Task 4
-first converts that staged focused observation through the sole bridge and
-offers identified delivery to Petrus History; task 3 neither updates the Petrus
-pin nor claims History acceptance or retained-Net fold.
+now converts that staged focused observation through the sole bridge and offers
+identified delivery to Petrus History. Its unfinished acceptance is a third
+observable cut after HTTP custody and source-neutral staging. Task 5 still owns
+the fourth cut, retained-Net fold, plus later host completion; task 4 does not
+collapse those facts.
 
 ## Authority and effects
 
@@ -401,6 +477,7 @@ enter agent values, state, processes, or diagnostics.
 | Activity task, Attempt, claim, lease, retry, heartbeat, and operational terminal | Motus Dispatch |
 | Activity execution and operational report | Motus Worker using the host-composed Activity registry |
 | bridge mapping/version and retained workflow identity | fresh CV21 readiness root |
+| exact observation delivery acceptance and unfinished occurrence | Impetus History through public `Engine.accept_delivery` |
 | ingress manifest and admission grant | readiness ingress custody |
 | review request and attempt | readiness review custody |
 | timer command, acknowledgement, maturity, and delivery | readiness timer custody |
@@ -422,6 +499,33 @@ reducer. Bridge-local correspondence checks exact input conversion, request and
 occurrence projection, terminal return, reconstruction, and replay. Existing V5
 tests remain workflow-behavior evidence; CV21 adds translation and outer-system
 evidence rather than copying those tests.
+
+Task 4 owner-local and cumulative root Worlds add a separate strict History-
+acceptance command after staging. Their neutral observations distinguish the
+source, token color and payload, delivery identity, occurrence, adjacent record
+order, accepted status, and still-unfolded status. Independent checker
+mutations cover bridge identity, manifest/grant/key/order authority, every
+mapped token field, identity, occurrence, record order, and accepted-versus-
+folded posture. A real child process is killed after the two acceptance facts
+commit but before caller acknowledgement; a fresh host/readiness graph exact-
+reoffers the immutable staging authority and observes the same occurrence with
+no additional History record. The root observation mounts the unchanged owner-
+local staging posture, and accepted correspondence requires that posture to be
+the exact original `novel` authority. File/byte and host-catalog observations
+stop at ceiling plus one rather than materializing an oversized state; History
+is inspected through one bounded public page. Before any public Engine load,
+readiness reserves 128 KiB for SQLite WAL/shared-memory establishment; before a
+new identity reaches `accept_delivery`, it remeasures the aggregate database,
+WAL, and shared-memory footprint and reserves 1 MiB for the finite two-record
+transaction. An exact durable reoffer reserves no append bytes, but still
+requires load headroom. Root/catalog SQL projections also reject malformed
+singleton values and duplicate root authority with fixed diagnostics before
+constructing detached values. Strict ingress and History reconstruction errors
+discard decoder exception chains so malformed retained acquisition,
+observation, or History content cannot enter diagnostics. The owner checker
+identity also binds the independently decoded canonical `HeadObservation`, so
+changing the bridge-consumed observation while retaining its key/bytes cannot
+pass.
 
 The shared Timeline understands only action identity, logical time,
 deterministic choices, process generations, generic occurrence faults, one-leaf

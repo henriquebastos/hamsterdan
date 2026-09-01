@@ -6,10 +6,12 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import timedelta
+import sqlite3
 from typing import TYPE_CHECKING, cast
 
 from petrus.testing.dst import (
     BudgetExhausted,
+    CheckResult,
     CheckerIdentity,
     Disposition,
     ExecuteOperation,
@@ -47,15 +49,23 @@ from hamsterdan2.readiness.simulation.ingress import (
     RESOURCE_LIMITS as INGRESS_RESOURCE_LIMITS,
 )
 from hamsterdan2.readiness.simulation.lifecycle import (
+    EXPECTED_HISTORY_DELIVERY_IDENTITY,
+    ReadinessChecker,
+    ReadinessState,
+    readiness_state,
+)
+from hamsterdan2.readiness.simulation.lifecycle import (
     PROFILE_IDENTITY as READINESS_PROFILE_IDENTITY,
 )
-from hamsterdan2.readiness.simulation.lifecycle import ReadinessChecker, ReadinessState
 from hamsterdan2.simulation.hamsterdan import (
+    ACCEPT_STAGED_OBSERVATION_COMMAND,
     COLLIDE_WEBHOOK_COMMAND,
     COLLISION_WEBHOOK_FIXTURE_DIGEST,
     DEFAULT_BUDGET,
     EXPECTED_DELIVERY,
     EXPECTED_QUARANTINED_DELIVERY,
+    EXPECTED_RECORD,
+    OPEN_PULL_REQUEST_COMMAND,
     ORIGINAL_WEBHOOK_FIXTURE_DIGEST,
     RECEIVE_WEBHOOK_COMMAND,
     STAGE_WEBHOOK_COMMAND,
@@ -64,8 +74,10 @@ from hamsterdan2.simulation.hamsterdan import (
     build_hamsterdan_world,
     hamsterdan_checker_identity,
     hamsterdan_profile_identity,
+    host_state,
     observe_hamsterdan,
     replay_hamsterdan,
+    root_resource_usage,
 )
 from hamsterdan2.simulation.hamsterdan import (
     PROFILE_IDENTITY as ROOT_PROFILE_IDENTITY,
@@ -85,6 +97,25 @@ if TYPE_CHECKING:
 
 def checker_observation(value: JsonValue) -> Observation:
     return Observation(name="hamsterdan.state", value=value, instant=0, generation=1, sequence=0)
+
+
+def replace_path_value(
+    value: dict[str, JsonValue],
+    path: tuple[str | int, ...],
+    replacement: JsonValue,
+) -> None:
+    target: object = value
+    for part in path[:-1]:
+        if isinstance(part, int):
+            assert isinstance(target, list)
+            target = target[part]
+        else:
+            assert isinstance(target, dict)
+            target = target[part]
+    final = path[-1]
+    assert isinstance(final, str)
+    assert isinstance(target, dict)
+    target[final] = replacement
 
 
 def retained_state(root: Path) -> dict[str, JsonValue]:
@@ -109,6 +140,31 @@ def staged_state(root: Path) -> dict[str, JsonValue]:
         world.timeline().command(
             "hamsterdan.stage_webhook",
             STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+        )
+        return cast("dict[str, JsonValue]", observe_hamsterdan(root).model_dump(mode="json"))
+    finally:
+        world.close()
+
+
+def accepted_state(root: Path) -> dict[str, JsonValue]:
+    world = build_hamsterdan_world(root=root)
+    try:
+        timeline = world.timeline()
+        timeline.command(
+            "hamsterdan.open_pull_request",
+            OPEN_PULL_REQUEST_COMMAND.model_dump(mode="json"),
+        )
+        timeline.command(
+            "hamsterdan.receive_webhook",
+            RECEIVE_WEBHOOK_COMMAND.model_dump(mode="json"),
+        )
+        timeline.command(
+            "hamsterdan.stage_webhook",
+            STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+        )
+        timeline.command(
+            "hamsterdan.accept_staged_observation",
+            ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
         )
         return cast("dict[str, JsonValue]", observe_hamsterdan(root).model_dump(mode="json"))
     finally:
@@ -395,7 +451,11 @@ class TestWebhookRootSimulation:
         ]
         assert state.delivery.rows == 1
         assert state.delivery.retained == EXPECTED_DELIVERY
-        assert state.readiness == ReadinessState(binding=None, history_records=0)
+        assert state.readiness == ReadinessState(
+            binding=None,
+            history_records=0,
+            in_flight_occurrences=0,
+        )
         assert state.ingress.posture is None
         assert state.ingress.resources.manifests == 0
         assert replayed.outcome == "pass"
@@ -425,7 +485,11 @@ class TestWebhookRootSimulation:
         staged_value = cast("dict[str, JsonValue]", staged.value)
         assert receipt.disposition == "applied"
         assert custody_only.ingress.posture is None
-        assert custody_only.readiness == ReadinessState(binding=None, history_records=0)
+        assert custody_only.readiness == ReadinessState(
+            binding=None,
+            history_records=0,
+            in_flight_occurrences=0,
+        )
         assert staged.disposition == "applied"
         assert staged_value["disposition"] == "novel"
         assert state.ingress.posture is not None
@@ -434,9 +498,77 @@ class TestWebhookRootSimulation:
         assert state.ingress.resources.entries == 1
         assert state.ingress.resources.grants == 1
         assert state.ingress.resources.decisions == 1
-        assert state.readiness == ReadinessState(binding=None, history_records=0)
+        assert state.readiness == ReadinessState(
+            binding=None,
+            history_records=0,
+            in_flight_occurrences=0,
+            staging=state.ingress.posture,
+        )
         assert not (record_root / "dispatch.sqlite3").exists()
         assert not list(record_root.rglob("history.sqlite3"))
+        assert replayed.outcome == "pass"
+        assert replayed.operations == len(artifact.operations)
+        assert replayed.journal_digest == artifact.expected.journal_digest
+
+    def test_custody_staging_and_unfinished_history_acceptance_are_distinct_replay_cuts(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        record_root = tmp_path / "record"
+        world = build_hamsterdan_world(root=record_root)
+        try:
+            timeline = world.timeline()
+            timeline.command(
+                "hamsterdan.open_pull_request",
+                OPEN_PULL_REQUEST_COMMAND.model_dump(mode="json"),
+            )
+            timeline.command(
+                "hamsterdan.receive_webhook",
+                RECEIVE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            )
+            custody = observe_hamsterdan(record_root)
+            timeline.command(
+                "hamsterdan.stage_webhook",
+                STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            )
+            staging = observe_hamsterdan(record_root)
+            accepted = timeline.command(
+                "hamsterdan.accept_staged_observation",
+                ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            )
+            timeline.finish(Disposition.QUIESCENT)
+            artifact = world.artifact("cv21.ds2.history-accepted-unfinished")
+        finally:
+            world.close()
+
+        state = observe_hamsterdan(record_root)
+        replayed = replay_hamsterdan(artifact, root=tmp_path / "replay")
+        accepted_value = cast("dict[str, JsonValue]", accepted.value)
+        assert custody.delivery.rows == 1
+        assert custody.ingress.posture is None
+        assert custody.readiness.history_records == 21
+        assert not custody.readiness.accepted
+        assert staging.ingress.posture is not None
+        assert staging.ingress.posture.disposition == "novel"
+        assert staging.readiness.staging == staging.ingress.posture
+        assert staging.readiness.history_records == 21
+        assert not staging.readiness.accepted
+        assert accepted.disposition == "applied"
+        assert accepted_value["disposition"] == "accepted"
+        assert accepted_value["finished"] is False
+        assert accepted_value["folded"] is False
+        assert state.readiness.history_records == 23
+        assert state.readiness.in_flight_occurrences == 1
+        assert state.readiness.staging == state.ingress.posture
+        assert state.readiness.accepted
+        assert not state.readiness.folded
+        assert state.readiness.delivery is not None
+        assert state.readiness.delivery.source == "on_head"
+        assert state.readiness.delivery.token_color == "HeadSeen"
+        assert state.readiness.delivery.delivery_identity == EXPECTED_HISTORY_DELIVERY_IDENTITY
+        assert state.readiness.delivery.occurrence == 1
+        assert state.readiness.delivery.record_order == ("ExternalEventDelivered", "FiringBegun")
+        assert state.host.records == [EXPECTED_RECORD]
         assert replayed.outcome == "pass"
         assert replayed.operations == len(artifact.operations)
         assert replayed.journal_digest == artifact.expected.journal_digest
@@ -472,7 +604,12 @@ class TestWebhookRootSimulation:
         assert state.ingress.resources.entries == 0
         assert state.ingress.resources.grants == 1
         assert state.ingress.resources.decisions == 1
-        assert state.readiness == ReadinessState(binding=None, history_records=0)
+        assert state.readiness == ReadinessState(
+            binding=None,
+            history_records=0,
+            in_flight_occurrences=0,
+            staging=state.ingress.posture,
+        )
         assert replayed.outcome == "pass"
         assert replayed.operations == len(artifact.operations)
         assert replayed.journal_digest == artifact.expected.journal_digest
@@ -668,6 +805,127 @@ class TestWebhookCheckerSensitivity:
         )
 
         assert changed_root_identity.digest != HamsterdanChecker.identity.digest
+
+    @pytest.mark.parametrize(
+        ("path", "replacement"),
+        [
+            pytest.param(
+                ("readiness", "binding", "bridge_identity"),
+                "workflow-bridge/mutated@1",
+                id="bridge",
+            ),
+            pytest.param(
+                ("ingress", "posture", "manifest", "manifest_id"),
+                f"manifest:v1:sha256:{'f' * 64}",
+                id="manifest",
+            ),
+            pytest.param(
+                ("ingress", "posture", "grant", "grant_id"),
+                f"grant:v1:sha256:{'f' * 64}",
+                id="grant",
+            ),
+            pytest.param(
+                ("ingress", "posture", "decisions", 0, "entry_order"),
+                1,
+                id="entry-order",
+            ),
+            pytest.param(
+                ("ingress", "posture", "manifest", "entries", 0, "observation_key"),
+                f"obs:v1:sha256:{'f' * 64}",
+                id="entry-key",
+            ),
+            pytest.param(("readiness", "delivery", "source"), "on_mutated", id="source"),
+            pytest.param(("readiness", "delivery", "token_color"), "Mutated", id="token-color"),
+            pytest.param(
+                ("readiness", "delivery", "token_payload", "head"),
+                "c" * 40,
+                id="token-head",
+            ),
+            pytest.param(
+                ("readiness", "delivery", "token_payload", "base"),
+                "c" * 40,
+                id="token-base",
+            ),
+            pytest.param(
+                ("readiness", "delivery", "token_payload", "mergeable"),
+                True,
+                id="token-mergeable",
+            ),
+            pytest.param(
+                ("readiness", "delivery", "token_payload", "policy"),
+                "policy:mutated",
+                id="token-policy",
+            ),
+            pytest.param(
+                ("readiness", "delivery", "token_payload", "strict_base"),
+                False,
+                id="token-strict-base",
+            ),
+            pytest.param(
+                ("readiness", "delivery", "token_payload", "base_current"),
+                True,
+                id="token-base-current",
+            ),
+            pytest.param(
+                ("readiness", "delivery", "delivery_identity"),
+                f"history-delivery:v1:sha256:{'f' * 64}",
+                id="history-identity",
+            ),
+            pytest.param(("readiness", "delivery", "occurrence"), 2, id="occurrence"),
+            pytest.param(
+                ("readiness", "in_flight_occurrences"),
+                2,
+                id="in-flight-occurrences",
+            ),
+            pytest.param(("readiness", "staging"), None, id="missing-readiness-staging"),
+            pytest.param(
+                ("readiness", "delivery", "record_order"),
+                ["FiringBegun", "ExternalEventDelivered"],
+                id="record-order",
+            ),
+            pytest.param(("readiness", "accepted"), False, id="accepted"),
+            pytest.param(("readiness", "folded"), True, id="folded"),
+        ],
+    )
+    def test_root_checker_independently_rejects_changed_history_acceptance(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        path: tuple[str | int, ...],
+        replacement: JsonValue,
+    ) -> None:
+        value = accepted_state(tmp_path)
+        replace_path_value(value, path, replacement)
+
+        def accept_readiness(checker: ReadinessChecker, observation: Observation) -> CheckResult:
+            del checker, observation
+            return CheckResult(passed=True, detail={})
+
+        def accept_ingress(checker: IngressChecker, observation: Observation) -> CheckResult:
+            del checker, observation
+            return CheckResult(
+                passed=True,
+                detail={
+                    "acquisition": True,
+                    "manifest": True,
+                    "entry_order": True,
+                    "key": True,
+                    "canonical_bytes": True,
+                    "observation": True,
+                    "grant": True,
+                    "decision": True,
+                    "acquisition_bytes": True,
+                    "resources": True,
+                },
+            )
+
+        monkeypatch.setattr(ReadinessChecker, "check", accept_readiness)
+        monkeypatch.setattr(IngressChecker, "check", accept_ingress)
+
+        result = HamsterdanChecker().check(checker_observation(value))
+
+        assert not result.passed
+        assert cast("dict[str, JsonValue]", result.detail)["history_acceptance"] is False
 
     def test_ingress_checker_identity_binds_the_resource_contract(self) -> None:
         changed_resources = {
@@ -977,3 +1235,176 @@ class TestWebhookRootResources:
 
         assert raised.value.bound == "profile_resources:retained.readiness.ingress.grants"
         assert raised.value.limit == 0
+
+    def test_zero_in_flight_budget_rejects_the_unfinished_acceptance(self, tmp_path: Path) -> None:
+        resources = {
+            **DEFAULT_BUDGET.profile_resources,
+            "retained.readiness.in_flight_occurrences": 0,
+        }
+        budget = DEFAULT_BUDGET.model_copy(update={"profile_resources": resources})
+        world = build_hamsterdan_world(root=tmp_path, budget=budget)
+        try:
+            timeline = world.timeline()
+            timeline.command(
+                "hamsterdan.open_pull_request",
+                OPEN_PULL_REQUEST_COMMAND.model_dump(mode="json"),
+            )
+            timeline.command(
+                "hamsterdan.receive_webhook",
+                RECEIVE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            )
+            timeline.command(
+                "hamsterdan.stage_webhook",
+                STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            )
+            with pytest.raises(BudgetExhausted) as raised:
+                timeline.command(
+                    "hamsterdan.accept_staged_observation",
+                    ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+                )
+        finally:
+            world.close()
+
+        assert raised.value.bound == "profile_resources:retained.readiness.in_flight_occurrences"
+        assert raised.value.limit == 0
+
+    def test_root_resource_observation_stops_at_the_fixed_file_ceiling(self, tmp_path: Path) -> None:
+        for index in range(DEFAULT_BUDGET.profile_resources["retained.state.files"] + 1):
+            (tmp_path / f"state-{index}").touch()
+
+        with pytest.raises(RuntimeError) as raised:
+            root_resource_usage(tmp_path)
+
+        assert raised.value.args == (
+            "state_file_capacity_exceeded",
+            DEFAULT_BUDGET.profile_resources["retained.state.files"],
+        )
+
+    @pytest.mark.parametrize(
+        ("table", "code"),
+        [
+            pytest.param("subject_roots", "host_subject_capacity_exceeded", id="subjects"),
+            pytest.param("host_records", "host_record_capacity_exceeded", id="records"),
+        ],
+    )
+    def test_root_catalog_observation_stops_at_one_row_per_authority(
+        self,
+        tmp_path: Path,
+        table: str,
+        code: str,
+    ) -> None:
+        with sqlite3.connect(tmp_path / "catalog.sqlite3") as connection:
+            connection.executescript(
+                """
+                CREATE TABLE subject_roots (
+                    installation_id, repository_id, pull_request_number, instance_id, readiness_root
+                );
+                CREATE TABLE host_records (
+                    action_identity, installation_id, repository_id, pull_request_number,
+                    action, posture, cut
+                );
+                INSERT INTO subject_roots VALUES (44, 31, 7, 'github:44:31:pr:7', 'instances/44/31/7');
+                INSERT INTO host_records VALUES (
+                    'trace:open:1', 44, 31, 7,
+                    'open_pull_request', 'awaiting_observation', 'host_recorded'
+                );
+                """
+            )
+            if table == "subject_roots":
+                connection.execute(
+                    "INSERT INTO subject_roots VALUES (44, 31, 8, 'github:44:31:pr:8', 'instances/44/31/8')"
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO host_records VALUES (
+                        'trace:open:2', 44, 31, 7,
+                        'open_pull_request', 'awaiting_observation', 'host_recorded'
+                    )
+                    """
+                )
+
+        with pytest.raises(RuntimeError) as raised:
+            host_state(tmp_path)
+
+        assert raised.value.args == (code, 1)
+
+    @pytest.mark.parametrize(
+        ("table", "code"),
+        [
+            pytest.param("subject_roots", "invalid_host_subject_observation", id="subject"),
+            pytest.param("host_records", "invalid_host_record_observation", id="record"),
+        ],
+    )
+    def test_root_catalog_observation_rejects_oversized_singleton_values_without_echo(
+        self,
+        tmp_path: Path,
+        table: str,
+        code: str,
+    ) -> None:
+        sentinel = "stored-secret-must-not-escape-" + "x" * 128
+        with sqlite3.connect(tmp_path / "catalog.sqlite3") as connection:
+            connection.executescript(
+                """
+                CREATE TABLE subject_roots (
+                    installation_id, repository_id, pull_request_number, instance_id, readiness_root
+                );
+                CREATE TABLE host_records (
+                    action_identity, installation_id, repository_id, pull_request_number,
+                    action, posture, cut
+                );
+                INSERT INTO subject_roots VALUES (44, 31, 7, 'github:44:31:pr:7', 'instances/44/31/7');
+                INSERT INTO host_records VALUES (
+                    'trace:open:1', 44, 31, 7,
+                    'open_pull_request', 'awaiting_observation', 'host_recorded'
+                );
+                """
+            )
+            if table == "subject_roots":
+                connection.execute("UPDATE subject_roots SET instance_id = ?", (sentinel,))
+            else:
+                connection.execute("UPDATE host_records SET action_identity = ?", (sentinel,))
+
+        with pytest.raises(RuntimeError) as raised:
+            host_state(tmp_path)
+
+        assert raised.value.args == (code,)
+        assert sentinel not in str(raised.value)
+
+    def test_readiness_observation_rejects_duplicate_root_authority(self, tmp_path: Path) -> None:
+        instance_root = tmp_path / "instance"
+        instance_root.mkdir()
+        with sqlite3.connect(instance_root / "readiness.sqlite3") as connection:
+            connection.executescript(
+                """
+                CREATE TABLE root_binding (singleton, instance_id, bridge_identity);
+                INSERT INTO root_binding VALUES (
+                    1, 'github:44:31:pr:7', 'workflow-bridge/head-seen-history-acceptance@2'
+                );
+                INSERT INTO root_binding VALUES (
+                    2, 'github:44:31:pr:8', 'workflow-bridge/head-seen-history-acceptance@2'
+                );
+                """
+            )
+
+        with pytest.raises(RuntimeError) as raised:
+            readiness_state(instance_root, dispatch_path=tmp_path / "dispatch.sqlite3")
+
+        assert raised.value.args == ("duplicate_root_binding_observation", 1)
+
+    def test_readiness_observation_rejects_oversized_root_value_without_echo(self, tmp_path: Path) -> None:
+        instance_root = tmp_path / "instance"
+        instance_root.mkdir()
+        sentinel = "stored-secret-must-not-escape-" + "x" * 128
+        with sqlite3.connect(instance_root / "readiness.sqlite3") as connection:
+            connection.executescript("CREATE TABLE root_binding (singleton, instance_id, bridge_identity)")
+            connection.execute(
+                "INSERT INTO root_binding VALUES (1, ?, 'workflow-bridge/head-seen-history-acceptance@2')",
+                (sentinel,),
+            )
+
+        with pytest.raises(RuntimeError) as raised:
+            readiness_state(instance_root, dispatch_path=tmp_path / "dispatch.sqlite3")
+
+        assert raised.value.args == ("invalid_root_binding_observation",)
+        assert sentinel not in str(raised.value)

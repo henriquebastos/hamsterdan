@@ -59,6 +59,13 @@ through the bridge, folds it in the current Net, and marks host delivery
 completion at a distinct cut. Duplicate, corroborating, colliding, and
 incomparable evidence is visible without a second admission ledger.
 
+The current partial DS2 state has delivered tasks 1–4 only. It reaches the
+identified History cut through the real first Head bridge mapping and leaves
+the accepted occurrence unfinished after `ExternalEventDelivered` and
+`FiringBegun`. Task 5 must exact-reoffer immutable staging to recover that same
+carrier, complete only its occurrence, then establish the retained fold and
+host completion described by the full “After DS2” state above.
+
 ### After DS3
 
 The bridge projects one current dashboard request as exact typed new Activity

@@ -16,6 +16,7 @@ from hamsterdan2.github_app.models import (  # noqa: TC001 -- Pydantic resolves 
     ProviderRouteId,
 )
 from hamsterdan2.workflow.observations import HeadObservation  # noqa: TC001 -- Pydantic resolves at runtime.
+from hamsterdan2.workflow.values import PullRequestSubject  # noqa: TC001 -- Pydantic resolves at runtime.
 
 
 MAX_ACQUISITION_BYTES = 16_768
@@ -162,6 +163,34 @@ class AdmissionGrantId(str):
         )
 
 
+class HistoryDeliveryIdentity(str):
+    """Versioned identity of one exact manifest entry offered to History."""
+
+    __slots__ = ()
+
+    PATTERN = re.compile(r"^history-delivery:v1:sha256:[0-9a-f]{64}$")
+
+    def __new__(cls, value: str) -> Self:
+        if not isinstance(value, str) or cls.PATTERN.fullmatch(value) is None:
+            raise ValueError(
+                "History delivery identity must use history-delivery:v1:sha256 with 64 lowercase hexadecimal digits"
+            )
+        return super().__new__(cls, value)
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls,
+        source_type: object,
+        handler: GetCoreSchemaHandler,
+    ) -> core_schema.CoreSchema:
+        del source_type, handler
+        return core_schema.no_info_after_validator_function(
+            cls,
+            core_schema.str_schema(strict=True),
+            serialization=core_schema.to_string_ser_schema(),
+        )
+
+
 class CanonicalObservation(bytes):
     """Finite deterministic bytes that define one focused observation exactly."""
 
@@ -274,6 +303,59 @@ class StagingPosture(BaseModel):
     manifest: IngressManifest
     grant: AdmissionGrant
     decisions: tuple[AdmissionDecision, ...] = Field(max_length=MAX_ENTRIES_PER_MANIFEST)
+
+
+class HistoryAcceptancePosture(BaseModel):
+    """Detached new-facing result of one exact History acceptance attempt."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    subject: PullRequestSubject
+    disposition: Literal["accepted", "refused"]
+    reason: Literal[
+        "accepted_unfinished",
+        "staging_not_novel",
+        "occurrence_already_ended",
+        "unexpected_scoped_acknowledgement",
+    ]
+    staging_disposition: Disposition
+    bridge_identity: str = Field(min_length=1, max_length=128)
+    manifest_id: ManifestId
+    grant_id: AdmissionGrantId
+    entry_order: int | None = Field(default=None, strict=True, ge=0, lt=MAX_ENTRIES_PER_MANIFEST)
+    observation_key: ObservationKey | None
+    delivery_identity: HistoryDeliveryIdentity | None
+    occurrence: int | None = Field(default=None, strict=True, gt=0)
+    finished: bool
+    folded: bool
+
+    @model_validator(mode="after")
+    def has_ruled_acceptance_shape(self) -> HistoryAcceptancePosture:
+        missing_entry = (self.entry_order is None, self.observation_key is None)
+        if missing_entry not in {(True, True), (False, False)}:
+            raise ValueError("History acceptance entry order and observation key must both be present or absent")
+        shape = (
+            self.disposition,
+            self.reason,
+            missing_entry == (False, False),
+            self.delivery_identity is not None,
+            self.occurrence is not None,
+            self.finished,
+            self.folded,
+        )
+        allowed = {
+            ("accepted", "accepted_unfinished", True, True, True, False, False),
+            ("refused", "staging_not_novel", False, False, False, False, False),
+            ("refused", "staging_not_novel", True, False, False, False, False),
+            ("refused", "occurrence_already_ended", True, True, True, True, False),
+            ("refused", "occurrence_already_ended", True, True, True, True, True),
+            ("refused", "unexpected_scoped_acknowledgement", True, True, False, False, False),
+        }
+        if shape not in allowed:
+            raise ValueError("History acceptance posture does not use a ruled field shape")
+        if (self.reason == "staging_not_novel") == (self.staging_disposition == "novel"):
+            raise ValueError("only non-novel staging may produce the non-admission posture")
+        return self
 
 
 class IngressResources(BaseModel):
