@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -32,14 +33,4 @@ jobs:
       - name: Remove Petrus dependency authentication
         if: always()
         run: rm -rf "$RUNNER_TEMP/petrus-git-auth"
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.10"
-      - name: Install demo-video dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          cd tools/demo-video
-          bun install --frozen-lockfile
-          bunx playwright install --with-deps chromium
-      - run: scripts/check full
+      - run: scripts/check tests

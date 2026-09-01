@@ -15,6 +15,7 @@ usage() {
     cat <<'EOF'
 usage: scripts/check quick [PATH ...]
        scripts/check hamsterdan2
+       scripts/check tests
        scripts/check full
        scripts/check release
        scripts/check audit
@@ -22,6 +23,7 @@ usage: scripts/check quick [PATH ...]
 
 quick     lint and format-check Python PATHs, type-check production source, and enforce architecture rules
 hamsterdan2  enforce the isolated strict replacement gate
+tests     Python tests only: fixed-seed randomized routine tests on four workers plus the hamsterdan2 suite
 full      quick, Bun, build, and fixed-seed randomized routine tests on four workers
 release   full plus one additional fixed-seed serial routine test run
 audit     report repository lint, complexity, and structural findings; fail only on a broken probe
@@ -70,6 +72,12 @@ routine_tests() {
     local seed="$1"
     shift
     uv run pytest -q "$@" --randomly-seed="$seed" --forbid-skips -m "$ROUTINE_TESTS"
+}
+
+tests() {
+    reject_paths tests "$@" || return
+    routine_tests 1729 -n 4 --dist load --maxschedchunk=1 --durations=20 --durations-min=0.5
+    uv run pytest -q -o addopts= tests2
 }
 
 full() {
@@ -151,6 +159,9 @@ case "$profile" in
         ;;
     hamsterdan2)
         hamsterdan2 "$@"
+        ;;
+    tests)
+        tests "$@"
         ;;
     full)
         full "$@"
