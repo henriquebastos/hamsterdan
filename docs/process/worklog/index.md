@@ -108,3 +108,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-29 — CV21 first bridged lifecycle completed locally](entries/2026-08-29T2318Z-cv21-first-bridged-lifecycle-completed-locally.md)
 - [2026-08-31 — CV21 source-neutral readiness staging qualified locally](entries/2026-08-31T1140Z-cv21-source-neutral-readiness-staging-qualified.md)
 - [2026-08-31 — CV21 Head History acceptance qualified locally](entries/2026-08-31T2024Z-cv21-head-history-acceptance-qualified.md)
+- [2026-09-01 — Supervised launch and clean-green journey on hamsterdan-prod](entries/2026-09-01T1710Z-supervised-launch-and-clean-green-journey-on-hamsterdan-prod.md)
