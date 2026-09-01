@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 import socket
-from typing import TYPE_CHECKING
+import sys
+from tempfile import TemporaryDirectory
 
 from petrus.testing.dst import (
     ExecuteOperation,
@@ -26,9 +28,7 @@ from hamsterdan2.simulation.process import (
     LOCK_HOLDER_SCENARIO,
 )
 
-
-if TYPE_CHECKING:
-    from pathlib import Path
+import pytest
 
 
 PROCESS_BUDGET = ProcessBudget(
@@ -116,13 +116,21 @@ class TestProcessDeathBeforeHostRecord:
 class TestConcurrentEngineExclusion:
     """Host custody admits only one readiness Engine callback for a PR root."""
 
+    # The pinned failure shape is Linux's: the contender parks while opening
+    # the readiness root, before any submit is recorded. macOS parks it later
+    # (after world creation and the submit attempt), so the exact prefix pin
+    # only holds on the platform CI and production run on.
+    @pytest.mark.skipif(sys.platform == "darwin", reason="pins the Linux blocking shape")
     def test_contender_cannot_enter_readiness_while_the_first_action_holds_custody(self, tmp_path: Path) -> None:
         root = tmp_path / "state"
-        ready_socket = tmp_path / "readiness.sock"
         with (
+            # AF_UNIX paths are capped near 104 bytes on macOS and pytest's
+            # tmp_path exceeds that, so the socket needs its own short root.
+            TemporaryDirectory(prefix="hd-ready-") as socket_root,
             socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener,
             ThreadPoolExecutor(max_workers=1) as processes,
         ):
+            ready_socket = Path(socket_root) / "ready.sock"
             listener.bind(str(ready_socket))
             listener.listen(1)
             holder_future = processes.submit(run_lock_holder, root=root, ready_socket=ready_socket)
