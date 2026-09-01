@@ -2,7 +2,7 @@
 code: CV21
 level: Value
 status: Active
-status_reason: the 2026-08-31 alpha decision made CV21 the quality track without production pressure; DS2 remains active with source-neutral readiness staging as the next planned task
+status_reason: the 2026-08-31 alpha decision made CV21 the quality track without production pressure; DS2 remains active after delivering unfinished identified History acceptance, with retained-Net fold and host completion next
 updated: 2026-08-31
 related:
   - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
@@ -100,8 +100,8 @@ DS1 bridged lifecycle -> DS2 ingress -> DS3 retained-Net Activity
 11. [CV21.DS11 — Supervise multiple PRs fairly](cv21-ds11-supervise-multiple-prs-fairly.md)
 12. [CV21.DS12 — Qualify the outer system and workflow bridge](cv21-ds12-qualify-outer-system-and-bridge.md)
 
-CV21.DS1 is complete. DS2 is `Active`; tasks 1–2 in its confirmed serial ladder
-are delivered and tasks 3–5 remain. DS3 through DS12 remain `Planned`; none is
+CV21.DS1 is complete. DS2 is `Active`; tasks 1–4 in its confirmed serial ladder
+are delivered and task 5 remains. DS3 through DS12 remain `Planned`; none is
 pulled merely because its predecessor completed. Each selected tracer must
 expand into reviewable User and Technical Stories and pass its own API-
 strengthening Plan Checkpoint before implementation.

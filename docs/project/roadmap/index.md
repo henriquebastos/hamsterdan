@@ -19,8 +19,9 @@ belongs in each item's own metadata; this index routes to current owners.
   host, operator, custody, authority, effects, discovery, fairness, and
   Hamsterdan-owned DST around one temporary bridge to the current working Net.
   No workflow loop is reimplemented. DS1's strict gate and first bridged
-  lifecycle are complete; DS2 is active after delivering signed-webhook-to-
-  durable-custody, with source-neutral readiness staging next.
+  lifecycle are complete; DS2 is active after delivering signed-webhook custody
+  through unfinished identified History acceptance, with retained-Net fold and
+  host completion next.
 
 ## Planned
 

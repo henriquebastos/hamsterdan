@@ -67,8 +67,12 @@ class RegisteredPullRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     subject: PullRequestSubject
-    instance_id: str = Field(min_length=1)
-    readiness_root: str = Field(pattern=r"^instances/[1-9][0-9]*/[1-9][0-9]*/[1-9][0-9]*$")
+    instance_id: str = Field(min_length=1, max_length=128)
+    readiness_root: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^instances/[1-9][0-9]*/[1-9][0-9]*/[1-9][0-9]*$",
+    )
 
 
 class HostRecord(BaseModel):

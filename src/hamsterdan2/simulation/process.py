@@ -33,19 +33,29 @@ from hamsterdan2.github_app.simulation.webhooks import (
     signed_webhook_headers,
 )
 from hamsterdan2.host.catalog import HostCatalog
-from hamsterdan2.host.composition import build_webhook_app, open_readiness
+from hamsterdan2.host.composition import (
+    build_observation_acceptance_authority,
+    build_staging_authority,
+    build_webhook_app,
+    open_readiness,
+)
 from hamsterdan2.host.values import DeliveryReceipt
 from hamsterdan2.simulation.hamsterdan import (
+    ACCEPT_STAGED_OBSERVATION_COMMAND,
     DEFAULT_BUDGET,
     OPEN_PULL_REQUEST_COMMAND,
     PROVIDER_ROUTE,
     RECEIVE_WEBHOOK_COMMAND,
+    STAGE_WEBHOOK_COMMAND,
+    STAGING_POLICY_REVISION,
     HamsterdanChecker,
     HamsterdanScenarioProfile,
     observe_hamsterdan,
     root_resource_usage,
+    validate_accept_staged_observation,
     validate_open_pull_request,
     validate_receive_webhook,
+    validate_stage_webhook,
 )
 
 
@@ -56,6 +66,7 @@ if TYPE_CHECKING:
     from pydantic import JsonValue
     from starlette.types import ASGIApp, Message, Scope
 
+    from hamsterdan2.host.application import ObservationAcceptanceAuthority, StagingAuthority
     from hamsterdan2.host.values import RegisteredPullRequest
     from hamsterdan2.workflow.values import AwaitingObservation
 
@@ -67,6 +78,10 @@ AFTER_RECOVERY_SCENARIO = "ds1.process.after-host-recorded.recovery"
 LOCK_HOLDER_SCENARIO = "ds1.process.before-host-recorded.lock-holder"
 CUSTODY_DEATH_SCENARIO = "ds2.process.after-delivery-custodied.death"
 CUSTODY_RECOVERY_SCENARIO = "ds2.process.after-delivery-custodied.recovery"
+STAGING_DEATH_SCENARIO = "ds2.process.after-staging-durable.death"
+STAGING_RECOVERY_SCENARIO = "ds2.process.after-staging-durable.recovery"
+HISTORY_ACCEPTANCE_DEATH_SCENARIO = "ds2.process.after-history-accepted.death"
+HISTORY_ACCEPTANCE_RECOVERY_SCENARIO = "ds2.process.history-acceptance-recovery"
 BEFORE_PROFILE_IDENTITY = ProfileIdentity(
     name="hamsterdan2.ds1.before-host-recorded-process",
     version=1,
@@ -104,6 +119,46 @@ CUSTODY_RECOVERY_PROFILE_IDENTITY = ProfileIdentity(
         {
             "command": RECEIVE_WEBHOOK_COMMAND.model_dump(mode="json"),
             "recovery": "fresh process classifies the signed redelivery",
+        }
+    ),
+)
+STAGING_DEATH_PROFILE_IDENTITY = ProfileIdentity(
+    name="hamsterdan2.ds2.after-staging-durable-process",
+    version=1,
+    digest=digest_json(
+        {
+            "command": STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            "death_cut": "manifest, grant, entry, and decision committed; caller acknowledgement absent",
+        }
+    ),
+)
+STAGING_RECOVERY_PROFILE_IDENTITY = ProfileIdentity(
+    name="hamsterdan2.ds2.staging-custody-recovery-process",
+    version=1,
+    digest=digest_json(
+        {
+            "command": STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+            "recovery": "fresh authority reconstructs and exactly reoffers staging",
+        }
+    ),
+)
+HISTORY_ACCEPTANCE_DEATH_PROFILE_IDENTITY = ProfileIdentity(
+    name="hamsterdan2.ds2.after-history-accepted-process",
+    version=1,
+    digest=digest_json(
+        {
+            "command": ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            "death_cut": "ExternalEventDelivered and FiringBegun committed; caller acknowledgement absent",
+        }
+    ),
+)
+HISTORY_ACCEPTANCE_RECOVERY_PROFILE_IDENTITY = ProfileIdentity(
+    name="hamsterdan2.ds2.history-acceptance-recovery-process",
+    version=1,
+    digest=digest_json(
+        {
+            "command": ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+            "recovery": "fresh authority reconstructs staging and exact-reoffers the unfinished occurrence",
         }
     ),
 )
@@ -321,6 +376,150 @@ class DeliveryCustodyProcessProfile:
         del generation
 
 
+class StagingCustodyProcessProfile:
+    """Drive the host-composed staging authority around caller acknowledgement loss."""
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        identity: ProfileIdentity,
+        terminate_after_staging: bool,
+    ) -> None:
+        self._root = root
+        self.identity = identity
+        self._terminate_after_staging = terminate_after_staging
+
+    def validate(self, command: Command) -> Command:
+        return validate_stage_webhook(command)
+
+    def validate_fault(self, fault: Fault) -> Fault:
+        raise ValueError(f"DS2 staging process admits no World faults; remove {fault.name!r}")
+
+    def create(self, context: ScenarioContext) -> GenerationStart[StagingAuthority]:
+        del context
+        return GenerationStart(
+            build_staging_authority(
+                state_root=self._root,
+                provider_routes=(PROVIDER_ROUTE,),
+                policy_revision=STAGING_POLICY_REVISION,
+            )
+        )
+
+    def load(self, context: ScenarioContext) -> GenerationStart[StagingAuthority]:
+        return self.create(context)
+
+    def apply(
+        self,
+        generation: StagingAuthority,
+        command: Command,
+        context: ScenarioContext,
+    ) -> ApplyResult:
+        del command, context
+        posture = generation.stage_delivery(
+            provider_route_id=STAGE_WEBHOOK_COMMAND.provider_route_id,
+            delivery_id=STAGE_WEBHOOK_COMMAND.delivery_id,
+        )
+        if self._terminate_after_staging:
+            terminate_child()
+        return ApplyResult(
+            disposition="idempotent" if posture.disposition == "exact_duplicate" else "applied",
+            value=posture.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def observe(
+        self,
+        generation: StagingAuthority,
+        request: ObservationRequest,
+        context: ScenarioContext,
+    ) -> JsonValue:
+        del generation, context
+        if request.name != "hamsterdan.state" or request.payload != {}:
+            raise ValueError("CV21 root exposes only the parameterless 'hamsterdan.state' observation")
+        return cast("JsonValue", observe_hamsterdan(self._root).model_dump(mode="json"))
+
+    def resource_usage(self, generation: StagingAuthority | None) -> ResourceUsage:
+        del generation
+        return root_resource_usage(self._root)
+
+    def drop(self, generation: StagingAuthority) -> None:
+        del generation
+
+    def close(self, generation: StagingAuthority) -> None:
+        del generation
+
+
+class HistoryAcceptanceProcessProfile:
+    """Drive exact History acceptance around caller acknowledgement loss."""
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        identity: ProfileIdentity,
+        terminate_after_acceptance: bool,
+    ) -> None:
+        self._root = root
+        self.identity = identity
+        self._terminate_after_acceptance = terminate_after_acceptance
+
+    def validate(self, command: Command) -> Command:
+        return validate_accept_staged_observation(command)
+
+    def validate_fault(self, fault: Fault) -> Fault:
+        raise ValueError(f"DS2 History-acceptance process admits no World faults; remove {fault.name!r}")
+
+    def create(self, context: ScenarioContext) -> GenerationStart[ObservationAcceptanceAuthority]:
+        del context
+        return GenerationStart(build_observation_acceptance_authority(state_root=self._root))
+
+    def load(self, context: ScenarioContext) -> GenerationStart[ObservationAcceptanceAuthority]:
+        return self.create(context)
+
+    def apply(
+        self,
+        generation: ObservationAcceptanceAuthority,
+        command: Command,
+        context: ScenarioContext,
+    ) -> ApplyResult:
+        del command, context
+        before = observe_hamsterdan(self._root).readiness.history_records
+        posture = generation.accept_staged_observation(
+            provider_route_id=PROVIDER_ROUTE.provider_route_id,
+            delivery_id=STAGE_WEBHOOK_COMMAND.delivery_id,
+        )
+        if self._terminate_after_acceptance:
+            terminate_child()
+        after = observe_hamsterdan(self._root).readiness.history_records
+        return ApplyResult(
+            disposition="idempotent" if after == before else "applied",
+            value=posture.model_dump(mode="json"),
+            scheduled=[],
+        )
+
+    def observe(
+        self,
+        generation: ObservationAcceptanceAuthority,
+        request: ObservationRequest,
+        context: ScenarioContext,
+    ) -> JsonValue:
+        del generation, context
+        if request.name != "hamsterdan.state" or request.payload != {}:
+            raise ValueError("CV21 root exposes only the parameterless 'hamsterdan.state' observation")
+        return cast("JsonValue", observe_hamsterdan(self._root).model_dump(mode="json"))
+
+    def resource_usage(self, generation: ObservationAcceptanceAuthority | None) -> ResourceUsage:
+        del generation
+        return root_resource_usage(self._root)
+
+    def drop(self, generation: ObservationAcceptanceAuthority) -> None:
+        del generation
+
+    def close(self, generation: ObservationAcceptanceAuthority) -> None:
+        del generation
+
+
 async def execute_webhook_request(
     app: ASGIApp,
     *,
@@ -454,6 +653,86 @@ def recover_delivery_custody(session: ProcessSession, payload: JsonValue) -> Sce
     artifact = world.artifact(CUSTODY_RECOVERY_SCENARIO)
     if not isinstance(artifact, ScenarioArtifact):
         raise TypeError("DS2 custody process recovery requires a version-4 resource artifact")
+    return artifact
+
+
+def die_after_staging_durable(session: ProcessSession, payload: JsonValue) -> ScenarioArtifact:
+    root = state_root(payload)
+    world = session.world(
+        StagingCustodyProcessProfile(
+            root,
+            identity=STAGING_DEATH_PROFILE_IDENTITY,
+            terminate_after_staging=True,
+        ),
+        DEFAULT_BUDGET,
+        checkers=(HamsterdanChecker(),),
+    )
+    world.timeline().command(
+        "hamsterdan.stage_webhook",
+        STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+    )
+    raise AssertionError("the post-staging process survived before acknowledgement")
+
+
+def recover_staging_custody(session: ProcessSession, payload: JsonValue) -> ScenarioArtifact:
+    root = state_root(payload)
+    world = session.world(
+        StagingCustodyProcessProfile(
+            root,
+            identity=STAGING_RECOVERY_PROFILE_IDENTITY,
+            terminate_after_staging=False,
+        ),
+        DEFAULT_BUDGET,
+        checkers=(HamsterdanChecker(),),
+    )
+    world.timeline().command(
+        "hamsterdan.stage_webhook",
+        STAGE_WEBHOOK_COMMAND.model_dump(mode="json"),
+    )
+    world.timeline().finish(Disposition.QUIESCENT)
+    artifact = world.artifact(STAGING_RECOVERY_SCENARIO)
+    if not isinstance(artifact, ScenarioArtifact):
+        raise TypeError("DS2 staging process recovery requires a version-4 resource artifact")
+    return artifact
+
+
+def die_after_history_accepted(session: ProcessSession, payload: JsonValue) -> ScenarioArtifact:
+    root = state_root(payload)
+    world = session.world(
+        HistoryAcceptanceProcessProfile(
+            root,
+            identity=HISTORY_ACCEPTANCE_DEATH_PROFILE_IDENTITY,
+            terminate_after_acceptance=True,
+        ),
+        DEFAULT_BUDGET,
+        checkers=(HamsterdanChecker(),),
+    )
+    world.timeline().command(
+        "hamsterdan.accept_staged_observation",
+        ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+    )
+    raise AssertionError("the post-History-acceptance process survived before acknowledgement")
+
+
+def recover_history_acceptance(session: ProcessSession, payload: JsonValue) -> ScenarioArtifact:
+    root = state_root(payload)
+    world = session.world(
+        HistoryAcceptanceProcessProfile(
+            root,
+            identity=HISTORY_ACCEPTANCE_RECOVERY_PROFILE_IDENTITY,
+            terminate_after_acceptance=False,
+        ),
+        DEFAULT_BUDGET,
+        checkers=(HamsterdanChecker(),),
+    )
+    world.timeline().command(
+        "hamsterdan.accept_staged_observation",
+        ACCEPT_STAGED_OBSERVATION_COMMAND.model_dump(mode="json"),
+    )
+    world.timeline().finish(Disposition.QUIESCENT)
+    artifact = world.artifact(HISTORY_ACCEPTANCE_RECOVERY_SCENARIO)
+    if not isinstance(artifact, ScenarioArtifact):
+        raise TypeError("DS2 History-acceptance recovery requires a version-4 resource artifact")
     return artifact
 
 

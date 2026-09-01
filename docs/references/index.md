@@ -75,23 +75,25 @@
   that public test surface; profile, checker, API, artifact, and replay-result
   compatibility remain separately pinned. Profile/runtime implementation
   exceptions remain harness failures rather than promoted counterexamples.
-- Current resource-bounded deterministic-simulation dependency:
+- Historical resource-bounded deterministic-simulation dependency:
   `henriquebastos/petrus@44cac5ff48ac371ebae56323941983f30db13c0d`,
-  inspected and pinned 2026-08-18. It supplies `petrus.testing.dst/v4` and
+  inspected and first pinned 2026-08-18. It supplies `petrus.testing.dst/v4` and
   `petrus-dst-world` artifact v4 with strict v1-v3 compatibility, exact
   deterministic profile-resource accounting, and the separately versioned
   `petrus.testing.dst.runner/v1` outer-process containment contract. A killed
   call yields an acknowledged prefix and unfinished attempt, never a fabricated
   replay artifact.
-- Delivered CV21.DS2 phased-delivery prerequisite:
+- Current CV21.DS2 phased-delivery dependency:
   `henriquebastos/petrus@4e5c2500af4eb439e8e8f5ec108982c81bfc7427`
   (`feat(engine): split identified delivery into durable phases`), verified at
-  Petrus `origin/main` on 2026-08-30. It supplies the public bounded phased seam
-  needed to distinguish identified acceptance from later fold and resume one
-  accepted unfinished occurrence without private `Instance` access. The
-  current Hamsterdan dependency remains intentionally pinned to
-  `44cac5ff48ac371ebae56323941983f30db13c0d`; CV21.DS2 task 4 will update and
-  qualify the pin when History acceptance first consumes the new seam.
+  Petrus `origin/main` on 2026-08-30 and pinned by Hamsterdan on 2026-08-31. It
+  preserves the v4 deterministic-simulation surface and supplies public
+  `Engine.accept_delivery(...)` and `Engine.complete_delivery(...)` phases.
+  CV21.DS2 task 4 consumes only acceptance: a first identified delivery commits
+  adjacent `ExternalEventDelivered` and `FiringBegun`, while an exact unfinished
+  reoffer reconstructs the same `AcceptedDelivery` without another append or
+  empty provider commit. Task 5 owns completion of that exact carrier. No
+  private `Instance` access or broad Engine advancement is used.
 - CV22 hierarchy evidence inspected 2026-08-28:
   `henriquebastos/petrus@2d26d34de9a1b34b7489ee2207f3492e777a282a`.
   Public `NetSpec` nested stamping flattens child paths into one built Net and
