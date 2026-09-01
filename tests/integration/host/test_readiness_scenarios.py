@@ -1580,7 +1580,7 @@ def assert_persistent_ci_regression(result: JourneyResult) -> None:
 
     dashboard_id = int(before_dashboard[0]["id"])
     assert dashboard[0]["id"] == dashboard_id
-    assert dashboard[0]["body"] != before_dashboard[0]["body"]
+    assert "| CI checks | ❌ failing |" in str(dashboard[0]["body"])
     follow_up_writes = result.provider_writes[result.before_follow_up_write_count :]
     assert any(
         method == "PATCH" and identifier == dashboard_id and body == dashboard[0]["body"]
@@ -1660,7 +1660,7 @@ def assert_seeded_review_finding(result: JourneyResult) -> None:
     )
     assert marker is not None and marker.group(1)
     dashboard_body = str(dashboard[0]["body"])
-    assert "blocking" in dashboard_body and (FINDING_ID in dashboard_body or "'count': 1" in dashboard_body)
+    assert "| Dan's review | ❌ blocking · 1 blocking of 1 finding(s) |" in dashboard_body
     assert all(item["user"] == {"login": BOT} for item in (*result.comments, *result.review_comments))
     assert (result.run_attempt, result.run_conclusion, result.rerun_requests) == (1, "success", 0)
     assert result.provider_state == ("open", False, False, True, "clean", HEAD, BASE)
@@ -1805,7 +1805,7 @@ def assert_conversational_change(result: JourneyResult) -> None:
     assert len(dashboard) == len(readiness) == 1
     dashboard_body = str(dashboard[0]["body"])
     assert NEW_HEAD in dashboard_body
-    assert "checks:{'status': 'in_progress'}" in dashboard_body
+    assert "| CI checks | ⏳ in progress |" in dashboard_body
     assert f"head={HEAD}" in str(readiness[0]["body"])
     assert NEW_HEAD not in str(readiness[0]["body"])
     assert not any("<!-- hamsterdan:finding " in str(item["body"]) for item in bot_comments)
@@ -2008,8 +2008,7 @@ def assert_agent_repair(result: JourneyResult) -> None:
     assert FINDING_ID in str(findings[0]["body"]) and initial_head in str(findings[0]["body"])
     assert final_head in str(dashboard[0]["body"])
     assert f"head={final_head}" in str(readiness[0]["body"])
-    assert f"findings:{{'blocking': 0, 'count': 0, 'head': '{final_head}'}}" in str(dashboard[0]["body"])
-    assert f"review:{{'head': '{final_head}', 'status': 'clear'}}" in str(dashboard[0]["body"])
+    assert "| Dan's review | ✅ clear · 0 findings |" in str(dashboard[0]["body"])
     assert result.head_follow_up_comments_before is not None
     assert not any("<!-- hamsterdan:readiness " in str(item["body"]) for item in result.head_follow_up_comments_before)
     readiness_writes = [
@@ -2112,7 +2111,7 @@ def assert_hero_review(result: JourneyResult) -> None:
 
     dashboard_body = str(dashboard[0]["body"])
     assert HEAD in dashboard_body and "blocking" in dashboard_body
-    assert all(str(finding["id"]) in dashboard_body for finding in HERO_FINDINGS) or "'count': 3" in dashboard_body
+    assert "| Dan's review | ❌ blocking · 3 blocking of 3 finding(s) |" in dashboard_body
     finding_writes = [
         body for _method, _path, _identifier, body in result.provider_writes if "<!-- hamsterdan:finding " in body
     ]
@@ -2217,12 +2216,9 @@ def _assert_base_mutation(
     }
     [stale_dashboard] = [item for item in stale.comments if "<!-- hamsterdan:dashboard -->" in str(item["body"])]
     stale_body = str(stale_dashboard["body"])
-    assert "base_current': False" in stale_body or "Base current: False" in stale_body
+    assert "base is stale" in stale_body and "| Base | ⚠️ behind" in stale_body
     if conflicted:
-        assert any(
-            evidence in stale_body
-            for evidence in ("conflict': True", "Conflict: True", "mergeable': False", "Mergeable: False")
-        )
+        assert "| Conflicts | ❌ merge conflict |" in stale_body
     assert stale.agent_counts[1:] == (0, 0)
 
     assert result.custody_before == result.follow_up_custody_before == result.head_follow_up_custody_before == "pending"
@@ -2359,12 +2355,9 @@ def _assert_base_mutation(
     ]
     before_head_dashboard_body = str(before_head_dashboard["body"])
     assert final_head not in before_head_dashboard_body
-    assert "base_current': False" in before_head_dashboard_body or "Base current: False" in before_head_dashboard_body
+    assert "| Base | ⚠️ behind" in before_head_dashboard_body
     if conflicted:
-        assert any(
-            evidence in before_head_dashboard_body
-            for evidence in ("conflict': True", "Conflict: True", "mergeable': False", "Mergeable: False")
-        )
+        assert "| Conflicts | ❌ merge conflict |" in before_head_dashboard_body
     before_head_readiness = [item for item in before_head_comments if "<!-- hamsterdan:readiness " in str(item["body"])]
     assert len(before_head_readiness) == 1
     assert f"head={initial_head}" in str(before_head_readiness[0]["body"])
@@ -2406,12 +2399,9 @@ def _assert_base_mutation(
     assert any(f"head={final_head}" in str(item["body"]) for item in readiness)
     dashboard_body = str(dashboard["body"])
     assert final_head in dashboard_body
-    assert "base_current': True" in dashboard_body or "Base current: True" in dashboard_body
+    assert "| Base | ✅ current with" in dashboard_body
     if conflicted:
-        final_state = next(
-            line for line in dashboard_body.splitlines() if line.startswith("state:") and final_head in line
-        )
-        assert "'base_current': True" in final_state and "'mergeable': True" in final_state
+        assert "| Conflicts | ✅ none |" in dashboard_body
     assert not any("<!-- hamsterdan:finding " in str(item["body"]) for item in bot_comments)
     assert not any("hamsterdan-rerun" in str(item["body"]) for item in bot_comments)
     assert result.review_comments == ()
@@ -2431,11 +2421,11 @@ def assert_collaboration_approval(result: JourneyResult) -> None:
     assert len(phase.dashboards) == 5
     assert phase.readiness_counts == (0, 0, 0, 0, 1)
     initial, requested, changes, approved, resolved = phase.dashboards
-    assert "human:{'approval': False, 'changes_requested': False, 'unresolved': 0}" in initial
-    assert "human:{'approval': False, 'changes_requested': False, 'unresolved': 0}" in requested
-    assert "human:{'approval': False, 'changes_requested': True, 'unresolved': 1}" in changes
-    assert "human:{'approval': True, 'changes_requested': False, 'unresolved': 1}" in approved
-    assert "human:{'approval': True, 'changes_requested': False, 'unresolved': 0}" in resolved
+    assert "| Human review | ⏳ not approved · 0 unresolved thread(s) |" in initial
+    assert "| Human review | ⏳ not approved · 0 unresolved thread(s) |" in requested
+    assert "| Human review | ❌ changes requested · 1 unresolved thread(s) |" in changes
+    assert "| Human review | ✅ approved · 1 unresolved thread(s) |" in approved
+    assert "| Human review | ✅ approved · 0 unresolved thread(s) |" in resolved
 
     assert result.custody_before == "pending" and result.custody_after == "terminal"
     assert result.custody_counts == {"terminal": 5}

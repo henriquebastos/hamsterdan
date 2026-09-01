@@ -67,6 +67,7 @@ from hamsterdan.contracts.readiness_v5 import (
 )
 from hamsterdan.github_app.models import GitHubBoundaryError, PublicationResult
 from hamsterdan.host.v5.claim import ClaimReader, CurrentClaim
+from hamsterdan.readiness.net_v5.board import render_board
 
 Recipients = Callable[[], tuple[str | None, str]]
 """A zero-argument port yielding the current (reviewer, author)."""
@@ -402,7 +403,7 @@ class V5PublicationGates:
             # authority-orthogonal projection into a full claim read:
             # after our own push, provider head legitimately moves before
             # the next webhook stages that head in the host grant.
-            result = self.publisher.dashboard(f"dash:{work.digest}", 0, "0" * 40, "\n".join(work.entries))
+            result = self.publisher.dashboard(f"dash:{work.digest}", 0, "0" * 40, render_board(work.entries))
         except GitHubBoundaryError:
             return DashBlocked(
                 entries=work.entries,
