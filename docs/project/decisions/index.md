@@ -25,3 +25,5 @@ settled direction by superseding its record explicitly rather than drifting.
 - [CV20 fragments into outer-system and workflow-replacement Values](records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md)
 - [CV21 Activities run in separately supervised Motus Workers](records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md)
 - [The alpha is the CV19 v1 launch](records/2026-08-31T2056Z-the-alpha-is-the-cv19-v1-launch.md)
+- [Webhook ingress uses the exe.dev share](records/2026-09-01T1240Z-webhook-ingress-uses-the-exe-dev-share.md)
+- [PR monitoring narrows to watched authors](records/2026-09-01T2057Z-pr-monitoring-narrows-to-watched-authors.md)

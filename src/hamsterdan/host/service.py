@@ -188,6 +188,7 @@ class HostService:
         self._stop = asyncio.Event()
         self._closed = False
         self._instances: dict[str, tuple[int, int, int]] = {}
+        self._watch_verdicts: dict[tuple[int, int, int], bool] = {}
         self._application_lock = threading.RLock()
         self._pump_lock = threading.Lock()
         self._scheduler_errors: dict[str, str] = {}
@@ -649,6 +650,34 @@ class HostService:
     def _record_posture(self, instance: str, outcome: object | None) -> None:
         self.runnable.replace_timer(instance, getattr(outcome, "next_maturation", None))
 
+    def _watched(
+        self,
+        key: tuple[int, int, int],
+        selected: list[tuple[Observation, AdmittedConversation | None]],
+    ) -> bool:
+        """Whether this unbound subject's PR author is watched.
+
+        An admitted mention opts one PR in; once a journey binds durably
+        the binding owns the opt-in, so only unbound subjects decide
+        here. The verdict is held per subject because a PR's author
+        never changes; a restart re-evaluates under the current
+        configuration.
+        """
+        if not self.config.watched_authors:
+            return True
+        if any(conversation is not None for _item, conversation in selected):
+            self._watch_verdicts[key] = True
+        verdict = self._watch_verdicts.get(key)
+        if verdict is None:
+            route = self.registry.route(key[0], key[1])
+            if route is None:
+                return True
+            transport = self._transport_factory(self.clients.installation(key[0], [key[1]]))
+            authority = GitHubAuthority(transport, route.repository_full_name, key[2])
+            verdict = authority.pull_request().author.casefold() in self.config.watched_authors
+            self._watch_verdicts[key] = verdict
+        return verdict
+
     def _activate_instance(
         self,
         instance: str,
@@ -678,6 +707,10 @@ class HostService:
         attempted: set[str] = set()
         activation_error: Exception | None = None
         try:
+            if selected and key not in self._apps and not bound and not self._watched(key, selected):
+                for item, _conversation in selected:
+                    self.custody.acknowledge(item.delivery_id, "author not watched")
+                return False
             application = (
                 self._apps[key]
                 if key in self._apps
