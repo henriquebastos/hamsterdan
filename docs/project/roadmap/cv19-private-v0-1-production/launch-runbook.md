@@ -6,17 +6,15 @@ explicit launch approval and Gate B the separate `v0.1.0` tag approval, exactly
 as CV19's done condition requires. Terms follow the
 [project glossary](../../glossary/index.md).
 
-## Open gap — resolve before Gate A
+## Ingress — resolved 2026-09-01
 
-**How do GitHub webhooks reach the VM?** The systemd unit publishes the host
-only on `127.0.0.1:8000` (`deployment/ansible/templates/hamsterdan.service.j2`),
-and no reverse proxy, tunnel, or relay exists in the deployment playbooks. The
-App's webhook URL currently points at the Amp durable relay used during
-qualification, which forwards to the orb's loopback, not the VM's. Before
-launch, the Navigator and Driver must pick and record the production ingress
-path (relay forwarding to the VM, an exe.dev HTTP exposure, or a provisioned
-tunnel) and prove one ping reaches the VM's webhook inbox. This is part of
-CV19's remaining "webhook ingress" proof, not a new scope.
+**How do GitHub webhooks reach the VM?** Resolved by the
+[exe.dev share decision](../../decisions/records/2026-09-01T1240Z-webhook-ingress-uses-the-exe-dev-share.md):
+`https://hamsterdan.example.invalid/` proxies publicly to the VM's port 8000 and
+reaches the qualified `127.0.0.1:8000` bind unchanged (proven with an
+end-to-end probe carrying the webhook headers). The App webhook URL points at
+`https://hamsterdan.example.invalid/github/webhooks`. Phase 1 still owes the
+live proof: one ping redelivery landing in the service's webhook inbox.
 
 ## Phase 0 — pre-launch verification (no GitHub effects)
 
