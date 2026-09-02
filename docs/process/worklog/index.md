@@ -110,3 +110,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-08-31 — CV21 Head History acceptance qualified locally](entries/2026-08-31T2024Z-cv21-head-history-acceptance-qualified.md)
 - [2026-09-01 — CV21 Head fold and host completion qualified locally](entries/2026-09-01T0154Z-cv21-head-fold-and-host-completion-qualified.md)
 - [2026-09-01 — Supervised launch and clean-green journey on hamsterdan-prod](entries/2026-09-01T1710Z-supervised-launch-and-clean-green-journey-on-hamsterdan-prod.md)
+- [2026-09-02 — CV21 Webhook Inbox and Intake accepted](entries/2026-09-02T0106Z-cv21-webhook-inbox-intake-accepted.md)

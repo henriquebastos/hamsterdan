@@ -40,7 +40,7 @@ end-to-end correspondence against the real mounted Net.
 
 The bridge supplies readiness runtime with one workflow definition containing:
 
-- construction of a fresh Net and seed for one immutable PR subject;
+- construction of a fresh Net and seed for one immutable PR Identity;
 - the complete Activity declaration and terminal-variant plan;
 - conversion of one typed new observation into one exact retained-workflow
   delivery;
@@ -49,17 +49,15 @@ The bridge supplies readiness runtime with one workflow definition containing:
 - conversion of one exact typed new terminal back to the original retained
   occurrence; and
 - conversion of bounded runtime inspection into detached new lifecycle and
-  work posture.
+  work state.
 
 Concrete Python signatures are DS1–DS3 Plan decisions made with readiness
 runtime and the first real call sites present. They must not expose a generic
-`dict`, legacy model, topology path, or untyped terminal. DS2 task 4 now supplies
-the first input signature: exact reconstructed `IngressManifest`,
-`AdmissionGrant`, and `IngressEntry` become a bridge-private delivery while the
-caller receives only detached `HistoryAcceptancePosture`. Task 5 adds the
-narrow post-completion signature: the same exact authority plus one bounded
-public runtime snapshot and complete finite History page become immutable
-`ObservationFoldPosture`.
+`dict`, legacy model, topology path, or untyped terminal. DS2 supplies the first
+input signature: exact `HeadObservation`, `ObservationKey`, and authorized
+policy become one bridge-private delivery. Bounded History reconstruction
+recovers that delivery and validates its exact terminal without exposing a
+retained token to host callers.
 
 ## Translation laws
 
@@ -68,16 +66,16 @@ Every mapping obeys all of these laws:
 1. **Total over the admitted family.** Every allowed retained variant maps to
    one closed new variant. An unknown retained variant fails closed with a new
    bridge-owned diagnostic.
-2. **Exact identity.** Subject, semantic source identity, occurrence,
-   operation, correlation, idempotency, head/base/policy/incarnation, and timer
+2. **Exact identity.** PR Identity, semantic source identity, occurrence,
+   operation, correlation, idempotency, head/base/policy/generation, and timer
    generation are retained or translated by a versioned bijection. They are
    never regenerated from ambient state.
 3. **No decision.** Conversion may rename, validate, canonicalize, or render a
    representation. It may not decide that work should exist, select a terminal,
    retry, close, defer, cancel, authorize, or order workflow work.
 4. **No legacy escape.** New owners receive only new immutable values. Stored
-   outer custody and replay artifacts contain no legacy module path, class name,
-   exception, or serialized wrapper.
+   Inbox and replay rows contain no legacy module path, class name, exception,
+   or serialized wrapper.
 5. **Original occurrence return.** A terminal can be admitted only for the
    exact retained request and occurrence from which its new request was
    projected. Work, operation, correlation, and idempotency all match before
@@ -109,101 +107,60 @@ removal replacement in CV22
 
 | Family | First CV21 tracer | Required direction |
 |---|---:|---|
-| subject, seed, lifecycle posture | DS1 | retained runtime state → detached new posture |
-| Head observation | DS2 tasks 4–5 | `HeadObservation` → retained `HeadSeen` at `on_head`; open incarnation 1 only; exact SHAs; explicit-true mergeability; manifest policy; strict/current base true/false; versioned identified unfinished History acceptance, exact source completion, and bounded detached post-fold projection |
+| PR Identity, seed, lifecycle stage | DS1 | retained runtime state → detached new state |
+| Head observation | DS2 | `HeadObservation` → retained `HeadSeen` at `on_head`; open generation 1 only; exact SHAs; explicit-true mergeability; authorized policy; strict/current base true/false; versioned identified History acceptance and exact source completion |
 | draft/ready/comment/human acquisition as first used | later owning tracer | focused new observation → exact retained ingress token; no family is implied by the Head mapping |
 | dashboard publication | DS3 | retained request → typed new Activity; typed new terminal → retained variant |
 | provider publication and recovery outcomes | DS4 | new effect outcome → exact retained terminal |
 | review and conversation agent work | DS5 | retained work ↔ typed new request/result terminal |
 | mutation work and publication | DS6 | retained work ↔ exact new causal operation and terminal |
 | CI evidence, rerun, and repair | DS7 | focused observation/work/terminal in both directions |
-| reminder and deferred timers | DS8 | retained timer command/due fact ↔ new timer custody values |
+| reminder and deferred timers | DS8 | retained timer command/due fact ↔ new timer state values |
 | closure and remaining lifecycle/authority outcomes | DS9 | focused new evidence and exact retained result families |
 
 DS10–DS12 add no workflow family unless a real discovery or qualification path
 exposes an omission. An omission updates this census before implementation; it
 does not authorize a generic fallback.
 
-The complete first DS2 mapping is delivered and fail-closed under
-`workflow-bridge/head-seen-history-fold@3`. Task 5 deliberately replaces the
-task-4 acceptance-only `workflow-bridge/head-seen-history-acceptance@2`
-identity because post-completion History correspondence and retained-state
-projection are now part of the complete mapping. This changes the derived
-History delivery identity; fresh construction has no old roots to migrate. The
-webhook-derived Head
-observation carries exact repository/ref/lifecycle semantics in canonical
-source-neutral staging, while retained `HeadSeen` consumes only the exact head
-and base SHAs. Bridge conversion maps `mergeable=True` only when the observation
-is explicitly true, uses the exact manifest-scoped policy revision, and maps
-webhook-only unproven base evidence to `strict_base=True` and
-`base_current=False`. Policy and provenance do not enter `ObservationKey`
-semantic equality. Provider time, route, custody generation, and receipt order
-never enter the token or key.
+The complete first DS2 mapping is delivered fail-closed under
+`workflow-bridge/head-seen-intake@4`. It replaces the earlier task-shaped
+identities because fresh CV21 roots have no compatibility or migration lane.
+The webhook-derived `HeadObservation` carries exact PR Identity, branch tips,
+and lifecycle semantics. Retained `HeadSeen` consumes only exact head/base SHAs,
+explicit-true mergeability, the policy authorized with the Inbox row,
+`strict_base=True`, and `base_current=False`. Policy does not enter
+`ObservationKey` semantic equality, but it does enter the History delivery
+identity. Provider time, route, DeliveryId, and Inbox sequence enter neither.
 
-Only local incarnation 1, lifecycle `open`, `draft=False`, and `merged=False`
-are admitted by this family. Closed, merged, and draft snapshots fail before
-History with a bounded bridge diagnostic. The bridge does not fabricate
-`DraftSeen`, `ReadySeen`, or `CloseSeen` and does not infer currentness, policy,
-ordering, retry, effect authority, or a workflow decision.
+Only generation 1, lifecycle `open`, `draft=False`, and `merged=False` is
+admitted. Closed, merged, and draft snapshots are rejected before History. The
+bridge does not fabricate `DraftSeen`, `ReadySeen`, or `CloseSeen`, and does not
+infer currentness, ordering, retry, effect authority, or a workflow decision.
 
-`history-delivery:v1:sha256:<digest>` binds the bridge identity, exact manifest
-ID, grant ID and manifest digest, entry order, and observation key. The
-manifest/grant reconstruction already binds canonical acquisition, observation
-bytes, subject, policy, and decision shape, so process loss can derive the same
-identity without storing a second acceptance record. Public
-`Engine.accept_delivery` receives the private source/token and that identity
-once per authority turn with no scope. Fresh delivery appends exactly
-`ExternalEventDelivered` then `FiringBegun`; exact unfinished reoffer returns
-the same occurrence without append. The fold turn validates that returned
-carrier's instance, source, identity, and occurrence, then calls public
-`Engine.complete_delivery` exactly once. Its `FiringOutcome` must consume
-nothing, produce only the exact `HeadSeen` at `life.heads`, and contain the
-ordered `FiringBegun`, `TokensProduced`, `FiringCompleted` batch for the same
-occurrence. No broad advancement or convenience drain is used.
+`history-delivery:v2:sha256:<digest>` binds bridge identity, observation key,
+and authorized policy revision. The Webhook Inbox durably binds that prepared
+Intake to one delivery before public `Engine.accept_delivery` runs. A first
+offer appends `ExternalEventDelivered` and `FiringBegun`; exact unfinished
+reoffer returns the same occurrence without append. The Inbox outcome
+`recorded` means that History accepted the delivery. It is not a fold or
+workflow-completion record.
 
-Task 4 correspondence drives only new CV21 inputs through host/readiness into
-the real retained production Net and independently inspects unfinished neutral
-History facts. Task 5 continues that exact path through source completion and
-bounded actual retained-state projection. The owner and root Worlds distinguish
-custody, staging, unfinished acceptance, fold, and host completion, then exactly
-replay each command from fresh roots. Checker mutations cover every bridge
-field, authority identity, terminal fact, projected posture field, and host
-receipt correlation.
+A later PR authority turn reads one complete finite History page and selects
+the oldest unfinished bridged occurrence. It exact-reoffers that History-owned
+source/token/identity, accepts only the correlated carrier, and calls public
+`Engine.complete_delivery` once. The result must consume nothing, produce only
+the exact `HeadSeen` at `life.heads`, and contain the ordered `FiringBegun`,
+`TokensProduced`, `FiringCompleted` batch for the same occurrence. If response
+loss leaves the occurrence already complete, the same History page proves the
+exact terminal and returns `already_completed`; no second completion call or
+host completion record exists.
 
-`PriorAcknowledgement` after response loss never causes another completion
-call. One complete finite History page must prove a unique exact
-`ExternalEventDelivered`, `FiringBegun`, `TokensProduced`, `FiringCompleted`
-suffix with no failure, partial, malformed, or unrelated terminal. Bounded
-runtime inspection must then prove status `running`, no in-flight occurrence,
-one exact `life.heads` token, and retained `LifeState` at running incarnation 0.
-The bridge combines those retained facts with source-neutral staging to return
-only the strict new-facing subject/instance, identity/occurrence, local
-incarnation 1, repository/ref/SHA branch tips, explicit mergeability, policy,
-strict/current-base falsehood, finished/folded state, and
-`observation_folded` cut. It does not execute the newly enabled retained
-transition or claim provider currency.
-
-Actual `SIGKILL` after durable acceptance, after source completion, and after
-later host completion proves fresh exact reoffer converges on the same
-occurrence/fold/receipt without another append. Cumulative root observation
-mounts unchanged owner-local staging and requires exact equality from the
-original `novel` ingress authority through History and completion. The
-correspondence caps History files before Engine load, uses one finite public
-History page, and bounds unfinished firings, retained marking, completion rows,
-files, bytes, SQLite pages, diagnostics, and checker materialization. Direct
-public-seam tests pin source/token/identity acceptance without scope, exact
-selected-carrier completion, and prior/scoped acknowledgement handling.
-
-The 2 MiB aggregate History file ceiling is pre-write authority, not only an
-observation bound. Every public Engine load reserves 128 KiB for WAL and
-shared-memory establishment. After the finite identity scan, a fresh identity
-is accepted only when the remeasured database/WAL/shared-memory footprint also
-leaves 1 MiB for the two-record acceptance transaction; a durable exact reoffer
-reserves no append bytes. An unfinished completion remeasures and reserves the
-same 1 MiB headroom for its two terminal records immediately before mutation;
-an already ended reoffer reserves none. Strict staging reconstruction,
-malformed History/runtime projection, and host receipt reconstruction replace
-decoder failures with fixed cause-free owner diagnostics.
+Process tests use actual `SIGKILL` after raw Inbox commit, after History
+acceptance, and after History completion. Fresh composition converges through
+exact Inbox reconstruction or History reoffer without a second acceptance or
+completion. Correspondence caps shared History at 128 MiB, each workflow at one
+4,096-record page, and a fresh History write at 1 MiB of reserved headroom.
+Malformed Inbox or History evidence fails with fixed owner diagnostics.
 
 ## Prohibited reuse
 
@@ -247,7 +204,7 @@ CV22 has removed the bridge only when:
 
 - readiness runtime receives the new workflow production factory at the same
   capability seam;
-- no outer import, value, custody schema, command, simulation module, or checker
+- no outer import, value, persistence schema, command, simulation module, or checker
   changes merely because the provider changed;
 - `src/hamsterdan2` and `tests2` contain no `hamsterdan` import;
 - every family correspondence scenario passes against the new workflow with

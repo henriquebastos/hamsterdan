@@ -78,9 +78,12 @@ Motus queue, Attempt, and Worker concurrency. One Engine per durable PR does
 not imply one process or Worker per PR; shared Worker roles serve many
 Instances through durable Instance identity and Activity routing.
 
-Ingress and authority scheduling remain distinct logical roles, and the HTTP
-request ends after durable delivery custody. This decision does not rule
-whether those two roles share an OS process.
+HTTP ingress, the host-owned Webhook Inbox Worker, and PR authority scheduling
+remain distinct logical roles. The HTTP request ends after verified raw
+evidence reaches the durable Webhook Inbox. The Webhook Inbox Worker parses,
+normalizes, and offers novel observations to History; it is not a Motus Worker
+and executes no Activity. This decision does not rule whether those host roles
+share an OS process.
 
 ## Options Considered
 
@@ -111,8 +114,8 @@ whether those two roles share an OS process.
 - Agenticus/Pi may create a bounded operation-local child process inside an
   agent Attempt. That child is Agenticus-owned execution machinery, not another
   long-lived Worker role or recovery authority.
-- Logs may be separate per role and correlate through Instance, occurrence,
-  operation, Attempt, and Worker incarnation. Logs never substitute for
+- Logs may be separate per role and correlate through workflow identity,
+  occurrence, operation, Attempt, and Worker generation. Logs never substitute for
   durable custody.
 - CV21 remains non-selectable and undeployed. This ruling authorizes no current
   runtime change, Worker launch, provider effect, or infrastructure action.

@@ -135,6 +135,32 @@ class DeliveryId(str):
         )
 
 
+class WebhookEvent(str):
+    """Bounded GitHub event name retained with raw inbox evidence."""
+
+    __slots__ = ()
+
+    PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+    def __new__(cls, value: str) -> Self:
+        if not isinstance(value, str) or cls.PATTERN.fullmatch(value) is None:
+            raise ValueError("webhook event must be 1-64 ASCII letters, digits, underscores, or hyphens")
+        return super().__new__(cls, value)
+
+    @classmethod
+    def __get_pydantic_core_schema__(
+        cls,
+        source_type: object,
+        handler: GetCoreSchemaHandler,
+    ) -> core_schema.CoreSchema:
+        del source_type, handler
+        return core_schema.no_info_after_validator_function(
+            cls,
+            core_schema.str_schema(strict=True),
+            serialization=core_schema.to_string_ser_schema(),
+        )
+
+
 class RepositoryFullName(str):
     """Canonical owner/name evidence from GitHub."""
 
@@ -231,8 +257,8 @@ class ProviderRoute(BaseModel):
     repository_full_name: RepositoryFullName
 
 
-class PullRequestSubject(BaseModel):
-    """Immutable GitHub subject present in one webhook snapshot."""
+class PullRequestIdentity(BaseModel):
+    """Immutable GitHub PR identity present in one webhook snapshot."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -256,7 +282,7 @@ class PullRequestSnapshot(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    subject: PullRequestSubject
+    pr_identity: PullRequestIdentity
     head: BranchTip
     base: BranchTip
     state: Literal["open", "closed"]
@@ -284,3 +310,13 @@ class NormalizedPullRequestWebhook(BaseModel):
     route: ProviderRoute
     snapshot: PullRequestSnapshot
     provenance: ObservationProvenance
+
+
+class VerifiedWebhookDelivery(BaseModel):
+    """Exact bounded body and metadata after successful HMAC verification."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    delivery_id: DeliveryId
+    event: WebhookEvent
+    body: bytes

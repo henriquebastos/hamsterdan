@@ -6,4 +6,5 @@ A counter of fresh starts of work on one pull request. It bumps when a new head 
 - Do not use for: review rounds or history sequence numbers; those count other things.
 - Avoid: incarnation, epoch, commit generation.
 - Example: a draft PR going ready starts a new generation even though no commit changed.
+- Current boundary: CV21.DS2 supports only generation 1; DS9 owns successor-generation policy and implementation.
 - Related: [PR Identity](pr-identity.md), [Notebook](notebook.md)

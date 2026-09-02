@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Henrique Bastos
 
-"""Strict commands and durable records at the replacement host boundary."""
+"""Strict values at the replacement host and application-storage boundary."""
 
 from __future__ import annotations
 
@@ -16,10 +16,14 @@ from hamsterdan2.github_app.models import (  # noqa: TC001 -- Pydantic resolves 
     PositiveIdentifier,
     ProviderRouteId,
     RepositoryFullName,
+    VerifiedWebhookDelivery,
+    WebhookEvent,
+)
+from hamsterdan2.readiness.intake_values import (  # noqa: TC001 -- Pydantic resolves boundary fields at runtime.
+    PreparedIntake,
 )
 from hamsterdan2.workflow.values import (  # noqa: TC001 -- Pydantic resolves boundary fields at runtime.
-    AwaitingObservation,
-    PullRequestSubject,
+    PullRequestIdentity,
 )
 
 
@@ -52,38 +56,41 @@ class ActionIdentity(str):
 
 
 class OpenPullRequestCommand(BaseModel):
-    """Request one bounded opening action for an immutable PR subject."""
+    """Request one bounded opening action for an immutable PR identity."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     action_identity: ActionIdentity
-    subject: PullRequestSubject
+    pr_identity: PullRequestIdentity
     action: Literal["open_pull_request"] = "open_pull_request"
 
 
-class RegisteredPullRequest(BaseModel):
-    """Durable host binding between one PR subject and its fresh readiness root."""
+class PullRequestWorkflow(BaseModel):
+    """Durable application binding for one PR workflow in shared History."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    subject: PullRequestSubject
-    instance_id: str = Field(min_length=1, max_length=128)
-    readiness_root: str = Field(
+    action_identity: ActionIdentity
+    pr_identity: PullRequestIdentity
+    workflow_id: str = Field(
         min_length=1,
         max_length=128,
-        pattern=r"^instances/[1-9][0-9]*/[1-9][0-9]*/[1-9][0-9]*$",
+        pattern=r"^github:[1-9][0-9]*:[1-9][0-9]*:pr:[1-9][0-9]*$",
     )
+    bridge_identity: Literal["workflow-bridge/head-seen-intake@4"]
+    generation: Literal[1] = 1
+    stage: Literal["awaiting_observation"] = "awaiting_observation"
+    checkpoint: Literal["pr_workflow_opened"] = "pr_workflow_opened"
 
-
-class HostRecord(BaseModel):
-    """Detached result durably retained after the bounded host cut."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    action_identity: ActionIdentity
-    action: Literal["open_pull_request"] = "open_pull_request"
-    posture: AwaitingObservation
-    cut: Literal["host_recorded"] = "host_recorded"
+    @model_validator(mode="after")
+    def matches_pr_identity(self) -> PullRequestWorkflow:
+        expected = (
+            f"github:{self.pr_identity.installation_id}:{self.pr_identity.repository_id}:"
+            f"pr:{self.pr_identity.pull_request_number}"
+        )
+        if self.workflow_id != expected:
+            raise ValueError("workflow identity must match its exact PR identity")
+        return self
 
 
 class ConfiguredProviderRoute(BaseModel):
@@ -97,62 +104,59 @@ class ConfiguredProviderRoute(BaseModel):
     repository_full_name: RepositoryFullName
 
 
-class DeliveryReceipt(BaseModel):
-    """Bounded HTTP acknowledgement of one durable custody disposition."""
+class InboxReceipt(BaseModel):
+    """Bounded HTTP acknowledgement of durable raw inbox evidence."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    custody: Literal["durable"] = "durable"
-    provider_route_id: ProviderRouteId
+    inbox: Literal["durable"] = "durable"
     delivery_id: DeliveryId
-    custody_generation: int = Field(strict=True, gt=0)
-    disposition: Literal["retained", "exact_duplicate", "quarantined"]
+    inbox_sequence: int = Field(strict=True, gt=0)
+    disposition: Literal["received", "duplicate", "collision"]
 
 
-class CustodiedDelivery(BaseModel):
-    """Reconstructed original normalized evidence and its custody posture."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    provider_route_id: ProviderRouteId
-    custody_generation: int = Field(strict=True, gt=0)
-    webhook: NormalizedPullRequestWebhook
-    quarantined: bool
-
-    def is_readiness_eligible(self) -> bool:
-        return not self.quarantined
-
-
-class HostDeliveryCompletionReceipt(BaseModel):
-    """Detached host receipt for one History-proven observation fold."""
+class InboxDelivery(BaseModel):
+    """Detached original raw evidence and its Intake-local state."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    provider_route_id: ProviderRouteId
+    inbox_sequence: int = Field(strict=True, gt=0)
+    verified: VerifiedWebhookDelivery
+    body_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    collision_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    normalized: NormalizedPullRequestWebhook | None = None
+    provider_route_id: ProviderRouteId | None = None
+    prepared: PreparedIntake | None = None
+    intake_authorized: bool
+    intake_outcome: Literal["recorded", "duplicate", "rejected"] | None = None
+    intake_reason: str | None = Field(default=None, min_length=1, max_length=128)
+    duplicate_of_delivery_id: DeliveryId | None = None
+
+
+class InboxAuthorization(BaseModel):
+    """Exact application-storage input for one source-neutral Intake decision."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
     delivery_id: DeliveryId
-    custody_generation: int = Field(strict=True, gt=0)
-    subject: PullRequestSubject
-    instance_id: str = Field(
-        min_length=1,
-        max_length=128,
-        pattern=r"^github:[1-9][0-9]*:[1-9][0-9]*:pr:[1-9][0-9]*$",
-    )
-    bridge_identity: Literal["workflow-bridge/head-seen-history-fold@3"]
-    manifest_id: str = Field(pattern=r"^manifest:v1:sha256:[0-9a-f]{64}$")
-    grant_id: str = Field(pattern=r"^grant:v1:sha256:[0-9a-f]{64}$")
-    manifest_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
-    entry_order: int = Field(strict=True, ge=0, lt=8)
-    observation_key: str = Field(pattern=r"^obs:v1:sha256:[0-9a-f]{64}$")
-    history_delivery_identity: str = Field(pattern=r"^history-delivery:v1:sha256:[0-9a-f]{64}$")
-    occurrence: Literal[1]
-    workflow_cut: Literal["observation_folded"] = "observation_folded"
-    cut: Literal["host_delivery_completed"] = "host_delivery_completed"
+    body_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    provider_route_id: ProviderRouteId
+    normalized: NormalizedPullRequestWebhook
+    prepared: PreparedIntake
 
-    @model_validator(mode="after")
-    def matches_subject_instance(self) -> HostDeliveryCompletionReceipt:
-        expected = (
-            f"github:{self.subject.installation_id}:{self.subject.repository_id}:pr:{self.subject.pull_request_number}"
-        )
-        if self.instance_id != expected:
-            raise ValueError("host delivery completion instance must match its exact subject")
-        return self
+
+class InboxResourceUsage(BaseModel):
+    """Finite application-storage counters exposed without raw evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    workflows: int = Field(strict=True, ge=0)
+    deliveries: int = Field(strict=True, ge=0)
+    pages: int = Field(strict=True, ge=0)
+    maximum_deliveries: int = Field(strict=True, gt=0)
+    maximum_pages: int = Field(strict=True, gt=0)
+
+
+def webhook_event(delivery: InboxDelivery) -> WebhookEvent:
+    """Expose the bounded event name without opening the raw body."""
+    return delivery.verified.event
