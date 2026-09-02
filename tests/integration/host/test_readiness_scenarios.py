@@ -1644,21 +1644,26 @@ def assert_seeded_review_finding(result: JourneyResult) -> None:
     ]
     assert len(dashboard) == len(finding_comments) == 1
     assert readiness == []
-    finding_body = str(finding_comments[0]["body"])
-    assert all(
-        text in finding_body
-        for text in (
-            FINDING_ID,
-            str(BLOCKING_FINDING["title"]),
-            str(BLOCKING_FINDING["body"]),
-            str(BLOCKING_FINDING["evidence"]),
-        )
+    # the finding is one anchored review comment on its own line: the
+    # reader gets the prose and the one-click suggestion; ids, titles,
+    # severities, and evidence stay out of the visible text — identity
+    # lives in the machine marker alone
+    [finding_comment] = finding_comments
+    assert finding_comment in result.review_comments
+    assert (finding_comment["path"], finding_comment["line"]) == (
+        BLOCKING_FINDING["path"],
+        BLOCKING_FINDING["line"],
     )
+    finding_body = str(finding_comment["body"])
+    assert str(BLOCKING_FINDING["body"]) in finding_body
+    assert f"```suggestion\n{BLOCKING_FINDING['suggestion']}\n```" in finding_body
+    assert str(BLOCKING_FINDING["title"]) not in finding_body
+    assert str(BLOCKING_FINDING["evidence"]) not in finding_body
     marker = re.search(
         rf"<!-- hamsterdan:finding operation=([^ >]+) head={HEAD} -->",
         finding_body,
     )
-    assert marker is not None and marker.group(1)
+    assert marker is not None and marker.group(1).endswith(f":{FINDING_ID}")
     dashboard_body = str(dashboard[0]["body"])
     assert "| Dan's review | ❌ blocking · 1 blocking of 1 finding(s) |" in dashboard_body
     assert all(item["user"] == {"login": BOT} for item in (*result.comments, *result.review_comments))
@@ -2078,36 +2083,26 @@ def assert_hero_review(result: JourneyResult) -> None:
         item for item in (*result.comments, *result.review_comments) if "<!-- hamsterdan:finding " in str(item["body"])
     ]
     assert len(dashboard) == 1 and readiness == []
-    assert all(
-        sum(str(finding["id"]) in str(item["body"]) for item in finding_effects) == 1 for finding in HERO_FINDINGS
+    # every finding is its own anchored review comment: the prose and
+    # the related-location link render; ids, titles, severities, and
+    # evidence stay in the machine marker only
+    assert len(finding_effects) == len(HERO_FINDINGS) == len(result.review_comments)
+    for finding in HERO_FINDINGS:
+        [comment] = [item for item in finding_effects if f":{finding['id']} head=" in str(item["body"])]
+        assert comment in result.review_comments
+        assert (comment["path"], comment["line"]) == (finding["path"], finding["line"])
+        body = str(comment["body"])
+        assert str(finding["body"]) in body
+        assert str(finding["title"]) not in body
+        assert str(finding["evidence"]) not in body
+        for related in finding["related_locations"]:
+            assert f"{related['path']}:{related['line']}" in body
+    assert finding_operations(result) == tuple(f"findings:{HEAD}:i1:{finding['id']}" for finding in HERO_FINDINGS)
+    [ttl_body] = [str(item["body"]) for item in finding_effects if ":F-ttl-unit head=" in str(item["body"])]
+    assert "```suggestion\ntimedelta(seconds=ttl_seconds)\n```" in ttl_body
+    assert not any(
+        "```suggestion" in str(item["body"]) for item in finding_effects if ":F-ttl-unit head=" not in str(item["body"])
     )
-    operations = finding_operations(result)
-
-    for finding in HERO_FINDINGS:
-        body = next(str(item["body"]) for item in finding_effects if str(finding["id"]) in str(item["body"]))
-        assert all(str(finding[field]) in body for field in ("title", "body", "evidence", "path", "line"))
-    assert len(finding_effects) == 1 and result.review_comments == ()
-    assert operations == (f"findings:{HEAD}:i1",)
-    [body] = [str(item["body"]) for item in finding_effects]
-    sections = {}
-    for section in body.split("\n### `")[1:]:
-        finding_id, separator, remainder = section.partition("`")
-        assert separator and finding_id not in sections
-        sections[finding_id] = remainder
-    assert tuple(sections) == tuple(str(finding["id"]) for finding in HERO_FINDINGS)
-    for finding in HERO_FINDINGS:
-        section = sections[str(finding["id"])]
-        assert all(str(finding[field]) in section for field in ("title", "body", "evidence"))
-        assert "**blocking** · severity: **high**" in section
-        assert f"Primary location: `{finding['path']}:{finding['line']}`" in section
-        if finding["id"] == "F-ttl-unit":
-            assert "Suggested change:\n```suggestion\ntimedelta(seconds=ttl_seconds)\n```" in section
-        else:
-            assert "Suggested change:" not in section
-        if finding["id"] == "F-cache-key":
-            assert "Related locations:\n- `scenario-fixtures/hero_review/cache.py:6`" in section
-        else:
-            assert "Related locations:" not in section
 
     dashboard_body = str(dashboard[0]["body"])
     assert HEAD in dashboard_body and "blocking" in dashboard_body

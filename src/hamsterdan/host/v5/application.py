@@ -114,6 +114,7 @@ class PrReadinessV5Application:
             self.current_claim,
             self._recipients,
             lambda: self.ingress.claim(self.instance_id).phase,
+            resolve_stale_threads=getattr(authority, "resolve_stale_finding_threads", None),
         )
         rerun = V5RerunGate(
             CommentRerunBroker(authority, publisher),

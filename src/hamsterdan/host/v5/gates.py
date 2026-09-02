@@ -34,8 +34,8 @@ propagates as an activity failure.
 from __future__ import annotations
 
 import hashlib
-import json
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -127,67 +127,54 @@ class PublicationProvider(Protocol):
         self, operation: str, *, context: Callable[[], tuple[int, str, str | None, str]]
     ) -> PublicationResult: ...
 
+    def finding(
+        self,
+        operation: str,
+        epoch: int,
+        head: str,
+        text: str,
+        *,
+        path: str = "",
+        line: int = 0,
+        related_locations: tuple[tuple[str, int], ...] = (),
+        suggestion: str = "",
+        link: str = "",
+        authority_operation: str | None = None,
+    ) -> PublicationResult: ...
+
+    def finding_find(self, operation: str, head: str) -> PublicationResult | None: ...
+
 
 _HELD = frozenset({"created", "existing"})
 _DASH_HELD = frozenset({"created", "existing", "updated"})
 
 
-def _findings_body(findings: list[dict[str, Any]]) -> str:
-    """Readable rendering that BINDS the complete canonical findings
-    payload via a hidden digest line: two batches differing in ANY
-    field produce different bodies, so a stable-identity collision
-    fails closed instead of reconciling as the same landed effect."""
-    digest = hashlib.sha256(json.dumps(findings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    lines = ["## Hamsterdan review findings"]
-    for finding in findings:
-        badge = "**blocking**" if finding.get("blocking") else "advisory"
-        title = finding.get("title") or finding.get("note") or finding.get("id")
-        lines.extend(
-            [
-                "",
-                f"### `{finding.get('id')}` — {title}",
-                f"{badge} · severity: **{finding.get('severity', 'unspecified')}**",
-                "",
-                str(finding.get("body", "")),
-            ]
-        )
-        path, line = finding.get("path"), finding.get("line")
-        if path and line:
-            lines.extend(["", f"Primary location: `{path}:{line}`"])
-        evidence = finding.get("evidence")
-        if evidence:
-            lines.extend(["", f"Evidence: {evidence}"])
-        related = finding.get("related_locations", [])
-        if related:
-            lines.extend(
-                [
-                    "",
-                    "Related locations:",
-                    *(f"- `{item.get('path')}:{item.get('line')}`" for item in related),
-                ]
-            )
-        suggestion = finding.get("suggestion")
-        if suggestion:
-            lines.extend(["", "Suggested change:", "```suggestion", str(suggestion), "```"])
-    lines.extend(["", f"<!-- hamsterdan:findings-digest {digest} -->"])
-    return "\n".join(lines)
+_FINDING_OPERATION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 
 
-def _legacy_findings_body(findings: list[dict[str, Any]]) -> str:
-    """The pre-DS4.3 rendering retained as an accepted held payload.
+def _finding_operation(op: str, finding: Mapping[str, Any]) -> str:
+    """The per-finding publication identity: the round operation plus the
+    finding's own id. An id the marker grammar cannot carry degrades to
+    its digest instead of faulting the whole round."""
+    identifier = str(finding.get("id", ""))
+    candidate = f"{op}:{identifier}"
+    if _FINDING_OPERATION.fullmatch(candidate) is None:
+        candidate = f"{op}:{hashlib.sha256(identifier.encode()).hexdigest()[:16]}"
+    return candidate
 
-    The complete canonical digest already bound these sparse comments to
-    the findings. An upgraded worker must reconcile one that GitHub holds
-    under the same stable operation instead of faulting on presentation
-    drift after a crash.
-    """
-    digest = hashlib.sha256(json.dumps(findings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    lines = ["## Hamsterdan review findings", ""]
-    for finding in findings:
-        badge = "**blocking**" if finding.get("blocking") else "advisory"
-        lines.append(f"- `{finding.get('id')}` ({badge}): {finding.get('note')}")
-    lines.extend(["", f"<!-- hamsterdan:findings-digest {digest} -->"])
-    return "\n".join(lines)
+
+def _finding_arguments(finding: Mapping[str, Any]) -> dict[str, Any]:
+    related = tuple(
+        (str(item.get("path")), int(item.get("line")))
+        for item in finding.get("related_locations", [])
+        if isinstance(item, dict) and item.get("path") and item.get("line")
+    )
+    return {
+        "path": str(finding.get("path") or ""),
+        "line": int(finding.get("line") or 0),
+        "related_locations": related,
+        "suggestion": str(finding.get("suggestion") or ""),
+    }
 
 
 def _reason(error: Exception) -> str:
@@ -219,6 +206,10 @@ class V5PublicationGates:
     claim: ClaimReader
     recipients: Recipients
     dashboard_phase: DashboardPhase = lambda: "running"
+    # ruled 2026-09-02: a fresh finding publication or readiness
+    # announcement also retires the App's own finding threads from
+    # superseded heads; held reconciles stay effect-free
+    resolve_stale_threads: Callable[[str], int] | None = None
 
     # -- reply: unfenced, immutable, identity `reply:{id}` -------------
 
@@ -295,6 +286,8 @@ class V5PublicationGates:
                 _ANNOUNCE_BODY,
                 compatible_bodies=_ANNOUNCE_COMPATIBLE,
             )
+            if self.resolve_stale_threads is not None:
+                self.resolve_stale_threads(work.head)
         except UnstagedCustodyError as error:
             return ADeferred(
                 op=work.op,
@@ -317,68 +310,67 @@ class V5PublicationGates:
             return AFault(op=work.op, incarnation=work.incarnation, reason=unproven)
         return ALanded(incarnation=work.incarnation, head=work.head)
 
-    # -- findings publish: FULL claim fence, one batch identity --------
+    # -- findings publish: FULL claim fence, one identity per finding --
 
     def publish_gate(self, work: Publishable) -> ReviewLanded | ReviewMoved | ReviewBlocked | ReviewFault:
-        body = _findings_body(work.findings)
-        compatible_bodies = (_legacy_findings_body(work.findings),)
         expected = CurrentClaim(
             phase="running", incarnation=work.incarnation, head=work.head, base=work.base, policy=work.policy
         )
         landed = ReviewLanded(
             head=work.head, incarnation=work.incarnation, findings=work.findings, effect=work.effect, mem=work.mem
         )
+        blocked = ReviewBlocked(
+            head=work.head,
+            base=work.base,
+            policy=work.policy,
+            incarnation=work.incarnation,
+            findings=work.findings,
+            effect=work.effect,
+            op=work.op,
+            mem=work.mem,
+        )
         try:
-            held = self.publisher.find("finding", work.op, work.head, body, compatible_bodies=compatible_bodies)
-            if held is not None:
-                return landed
-            current = self.claim()
-            if current != expected:
-                return ReviewMoved(
-                    head=work.head,
-                    observed=current.head,
-                    observed_base=current.base,
-                    observed_policy=current.policy,
-                    observed_incarnation=current.incarnation,
-                    observed_phase=current.phase,
-                    findings=work.findings,
-                    mem=work.mem,
-                )
-            result = self.publisher.immutable(
-                "finding",
-                work.op,
-                work.incarnation,
-                work.head,
-                body,
-                compatible_bodies=compatible_bodies,
-            )
+            pending = [
+                finding
+                for finding in work.findings
+                if self.publisher.finding_find(_finding_operation(work.op, finding), work.head) is None
+            ]
+            if pending:
+                current = self.claim()
+                if current != expected:
+                    return ReviewMoved(
+                        head=work.head,
+                        observed=current.head,
+                        observed_base=current.base,
+                        observed_policy=current.policy,
+                        observed_incarnation=current.incarnation,
+                        observed_phase=current.phase,
+                        findings=work.findings,
+                        mem=work.mem,
+                    )
+                # one anchored comment per finding; a partial landing is
+                # safe because every identity reconciles lookup-first on
+                # the next attempt
+                for finding in pending:
+                    result = self.publisher.finding(
+                        _finding_operation(work.op, finding),
+                        work.incarnation,
+                        work.head,
+                        str(finding.get("body", "")),
+                        authority_operation=work.op,
+                        **_finding_arguments(finding),
+                    )
+                    unproven = _unproven(result)
+                    if unproven == "blocked":
+                        return blocked
+                    if unproven is not None:
+                        return ReviewFault(reason=unproven, mem=work.mem)
+                if self.resolve_stale_threads is not None:
+                    self.resolve_stale_threads(work.head)
         except GitHubBoundaryError:
-            return ReviewBlocked(
-                head=work.head,
-                base=work.base,
-                policy=work.policy,
-                incarnation=work.incarnation,
-                findings=work.findings,
-                effect=work.effect,
-                op=work.op,
-                mem=work.mem,
-            )
+            return blocked
         except (RuntimeError, ValueError) as error:
             return ReviewFault(reason=_reason(error), mem=work.mem)
-        unproven = _unproven(result)
-        if unproven == "blocked":
-            return ReviewBlocked(
-                head=work.head,
-                base=work.base,
-                policy=work.policy,
-                incarnation=work.incarnation,
-                findings=work.findings,
-                effect=work.effect,
-                op=work.op,
-                mem=work.mem,
-            )
-        if unproven is not None:
-            return ReviewFault(reason=unproven, mem=work.mem)
         return landed
 
     # -- dashboard: unfenced idempotent upsert, digest identity --------

@@ -196,24 +196,23 @@ class FindingsLedger:
         self.held: dict[str, tuple[str, str]] = {}
         self.posts = 0
 
-    def find(self, kind, operation, head, body, *, compatible_bodies=()):
-        del compatible_bodies
+    def finding_find(self, operation, head):
         prior = self.held.get(operation)
         if prior is None:
             return None
-        assert (kind, head, body) == ("finding", prior[0], prior[1])
-        return PublicationResult("existing")
+        assert prior[0] == head
+        return PublicationResult("existing", inline=True)
 
-    def immutable(self, kind, operation, epoch, head, body, **kwargs):
+    def finding(self, operation, epoch, head, text, **kwargs):
         del kwargs
-        assert kind == "finding" and epoch == 3
+        assert epoch == 3
         prior = self.held.get(operation)
         if prior is not None:
-            assert prior == (head, body)
-            return PublicationResult("existing")
+            assert prior == (head, text)
+            return PublicationResult("existing", inline=True)
         self.posts += 1
-        self.held[operation] = head, body
-        return PublicationResult("created")
+        self.held[operation] = head, text
+        return PublicationResult("created", inline=True)
 
 
 class RerunLedger:
@@ -476,7 +475,7 @@ def test_findings_publication_reconciles_before_moved_authority_after_two_lost_t
     assert requested.correlation == requested.idempotency == PUBLICATION.op
 
     first, _ = _restart(tmp_path, definitions, "discard", requested)
-    assert ledger.posts == 1 and list(ledger.held) == [PUBLICATION.op]
+    assert ledger.posts == 1 and list(ledger.held) == [f"{PUBLICATION.op}:f1"]
     first.close()
     claim.readable = False
     second, _ = _restart(tmp_path, definitions, "discard", requested)

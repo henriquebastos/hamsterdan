@@ -319,7 +319,12 @@ class CommentPublisher:
             else ""
         )
         suggestion_block = f"```suggestion\n{suggestion}\n```" if suggestion else ""
-        detail = "\n\n".join(
+        # the inline comment sits on the line it is about, so it carries
+        # no location line; only the conversation fallback names the line
+        inline_detail = "\n\n".join(
+            item for item in (text, related, suggestion_block, f"Link: {link}" if link else "") if item
+        )
+        fallback_detail = "\n\n".join(
             item
             for item in (
                 text,
@@ -330,7 +335,8 @@ class CommentPublisher:
             )
             if item
         )
-        payload = f"{detail}\n\n{marker}"
+        inline_payload = f"{inline_detail}\n\n{marker}"
+        fallback_payload = f"{fallback_detail}\n\n{marker}"
         legacy_detail = "\n".join(
             item
             for item in (text, f"Location: {path}:{line}" if location else "", f"Link: {link}" if link else "")
@@ -339,7 +345,9 @@ class CommentPublisher:
         legacy_payload = f"{legacy_detail}\n\n{marker}"
         existing_review = self._find_review(marker) if location else None
         if existing_review is not None:
-            if existing_review.get("body") != payload:
+            # the pre-split composition landed the location line inline;
+            # a held comment in that shape reconciles instead of colliding
+            if existing_review.get("body") not in (inline_payload, fallback_payload):
                 raise ValueError("stable publication operation collided with a different payload")
             return PublicationResult("existing", _reference(existing_review), inline=True)
         existing_issue = self._find(marker)
@@ -347,7 +355,7 @@ class CommentPublisher:
             compatible_legacy = (
                 not suggestion and not related_locations and existing_issue.get("body") == legacy_payload
             )
-            if existing_issue.get("body") != payload and not compatible_legacy:
+            if existing_issue.get("body") != fallback_payload and not compatible_legacy:
                 raise ValueError("stable publication operation collided with a different payload")
             return PublicationResult("existing", _reference(existing_issue), inline=False)
         if location:
@@ -355,15 +363,31 @@ class CommentPublisher:
                 operation,
                 epoch,
                 head,
-                detail,
+                inline_detail,
                 path,
                 line,
                 authority_operation=authority_operation,
             )
             if result.capability_available:
                 return result
-        result = self.immutable("finding", operation, epoch, head, detail, authority_operation=authority_operation)
+        result = self.immutable(
+            "finding", operation, epoch, head, fallback_detail, authority_operation=authority_operation
+        )
         return PublicationResult(result.status, result.reference, result.capability_available, inline=False)
+
+    def finding_find(self, operation: str, head: str) -> PublicationResult | None:
+        """Presence-only lookup of one landed finding under (operation,
+        head), inline or fallback: the marker has a single writer, so
+        presence alone proves the landing. The publish path still
+        collision-checks content when it runs."""
+        marker = self.marker("finding", operation, head)
+        existing_review = self._find_review(marker)
+        if existing_review is not None:
+            return PublicationResult("existing", _reference(existing_review), inline=True)
+        existing_issue = self._find(marker)
+        if existing_issue is not None:
+            return PublicationResult("existing", _reference(existing_issue), inline=False)
+        return None
 
     def _inline_finding(
         self,

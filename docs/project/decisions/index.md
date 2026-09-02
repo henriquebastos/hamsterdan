@@ -28,3 +28,4 @@ settled direction by superseding its record explicitly rather than drifting.
 - [The alpha is the CV19 v1 launch](records/2026-08-31T2056Z-the-alpha-is-the-cv19-v1-launch.md)
 - [Webhook ingress uses the exe.dev share](records/2026-09-01T1240Z-webhook-ingress-uses-the-exe-dev-share.md)
 - [PR monitoring narrows to watched authors](records/2026-09-01T2057Z-pr-monitoring-narrows-to-watched-authors.md)
+- [Findings publish as per-finding inline suggestions](records/2026-09-02T0320Z-findings-publish-as-per-finding-inline-suggestions.md)

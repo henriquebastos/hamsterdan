@@ -19,9 +19,6 @@ these implementations must match:
 
 from __future__ import annotations
 
-import hashlib
-import json
-
 import pytest
 
 from hamsterdan.contracts.readiness_v5 import (
@@ -114,6 +111,31 @@ class FakePublisher:
 
     def dashboard(self, operation, epoch, head, body):
         self.calls.append(("dashboard", operation, head, body))
+        return self._outcome()
+
+    def finding_find(self, operation, head):
+        self.calls.append(("finding_find", operation, head))
+        if self.found:
+            return PublicationResult("existing", REFERENCE, inline=True)
+        return None
+
+    def finding(
+        self,
+        operation,
+        epoch,
+        head,
+        text,
+        *,
+        path="",
+        line=0,
+        related_locations=(),
+        suggestion="",
+        link="",
+        authority_operation=None,
+    ):
+        self.calls.append(
+            ("finding", operation, head, text, path, line, related_locations, suggestion, authority_operation)
+        )
         return self._outcome()
 
     def reminder_operation(self, operation, *, context):
@@ -441,43 +463,72 @@ class TestDashGate:
 
 
 class TestPublishGate:
-    """Findings publish under ONE batch effect identity
-    (`findings:{head}:i{n}`): lookup-first with content comparison, a
-    full claim fence before the post, exclusive custody in mem."""
+    """Each finding publishes as its own anchored effect
+    (`findings:{head}:i{n}:{finding_id}`): presence-only lookup first,
+    one full claim fence before any post, exclusive custody in mem.
+    Content collisions surface from the publisher's per-finding
+    payload comparison."""
 
     WORK = Publishable(
         head="h1",
         base="b1",
         policy="p1",
         incarnation=1,
-        findings=[{"id": "f1", "note": "n1", "blocking": True}],
+        findings=[
+            {
+                "id": "f1",
+                "blocking": True,
+                "body": "The TTL is read as minutes.",
+                "path": "src/gate.py",
+                "line": 10,
+                "suggestion": "    return issued_at + timedelta(seconds=ttl_seconds)",
+                "related_locations": [{"path": "src/models.py", "line": 18}],
+            },
+            {"id": "f2", "blocking": True, "body": "Only true approvals may count."},
+        ],
         effect="findings:h1:i1",
         op="findings:h1:i1",
         mem={"reviewed": [], "provisional": [], "findings": [], "dismissed": [], "pub": {}},
     )
 
-    def test_findings_land_under_the_batch_identity(self) -> None:
+    def test_each_finding_lands_under_its_own_anchored_identity(self) -> None:
         publisher = FakePublisher()
         result = gates(publisher).publish_gate(self.WORK)
         assert result == ReviewLanded(
             head="h1", incarnation=1, findings=self.WORK.findings, effect="findings:h1:i1", mem=self.WORK.mem
         )
-        [(_, kind, operation, _, body)] = [c for c in publisher.calls if c[0] == "immutable"]
-        # "finding" is the real publisher's marker kind for findings;
-        # CommentPublisher.marker() rejects kinds outside its frozen set.
-        assert (kind, operation) == ("finding", "findings:h1:i1")
-        assert "f1" in body
-        assert [name for name, _bodies in publisher.compatible_calls] == ["find", "immutable"]
-        [find_compatible, immutable_compatible] = [bodies for _name, bodies in publisher.compatible_calls]
-        assert find_compatible == immutable_compatible
-        expected_legacy = (
-            "## Hamsterdan review findings\n\n- `f1` (**blocking**): n1\n\n"
-            "<!-- hamsterdan:findings-digest "
-            f"{hashlib.sha256(json.dumps(self.WORK.findings, sort_keys=True, separators=(',', ':')).encode()).hexdigest()} -->"
+        lookups = [c for c in publisher.calls if c[0] == "finding_find"]
+        assert [operation for _, operation, _head in lookups] == ["findings:h1:i1:f1", "findings:h1:i1:f2"]
+        anchored, plain = [c for c in publisher.calls if c[0] == "finding"]
+        assert anchored[1:] == (
+            "findings:h1:i1:f1",
+            "h1",
+            "The TTL is read as minutes.",
+            "src/gate.py",
+            10,
+            (("src/models.py", 18),),
+            "    return issued_at + timedelta(seconds=ttl_seconds)",
+            "findings:h1:i1",
         )
-        assert find_compatible == (expected_legacy,)
+        assert plain[1] == "findings:h1:i1:f2" and plain[4] == "" and plain[5] == 0
 
-    def test_lookup_first_accepts_the_pre_rendering_upgrade_body_without_a_fence_or_post(self) -> None:
+    def test_an_unmarkable_finding_id_degrades_to_its_digest(self) -> None:
+        work = Publishable(
+            head="h1",
+            base="b1",
+            policy="p1",
+            incarnation=1,
+            findings=[{"id": "spaced finding id", "blocking": True, "body": "b"}],
+            effect="findings:h1:i1",
+            op="findings:h1:i1",
+            mem=self.WORK.mem,
+        )
+        publisher = FakePublisher()
+        gates(publisher).publish_gate(work)
+        [(_, operation, _head)] = [c for c in publisher.calls if c[0] == "finding_find"]
+        assert operation.startswith("findings:h1:i1:") and " " not in operation
+
+    def test_a_held_finding_reconciles_without_a_fence_claim_or_post(self) -> None:
         head = "a" * 40
         operation = f"findings:{head}:i1"
         work = Publishable(
@@ -485,38 +536,35 @@ class TestPublishGate:
             base="b" * 40,
             policy="p1",
             incarnation=1,
-            findings=self.WORK.findings,
+            findings=[{"id": "f1", "blocking": True, "body": "The TTL is read as minutes."}],
             effect=operation,
             op=operation,
             mem=self.WORK.mem,
         )
-        digest = hashlib.sha256(json.dumps(work.findings, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-        legacy_body = (
-            "## Hamsterdan review findings\n\n- `f1` (**blocking**): n1\n\n"
-            f"<!-- hamsterdan:findings-digest {digest} -->"
-        )
-        marker = CommentPublisher.marker("finding", operation, head)
+        marker = CommentPublisher.marker("finding", f"{operation}:f1", head)
 
-        class HeldLegacyComment:
+        class HeldInlineComment:
             def __init__(self) -> None:
                 self.requests: list[tuple[str, str]] = []
 
             def pages(self, path: str):
+                if path == "/repos/owner/repo/pulls/7/comments?per_page=100":
+                    return (
+                        {
+                            "id": 7,
+                            "html_url": "https://github.com/owner/repo/pull/7#discussion_r7",
+                            "body": f"The TTL is read as minutes.\n\n{marker}",
+                            "user": {"login": "hamsterdan[bot]"},
+                        },
+                    )
                 assert path == "/repos/owner/repo/issues/7/comments?per_page=100"
-                return (
-                    {
-                        "id": 7,
-                        "html_url": "https://github.com/owner/repo/pull/7#issuecomment-7",
-                        "body": f"{legacy_body}\n\n{marker}",
-                        "user": {"login": "hamsterdan[bot]"},
-                    },
-                )
+                return ()
 
             def request(self, method: str, path: str, body=None):
                 self.requests.append((method, path))
-                raise AssertionError("a held compatible finding must not be posted again")
+                raise AssertionError("a held finding must not be posted again")
 
-        transport = HeldLegacyComment()
+        transport = HeldInlineComment()
         fences: list[tuple] = []
         claims: list[str] = []
         publisher = CommentPublisher(
@@ -547,7 +595,7 @@ class TestPublishGate:
         assert isinstance(result, ReviewLanded) and result.effect == "findings:h1:i1"
 
     def test_a_content_collision_fails_closed(self) -> None:
-        publisher = FakePublisher(collide=True)
+        publisher = FakePublisher(mode="collision")
         result = gates(publisher).publish_gate(self.WORK)
         assert isinstance(result, ReviewFault) and "collided" in result.reason
 
@@ -565,7 +613,7 @@ class TestPublishGate:
             findings=self.WORK.findings,
             mem=self.WORK.mem,
         )
-        assert not [c for c in publisher.calls if c[0] == "immutable"]
+        assert not [c for c in publisher.calls if c[0] == "finding"]
 
     def test_retryable_exhaustion_retains_the_exact_operation(self) -> None:
         publisher = FakePublisher(mode="boundary")
@@ -596,23 +644,47 @@ class TestPublishGate:
         result = gates(publisher).publish_gate(self.WORK)
         assert isinstance(result, ReviewFault) and "banana" in result.reason
 
-    def test_the_body_binds_the_complete_findings_payload(self) -> None:
-        # two batches differing ONLY in a field the readable rendering
-        # omits must still produce different bodies, so the provider's
-        # stable-identity content comparison can fail closed (A2).
-        first, second = FakePublisher(), FakePublisher()
-        gates(first).publish_gate(self.WORK)
-        variant = Publishable(
-            head="h1",
-            base="b1",
-            policy="p1",
-            incarnation=1,
-            findings=[{"id": "f1", "note": "n1", "blocking": True, "extra": "field"}],
-            effect="findings:h1:i1",
-            op="findings:h1:i1",
-            mem=self.WORK.mem,
+
+class TestStaleThreadResolution:
+    """A fresh finding publication or readiness announcement also
+    retires the App's finding threads from superseded heads (ruled
+    2026-09-02); held reconciles stay effect-free, so recovery paths
+    never mutate threads."""
+
+    def _gates(self, publisher: FakePublisher, resolved: list[str]) -> V5PublicationGates:
+        return V5PublicationGates(
+            publisher=publisher,
+            claim=lambda: CLAIM,
+            recipients=lambda: ("the-reviewer", "the-author"),
+            resolve_stale_threads=lambda head: resolved.append(head) or 0,
         )
-        gates(second).publish_gate(variant)
-        [(_, _, _, _, body_a)] = [c for c in first.calls if c[0] == "immutable"]
-        [(_, _, _, _, body_b)] = [c for c in second.calls if c[0] == "immutable"]
-        assert body_a != body_b
+
+    def test_a_fresh_finding_publication_resolves_stale_threads_for_its_head(self) -> None:
+        resolved: list[str] = []
+        result = self._gates(FakePublisher(), resolved).publish_gate(TestPublishGate.WORK)
+        assert isinstance(result, ReviewLanded)
+        assert resolved == ["h1"]
+
+    def test_a_held_finding_reconcile_never_touches_threads(self) -> None:
+        resolved: list[str] = []
+        result = self._gates(FakePublisher(found=True), resolved).publish_gate(TestPublishGate.WORK)
+        assert isinstance(result, ReviewLanded)
+        assert resolved == []
+
+    def test_a_fresh_announcement_resolves_stale_threads_for_its_head(self) -> None:
+        resolved: list[str] = []
+        work = AnnounceReq(
+            op="ready:h1:i1", incarnation=1, head="h1", base="b1", policy="p1", strict_base=False, base_current=True
+        )
+        result = self._gates(FakePublisher(), resolved).announce_gate(work)
+        assert result == ALanded(incarnation=1, head="h1")
+        assert resolved == ["h1"]
+
+    def test_a_held_announcement_reconcile_never_touches_threads(self) -> None:
+        resolved: list[str] = []
+        work = AnnounceReq(
+            op="ready:h1:i1", incarnation=1, head="h1", base="b1", policy="p1", strict_base=False, base_current=True
+        )
+        result = self._gates(FakePublisher(found=True), resolved).announce_gate(work)
+        assert result == ALanded(incarnation=1, head="h1")
+        assert resolved == []
