@@ -33,11 +33,11 @@ host Worker composition
 
 | Package | Owns | Must not own |
 |---|---|---|
-| `workflow` | final outer-facing workflow observations, Activity work, terminals, operation identity, occurrence projection, and detached posture language required by CV21 call sites | Net topology, loop state, folds, Engine lifecycle, provider/agent calls, clocks, persistence, or a copy of current workflow decisions |
-| `readiness` | one-PR application, Engine integration over Impetus History and engine-facing Motus Dispatch, the sole legacy bridge, authority, ingress/review/timer/instance custody, and typed Activity adaptation | Motus Worker construction or driving, Activity claim/retry/execution policy, concrete provider or agent construction, process-wide scheduling, HTTP or CLI |
+| `workflow` | final outer-facing workflow observations, Activity work, terminals, operation identity, occurrence projection, and detached state language required by CV21 call sites | Net topology, loop state, folds, Engine lifecycle, provider/agent calls, clocks, persistence, or a copy of current workflow decisions |
+| `readiness` | one-PR Engine integration over shared Impetus History and engine-facing Motus Dispatch, source-neutral projection, the sole legacy bridge, and typed Activity adaptation | Webhook Inbox persistence/scheduling, Motus Worker construction or driving, concrete provider or agent construction, process-wide scheduling, HTTP or CLI |
 | `github_app` | provider models, App credentials, bounded transport/gateway, webhook and route mechanisms, and lookup-first provider operations | readiness or workflow decisions, agent execution, process supervision |
 | `agents` | credential-free request/result/terminal protocol, Pi adaptation, and workspace safety | GitHub credentials, provider publication, host route selection, workflow interpretation |
-| `host` | sole concrete construction root for each process role, process-local resources, durable webhook/route custody, concrete Activity registry/resolution and queue binding, agent runtime custody, catalog, discovery, runnable fairness, lifecycle evidence, inspection, API, and service | workflow tokens, History decoding, Activity attempt/lease/retry semantics, or workflow execution decisions |
+| `host` | sole concrete construction root for each process role, shared application database, PR workflow identities, Webhook Inbox and its worker, concrete Activity registry/resolution and queue binding, agent runtime state, discovery, runnable fairness, lifecycle evidence, inspection, API, and service | workflow tokens, History decoding, Activity attempt/lease/retry semantics, or workflow execution decisions |
 | `operator` | bounded human command behavior and atomic qualification setup | long-running service policy or workflow interpretation |
 | `simulation` | logical time, deterministic scheduling, generic occurrence faults, process generations, budgets, strict artifacts, and replay | owner commands, domain policy, authority, retry, or checker semantics |
 
@@ -50,33 +50,29 @@ the same outer-facing language after ruling its subnet composition contract.
 Paths are admitted by the tracer that first needs them. DS1 does not create an
 empty final skeleton.
 
-DS1 and the delivered DS2 HTTP-custody task admit this source shape:
+DS1 and the glossary-aligned DS2 implementation admit this source shape:
 
 ```text
 src/hamsterdan2/
   github_app/
     models.py
     webhooks.py
-    simulation/
-      webhooks.py
   workflow/
     values.py
+    observations.py
   readiness/
-    root.py
+    intake_values.py
+    projection.py
     runtime.py
     workflow_bridge.py
-    simulation/
-      lifecycle.py
   host/
     api.py
     application.py
-    catalog.py
     composition.py
-    delivery.py
+    database.py
+    pr_workflows.py
     values.py
-  simulation/
-    hamsterdan.py
-    process.py
+    webhook_inbox.py
 ```
 
 The following cumulative shape remains directional for later tracers. A later
@@ -178,20 +174,20 @@ The architecture gate rejects:
 Positive checks require the real edges only after their owning tracer admits
 them. The bridge allowlist and type-leak census apply from DS1.
 
-## Runtime ownership and bounded cuts
+## Runtime ownership and bounded checkpoints
 
 One Hamsterdan authority role schedules many independent one-PR readiness
-lifecycles. Each readiness call crosses one named durable cut and returns a
+lifecycles. Each readiness call crosses one named durable checkpoint and returns a
 detached value. Motus Workers are separately supervised process roles over
 durable Dispatch; the authority role never creates, pumps, or waits inside an
 Activity implementation:
 
 ```text
-provider acquisition
-  -> host delivery custody
-  -> readiness manifest/admission
-  -> bridge translation and identified History admission
-  -> retained workflow fold
+signed provider delivery
+  -> raw Webhook Inbox retention and HTTP 200
+  -> later host normalization and semantic Intake classification
+  -> bridge translation and unfinished identified History acceptance
+  -> later exact retained source completion owned by History
   -> bridge projection of pending typed Activity
   -> Impetus Activity request/occurrence
   -> Motus Dispatch publication
@@ -208,12 +204,12 @@ later authority turn
   -> Impetus records canonical Activity terminal
   -> bridge converts the exact terminal
   -> retained workflow occurrence
-  -> detached readiness posture
-  -> host custody completion or tail requeue
+  -> detached readiness state
+  -> application checkpoint or tail requeue
 ```
 
 Convenience drains are finite loops over those calls. They are never hidden
-inside application methods. Host sees detached lifecycle and work posture, not
+inside application methods. Host sees detached lifecycle and work state, not
 markings, current tokens, legacy classes, or workflow terminal variants.
 
 `host/composition.py` is the sole concrete composition location, not a
@@ -231,10 +227,11 @@ Net, Activity declarations, readiness boundary, or terminal path. GitHub and
 agent Activities use separate Worker roles so GitHub credentials never enter
 agent process territory.
 
-Ingress and authority scheduling are distinct logical roles even when a later
-Plan chooses to co-locate them. Their OS-process placement is not decided by
-this Worker ruling. Motus Worker roles are not co-located with the authority
-role in the accepted production-shaped profile.
+HTTP ingress, Webhook Inbox processing, and PR authority scheduling are
+distinct logical roles even when a later Plan chooses to co-locate them. The
+Webhook Inbox Worker is host-owned and is not a Motus Worker. Their OS-process
+placement is not decided by this Worker ruling. Motus Worker roles are not
+co-located with the authority role in the accepted production-shaped profile.
 
 After DS5, the smallest long-lived Hamsterdan topology therefore has three OS
 processes when ingress and authority are co-located, or four when they are
@@ -259,99 +256,122 @@ Motus and agent-lifecycle custody after that child exits or crashes.
 
 ## Request and asynchronous process cycles
 
-The provider request cycle ends at durable host custody:
+The provider request cycle ends at the raw Webhook Inbox:
 
 ```text
 GitHub -> Amp durable webhook relay -> HTTP ingress role
-  -> bound and verify request
-  -> durably commit delivery identity and normalized observation
-  -> return custody acknowledgement
+  -> bound exact headers/body -> verify HMAC
+  -> commit DeliveryId, event, exact raw body, and body digest
+  -> return HTTP 200
 HTTP request ends
 ```
 
-No readiness fold, Engine advancement, Dispatch claim, provider mutation,
-agent execution, or terminal admission is required to return that
-acknowledgement. Relay uncertainty may redeliver the same provider identity;
-durable custody classifies it without starting another workflow admission.
+The request neither parses JSON nor opens readiness, History, or Dispatch.
+`DeliveryId` classifies transport redelivery. Same ID/event/body returns the
+original Inbox sequence as a duplicate; changed evidence records a bounded
+collision digest without overwriting the original body. Valid signed malformed
+JSON and unsupported events are retained for later rejection. Invalid transport
+or HMAC is refused before persistence.
 
-DS2 task 2 fixes this boundary more narrowly. `github_app` verifies the exact
-raw bytes before parsing and projects a bounded pull-request snapshot plus
-webhook provenance. Host then binds the envelope to one configured active route
-and acquires `(ProviderRouteId, DeliveryId)` in SQLite. One canonical normalized
-content value is retained per acquisition identity. Identical redelivery is an
-exact duplicate; changed normalized content permanently quarantines that one
-acquisition without overwriting its original evidence. The request receives
-HTTP 202 only after the retained, duplicate, or quarantined disposition is
-durable. Invalid transport, signature, envelope, or route evidence is refused
-without persistence.
+A later host-owned `WebhookInboxWorker` selects one Inbox row. It parses and
+normalizes through `github_app`, binds configured route evidence, projects a
+source-neutral `HeadObservation`, and computes `ObservationKey`. This worker is
+not a Motus Worker and no Activity is involved. Provider timestamp, provenance,
+delivery identity, route, policy, and Inbox order remain outside semantic
+equality. PR Identity is included, but is not itself a deduplication key: one PR
+may produce many different observations.
 
-The normalized snapshot contains only its immutable PR subject, exact head and
-base branch tips, lifecycle state, draft and merged flags, tri-state
-mergeability, and bounded provider update time. Webhook event, action, and
-delivery identity are provenance. Raw body, signature, secret, arbitrary
-headers, SDK values, branch policy, base currentness, provider currency, and
-workflow decisions are neither retained nor returned.
+One application transaction reconstructs the exact row and workflow binding,
+then durably authorizes only the first owner of a novel key. Same key and bytes
+becomes `duplicate`; key/bytes disagreement or unsupported evidence becomes
+`rejected`; unknown PR Identity remains pending for later registration. Durable
+authorization prevents another delivery from reaching History while the first
+handoff is uncertain.
+
+Only an authorized novel observation reaches public `Engine.accept_delivery`.
+Fresh acceptance commits `ExternalEventDelivered` and `FiringBegun`; exact
+reoffer recovers the same occurrence without append. The application
+transaction then marks the Inbox row `recorded`. If the process dies after the
+History commit, the application transaction rolls back while History survives;
+fresh processing exact-reoffers and records the handoff.
+
+The Inbox owns no later completion mark. A PR authority turn derives the oldest
+unfinished bridged occurrence from one bounded History page, exact-reoffers its
+source/token/identity, and calls public `Engine.complete_delivery` only for that
+carrier. A prior successful terminal returns `already_completed` from History
+alone. Completion does not run a broad drain, advance `life.admit_head`, create
+Dispatch, run a Worker, read the provider, or start an agent.
+
+Fresh state uses shared `hamsterdan.sqlite3`, `history.sqlite3`, and
+`dispatch.sqlite3`. The application file contains exactly `pr_workflows` and
+`webhook_inbox`; no per-PR database, catalog, ingress/staging database,
+manifest, grant, accepted pointer, fold table, or host completion receipt
+exists. Separate application and History files permit the application writer to
+hold its transaction while Petrus writes through an independent connection.
 
 Outside the request, an authority turn claims one host delivery, advances one
-PR through readiness, and either returns detached posture or publishes a Motus
+PR through readiness, and either returns detached state or publishes a Motus
 Activity. A Worker turn may continue while ingress or the authority role is
 down. After the Worker durably reports an operational terminal, a later
 authority turn collects it, lets Impetus author the canonical terminal, and
 continues the retained occurrence through the bridge.
 
-Logs are role-local observations correlated by subject/Instance, occurrence,
-operation, Attempt, and Worker incarnation. They are not delivery, workflow,
-Dispatch, provider-effect, or agent-result authority.
+Logs are role-local observations correlated by PR Identity/workflow identity,
+occurrence, operation, Attempt, and Worker generation. They are not delivery,
+workflow, Dispatch, provider-effect, or agent-result authority.
 
 ## Observation and admission
 
 Webhook is the first acquisition source, not a special workflow path:
 
 ```text
-PullRequestSnapshot + ObservationProvenance
-  -> focused observation + ObservationKey
-  -> IngressManifest + AdmissionGrant + ordered IngressEntry
-  -> bridge conversion
-  -> identified Petrus History admission
-  -> retained workflow fold
+verified DeliveryId + exact raw body in Webhook Inbox
+  -> later normalized provider snapshot
+  -> focused HeadObservation + ObservationKey
+  -> durable novel authorization in the same Inbox row
+  -> bridge conversion + identified Petrus History acceptance
+  -> later History-owned completion
 ```
 
-History remains the sole workflow-admission ledger. Host delivery, HTTP custody
-acknowledgement, readiness staging, History acceptance, and workflow fold are
-distinct observable cuts. Later exact reads and discovery use the same common
-admission seam. `AdmissionGrant` is manifest-scoped admission authority, never
-fresh effect authority.
+History remains the sole workflow ledger. The Inbox owns raw transport
+evidence, semantic authorization, and its Intake outcome. `recorded` means the
+exact identified delivery reached History; it is not a completion marker.
+Later exact reads and discovery use the same focused observation boundary.
+No manifest, grant, admission-decision table, accepted pointer, or host
+completion record exists.
 
 ## Authority and effects
 
 Readiness authorizes protected work by combining:
 
-1. its durable workflow grant;
+1. its durable workflow intent in History;
 2. a fresh exact provider read; and
-3. fresh host route/custody evidence.
+3. fresh host route and generation evidence.
 
-The complete semantic claim includes phase, incarnation, head, base, and policy.
+The complete semantic claim includes stage, generation, head, base, and policy.
 No source substitutes for another. Every external mutation uses a stable logical
 operation, lookup-first ambiguity recovery, at most one mutation attempt per
 Worker turn, exact terminal correlation, and current-authority fencing at the
-required cut. GitHub credentials exist only in the GitHub Worker role and never
+required checkpoint. GitHub credentials exist only in the GitHub Worker role and never
 enter agent values, state, processes, or diagnostics.
 
 ## Durable truth
 
 | Truth | Owner |
 |---|---|
-| provider acceptance and lookup result | GitHub operation custody or provider truth |
-| agent submission, terminal, and receiver delivery | agent lifecycle custody |
+| signed raw delivery, transport duplicate/collision, semantic authorization, and Intake outcome | host Webhook Inbox in `hamsterdan.sqlite3` |
+| PR Identity to workflow identity and generation | host `pr_workflows` in `hamsterdan.sqlite3` |
+| provider acceptance and lookup result | GitHub operation state or provider truth |
+| agent submission, terminal, and receiver delivery | agent lifecycle state |
 | workflow request, occurrence, and canonical terminal | Impetus History through the one-PR Engine composed by readiness |
 | Activity task, Attempt, claim, lease, retry, heartbeat, and operational terminal | Motus Dispatch |
 | Activity execution and operational report | Motus Worker using the host-composed Activity registry |
-| bridge mapping/version and retained workflow identity | fresh CV21 readiness root |
-| ingress manifest and admission grant | readiness ingress custody |
-| review request and attempt | readiness review custody |
-| timer command, acknowledgement, maturity, and delivery | readiness timer custody |
-| subject/root/route registration | host catalog |
-| runnable fairness and leases | host runnable custody |
+| bridge mapping/version | readiness workflow bridge |
+| exact observation acceptance, unfinished occurrence, and successful terminal | Impetus History through public `Engine.accept_delivery` and `Engine.complete_delivery` |
+| review request and attempt | readiness review state |
+| timer command, acknowledgement, maturity, and delivery | readiness timer state |
+| route registration | host application state |
+| runnable fairness and leases | host runnable state |
 
 Process-local frames, clients, coroutines, exceptions, queues, and simulation
 frames are never recovery authority.
@@ -368,6 +388,28 @@ reducer. Bridge-local correspondence checks exact input conversion, request and
 occurrence projection, terminal return, reconstruction, and replay. Existing V5
 tests remain workflow-behavior evidence; CV21 adds translation and outer-system
 evidence rather than copying those tests.
+
+DS2 deterministic evidence drives the production HTTP, application SQLite,
+bridge, shared History, and retained Net seams directly. It distinguishes raw
+Inbox retention, transport duplicate/collision, semantic
+pending/recorded/duplicate/rejected, identified unfinished acceptance, and
+History-owned completion. Concurrency covers two deliveries competing for one
+semantic observation and multiple distinct observations for one PR.
+
+Real child processes are killed after raw Inbox commit, after History
+acceptance but before Inbox acknowledgement, and after History completion but
+before caller acknowledgement. Fresh composition converges without another
+Inbox row, History acceptance, or terminal. Corruption mutations cover raw
+body digest, normalized evidence, canonical observation/key, PR binding,
+bridge identity, acceptance pair, and terminal pair.
+
+Bounded inspection limits the application to two tables, 10,000 workflows and
+10,000 Inbox rows by default, 131,072 SQLite pages, 1 MiB raw bodies, 16 KiB
+normalized values, and 8 KiB observations. Shared History is capped at 128 MiB
+and one 4,096-record page per workflow, with 1 MiB reserved before a fresh
+acceptance or completion write. The source completion does not advance the
+newly enabled retained dashboard transition, so Dispatch pending count remains
+zero.
 
 The shared Timeline understands only action identity, logical time,
 deterministic choices, process generations, generic occurrence faults, one-leaf

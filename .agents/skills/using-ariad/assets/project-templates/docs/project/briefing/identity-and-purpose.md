@@ -8,6 +8,6 @@ What does this project exist to do? Name its value, audience, and reason for exi
 
 Which stable assumptions guide implementation? Include target users, experience constraints, positioning, non-negotiable behaviors, or quality expectations. Put actionable trade-off guidance in `docs/product/principles/current-principles.md`.
 
-## Glossary
+## Domain Language
 
-Define project-specific terms an agent must understand.
+Accepted project-specific terminology lives in the [glossary](../glossary/index.md). Link to that owner instead of copying definitions here.

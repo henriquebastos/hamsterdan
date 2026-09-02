@@ -227,7 +227,14 @@ class GitHubAuthority:
             except GitHubBoundaryError:
                 unresolved, capability = None, "threads_unavailable"
             else:
-                unresolved = sum(not bool(thread.get("isResolved")) for thread in threads)
+                # Dan's own finding threads are excluded from the count:
+                # the review facts already carry the finding signal, and
+                # the board must not report one problem twice. A thread
+                # whose authorship cannot be read counts as human — the
+                # conservative direction keeps real threads visible.
+                unresolved = sum(
+                    not bool(thread.get("isResolved")) and not _viewer_thread(thread) for thread in threads
+                )
                 capability = "available"
         items = tuple(sorted(latest.items()))
         return HumanReviewSnapshot(
@@ -238,6 +245,27 @@ class GitHubAuthority:
             unresolved,
             capability,
         )
+
+    def resolve_stale_finding_threads(self, current_head: str) -> int:
+        """Resolve the App's own finding threads left behind by superseded
+        heads. A new head that fixed a finding must also retire its
+        thread, or a resolution-requiring ruleset would block merge
+        while the board reads all-clear. Threads on the current head and
+        every human thread are untouched."""
+        if self.graphql is None:
+            return 0
+        resolved = 0
+        for thread in self.graphql.review_threads(self.owner, self.name, self.pr_number):
+            if bool(thread.get("isResolved")) or not _viewer_thread(thread):
+                continue
+            first = _first_comment(thread)
+            body = str(first.get("body", "")) if first is not None else ""
+            matched = _FINDING_MARKER_HEAD.search(body)
+            if matched is None or matched.group(1) == current_head:
+                continue
+            self.graphql.resolve_review_thread(str(thread["id"]))
+            resolved += 1
+        return resolved
 
     def base_current(self, pull: PullRequestSnapshot) -> bool:
         value = self._get(f"{self.root}/compare/{pull.base}...{pull.head}")
@@ -350,6 +378,21 @@ class GitHubAuthority:
         if len(data) > MAX_LOG_BYTES:
             raise GitHubBoundaryError("GitHub Actions logs exceed their bound")
         return data
+
+
+def _viewer_thread(thread: Mapping[str, Any]) -> bool:
+    """Whether the API viewer (the App itself) opened this thread."""
+    first = _first_comment(thread)
+    return bool(first is not None and first.get("viewerDidAuthor") is True)
+
+
+def _first_comment(thread: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    comments = thread.get("comments")
+    nodes = comments.get("nodes") if isinstance(comments, Mapping) else None
+    return nodes[0] if isinstance(nodes, list) and nodes and isinstance(nodes[0], Mapping) else None
+
+
+_FINDING_MARKER_HEAD = re.compile(r"<!-- hamsterdan:finding operation=[^ >]+ head=([0-9a-f]{40}) -->")
 
 
 def _run(value: Mapping[str, Any], workflow: str, pr_number: int) -> ActionsRunSnapshot:

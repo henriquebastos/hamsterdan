@@ -15,6 +15,7 @@ usage() {
     cat <<'EOF'
 usage: scripts/check quick [PATH ...]
        scripts/check hamsterdan2
+       scripts/check tests
        scripts/check full
        scripts/check release
        scripts/check audit
@@ -22,6 +23,7 @@ usage: scripts/check quick [PATH ...]
 
 quick     lint and format-check Python PATHs, type-check production source, and enforce architecture rules
 hamsterdan2  enforce the isolated strict replacement gate
+tests     Python tests only: fixed-seed randomized routine tests on four workers plus the hamsterdan2 suite
 full      quick, Bun, build, and fixed-seed randomized routine tests on four workers
 release   full plus one additional fixed-seed serial routine test run
 audit     report repository lint, complexity, and structural findings; fail only on a broken probe
@@ -70,6 +72,26 @@ routine_tests() {
     local seed="$1"
     shift
     uv run pytest -q "$@" --randomly-seed="$seed" --forbid-skips -m "$ROUTINE_TESTS"
+}
+
+tests() {
+    reject_paths tests "$@" || return
+    # Hosted CI must stay apt-free, and neither its 2-vCPU runner nor a
+    # many-core laptop tolerates oversubscribed process-forking DST tests:
+    # provisioning tests stay with the full gate, and workers are capped at
+    # the proven four without exceeding the machine's CPUs.
+    ROUTINE_TESTS="$ROUTINE_TESTS and not linux_orb_setup"
+    local workers
+    workers=$(getconf _NPROCESSORS_ONLN)
+    ((workers > 4)) && workers=4
+    # The generated campaign tests fork real processes against wall-clock
+    # budgets; sharing a slow runner with sibling workers turns them flaky,
+    # so they run serially with the whole machine after the parallel bulk.
+    local campaign="tests/integration/testing/test_readiness_campaign.py"
+    routine_tests 1729 -n "$workers" --dist load --maxschedchunk=1 --durations=20 --durations-min=0.5 \
+        --ignore="$campaign"
+    routine_tests 1729 "$campaign"
+    uv run pytest -q -o addopts= tests2
 }
 
 full() {
@@ -151,6 +173,9 @@ case "$profile" in
         ;;
     hamsterdan2)
         hamsterdan2 "$@"
+        ;;
+    tests)
+        tests "$@"
         ;;
     full)
         full "$@"

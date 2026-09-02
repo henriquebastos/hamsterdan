@@ -230,7 +230,9 @@ class Application:
 
 
 def config(
-    root: Path, repositories: tuple[tuple[int, str], ...] = ((31, "owner/one"), (32, "owner/two"))
+    root: Path,
+    repositories: tuple[tuple[int, str], ...] = ((31, "owner/one"), (32, "owner/two")),
+    watched_authors: frozenset[str] = frozenset(),
 ) -> HostConfig:
     return HostConfig(
         app_id=17,
@@ -240,6 +242,7 @@ def config(
         state_path=root,
         private_key="private-key-secret",
         webhook_secret="hook-secret",
+        watched_authors=watched_authors,
     )
 
 
@@ -248,15 +251,18 @@ def service(
     *,
     clients: Clients | None = None,
     factory: Any = Application,
+    watched_authors: frozenset[str] = frozenset(),
+    transport_factory: Any = None,
 ) -> HostService:
     agent_composition, routes = agent_custody(root)
     result = HostService(
-        config(root),
+        config(root, watched_authors=watched_authors),
         clients=clients or Clients(),
         runner=object(),
         agent_composition=agent_composition,
         agent_routes=routes,
         application_factory=factory,
+        transport_factory=transport_factory,
     )
     result.registry.reconcile((InstallationInventory(44, 23, ((31, "owner/one"), (32, "owner/two"))),))
     return result
@@ -669,6 +675,86 @@ def test_addressed_trusted_human_comment_is_routed(tmp_path: Path) -> None:
     assert made[0].comments[0]["comment_id"] == 9
     assert made[0].comments[0]["text"] == "help"
     assert made[0].reconciles == ["github-delivery:comment"]
+
+
+def watch_narrowed_service(
+    tmp_path: Path, made: list[Application], watched_authors: frozenset[str]
+) -> tuple[HostService, V5Provider]:
+    provider = V5Provider()
+    host = service(
+        tmp_path,
+        factory=lambda *a, **k: made.append(Application(*a, **k)) or made[-1],
+        watched_authors=watched_authors,
+        transport_factory=lambda client: provider,
+    )
+    return host, provider
+
+
+def inbox_reason(root: Path, delivery: str) -> str | None:
+    with sqlite3.connect(root / "webhooks.sqlite3") as db:
+        row = db.execute("SELECT reason FROM inbox WHERE delivery_id=?", (delivery,)).fetchone()
+    return None if row is None else row[0]
+
+
+def test_unwatched_author_pr_is_terminal_without_journey_and_decides_once(tmp_path: Path) -> None:
+    made: list[Application] = []
+    host, provider = watch_narrowed_service(tmp_path, made, frozenset({"someone-else"}))
+    for delivery in (str(uuid.uuid4()), str(uuid.uuid4())):
+        body = envelope()
+        host.custody.receive(signed(body, delivery).items() | {("content-length", str(len(body)))}, body)
+        host.process(host.custody.pending()[0])
+        assert host.custody.status(delivery) == "terminal"
+        assert inbox_reason(tmp_path, delivery) == "author not watched"
+    assert made == []
+    assert provider.comments == []
+    assert provider.calls.count(("GET", "/repos/owner/one/pulls/7")) == 1
+    host.close()
+
+
+def test_watched_author_pr_starts_the_journey(tmp_path: Path) -> None:
+    made: list[Application] = []
+    host, _provider = watch_narrowed_service(tmp_path, made, frozenset({"author"}))
+    delivery, body = str(uuid.uuid4()), envelope()
+    host.custody.receive(signed(body, delivery).items() | {("content-length", str(len(body)))}, body)
+    host.process(host.custody.pending()[0])
+    assert host.custody.status(delivery) == "terminal"
+    assert [item.delivery_id for item in made[0].observations] == [delivery]
+    host.close()
+
+
+def test_trusted_mention_opts_an_unwatched_pr_in_for_its_lifetime(tmp_path: Path) -> None:
+    made: list[Application] = []
+    host, provider = watch_narrowed_service(tmp_path, made, frozenset({"someone-else"}))
+    host.process(
+        observation(
+            "summon",
+            event="issue_comment",
+            action="created",
+            comment_id=9,
+            comment_body="@hamsterdan-test help",
+            actor_id=5,
+            actor_login="human",
+            actor_type="User",
+            author_association="MEMBER",
+        )
+    )
+    host.process(observation("follow-up"))
+    assert len(made) == 1
+    assert [item.delivery_id for item in made[0].observations] == ["summon", "follow-up"]
+    assert provider.calls == []
+    host.close()
+
+
+def test_bound_instance_keeps_its_journey_when_watching_narrows(tmp_path: Path) -> None:
+    root = tmp_path / "applications" / "44" / "31" / "7"
+    bind_application(root)
+    (root / "history.jsonl").write_text("", encoding="utf-8")
+    made: list[Application] = []
+    host, provider = watch_narrowed_service(tmp_path, made, frozenset({"someone-else"}))
+    host.process(observation("existing"))
+    assert [item.delivery_id for item in made[0].observations] == ["existing"]
+    assert provider.calls == []
+    host.close()
 
 
 def test_delivery_remains_pending_when_post_activation_settlement_fails(tmp_path: Path) -> None:

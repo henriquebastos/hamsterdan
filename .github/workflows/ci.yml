@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 permissions:
@@ -10,10 +11,9 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: "3.14"
       - name: Configure Petrus dependency authentication
@@ -33,5 +33,4 @@ jobs:
       - name: Remove Petrus dependency authentication
         if: always()
         run: rm -rf "$RUNNER_TEMP/petrus-git-auth"
-      - name: Run Python tests
-        run: uv run --frozen pytest -q -n 4 --dist load --maxschedchunk=1 --forbid-skips -m "not real_provider_acceptance"
+      - run: scripts/check tests

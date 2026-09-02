@@ -45,7 +45,7 @@ class TestClassification:
         see_head(engine, "h1")
         comment(engine, "c1", "status")
         world = world_of(engine)
-        assert reply_texts(world) == {"reply:c1": "answer:status"}
+        assert reply_texts(world) == {"reply:c1": "Nothing new to report — the summary comment is current."}
         state = memory(engine)
         assert state["served"] == ["c1"]
         assert state["pending"] == {}  # custody returned
@@ -67,13 +67,13 @@ class TestClassification:
         world = world_of(engine)
         assert world["pushes"] == []
         assert tokens(engine, "mut.requests") == []
-        assert reply_texts(world) == {"reply:c1": "no workflow change"}
+        assert reply_texts(world) == {"reply:c1": "I can't act on that — nothing in the workflow changed."}
 
     def test_an_unknown_kind_gets_the_no_change_reply(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
         comment(engine, "c1", "make-coffee")
-        assert reply_texts(world_of(engine)) == {"reply:c1": "no workflow change"}
+        assert reply_texts(world_of(engine)) == {"reply:c1": "I can't act on that — nothing in the workflow changed."}
 
     def test_a_pure_intent_is_answered_even_after_close(self) -> None:
         # the conversation loop NEVER ends: close retires the workflow
@@ -82,7 +82,7 @@ class TestClassification:
         see_head(engine, "h1")
         deliver(engine, "on_close", "CloseSeen", {"reason": "merged"})
         comment(engine, "c1", "reply")
-        assert reply_texts(world_of(engine)) == {"reply:c1": "answer:reply"}
+        assert reply_texts(world_of(engine)) == {"reply:c1": "Nothing new to report — the summary comment is current."}
 
 
 # -- note intents (routed facts) ----------------------------------------------
@@ -93,7 +93,7 @@ class TestNoteIntents:
         engine, _ = spawn()
         see_head(engine, "h1")  # the agent posts finding f-h1
         comment(engine, "c1", "dismiss", arg="f-h1")
-        assert reply_texts(world_of(engine))["reply:c1"] == "noted:dismiss"
+        assert reply_texts(world_of(engine))["reply:c1"] == "Noted — that finding is dismissed."
         assert one(engine, "review.memory")["dismissed"] == ["f-h1"]
 
     def test_snooze_and_resume_mail_reminders_while_defer_disposes_review_finding(self) -> None:
@@ -113,7 +113,7 @@ class TestNoteIntents:
         see_head(engine, "h1")
         deliver(engine, "on_close", "CloseSeen", {"reason": "merged"})
         comment(engine, "c1", "dismiss", arg="f-h1")
-        assert reply_texts(world_of(engine))["reply:c1"] == "declined:dismiss:terminal"
+        assert reply_texts(world_of(engine))["reply:c1"] == "This PR is closed — nothing changes here anymore."
         assert tokens(engine, "review.dismiss") == []
 
     def test_recover_publication_routes_by_operation_prefix(self) -> None:
@@ -128,13 +128,13 @@ class TestNoteIntents:
         assert one(engine, "review.memory")["pub"] == {"phase": "idle"}
         findings = [c for c in world["comments"] if c["kind"] == "findings"]
         assert [c["key"] for c in findings] == ["findings:h1:i1"]
-        assert reply_texts(world)["reply:c1"] == "noted:recover_publication"
+        assert reply_texts(world)["reply:c1"] == "On it — I'm retrying that publication now."
 
     def test_recover_publication_with_an_unknown_prefix_is_declined(self) -> None:
         engine, _ = spawn()
         see_head(engine, "h1")
         comment(engine, "c1", "recover_publication", arg="bogus:xyz")
-        assert reply_texts(world_of(engine))["reply:c1"] == "declined:recover_publication:unknown-target"
+        assert reply_texts(world_of(engine))["reply:c1"] == "I don't recognize that operation, so I can't recover it."
 
 
 # -- committing intents --------------------------------------------------------
@@ -148,7 +148,7 @@ class TestCommittingIntents:
         world = world_of(engine)
         # rid = comment identity: the operation key is producer-stable
         assert world["pushes"] == [{"key": "push:comment:c1:h1:i1", "op": "change", "from": "h1", "to": "h1+change"}]
-        assert reply_texts(world)["reply:c1"] == "started:change"
+        assert reply_texts(world)["reply:c1"] == "On it — I'm making that change and will push to this PR."
 
     def test_a_committing_intent_outside_running_is_declined(self) -> None:
         engine, _ = spawn()
@@ -158,7 +158,7 @@ class TestCommittingIntents:
         world = world_of(engine)
         assert world["pushes"] == []
         assert tokens(engine, "mut.requests") == []
-        assert reply_texts(world)["reply:c1"] == "declined:change:quiescent"
+        assert reply_texts(world)["reply:c1"] == "This PR is a draft — I hold changes until it's ready for review."
 
     def test_a_committing_intent_under_a_provisional_head_is_declined(self) -> None:
         # our own push is in flight between the land and its webhook:
@@ -169,12 +169,12 @@ class TestCommittingIntents:
         assert one(engine, "life.state")["expected"] == "h1+change"
         comment(engine, "c2", "update_base")
         world = world_of(engine)
-        assert reply_texts(world)["reply:c2"] == "declined:update_base:provisional"
+        assert reply_texts(world)["reply:c2"] == "My own update is still landing — ask again once it settles."
         assert len(world["pushes"]) == 1
         # the expected webhook arrives: committing intents flow again
         see_head(engine, "h1+change")
         comment(engine, "c3", "update_base")
-        assert reply_texts(world)["reply:c3"] == "started:update_base"
+        assert reply_texts(world)["reply:c3"] == "On it — I'm updating this branch from its base."
         assert len(world["pushes"]) == 2
 
     def test_a_committing_intent_after_close_is_declined(self) -> None:
@@ -184,7 +184,7 @@ class TestCommittingIntents:
         comment(engine, "c1", "change")
         world = world_of(engine)
         assert world["pushes"] == []
-        assert reply_texts(world)["reply:c1"] == "declined:change:terminal"
+        assert reply_texts(world)["reply:c1"] == "This PR is closed — nothing changes here anymore."
 
 
 # -- the reply gate ------------------------------------------------------------
@@ -196,7 +196,14 @@ class TestReplyGate:
         engine, _ = spawn()
         see_head(engine, "h1")
         world = world_of(engine)
-        world["comments"].append({"key": "reply:c1", "kind": "reply", "head": "", "body": "answer:status"})
+        world["comments"].append(
+            {
+                "key": "reply:c1",
+                "kind": "reply",
+                "head": "",
+                "body": "Nothing new to report — the summary comment is current.",
+            }
+        )
         comment(engine, "c1", "status")
         assert len(replies(world)) == 1  # NO duplicate post
         assert memory(engine)["pending"] == {}
@@ -208,13 +215,13 @@ class TestReplyGate:
         world["comments_mode"] = "retryable"
         comment(engine, "c1", "status")
         state = memory(engine)
-        assert state["blocked"] == {"c1": "answer:status"}
+        assert state["blocked"] == {"c1": "Nothing new to report — the summary comment is current."}
         assert state["pending"] == {}
         assert replies(world) == []
         # recovery reissues the SAME identity with the retained text
         world["comments_mode"] = None
         comment(engine, "c2", "recover_publication", arg="reply:c1")
-        assert reply_texts(world)["reply:c1"] == "answer:status"
+        assert reply_texts(world)["reply:c1"] == "Nothing new to report — the summary comment is current."
         state = memory(engine)
         assert state["blocked"] == {}
         assert state["pending"] == {}
@@ -226,7 +233,12 @@ class TestReplyGate:
         world["comments_mode"] = "unknown"
         comment(engine, "c1", "status")
         state = memory(engine)
-        assert state["faulted"] == {"c1": {"text": "answer:status", "reason": "unknown provider terminal"}}
+        assert state["faulted"] == {
+            "c1": {
+                "text": "Nothing new to report — the summary comment is current.",
+                "reason": "unknown provider terminal",
+            }
+        }
         [fault] = [f for f in projection(engine) if f["kind"] == "fault"]
         assert fault["body"] == {
             "where": "conversation",
@@ -236,7 +248,14 @@ class TestReplyGate:
         }
         # the provider DID hold it: recovery must not post a second copy
         world["comments_mode"] = None
-        world["comments"].append({"key": "reply:c1", "kind": "reply", "head": "", "body": "answer:status"})
+        world["comments"].append(
+            {
+                "key": "reply:c1",
+                "kind": "reply",
+                "head": "",
+                "body": "Nothing new to report — the summary comment is current.",
+            }
+        )
         comment(engine, "c2", "recover_publication", arg="reply:c1")
         assert len(replies(world)) == 2  # c1 reconciled + c2's own reply
         state = memory(engine)
@@ -272,7 +291,7 @@ class TestReplyGate:
         see_head(engine, "h1")
         world = world_of(engine)
         world["comments"].append({"key": "reply:c1", "kind": "reply", "head": "", "body": "something else"})
-        comment(engine, "c1", "status")  # would answer "answer:status"
+        comment(engine, "c1", "status")  # would answer the pure fallback text
         state = memory(engine)
         assert state["faulted"]["c1"]["reason"] == "effect identity collision: reply:c1"
         assert reply_texts(world)["reply:c1"] == "something else"  # untouched
@@ -293,6 +312,9 @@ class TestReplyGate:
         engine, _, dispatch, definitions = spawn_held()
         comment_held(engine, dispatch, definitions, "c1", "status", hold=frozenset({"reply_gate"}))
         comment_held(engine, dispatch, definitions, "c2", "reply", hold=frozenset({"reply_gate"}))
-        assert memory(engine)["pending"] == {"c1": "answer:status", "c2": "answer:reply"}
+        assert memory(engine)["pending"] == {
+            "c1": "Nothing new to report — the summary comment is current.",
+            "c2": "Nothing new to report — the summary comment is current.",
+        }
         pending = [i for i in dispatch.pending.values() if i.activity == "reply_gate"]
         assert len(pending) == 2

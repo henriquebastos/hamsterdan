@@ -1150,3 +1150,91 @@ def test_rerun_issue_degrades_a_malformed_201_reference_to_none() -> None:
     fake.responses[("POST", comments)] = WireResponse(201, {"html_url": "url"})
     issued = broker.issue(ActionsRunSnapshot(5, HEAD, "ci.yml", 1, "completed", "failure"), epoch=3, operation="r-1")
     assert issued.result.status == "requested" and issued.result.reference is None
+
+
+class ThreadsTransport(FakeTransport):
+    """Answers the review-threads query and records resolutions."""
+
+    def __init__(self, threads: list[dict[str, Any]]) -> None:
+        super().__init__()
+        self.threads = threads
+        self.resolved: list[str] = []
+
+    def request(self, method: str, path: str, body: Mapping[str, Any] | None = None) -> WireResponse:
+        if not (method == "POST" and path == "/graphql"):
+            return super().request(method, path, body)
+        self.calls.append((method, path, body))
+        assert body is not None
+        if "resolveReviewThread" in str(body.get("query")):
+            variables = body["variables"]
+            assert isinstance(variables, dict)
+            thread_id = str(variables["thread"])
+            self.resolved.append(thread_id)
+            return WireResponse(
+                200, {"data": {"resolveReviewThread": {"thread": {"id": thread_id, "isResolved": True}}}}
+            )
+        return WireResponse(
+            200,
+            {
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "reviewThreads": {
+                                "nodes": self.threads,
+                                "pageInfo": {"hasNextPage": False, "endCursor": None},
+                            }
+                        }
+                    }
+                }
+            },
+        )
+
+
+def _thread(thread_id: str, *, resolved: bool, viewer: bool | None, marker_head: str | None) -> dict[str, Any]:
+    node: dict[str, Any] = {"id": thread_id, "isResolved": resolved}
+    if viewer is not None:
+        finding_body = (
+            f"prose\n\n<!-- hamsterdan:finding operation=findings:{marker_head}:i1:f1 head={marker_head} -->"
+            if marker_head
+            else "a plain reply"
+        )
+        node["comments"] = {"nodes": [{"viewerDidAuthor": viewer, "body": finding_body}]}
+    return node
+
+
+def test_unresolved_thread_count_excludes_the_apps_own_threads() -> None:
+    # ruled 2026-09-02: the Dan's-review row already carries the finding
+    # signal, so the human-review count reports human threads only; a
+    # thread with unreadable authorship counts as human (conservative)
+    fake = ThreadsTransport(
+        [
+            _thread("human-open", resolved=False, viewer=False, marker_head=HEAD),
+            _thread("dan-open", resolved=False, viewer=True, marker_head=HEAD),
+            _thread("human-done", resolved=True, viewer=False, marker_head=HEAD),
+            _thread("authorless-open", resolved=False, viewer=None, marker_head=None),
+        ]
+    )
+    fake.responses[("GET", "/repos/owner/repo/pulls/7/requested_reviewers")] = WireResponse(200, {"users": []})
+    fake.page_values["/repos/owner/repo/pulls/7/reviews?per_page=100"] = ()
+    value = GitHubAuthority(fake, "owner/repo", 7, graphql=GitHubGraphQL(fake)).human_review()
+    assert value.unresolved_threads == 2 and value.threads_capability == "available"
+
+
+def test_stale_finding_thread_resolution_targets_only_superseded_app_threads() -> None:
+    old_head = "c" * 40
+    fake = ThreadsTransport(
+        [
+            _thread("dan-stale", resolved=False, viewer=True, marker_head=old_head),
+            _thread("dan-current", resolved=False, viewer=True, marker_head=HEAD),
+            _thread("human-stale", resolved=False, viewer=False, marker_head=old_head),
+            _thread("dan-settled", resolved=True, viewer=True, marker_head=old_head),
+            _thread("dan-reply", resolved=False, viewer=True, marker_head=None),
+        ]
+    )
+    value = GitHubAuthority(fake, "owner/repo", 7, graphql=GitHubGraphQL(fake))
+    assert value.resolve_stale_finding_threads(HEAD) == 1
+    assert fake.resolved == ["dan-stale"]
+
+
+def test_stale_finding_thread_resolution_without_graphql_is_inert() -> None:
+    assert GitHubAuthority(FakeTransport(), "owner/repo", 7).resolve_stale_finding_threads(HEAD) == 0

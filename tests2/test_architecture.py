@@ -1,6 +1,6 @@
 # Copyright (c) 2026 Henrique Bastos
 
-"""Package boundaries admitted by the first CV21 tracer."""
+"""Architecture boundaries for the glossary-aligned CV21 Intake flow."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ import ast
 from graphlib import CycleError, TopologicalSorter
 import importlib.util
 from pathlib import Path
+
+from hamsterdan2.host.database import APPLICATION_TABLES, SCHEMA
+from hamsterdan2.workflow.observations import HeadObservation
 
 import pytest
 
@@ -18,8 +21,8 @@ BRIDGE = SOURCE / "readiness" / "workflow_bridge.py"
 RUNTIME = SOURCE / "readiness" / "runtime.py"
 GITHUB_WEBHOOKS = SOURCE / "github_app" / "webhooks.py"
 HOST_API = SOURCE / "host" / "api.py"
+HOST_APPLICATION = SOURCE / "host" / "application.py"
 HOST_COMPOSITION = SOURCE / "host" / "composition.py"
-PROCESS_SIMULATION = SOURCE / "simulation" / "process.py"
 LEGACY_ALLOWLIST = frozenset(
     {
         "hamsterdan.contracts.readiness_v5",
@@ -27,7 +30,6 @@ LEGACY_ALLOWLIST = frozenset(
         "hamsterdan.readiness.net_v5.topology",
     }
 )
-PACKAGE_INITIALIZERS = tuple(SOURCE.rglob("__init__.py"))
 
 
 def imports_from(source: str, package: str, filename: str = "<fixture>") -> set[str]:
@@ -65,222 +67,194 @@ def matches_module(name: str, module: str) -> bool:
     return name == module or name.startswith(f"{module}.")
 
 
-def test_import_scanner_resolves_relative_imports() -> None:
-    assert "hamsterdan2.workflow" in imports_from("from ..workflow import values", "hamsterdan2.readiness")
+def calls_in(path: Path) -> list[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
+    return [
+        node.func.id if isinstance(node.func, ast.Name) else node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name | ast.Attribute)
+    ]
 
 
 def test_packages_do_not_reexport_children_or_offer_facades() -> None:
-    for path in PACKAGE_INITIALIZERS:
+    for path in SOURCE.rglob("__init__.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
         imports = [node for node in ast.walk(tree) if isinstance(node, ast.Import | ast.ImportFrom)]
-        assignments = [
-            node
+        exports = [
+            ast.literal_eval(node.value)
             for node in tree.body
-            if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "__all__"
+            if isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "__all__"
+            and node.value is not None
         ]
-        assert imports == [], f"{path.relative_to(ROOT)} reexports a child"
-        assert len(assignments) == 1
-        assignment = assignments[0]
-        assert assignment.value is not None
-        assert ast.literal_eval(assignment.value) == []
+        assert imports == []
+        assert exports == [[]]
 
 
 def test_source_import_graph_is_acyclic_and_avoids_package_objects() -> None:
     paths = tuple(SOURCE.rglob("*.py"))
     modules = {module_name(path): path for path in paths}
-    package_names = {module_name(path) for path in PACKAGE_INITIALIZERS}
+    package_names = {module_name(path) for path in SOURCE.rglob("__init__.py")}
     graph = {module_name(path): {name for name in source_imports(path) if name in modules} for path in paths}
-    package_imports = {
-        path: sorted(source_imports(path) & package_names) for path in paths if source_imports(path) & package_names
+    package_importers = {
+        path.relative_to(ROOT): sorted(source_imports(path) & package_names)
+        for path in paths
+        if source_imports(path) & package_names
     }
 
-    assert package_imports == {}
+    assert package_importers == {}
     try:
         tuple(TopologicalSorter(graph).static_order())
     except CycleError as error:
         pytest.fail(f"hamsterdan2 import cycle: {error.args}")
 
 
-def test_only_the_workflow_bridge_imports_the_exact_legacy_allowlist() -> None:
+def test_only_the_workflow_bridge_imports_current_hamsterdan_code() -> None:
     paths = (*SOURCE.rglob("*.py"), *(ROOT / "tests2").rglob("*.py"))
-    legacy_imports = {
-        path: {name for name in source_imports(path) if name == "hamsterdan" or name.startswith("hamsterdan.")}
+    legacy = {
+        path: {name for name in source_imports(path) if matches_module(name, "hamsterdan")}
         for path in paths
-        if any(name == "hamsterdan" or name.startswith("hamsterdan.") for name in source_imports(path))
+        if any(matches_module(name, "hamsterdan") for name in source_imports(path))
     }
 
-    assert legacy_imports == {BRIDGE: LEGACY_ALLOWLIST}
+    assert legacy == {BRIDGE: LEGACY_ALLOWLIST}
 
 
-def test_production_never_imports_simulation() -> None:
-    for path in SOURCE.rglob("*.py"):
-        if "simulation" in path.relative_to(SOURCE).parts:
-            continue
-        escaped = {
-            name
-            for name in source_imports(path)
-            if name == "hamsterdan2.simulation"
-            or name.startswith("hamsterdan2.simulation.")
-            or ".simulation." in name
-            or name.endswith(".simulation")
-        }
-        assert escaped == set(), f"{path.relative_to(ROOT)} imports simulation: {sorted(escaped)}"
-
-
-def test_workflow_values_have_no_runtime_or_outer_dependencies() -> None:
-    forbidden = (
-        "hamsterdan2.host",
-        "hamsterdan2.readiness",
-        "hamsterdan2.simulation",
-        "petrus",
-        "pathlib",
-        "sqlite3",
-        "fastapi",
-        "httpx",
-    )
+def test_inner_workflow_and_github_boundaries_have_no_outer_runtime_dependencies() -> None:
+    workflow_forbidden = ("hamsterdan2.github_app", "hamsterdan2.host", "hamsterdan2.readiness", "petrus", "sqlite3")
+    github_forbidden = ("hamsterdan2.host", "hamsterdan2.readiness", "hamsterdan2.workflow", "petrus", "sqlite3")
     for path in (SOURCE / "workflow").rglob("*.py"):
-        escaped = {name for name in source_imports(path) if any(matches_module(name, prefix) for prefix in forbidden)}
-        assert escaped == set(), f"{path.relative_to(ROOT)} imports outer/runtime concepts: {sorted(escaped)}"
-
-
-def test_github_boundary_has_no_host_workflow_or_runtime_dependencies() -> None:
-    forbidden = (
-        "hamsterdan2.host",
-        "hamsterdan2.readiness",
-        "hamsterdan2.workflow",
-        "petrus",
-        "fastapi",
-        "httpx",
-        "sqlite3",
-    )
+        assert not {
+            name for name in source_imports(path) if any(matches_module(name, item) for item in workflow_forbidden)
+        }
     for path in (SOURCE / "github_app").rglob("*.py"):
-        if "simulation" in path.relative_to(SOURCE).parts:
-            continue
-        escaped = {name for name in source_imports(path) if any(matches_module(name, prefix) for prefix in forbidden)}
-        assert escaped == set(), f"{path.relative_to(ROOT)} imports outer/runtime concepts: {sorted(escaped)}"
+        assert not {
+            name for name in source_imports(path) if any(matches_module(name, item) for item in github_forbidden)
+        }
 
 
-def test_githubkit_is_confined_to_the_webhook_boundary() -> None:
-    imports = {
+def test_framework_boundaries_are_confined_to_their_owners() -> None:
+    githubkit = {
         path: sorted(name for name in source_imports(path) if matches_module(name, "githubkit"))
         for path in SOURCE.rglob("*.py")
         if any(matches_module(name, "githubkit") for name in source_imports(path))
     }
-
-    assert imports == {GITHUB_WEBHOOKS: ["githubkit.webhooks"]}
-
-
-def test_fastapi_and_webhook_app_construction_stay_at_the_host_http_rim() -> None:
-    fastapi_importers = {
+    fastapi = {
         path for path in SOURCE.rglob("*.py") if any(matches_module(name, "fastapi") for name in source_imports(path))
     }
-    constructors = []
-    composition_calls = []
+
+    assert githubkit == {GITHUB_WEBHOOKS: ["githubkit.webhooks"]}
+    assert fastapi == {HOST_API, HOST_COMPOSITION}
+
+
+def test_http_stops_at_verification_and_inbox_storage() -> None:
+    forbidden_imports = ("hamsterdan2.readiness", "hamsterdan2.workflow", "petrus")
+    assert not {
+        name for name in source_imports(HOST_API) if any(matches_module(name, item) for item in forbidden_imports)
+    }
+    assert set(calls_in(HOST_API)).isdisjoint(
+        {
+            "process_delivery",
+            "authorization_for",
+            "accept_delivery",
+            "complete_delivery",
+            "build_readiness_runtime",
+        }
+    )
+
+    tree = ast.parse(GITHUB_WEBHOOKS.read_text(encoding="utf-8"), filename=str(GITHUB_WEBHOOKS.relative_to(ROOT)))
+    verify_method = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "verify")
+    verify_calls = {
+        node.func.id
+        for node in ast.walk(verify_method)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert "parse_envelope" not in verify_calls
+
+
+def test_webhook_inbox_worker_is_host_owned_and_not_a_motus_worker() -> None:
+    imports = source_imports(HOST_APPLICATION)
+    tree = ast.parse(HOST_APPLICATION.read_text(encoding="utf-8"), filename=str(HOST_APPLICATION.relative_to(ROOT)))
+    worker = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "WebhookInboxWorker")
+
+    assert worker.bases == []
+    assert not any(matches_module(name, "petrus.motus.worker") for name in imports)
+
+
+def test_concrete_application_construction_stays_in_host_composition() -> None:
+    owners: dict[str, list[Path]] = {name: [] for name in ("Hamsterdan", "WebhookInboxWorker", "PullRequestAuthority")}
     for path in SOURCE.rglob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
-        constructors.extend(
-            path
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "FastAPI"
+        called = calls_in(path)
+        for name, paths in owners.items():
+            if name in called:
+                paths.append(path)
+
+    assert owners == {
+        "Hamsterdan": [HOST_COMPOSITION],
+        "WebhookInboxWorker": [HOST_COMPOSITION],
+        "PullRequestAuthority": [HOST_COMPOSITION],
+    }
+
+
+def test_application_storage_has_exactly_two_tables_and_no_downstream_completion_ledger() -> None:
+    lowered = SCHEMA.lower()
+
+    assert {"pr_workflows", "webhook_inbox"} == APPLICATION_TABLES
+    assert lowered.count("create table if not exists") == 2
+    assert "manifest" not in lowered
+    assert "grant" not in lowered
+    assert "staging" not in lowered
+    assert "completion" not in lowered
+    assert "dispatch" not in lowered
+
+
+def test_composition_names_exactly_three_shared_sqlite_files() -> None:
+    sqlite_names = {
+        node.value
+        for node in ast.walk(
+            ast.parse(
+                HOST_COMPOSITION.read_text(encoding="utf-8"),
+                filename=str(HOST_COMPOSITION.relative_to(ROOT)),
+            )
         )
-        composition_calls.extend(
-            path
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "create_webhook_app"
-        )
-
-    assert fastapi_importers == {HOST_API, HOST_COMPOSITION}
-    assert constructors == [HOST_API]
-    assert composition_calls == [HOST_COMPOSITION]
-
-
-def test_webhook_http_rim_cannot_open_workflow_runtime() -> None:
-    forbidden = (
-        "hamsterdan2.readiness",
-        "hamsterdan2.workflow",
-        "petrus",
-    )
-    escaped = {name for name in source_imports(HOST_API) if any(matches_module(name, prefix) for prefix in forbidden)}
-
-    assert escaped == set()
-
-
-def test_process_loss_evidence_drives_the_composed_asgi_boundary() -> None:
-    imports = source_imports(PROCESS_SIMULATION)
-    tree = ast.parse(
-        PROCESS_SIMULATION.read_text(encoding="utf-8"),
-        filename=str(PROCESS_SIMULATION.relative_to(ROOT)),
-    )
-    calls = {node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
-
-    assert "hamsterdan2.host.composition" in imports
-    assert "build_webhook_app" in calls
-    assert "hamsterdan2.host.delivery" not in imports
-    assert "hamsterdan2.github_app.webhooks" not in imports
-
-
-def test_readiness_runtime_alone_owns_engine_history_and_dispatch() -> None:
-    runtime_modules = (
-        "petrus.engine",
-        "petrus.impetus.history_store",
-        "petrus.motus.dispatch",
-    )
-    escaped = {
-        path: sorted(
-            name for name in source_imports(path) if any(matches_module(name, module) for module in runtime_modules)
-        )
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.endswith(".sqlite3")
+    }
+    all_sqlite_names = {
+        node.value
         for path in SOURCE.rglob("*.py")
-        if path != RUNTIME
-        and any(matches_module(name, module) for name in source_imports(path) for module in runtime_modules)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT))))
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.endswith(".sqlite3")
     }
 
-    assert escaped == {}
-    assert {
-        name for name in source_imports(RUNTIME) if any(matches_module(name, module) for module in runtime_modules)
-    } == {
-        "petrus.engine.sqlite",
-        "petrus.impetus.history_store",
-        "petrus.motus.dispatch",
-    }
-    tree = ast.parse(RUNTIME.read_text(encoding="utf-8"), filename=str(RUNTIME.relative_to(ROOT)))
-    fenced_constructors = {
-        alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.module == "petrus.engine.sqlite"
-        for alias in node.names
-    }
-    calls = {node.func.id for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
-    assert fenced_constructors == {"create_engine", "load_engine"}
-    assert fenced_constructors <= calls
+    assert sqlite_names == {"hamsterdan.sqlite3", "history.sqlite3", "dispatch.sqlite3"}
+    assert all_sqlite_names == sqlite_names
 
 
-def test_simulation_is_the_only_petrus_testing_consumer() -> None:
-    for path in SOURCE.rglob("*.py"):
-        imports_testing = any(matches_module(name, "petrus.testing") for name in source_imports(path))
-        assert not imports_testing or "simulation" in path.relative_to(SOURCE).parts, (
-            f"{path.relative_to(ROOT)} imports Petrus testing mechanics outside simulation"
-        )
-
-
-def test_ds1_constructs_no_worker_or_worker_dispatch() -> None:
-    forbidden = ("petrus.motus.worker", "petrus.motus.worker_dispatch")
-    imported = {
-        path: sorted(name for name in source_imports(path) if any(matches_module(name, module) for module in forbidden))
+def test_only_readiness_runtime_calls_public_petrus_delivery_phases() -> None:
+    phase_calls = {
+        path: [
+            name for name in calls_in(path) if name in {"accept_delivery", "complete_delivery", "deliver", "advance"}
+        ]
         for path in SOURCE.rglob("*.py")
-        if any(matches_module(name, module) for name in source_imports(path) for module in forbidden)
+    }
+    phase_calls = {path: calls for path, calls in phase_calls.items() if calls}
+
+    assert {path: sorted(calls) for path, calls in phase_calls.items()} == {
+        RUNTIME: ["accept_delivery", "accept_delivery", "complete_delivery"]
     }
 
-    assert imported == {}
 
-
-def test_concrete_hamsterdan_construction_stays_in_host_composition() -> None:
-    constructors = []
-    for path in SOURCE.rglob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path.relative_to(ROOT)))
-        constructors.extend(
-            path
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "Hamsterdan"
-        )
-
-    assert constructors == [SOURCE / "host" / "composition.py"]
+def test_observation_semantics_exclude_transport_policy_and_provider_time() -> None:
+    assert set(HeadObservation.model_fields) == {
+        "version",
+        "family",
+        "pr_identity",
+        "generation",
+        "head",
+        "base",
+        "lifecycle_state",
+        "draft",
+        "merged",
+        "mergeable",
+    }

@@ -232,6 +232,21 @@ def test_config_rejects_unsafe_secret_files_without_disclosure(tmp_path: Path, f
     assert "do-not-disclose" not in str(caught.value)
 
 
+def test_config_watches_every_author_by_default_and_narrows_casefolded(tmp_path: Path) -> None:
+    env = environment(tmp_path)
+    assert HostConfig.from_environment(env).watched_authors == frozenset()
+    env["HAMSTERDAN_WATCH_AUTHORS"] = " Alice , bob-Dev "
+    assert HostConfig.from_environment(env).watched_authors == frozenset({"alice", "bob-dev"})
+
+
+@pytest.mark.parametrize("value", ["alice,", "not a login", "@alice", ","])
+def test_config_rejects_malformed_watched_authors(tmp_path: Path, value: str) -> None:
+    env = environment(tmp_path)
+    env["HAMSTERDAN_WATCH_AUTHORS"] = value
+    with pytest.raises(ConfigurationError, match="watched authors"):
+        HostConfig.from_environment(env)
+
+
 def test_app_and_installation_auth_use_jwt_then_scoped_token_and_safe_metadata(tmp_path: Path) -> None:
     calls: list[httpx.Request] = []
     metadata: list[RequestMetadata] = []

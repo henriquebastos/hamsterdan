@@ -1,9 +1,9 @@
 ---
 code: CV19
 level: Value
-status: Paused
-status_reason: Navigator paused private production before launch to focus delivery on CV21; the qualified inactive candidate and remaining launch proof are retained
-updated: 2026-08-28
+status: Active
+status_reason: the 2026-08-31 alpha decision resumed CV19 as the delivery focus; the qualified inactive candidate is retained and launch still requires separate explicit Navigator approval
+updated: 2026-08-31
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
   - ../../decisions/records/2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
@@ -12,11 +12,12 @@ related:
 
 # CV19 — Private v0.1 production
 
-> **Paused 2026-08-28:** The Navigator stopped this delivery work before
-> production launch to focus on CV21. This is a roadmap pause, not a live
-> runtime operation; the last recorded systemd posture was disabled and
-> inactive. The qualified candidate and remaining launch, monitoring, and
-> private-release work remain resumable.
+> **Resumed 2026-08-31:** The
+> [alpha decision](../../decisions/records/2026-08-31T2056Z-the-alpha-is-the-cv19-v1-launch.md)
+> made the CV19 v1 launch the first production alpha and returned CV19 to the
+> delivery focus. The 2026-08-28 pause note is retained below for history: the
+> last recorded systemd state was disabled and inactive, and launch still
+> requires separate explicit Navigator approval.
 
 ## Intent
 

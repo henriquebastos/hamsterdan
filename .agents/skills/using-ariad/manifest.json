@@ -72,8 +72,13 @@
     },
     {
       "destination": "references/method/contracts-and-preferences.md",
-      "sha256": "dc2f05c7afb69fd987d7db079313380e255c39bb772a3c0470cf5d487f4d5fc0",
+      "sha256": "c17642e4db1df31ae1a28929eeb8a6b59a087d480a59f14701acb68d48d4290f",
       "source": "docs/method/contracts-and-preferences.md"
+    },
+    {
+      "destination": "references/method/domain-language.md",
+      "sha256": "e6a453349b4c5ca82aec040f6f4246ac32d0dd21f0ecc5cc3a0b2b528ad6fc57",
+      "source": "docs/method/domain-language.md"
     },
     {
       "destination": "references/method/driver-navigator.md",
@@ -92,12 +97,12 @@
     },
     {
       "destination": "references/method/index.md",
-      "sha256": "c4af0ea71cdee836262069581f81788df597621c75178294befb55502100088f",
+      "sha256": "fb1f74352b905dd0df7942914b452cff24d02768f98835b18cc98380dc4a79f7",
       "source": "docs/method/index.md"
     },
     {
       "destination": "references/method/memory-closure.md",
-      "sha256": "a395c5c806eaf9b739128a94ce014afd466358edddef9b94e5122d92594c7668",
+      "sha256": "b04b7feae3a7c4ebd4c70e384ce923dd4e6b1581487da1ba0bc534c34bce0d61",
       "source": "docs/method/memory-closure.md"
     },
     {
@@ -107,7 +112,7 @@
     },
     {
       "destination": "references/method/overview.md",
-      "sha256": "6380feaec4d4ce0308492f17cebeff7b31afeb8a44b0a324895ff652fe2f8f4d",
+      "sha256": "a4920cc9c907565bff1b42d28eac9d571f52593cd4e227725c7ff224da433a9d",
       "source": "docs/method/overview.md"
     },
     {
@@ -127,7 +132,7 @@
     },
     {
       "destination": "assets/project-templates/docs/ariad/index.md",
-      "sha256": "b04abe0cf3e0a61fda36e621c87d4b69a56272df691faab82b55ebcf15972a71",
+      "sha256": "8f2175e54fdb70fbe527629d6aeab2c3ec80e7b5ac68f8e05cde37c9267926ef",
       "source": "docs/project-templates/docs/ariad/index.md"
     },
     {
@@ -137,7 +142,7 @@
     },
     {
       "destination": "assets/project-templates/docs/process/development-guide/documentation-and-memory.md",
-      "sha256": "af8428ca1ab9016ab1a0cf2701a264ca918ac9fb7d08f4c11874d1bb61f9eb1e",
+      "sha256": "45c2368e13262b73a976aa48ac6fa2ddbe5733bd72109d7e351b67245e25679e",
       "source": "docs/project-templates/docs/process/development-guide/documentation-and-memory.md"
     },
     {
@@ -197,12 +202,12 @@
     },
     {
       "destination": "assets/project-templates/docs/project/briefing/identity-and-purpose.md",
-      "sha256": "c9bed98331326244cbbeeee7085aaa0448ead009397ccc09b0123c553557c9b8",
+      "sha256": "6639b36a94becd24bb300f7f205ce9baa417bc78640fc4e0e6f0d6179c1d2b53",
       "source": "docs/project-templates/docs/project/briefing/identity-and-purpose.md"
     },
     {
       "destination": "assets/project-templates/docs/project/briefing/index.md",
-      "sha256": "f32c8121212c86c9b9cc496d3c9b14f7700f7749e8535a77bb23c51edb90d314",
+      "sha256": "1e926cc9f9dfdbb01ed0f642b6843594603edf268cd1c48746810ba4bcd74c7a",
       "source": "docs/project-templates/docs/project/briefing/index.md"
     },
     {
@@ -231,6 +236,11 @@
       "source": "docs/project-templates/docs/project/exploration/index.md"
     },
     {
+      "destination": "assets/project-templates/docs/project/glossary/index.md",
+      "sha256": "d6ef3f91249aaf4cf5ed052a83758221989295da649a4223d8ae2613fd353aa7",
+      "source": "docs/project-templates/docs/project/glossary/index.md"
+    },
+    {
       "destination": "assets/project-templates/docs/project/roadmap/index.md",
       "sha256": "1fbd799cd40b9f3f43eca9160da3222f5aa8247ab05acf532a61ad2e4baad326",
       "source": "docs/project-templates/docs/project/roadmap/index.md"
@@ -252,7 +262,7 @@
     },
     {
       "destination": "SKILL.md",
-      "sha256": "7262c297d2aead00815f66151b0d25ab6e95a2e00b06860af5770c9492eac0f1",
+      "sha256": "49820b657e578e91cdffc1c3546945c519e9a7a0ced247e6efbd5dfc3d16e0d5",
       "source": "authored:SKILL.md"
     },
     {
@@ -262,9 +272,9 @@
     }
   ],
   "format_version": "1",
-  "method_digest": "9257e4a6b9542dc5536af2bd17e7d60a9784711faaaa926591278f4be7f8371f",
+  "method_digest": "c118e38da423a3b07de392e3000b864613e384540b6d5180cfac180426a5b323",
   "package": "using-ariad",
-  "package_digest": "82abd3545b6d456649bc33fddb19671939ab512dd0249050a25fe7600df25572",
-  "package_version": "0.2.1",
+  "package_digest": "7302f17bec822017dfb00302d5ec0613652e859a8de17899ef81abbca28a873e",
+  "package_version": "0.3.0",
   "source_path": "skills/using-ariad"
 }

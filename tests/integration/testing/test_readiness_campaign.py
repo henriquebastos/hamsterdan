@@ -148,7 +148,7 @@ class _DeliveryRecoveryMachine(RuleBasedStateMachine):
     @initialize(seed=st.integers(min_value=0, max_value=2**53 - 1))
     def start(self, seed: int) -> None:
         self._seed = seed
-        self._world = ReadinessWorld(Path(self._directory.name) / "live", seed=seed)
+        self._world = ReadinessWorld(Path(self._directory.name).resolve() / "live", seed=seed)
         self._timeline = self._world.timeline()
         choices = self._world.world.choices
         self._response_lost = choices.index(ChoiceAuthority.FAULT, 2) == 1
@@ -246,7 +246,7 @@ class _DeliveryRecoveryMachine(RuleBasedStateMachine):
                 world.close()
                 self._closed = True
 
-                replayed = replay_readiness(artifact, Path(self._directory.name) / "replay")
+                replayed = replay_readiness(artifact, Path(self._directory.name).resolve() / "replay")
                 assert replayed.outcome == "pass"
                 assert replayed.disposition == Disposition.CONVERGED.value
                 assert replayed.failure is None
@@ -315,7 +315,7 @@ class _DeliveryRecoveryMachine(RuleBasedStateMachine):
             world,
             scenario_id=self._scenario_id,
             failure_path=self._failure_path,
-            replay_root=Path(self._directory.name) / "failure-replay",
+            replay_root=Path(self._directory.name).resolve() / "failure-replay",
             primary=primary,
         )
 
@@ -377,7 +377,7 @@ def test_generated_authority_lifecycle_schedules_replay_exactly(
     event(f"authority_before={','.join(before) or 'none'}")
     event(f"authority_after={','.join(after) or 'none'}")
     directory = TemporaryDirectory(prefix="hamsterdan-readiness-authority-")
-    root = Path(directory.name)
+    root = Path(directory.name).resolve()
     world = ReadinessWorld(root / "live", seed=seed)
     timeline = world.timeline()
     scenario_id = f"readiness-authority-lifecycle-{path}-v2"
@@ -564,7 +564,7 @@ def test_generated_reminder_timer_recovery_schedules_replay_exactly(
     event(f"timer_response_lost={response_lost}")
     event(f"timer_redeliver={redeliver}")
     directory = TemporaryDirectory(prefix="hamsterdan-readiness-timer-")
-    root = Path(directory.name)
+    root = Path(directory.name).resolve()
     world = ReadinessWorld(root / "live", seed=seed)
     timeline = world.timeline()
     scenario_id = f"readiness-reminder-timer-{path}-v1"
@@ -761,7 +761,7 @@ def test_generated_v5_git_publication_recovery_schedules_replay_exactly(
     event(f"git_crash_cut={crash_cut}")
     event(f"git_redeliver={redeliver}")
     directory = TemporaryDirectory(prefix="hamsterdan-readiness-git-")
-    root = Path(directory.name)
+    root = Path(directory.name).resolve()
     world = ReadinessWorld(root / "live", seed=seed)
     timeline = world.timeline()
     scenario_id = f"readiness-v5-git-publication-{crash_cut}-v1"
@@ -913,6 +913,7 @@ def test_generated_v5_git_publication_recovery_schedules_replay_exactly(
                     raise
 
 
+@pytest.mark.timeout(60)
 def test_generated_delivery_recovery_schedules_replay_exactly() -> None:
     run_state_machine_as_test(
         _DeliveryRecoveryMachine,

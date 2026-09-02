@@ -1298,7 +1298,13 @@ def _application_after_dashboard_custody_race(
         nonlocal inserted
         result = original_request(method, endpoint, body)
         text = str(body.get("body", "")) if isinstance(body, dict) else ""
-        if not inserted and method == "PATCH" and "hamsterdan:dashboard" in text and "human:" in text:
+        if (
+            not inserted
+            and method == "PATCH"
+            and "hamsterdan:dashboard" in text
+            and "| Human review |" in text
+            and "no review yet" not in text
+        ):
             inserted = True
             with sqlite3.connect(path) as database:
                 database.execute(

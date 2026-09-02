@@ -52,6 +52,15 @@ def _slug(value: str | None) -> str:
     return slug
 
 
+def _watched_authors(value: str | None) -> frozenset[str]:
+    if value is None or not value.strip():
+        return frozenset()
+    logins = frozenset(part.strip().casefold() for part in value.split(","))
+    if any(_ACCOUNT_LOGIN.fullmatch(login) is None for login in logins):
+        raise ConfigurationError("watched authors are malformed")
+    return logins
+
+
 def _bounded_file(value: str | None, label: str, *, forbidden_mode: int) -> bytes:
     if not value:
         raise ConfigurationError(f"{label} file is missing")
@@ -172,6 +181,7 @@ class HostConfig:
     client_id: str
     accounts: tuple[AccountConfig, ...]
     state_path: Path
+    watched_authors: frozenset[str]
     _private_key: str
     _webhook_secret: str
     _locked: bool
@@ -185,6 +195,7 @@ class HostConfig:
         "app_slug",
         "client_id",
         "state_path",
+        "watched_authors",
     )
 
     def __init__(
@@ -197,12 +208,14 @@ class HostConfig:
         state_path: Path,
         private_key: str,
         webhook_secret: str,
+        watched_authors: frozenset[str] = frozenset(),
     ) -> None:
         object.__setattr__(self, "app_id", app_id)
         object.__setattr__(self, "app_slug", app_slug.casefold())
         object.__setattr__(self, "client_id", client_id)
         object.__setattr__(self, "accounts", accounts)
         object.__setattr__(self, "state_path", state_path)
+        object.__setattr__(self, "watched_authors", watched_authors)
         object.__setattr__(self, "_private_key", private_key)
         object.__setattr__(self, "_webhook_secret", webhook_secret)
         object.__setattr__(self, "_locked", True)
@@ -228,6 +241,7 @@ class HostConfig:
             state_path=state_path,
             private_key=_secret_file(env.get("HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE"), "private key"),
             webhook_secret=_secret_file(env.get("HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE"), "webhook secret"),
+            watched_authors=_watched_authors(env.get("HAMSTERDAN_WATCH_AUTHORS")),
         )
 
     def _credentials(self) -> tuple[str, str]:
@@ -240,6 +254,6 @@ class HostConfig:
     def __repr__(self) -> str:
         return (
             f"HostConfig(app_id={self.app_id!r}, app_slug={self.app_slug!r}, client_id=<redacted>, "
-            f"accounts={self.accounts!r}, "
+            f"accounts={self.accounts!r}, watched_authors={self.watched_authors!r}, "
             f"state_path={self.state_path!r}, credentials=<redacted>)"
         )

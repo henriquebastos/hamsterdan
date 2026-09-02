@@ -1,8 +1,10 @@
 ---
-status: Decided
+status: Superseded
 raised: 2026-08-27
 decided: 2026-08-28
 recorded: 2026-08-28T0152Z
+superseded: 2026-09-01
+superseded_by: 2026-09-01T1159Z-webhook-inbox-hands-novel-observations-to-history.md
 deciders:
   - Henrique (Navigator)
 related:
@@ -12,6 +14,12 @@ related:
 ---
 
 # PR observations use source-neutral admission and History authority
+
+Superseded by
+[Webhook Inbox hands novel observations to History](2026-09-01T1159Z-webhook-inbox-hands-novel-observations-to-history.md).
+The source-neutral observation and History-authority principles remain; the
+manifest, grant, staging database, classification family, and host completion
+consequences do not.
 
 ## Decision
 

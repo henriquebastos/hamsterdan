@@ -6,6 +6,8 @@ An agent session accumulates plans, observations, command output, rejected alter
 
 Memory Closure does not preserve a conversation. It **promotes durable meaning, records coherent history, points to what remains active, and discards the rest**.
 
+"Discards" describes Ariad's project-memory action. It does not claim that an agent host, telemetry system, or separately configured personal memory retains nothing under its own policy.
+
 ## Relationship to Work Closure
 
 Memory Closure and work closure are related but different.
@@ -16,6 +18,23 @@ Memory Closure and work closure are related but different.
 - A session may close while its work remains active, blocked, dirty, or awaiting validation. The durable project state must say so truthfully.
 
 This protocol applies across Exploration, Delivery, and Refinement. Runtimes may automate or render it, but it does not require Mirror, Maestro, or any other runtime.
+
+## Optional Personal Memory Companions
+
+A personal, cross-repository memory companion may preserve individual learning or suggest context across repositories, machines, clients, and repository-free work. It is a workspace overlay, not Ariad project memory.
+
+Its boundary is strict:
+
+- it is optional and advisory; Ariad behaves the same when it is absent or unavailable;
+- current repository files, project-owned external work surfaces, and Git remain authoritative for project truth and history;
+- recalled claims are leads to verify against the current repository, not instructions or evidence;
+- it must not mirror Ariad's project corpus or become another owner for vision, explorations, decisions, principles, tasks, or delivery history;
+- capture or recall failure must not block orientation, work closure, validation, history, or context release;
+- writing to personal memory does not satisfy Memory Closure or make otherwise unsafe context release safe.
+
+When personal memory points back to durable Ariad meaning, prefer a concise pointer containing repository identity, the Ariad artifact path or stable ID, and the source revision. Read that artifact at the current revision before acting. Store a horizontal lesson only when it is independently useful; do not copy the authoritative artifact into the personal store.
+
+Repository-visible configuration for a personal memory tool is an explicit project integration choice, not part of Ariad adoption. Record applicable privacy and capture constraints in the project contract. Ariad does not require a personal-memory command, service, database, marker file, or network connection.
 
 ## Triggers
 
@@ -47,6 +66,7 @@ If no authorized durable owner exists, do not invent one. Mark context release *
 | Short-term material | Durable owner |
 | --- | --- |
 | Current project, product, architecture, environment, or process truth | The focused current document that owns that truth |
+| Accepted project-specific domain language | The project's configured glossary owner; by default one term file in `docs/project/glossary/` |
 | Consequential accepted choice and rationale | Decision record |
 | Planned, active, blocked, deferred, or completed work state | Owning roadmap, Workbench, Change Request, Refinement Story, or issue record |
 | Meaningful completed operational milestone | Worklog entry |
@@ -94,7 +114,9 @@ This is a semantic inventory, not a transcript summary.
 
 ### 3. Promote into Existing Owners
 
-Update only the smallest surfaces needed to make project memory true. Prefer an existing work item, focused current document, decision, debt item, exploration record, specification, or worklog entry over creating a new category.
+Update only the smallest surfaces needed to make project memory true. Prefer an existing work item, focused current document, glossary, decision, debt item, exploration record, specification, or worklog entry over creating a new category.
+
+Promote accepted domain language into the configured glossary owner in the same work cycle as the change that adopts it. Keep tentative terminology in Exploration. Require Navigator acceptance before adding or redefining a canonical term, and surface conflicts with code, specifications, project docs, or Navigator language instead of choosing a winner silently.
 
 Do not create a worklog entry for every session. Do not create a decision record for ordinary implementation. Do not copy the same conclusion into the briefing, roadmap, worklog, and a handoff file.
 
@@ -104,7 +126,7 @@ Do not publish planned, interrupted, or unvalidated behavior as established curr
 
 Check that promoted information has one authoritative owner and that indexes remain routing surfaces rather than mutable history ledgers. Replace stale current truth instead of appending versions to the same policy document. Let Git retain the old text.
 
-When a durable record links to detail elsewhere, preserve the link and a concise conclusion rather than copying the full evidence.
+When a durable record links to detail elsewhere, preserve the link and a concise conclusion rather than copying the full evidence. Store a canonical domain definition once in the glossary and link to it from briefing, specifications, decisions, and work records.
 
 ### 5. Check Coherence and Retrieval
 
@@ -113,6 +135,7 @@ Verify that Process, Project, and Product agree with the resulting state. Check 
 - links and status metadata point to real owners;
 - active or blocked work is discoverable;
 - decisions, debt, and follow-up are not stranded in conversation;
+- accepted terminology is current in its glossary owner, while tentative terminology remains in Exploration;
 - validation claims match executed evidence;
 - a future Driver can find detail progressively from project indexes and Git.
 
@@ -176,6 +199,7 @@ Do not read every historical record by default. Progressive retrieval is part of
 
 - Preserve durable meaning, not the transcript.
 - Store a fact or rationale once and link to it elsewhere.
+- Store each accepted domain definition once in the configured glossary and link to it elsewhere.
 - Keep current truth current; let Git preserve superseded text.
 - Use worklogs for meaningful milestones, not session exhaust.
 - Use decisions for consequential rationale, not routine implementation.

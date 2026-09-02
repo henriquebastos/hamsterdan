@@ -140,7 +140,7 @@ class GitHubGraphQL:
           repository(owner:$owner,name:$repository) {
             pullRequest(number:$number) {
               reviewThreads(first:100,after:$after) {
-                nodes { id isResolved }
+                nodes { id isResolved comments(first:1) { nodes { viewerDidAuthor body } } }
                 pageInfo { hasNextPage endCursor }
               }
             }
@@ -185,6 +185,23 @@ class GitHubGraphQL:
             if not isinstance(cursor, str) or not cursor:
                 raise GitHubBoundaryError("GitHub review-thread pagination is malformed")
         raise GitHubBoundaryError("GitHub review-thread pagination exceeds its bound")
+
+    def resolve_review_thread(self, thread_id: str) -> None:
+        mutation = """
+        mutation($thread:ID!) {
+          resolveReviewThread(input:{threadId:$thread}) { thread { id isResolved } }
+        }
+        """
+        response = self.transport.request("POST", "/graphql", {"query": mutation, "variables": {"thread": thread_id}})
+        if response.status != 200 or not isinstance(response.body, dict) or response.body.get("errors"):
+            raise GitHubBoundaryError("GitHub did not prove review-thread resolution")
+        try:
+            body = cast(dict[str, Any], response.body)
+            thread = body["data"]["resolveReviewThread"]["thread"]
+            if thread.get("id") != thread_id or thread.get("isResolved") is not True:
+                raise TypeError
+        except KeyError, TypeError:
+            raise GitHubBoundaryError("GitHub did not prove review-thread resolution") from None
 
     def compare_and_swap_ref(self, repository: str, ref: str, expected_head: str, commit: str) -> None:
         owner, separator, name = repository.partition("/")

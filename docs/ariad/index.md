@@ -16,6 +16,9 @@ indexes: `docs/project/briefing.md`, `docs/process/development-guide.md`,
 `docs/project/roadmap/index.md`, `docs/project/exploration/index.md`,
 `docs/project/debt/index.md`, `docs/process/worklog/index.md`, and
 `docs/references/index.md`. Read indexes first and only then focused records.
+Read `docs/project/glossary/index.md` and the relevant term files when
+project-specific domain language affects the task, without preloading
+unrelated records.
 Canonical lifecycle detail belongs in the installed skill; local documents own
 project truth and deliberate adaptations.
 

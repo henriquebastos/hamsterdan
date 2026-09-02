@@ -2,6 +2,10 @@
 
 Hamsterdan is a GitHub-native PR-readiness application built on Petrus. It is a
 separate application project, not a Petrus component or runtime identity.
+The plain-language identity page is
+[What Hamsterdan is](../product/what-hamsterdan-is.md); the canonical domain
+language is the [project glossary](glossary/index.md). This briefing predates
+both and still uses retired vocabulary.
 
 The source project lives in the private `henriquebastos/hamsterdan` repository.
 HBNetwork owns the first private GitHub App used for real-provider validation.
@@ -60,22 +64,23 @@ after private production qualification.
 
 ## Current movement
 
-[CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) owns the current
-delivery movement: the non-selectable reconstruction of the outer system over
-one temporary bridge to the current working Net. CV21.DS1 now provides the
-isolated replacement gate and locally qualified host/readiness/bridge lifecycle
-under `src/hamsterdan2`; CV21.DS2 is active, its signed-webhook-to-durable-
-custody task is delivered, and source-neutral readiness staging is next. The
-replacement remains non-selectable, uses only fresh disposable state, and has
-no runtime selector or deployment.
+[CV19](roadmap/cv19-private-v0-1-production/index.md) owns the current delivery
+movement: the private `v0.1.0` launch of the current V5 runtime is the first
+production alpha. Its exact candidate and configuration remain qualified on the
+owned `hamsterdan-prod` exe.dev VM; its last recorded systemd posture was
+disabled and inactive. The supervised launch still requires separate explicit
+Navigator approval, followed by one bounded monitoring proof and the tag.
 
-The Navigator paused
-[CV19](roadmap/cv19-private-v0-1-production/index.md) before production launch.
-Its exact V5-only candidate and configuration remain qualified on the owned
-`hamsterdan-prod` exe.dev VM; its last recorded systemd posture was disabled and
-inactive. This roadmap pause performed no runtime operation. Supervised launch,
-one bounded monitoring proof, and private-release history remain resumable but
-are not the current focus.
+[CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) continues as the
+quality track without gating that alpha. Its non-selectable outer-system
+reconstruction uses one temporary bridge to the current working Net. CV21.DS1
+provides the isolated replacement gate and locally qualified host/readiness/
+bridge lifecycle under `src/hamsterdan2`; CV21.DS2's glossary-aligned
+replacement is accepted and complete. Signed raw webhook evidence enters one
+shared Webhook Inbox, a later host worker authorizes only novel semantic
+observations, and Petrus History alone owns acceptance and completion. DS3 is
+not pulled. The replacement uses only fresh disposable state and has no runtime
+selector or deployment.
 
 [CV22](roadmap/cv22-decomposable-readiness-workflow/index.md) then replaces that
 bridge with recursively independent production subnets and owns final cutover.
