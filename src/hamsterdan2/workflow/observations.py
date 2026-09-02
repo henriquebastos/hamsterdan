@@ -12,7 +12,7 @@ from pydantic_core import core_schema
 
 from hamsterdan2.workflow.values import (  # noqa: TC001 -- Pydantic resolves boundary fields at runtime.
     PositiveIdentifier,
-    PullRequestSubject,
+    PullRequestIdentity,
 )
 
 
@@ -87,14 +87,14 @@ class BranchTip(BaseModel):
 
 
 class HeadObservation(BaseModel):
-    """First-local Head evidence without policy, provenance, time, or currentness claims."""
+    """Head evidence without policy, provenance, time, or currentness claims."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     version: Literal[1] = 1
     family: Literal["head"] = "head"
-    subject: PullRequestSubject
-    local_incarnation: Literal[1] = 1
+    pr_identity: PullRequestIdentity
+    generation: Literal[1] = 1
     head: BranchTip
     base: BranchTip
     lifecycle_state: Literal["open", "closed"]

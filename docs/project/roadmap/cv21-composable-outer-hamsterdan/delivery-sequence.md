@@ -11,7 +11,7 @@ A CV21 Delivery Story closes only when it:
 1. begins at an external, operator, or strict deterministic command;
 2. enters through the real new host composition and every admitted new owner;
 3. mounts the real current Net only through the sole bridge;
-4. ends at a bounded visible posture, durable typed Activity, or accepted
+4. ends at bounded visible state, a durable typed Activity, or an accepted
    external effect;
 5. adds owner-local and root deterministic execution, independent checker
    sensitivity, named crash cuts, exact replay, and finite resource evidence;
@@ -21,24 +21,24 @@ A CV21 Delivery Story closes only when it:
 
 Component work may land in small Technical Stories, but does not close the
 Delivery Story without the vertical result. Each tracer introduces at most one
-major new effect family, custody state machine, authority policy, concurrency
+major new effect family, durable state machine, authority policy, concurrency
 dimension, or causal chain.
 
 ## Linear sequence
 
 | Story | Accepted new outer capability | Explicitly retained workflow behavior |
 |---|---|---|
-| DS1 | strict gate; fresh one-PR construction; host/readiness/bridge spine; bounded step/posture; Timeline and replay | current Net construction and seed |
-| DS2 | provider webhook acquisition; durable host custody; HTTP response boundary; later source-neutral manifest/admission | current ingress fold |
+| DS1 | strict gate; fresh one-PR construction; host/readiness/bridge spine; bounded step/state; Timeline and replay | current Net construction and seed |
+| DS2 | signed raw Webhook Inbox; later normalization and source-neutral Intake; identified History acceptance and completion | current ingress fold |
 | DS3 | typed Activity projection; Impetus request/occurrence; pending Motus Dispatch; scripted terminal collection without a Worker | current dashboard request decision and state |
 | DS4 | separate GitHub Worker process; bounded provider reads; lookup-first publication; Motus operational terminal and later Engine collection | current publication terminal fold |
 | DS5 | separate agent Worker process; credential-free Agenticus/Pi protocol; exact result delivery; first complete protected-work claim | current review/conversation decisions |
 | DS6 | exact workflow→agent→Git→workflow causal custody and ref-CAS recovery | current mutation decision and terminal fold |
 | DS7 | exact-head CI evidence; rerun and repair effect execution/recovery | current escalation policy |
 | DS8 | durable timer command/acknowledgement/maturity/delivery and host clock wake | current reminder/defer decisions |
-| DS9 | complete lifecycle/currentness/authority matrix and known-subject convergence | current close/block/terminal behavior |
+| DS9 | complete lifecycle/currentness/authority matrix and known-PR convergence | current close/block/terminal behavior |
 | DS10 | bounded unknown-open-PR discovery and exact-read-before-registration | no new workflow family expected |
-| DS11 | durable fair authority scheduling across known-subject and discovery turns, independent of shared Worker concurrency; service/operator inspection | no new workflow family expected |
+| DS11 | durable fair authority scheduling across known-PR and discovery turns, independent of shared Worker concurrency; service/operator inspection | no new workflow family expected |
 | DS12 | complete journey, recovery, bridge correspondence, distribution, and resource evidence | complete retained-Net behavior exercised through new outer system |
 
 ## Cumulative construction state
@@ -46,33 +46,33 @@ dimension, or causal chain.
 ### After DS1
 
 The strict isolated gate exists. A deterministic command constructs one fresh
-PR root, mounts the current Net through the bridge, advances one bounded action,
-returns detached new posture, crashes, reconstructs, and exactly replays. No
+PR workflow, mounts the current Net through the bridge, advances one bounded action,
+returns detached new state, crashes, reconstructs, and exactly replays. No
 provider observation or external effect exists.
 
 ### After DS2
 
-One signed provider delivery is normalized and durably retained by new
-provider/host owners, then the HTTP request ends. Separate authority turns
-stage it in one readiness manifest, accept it unfinished in identified History,
-exact-reoffer immutable staging to recover and complete only that source
-occurrence, project its actual retained post-fold state, and finally record
-host delivery completion. Duplicate, corroborating, colliding, and incomparable
-evidence is visible without a second admission ledger.
+One valid signed provider delivery is durably retained as exact raw evidence,
+then the HTTP request returns 200. A later host-owned Webhook Inbox Worker
+parses and normalizes it, binds its PR Identity, and classifies semantic
+equality before History. Only the durably authorized owner of a novel
+observation calls `Engine.accept_delivery`; after that acceptance is proven,
+the Inbox row becomes `recorded`.
 
-All five planned DS2 implementation tasks are delivered. Custody, HTTP
-acknowledgement, staging, unfinished History acceptance, retained source fold,
-and host completion remain separately reconstructible cuts. DS2 remains
-`Active` until the Navigator accepts the Experience Report and closes it; this
-implementation state does not pull DS3 or advance the retained dashboard
-transition.
+A later PR authority turn derives the oldest unfinished bridged occurrence from
+History and completes only that occurrence. It writes no host completion mark.
+Transport duplicate/collision and semantic pending/recorded/duplicate/rejected
+states remain visible without a second workflow ledger. Fresh state always has
+three shared SQLite files, and `hamsterdan.sqlite3` has exactly `pr_workflows`
+and `webhook_inbox`. DS2 is complete; its closure does not pull DS3 or advance
+the retained dashboard transition.
 
 ### After DS3
 
 The bridge projects one current dashboard request as exact typed new Activity
 work with its occurrence and identities. Impetus History proves the canonical
 request; Motus Dispatch durably retains pending operational custody. Host sees
-only detached waiting posture. A scripted Dispatch terminal can become
+only detached waiting state. A scripted Dispatch terminal can become
 canonical only through Engine collection and can return only to the original
 occurrence. No Worker or provider implementation runs and no new dashboard
 subnet exists.
@@ -113,9 +113,9 @@ same explicit capability without hidden sleeps or drains.
 
 ### After DS9
 
-Known nonterminal subjects converge through bounded exact reads. Every protected
-operation uses the complete phase/incarnation/head/base/policy claim plus fresh
-provider and host evidence. Route or custody movement fails closed without host
+Known nonterminal PR identities converge through bounded exact reads. Every protected
+operation uses the complete stage/generation/head/base/policy claim plus fresh
+provider and host evidence. Route or generation movement fails closed without host
 inventing workflow terminals.
 
 ### After DS10
@@ -126,8 +126,8 @@ registration, enqueue, and common admission.
 
 ### After DS11
 
-One Hamsterdan authority role advances many independent PR roots with durable
-fair leases and tail requeue across known-subject and discovery turns. API,
+One Hamsterdan authority role advances many independent PR workflows with durable
+fair leases and tail requeue across known-PR and discovery turns. API,
 CLI, inspection, startup, and shutdown remain bounded and do not decode
 workflow internals. Shared separately supervised Worker roles serve those
 Instances without one process or thread per PR; their queue concurrency and
@@ -144,7 +144,7 @@ non-selectable and performs no cutover.
 
 Before implementation, each selected DS Plan Checkpoint reviews together:
 
-- the external-to-posture/effect call tree;
+- the external-to-state/effect call tree;
 - concrete values, signatures, and package ownership;
 - identity, authority, correlation, idempotency, and currentness;
 - durable cuts, failures, crash/reconstruction, and ambiguity recovery;

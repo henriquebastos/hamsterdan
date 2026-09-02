@@ -1,33 +1,21 @@
 # Copyright (c) 2026 Henrique Bastos
 
-"""FastAPI boundary ending each webhook request at durable host custody."""
+"""FastAPI boundary ending each valid signed webhook at raw inbox storage."""
 
 from __future__ import annotations
 
 import asyncio
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import FastAPI, Request, status
 from pydantic import BaseModel, ConfigDict
 from starlette.responses import JSONResponse, Response
 
-from hamsterdan2.github_app.webhooks import (
-    GitHubWebhook,
-    WebhookRefusalError,
-)
-from hamsterdan2.github_app.webhooks import (
-    RefusalReason as GitHubRefusalReason,
-)
-from hamsterdan2.host.delivery import (
-    DeliveryCustody,
-    DeliveryRefusalError,
-)
-from hamsterdan2.host.delivery import (
-    RefusalReason as DeliveryRefusalReason,
-)
+from hamsterdan2.github_app.webhooks import GitHubWebhook, RefusalReason, WebhookRefusalError
+from hamsterdan2.host.webhook_inbox import WebhookInbox, WebhookInboxCapacityError
 
 
-type HttpRefusalReason = GitHubRefusalReason | DeliveryRefusalReason
+type HttpRefusalReason = RefusalReason | Literal["inbox_capacity_exhausted"]
 
 
 class WebhookRefusalResponse(BaseModel):
@@ -40,7 +28,7 @@ class WebhookRefusalResponse(BaseModel):
 
 def refusal_response(reason: HttpRefusalReason) -> JSONResponse:
     status_code = (
-        status.HTTP_503_SERVICE_UNAVAILABLE if reason == "custody_capacity_exhausted" else status.HTTP_400_BAD_REQUEST
+        status.HTTP_503_SERVICE_UNAVAILABLE if reason == "inbox_capacity_exhausted" else status.HTTP_400_BAD_REQUEST
     )
     content = WebhookRefusalResponse(refusal=reason).model_dump(mode="json")
     return JSONResponse(status_code=status_code, content=content)
@@ -55,20 +43,22 @@ async def bounded_body(request: Request, maximum_body_bytes: int) -> bytes:
     return bytes(body)
 
 
-def create_webhook_app(*, webhook: GitHubWebhook, custody: DeliveryCustody) -> FastAPI:
-    app = FastAPI(title="Hamsterdan2 webhook custody")
+def create_webhook_app(*, webhook: GitHubWebhook, inbox: WebhookInbox) -> FastAPI:
+    app = FastAPI(title="Hamsterdan Webhook Inbox")
 
-    @app.post("/github/webhooks", status_code=status.HTTP_202_ACCEPTED)
+    @app.post("/github/webhooks", status_code=status.HTTP_200_OK)
     async def receive(request: Request) -> Response:
         try:
             body = await bounded_body(request, webhook.maximum_body_bytes)
             headers = cast("list[tuple[bytes, bytes]]", request.scope["headers"])
-            normalized = webhook.normalize(headers, body)
-            receipt = await asyncio.to_thread(custody.acquire, normalized)
-        except (WebhookRefusalError, DeliveryRefusalError) as error:
+            verified = webhook.verify(headers, body)
+            receipt = await asyncio.to_thread(inbox.record, verified)
+        except WebhookRefusalError as error:
             return refusal_response(error.reason)
+        except WebhookInboxCapacityError:
+            return refusal_response("inbox_capacity_exhausted")
         return JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
+            status_code=status.HTTP_200_OK,
             content=receipt.model_dump(mode="json"),
         )
 

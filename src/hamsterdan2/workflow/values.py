@@ -1,16 +1,17 @@
 # Copyright (c) 2026 Henrique Bastos
 
-"""Values shared across the new host/readiness workflow boundary."""
+"""Values shared across the replacement host/readiness workflow boundary."""
 
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
-PositiveIdentifier = Annotated[int, Field(strict=True, gt=0)]
+MAX_DURABLE_IDENTIFIER = 9_223_372_036_854_775_807
+PositiveIdentifier = Annotated[int, Field(strict=True, gt=0, le=MAX_DURABLE_IDENTIFIER)]
 
 
-class PullRequestSubject(BaseModel):
+class PullRequestIdentity(BaseModel):
     """Immutable identity of one GitHub installation's pull request."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -21,9 +22,9 @@ class PullRequestSubject(BaseModel):
 
 
 class AwaitingObservation(BaseModel):
-    """Detached posture of a lifecycle that needs its first observation."""
+    """Detached stage of a PR workflow waiting for an observation."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    subject: PullRequestSubject
-    posture: Literal["awaiting_observation"] = "awaiting_observation"
+    pr_identity: PullRequestIdentity
+    stage: Literal["awaiting_observation"] = "awaiting_observation"

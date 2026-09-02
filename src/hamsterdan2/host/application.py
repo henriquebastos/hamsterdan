@@ -1,274 +1,173 @@
 # Copyright (c) 2026 Henrique Bastos
 
-"""Bounded replacement-host operations over durable catalog custody."""
+"""Host-owned operations over PR workflows, Webhook Inbox, and Readiness."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from hamsterdan2.host.values import CustodiedDelivery, HostDeliveryCompletionReceipt
-from hamsterdan2.readiness.ingress_values import ObservationFoldPosture
-from hamsterdan2.workflow.values import PullRequestSubject
+from hamsterdan2.github_app.webhooks import GitHubWebhookNormalizer, WebhookRefusalError
+from hamsterdan2.host.values import InboxAuthorization, InboxDelivery
+from hamsterdan2.host.webhook_inbox import (
+    ProviderRouteNotConfiguredError,
+    WebhookInbox,
+    WebhookInboxDeliveryNotFoundError,
+)
+from hamsterdan2.readiness.intake_values import IntakeResult, ObservationCompletion, PolicyRevision
+from hamsterdan2.readiness.runtime import prepare_intake
+from hamsterdan2.readiness.workflow_bridge import UnsupportedHeadObservationError, WorkflowBridgeError
 
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from typing import Protocol
 
-    from hamsterdan2.github_app.models import DeliveryId, ProviderRouteId
-    from hamsterdan2.host.catalog import HostCatalog
-    from hamsterdan2.host.delivery import DeliveryCompletionCustody, DeliveryCustody
-    from hamsterdan2.host.values import HostRecord, OpenPullRequestCommand, RegisteredPullRequest
-    from hamsterdan2.readiness.ingress import IngressCustody
-    from hamsterdan2.readiness.ingress_values import (
-        HistoryAcceptancePosture,
-        IngressResources,
-        StagingAcquisition,
-        StagingPosture,
-    )
-    from hamsterdan2.workflow.values import AwaitingObservation
-
-    class AcceptReadinessObservation(Protocol):
-        def __call__(
-            self,
-            registered: RegisteredPullRequest,
-            *,
-            provider_route_id: ProviderRouteId,
-            delivery_id: DeliveryId,
-        ) -> HistoryAcceptancePosture: ...
-
-    class FoldReadinessObservation(Protocol):
-        def __call__(
-            self,
-            registered: RegisteredPullRequest,
-            *,
-            provider_route_id: ProviderRouteId,
-            delivery_id: DeliveryId,
-        ) -> ObservationFoldPosture | HistoryAcceptancePosture: ...
+    from hamsterdan2.github_app.models import DeliveryId, NormalizedPullRequestWebhook, ProviderRouteId
+    from hamsterdan2.host.pr_workflows import PullRequestWorkflows
+    from hamsterdan2.host.values import OpenPullRequestCommand, PullRequestWorkflow
+    from hamsterdan2.readiness.intake_values import PreparedIntake
+    from hamsterdan2.readiness.runtime import HistoryAcceptance, ReadinessRuntime
+    from hamsterdan2.workflow.values import AwaitingObservation, PullRequestIdentity
 
 
 class Hamsterdan:
-    """Register and advance one PR at a time through host-owned cuts."""
+    """Open one PR workflow through the concrete host composition."""
 
     def __init__(
         self,
         *,
-        catalog: HostCatalog,
-        open_readiness: Callable[[RegisteredPullRequest], AwaitingObservation],
+        workflows: PullRequestWorkflows,
+        open_readiness: Callable[[PullRequestWorkflow], AwaitingObservation],
     ) -> None:
-        self._catalog = catalog
+        self._workflows = workflows
         self._open_readiness = open_readiness
 
-    def register(self, command: OpenPullRequestCommand) -> RegisteredPullRequest:
-        return self._catalog.register(command)
-
-    def step(self, command: OpenPullRequestCommand) -> HostRecord:
-        return self._catalog.step(command, self._open_readiness)
-
-    def open_pull_request(self, command: OpenPullRequestCommand) -> HostRecord:
-        self.register(command)
-        return self.step(command)
+    def open_pull_request(self, command: OpenPullRequestCommand) -> PullRequestWorkflow:
+        return self._workflows.open(command, self._open_readiness)
 
 
-class DeliveryNotFoundError(Exception):
-    """The requested acquired delivery does not exist in host custody."""
-
-
-class StagedObservationNotFoundError(Exception):
-    """The requested task-2 identity has no durable readiness staging."""
-
-
-class ObservationDeliveryNotFoldedError(Exception):
-    """Host completion requires the exact successful retained fold."""
-
-
-class StagingAuthority:
-    """Run one readiness staging turn from reconstructed host delivery custody."""
-
-    def __init__(self, *, delivery_custody: DeliveryCustody, ingress_custody: IngressCustody) -> None:
-        self._delivery_custody = delivery_custody
-        self._ingress_custody = ingress_custody
-
-    def stage_delivery(
-        self,
-        *,
-        provider_route_id: ProviderRouteId,
-        delivery_id: DeliveryId,
-    ) -> StagingPosture:
-        def select_delivery() -> CustodiedDelivery:
-            delivery = self._delivery_custody.retained_delivery(
-                provider_route_id=provider_route_id,
-                delivery_id=delivery_id,
-            )
-            if delivery is None:
-                raise DeliveryNotFoundError(
-                    provider_route_id,
-                    delivery_id,
-                    "acquire this delivery before requesting readiness staging",
-                )
-            return delivery
-
-        return self._ingress_custody.stage_selected(select_delivery)
-
-    def staging_posture(
-        self,
-        *,
-        provider_route_id: ProviderRouteId,
-        delivery_id: DeliveryId,
-    ) -> StagingPosture | None:
-        return self._ingress_custody.staging_posture(
-            provider_route_id=provider_route_id,
-            delivery_id=delivery_id,
-        )
-
-    def staging_acquisition(
-        self,
-        *,
-        provider_route_id: ProviderRouteId,
-        delivery_id: DeliveryId,
-    ) -> StagingAcquisition | None:
-        return self._ingress_custody.staging_acquisition(
-            provider_route_id=provider_route_id,
-            delivery_id=delivery_id,
-        )
-
-    def ingress_resources(self) -> IngressResources:
-        return self._ingress_custody.resources()
-
-
-class ObservationAcceptanceAuthority:
-    """Select staged authority by task-2 identity and fence its registered root."""
+class WebhookInboxWorker:
+    """Normalize and offer one selected inbox delivery without running in HTTP."""
 
     def __init__(
         self,
         *,
-        catalog: HostCatalog,
-        ingress_custody: IngressCustody,
-        completion_custody: DeliveryCompletionCustody,
-        accept_readiness: AcceptReadinessObservation,
-        fold_readiness: FoldReadinessObservation,
-        verify_readiness: FoldReadinessObservation,
+        inbox: WebhookInbox,
+        normalizer: GitHubWebhookNormalizer,
+        policy_revision: PolicyRevision,
+        readiness_for: Callable[[PullRequestWorkflow], ReadinessRuntime],
     ) -> None:
-        self._catalog = catalog
-        self._ingress_custody = ingress_custody
-        self._completion_custody = completion_custody
-        self._accept_readiness = accept_readiness
-        self._fold_readiness = fold_readiness
-        self._verify_readiness = verify_readiness
+        self._inbox = inbox
+        self._normalizer = normalizer
+        self._policy_revision = policy_revision
+        self._readiness_for = readiness_for
 
-    def selected_subject(
+    def process_delivery(self, delivery_id: DeliveryId) -> IntakeResult:
+        prior = self._inbox.result(delivery_id)
+        if prior is not None:
+            return prior
+        selected = self.selected_delivery(delivery_id)
+        authorized = self.authorized_delivery(selected)
+        if isinstance(authorized, IntakeResult):
+            return authorized
+        return self._inbox.record_in_history(delivery_id, self.accept_to_history)
+
+    def authorized_delivery(self, selected: InboxDelivery) -> InboxDelivery | IntakeResult:
+        if selected.intake_authorized:
+            return selected
+        authorization = self.authorization_for(selected)
+        if isinstance(authorization, IntakeResult):
+            return authorization
+        return self._inbox.authorize(authorization)
+
+    def accept_to_history(
         self,
-        *,
-        provider_route_id: ProviderRouteId,
-        delivery_id: DeliveryId,
-    ) -> PullRequestSubject:
-        reconstructed = self._ingress_custody.reconstructed_staging(
-            provider_route_id=provider_route_id,
-            delivery_id=delivery_id,
+        workflow: PullRequestWorkflow,
+        exact_prepared: PreparedIntake,
+    ) -> HistoryAcceptance:
+        return self._readiness_for(workflow).accept(workflow, exact_prepared)
+
+    def selected_delivery(self, delivery_id: DeliveryId) -> InboxDelivery:
+        delivery = self._inbox.delivery(delivery_id)
+        if delivery is None:
+            raise WebhookInboxDeliveryNotFoundError(delivery_id)
+        return delivery
+
+    def normalize_or_reject(self, delivery: InboxDelivery) -> NormalizedPullRequestWebhook | IntakeResult:
+        try:
+            return self._normalizer.normalize(delivery.verified)
+        except WebhookRefusalError as error:
+            return self._inbox.reject(delivery.verified.delivery_id, reason=error.reason)
+
+    def route_or_reject(
+        self,
+        delivery: InboxDelivery,
+        normalized: NormalizedPullRequestWebhook,
+    ) -> ProviderRouteId | IntakeResult:
+        try:
+            return self._inbox.provider_route_id(normalized)
+        except ProviderRouteNotConfiguredError:
+            return self._inbox.reject(
+                delivery.verified.delivery_id,
+                reason="route_not_configured",
+                normalized=normalized,
+            )
+
+    def prepare_or_reject(
+        self,
+        delivery: InboxDelivery,
+        normalized: NormalizedPullRequestWebhook,
+    ) -> PreparedIntake | IntakeResult:
+        try:
+            return prepare_intake(
+                normalized,
+                policy_revision=self._policy_revision,
+            )
+        except UnsupportedHeadObservationError:
+            return self._inbox.reject(
+                delivery.verified.delivery_id,
+                reason="unsupported_head_lifecycle",
+                normalized=normalized,
+            )
+        except WorkflowBridgeError:
+            return self._inbox.reject(
+                delivery.verified.delivery_id,
+                reason="workflow_projection_rejected",
+                normalized=normalized,
+            )
+
+    def authorization_for(self, delivery: InboxDelivery) -> InboxAuthorization | IntakeResult:
+        normalized = self.normalize_or_reject(delivery)
+        if isinstance(normalized, IntakeResult):
+            return normalized
+        route = self.route_or_reject(delivery, normalized)
+        if isinstance(route, IntakeResult):
+            return route
+        prepared = self.prepare_or_reject(delivery, normalized)
+        if isinstance(prepared, IntakeResult):
+            return prepared
+        return InboxAuthorization(
+            delivery_id=delivery.verified.delivery_id,
+            body_digest=delivery.body_digest,
+            provider_route_id=route,
+            normalized=normalized,
+            prepared=prepared,
         )
-        if reconstructed is None:
-            raise StagedObservationNotFoundError(
-                provider_route_id,
-                delivery_id,
-                "stage this acquired delivery before requesting observation authority",
-            )
-        acquisition, _ = reconstructed
-        source_subject = acquisition.webhook.snapshot.subject
-        return PullRequestSubject(
-            installation_id=source_subject.installation_id,
-            repository_id=source_subject.repository_id,
-            pull_request_number=source_subject.pull_request_number,
-        )
 
-    def accept_staged_observation(
+
+class PullRequestAuthority:
+    """Drive one History-owned observation occurrence for one PR identity."""
+
+    def __init__(
         self,
         *,
-        provider_route_id: ProviderRouteId,
-        delivery_id: DeliveryId,
-    ) -> HistoryAcceptancePosture:
-        subject = self.selected_subject(provider_route_id=provider_route_id, delivery_id=delivery_id)
+        workflows: PullRequestWorkflows,
+        readiness_for: Callable[[PullRequestWorkflow], ReadinessRuntime],
+    ) -> None:
+        self._workflows = workflows
+        self._readiness_for = readiness_for
 
-        def accept(registered: RegisteredPullRequest) -> HistoryAcceptancePosture:
-            return self._accept_readiness(
-                registered,
-                provider_route_id=provider_route_id,
-                delivery_id=delivery_id,
-            )
+    def complete_next_observation(self, pr_identity: PullRequestIdentity) -> ObservationCompletion:
+        def complete(workflow: PullRequestWorkflow) -> ObservationCompletion:
+            return self._readiness_for(workflow).complete_next(workflow)
 
-        return self._catalog.run_readiness_authority(subject, accept)
-
-    def fold_accepted_observation(
-        self,
-        *,
-        provider_route_id: ProviderRouteId,
-        delivery_id: DeliveryId,
-    ) -> ObservationFoldPosture | HistoryAcceptancePosture:
-        subject = self.selected_subject(provider_route_id=provider_route_id, delivery_id=delivery_id)
-
-        def fold(registered: RegisteredPullRequest) -> ObservationFoldPosture | HistoryAcceptancePosture:
-            return self._fold_readiness(
-                registered,
-                provider_route_id=provider_route_id,
-                delivery_id=delivery_id,
-            )
-
-        return self._catalog.run_readiness_authority(subject, fold)
-
-    def complete_observation_delivery(
-        self,
-        *,
-        provider_route_id: ProviderRouteId,
-        delivery_id: DeliveryId,
-    ) -> HostDeliveryCompletionReceipt:
-        subject = self.selected_subject(provider_route_id=provider_route_id, delivery_id=delivery_id)
-
-        def complete(registered: RegisteredPullRequest) -> HostDeliveryCompletionReceipt:
-            folded = self._verify_readiness(
-                registered,
-                provider_route_id=provider_route_id,
-                delivery_id=delivery_id,
-            )
-            if not isinstance(folded, ObservationFoldPosture):
-                raise ObservationDeliveryNotFoldedError(
-                    provider_route_id,
-                    delivery_id,
-                    "only a novel History-proven fold can complete host delivery",
-                )
-            reconstructed = self._ingress_custody.reconstructed_staging(
-                provider_route_id=provider_route_id,
-                delivery_id=delivery_id,
-            )
-            if reconstructed is None:
-                raise StagedObservationNotFoundError(
-                    provider_route_id,
-                    delivery_id,
-                    "staging authority disappeared during host completion",
-                )
-            acquisition, _ = reconstructed
-            expected_delivery = CustodiedDelivery(
-                provider_route_id=acquisition.identity.provider_route_id,
-                custody_generation=acquisition.custody_generation,
-                webhook=acquisition.webhook,
-                quarantined=acquisition.quarantined,
-            )
-            receipt = HostDeliveryCompletionReceipt(
-                provider_route_id=provider_route_id,
-                delivery_id=delivery_id,
-                custody_generation=acquisition.custody_generation,
-                subject=folded.subject,
-                instance_id=folded.instance_id,
-                bridge_identity=folded.bridge_identity,
-                manifest_id=str(folded.manifest_id),
-                grant_id=str(folded.grant_id),
-                manifest_digest=folded.manifest_digest,
-                entry_order=folded.entry_order,
-                observation_key=str(folded.observation_key),
-                history_delivery_identity=str(folded.delivery_identity),
-                occurrence=folded.occurrence,
-            )
-            return self._completion_custody.record_completion(
-                receipt,
-                expected_delivery=expected_delivery,
-            )
-
-        return self._catalog.run_readiness_authority(subject, complete)
+        return self._workflows.run_authority(pr_identity, complete)

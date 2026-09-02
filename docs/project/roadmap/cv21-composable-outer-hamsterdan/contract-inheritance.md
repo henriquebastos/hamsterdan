@@ -9,14 +9,14 @@ outer-system rows below. CV22 owns workflow rows. CV20 remains linked evidence.
 | Accepted contract | CV21 disposition | CV22 disposition |
 |---|---|---|
 | parallel `hamsterdan2`/`tests2`, fresh construction state, no selectable second runtime | Adopt unchanged; CV21 has no cutover | Adopt through workflow construction; final cutover is CV22's last separately approved action |
-| vertical tracer bullets with local/root DST, crash cuts, exact replay, bounds, and correspondence from first use | Adopt for all twelve outer tracers through the real bridge-mounted Net | Adopt for each subnet and its composed workflow/root tracer |
+| vertical tracer bullets with local/root DST, crash checkpoints, exact replay, bounds, and correspondence from first use | Adopt for all twelve outer tracers through the real bridge-mounted Net | Adopt for each subnet and its composed workflow/root tracer |
 | pure reducers and intention-named capability factories | Adopt for new outer state transitions and effect composition | Adopt for workflow folds and subnet construction |
 | Timeline plus bounded one-leaf execution | Adopt for outer owner and root simulation | Reuse for subnet-local and workflow-owner simulation |
-| source-neutral observation admission and History as sole workflow-admission ledger | Adopt; bridge converts only after manifest-scoped readiness admission | New workflow consumes the same focused boundary observations without changing outer custody |
-| immutable one-PR subject and exact identity/correlation/operation comparison | Adopt at every outer cut and bridge mapping | New workflow produces the same boundary identity |
-| three-source authority: durable readiness grant, fresh provider read, fresh host evidence | Adopt | Workflow supplies durable intent but never substitutes for fresh outer authority |
+| source-neutral observation admission and History as sole workflow-admission ledger | Adopt; Webhook Inbox authorizes one novel observation before bridge conversion | New workflow consumes the same focused boundary observations without changing Inbox ownership |
+| immutable PR Identity and exact identity/correlation/operation comparison | Adopt at every outer checkpoint and bridge mapping | New workflow produces the same boundary identity |
+| three-source authority: durable workflow intent, fresh provider read, fresh host evidence | Adopt | Workflow supplies durable intent but never substitutes for fresh outer authority |
 | lookup-first at-least-once effects | Adopt for GitHub, Git, agent, and publication operations | Workflow emits stable immutable work and consumes exact outcomes |
-| Impetus canonical History plus separately supervised Motus Worker execution | Adopt with readiness owning one-PR Engine integration, Motus owning operational task/Attempt custody, and external deployment owning Worker process lifetime | Preserve the same Engine/Dispatch/Worker boundary when the replacement Net removes the bridge |
+| Impetus canonical History plus separately supervised Motus Worker execution | Adopt with readiness owning one-PR Engine integration, Motus owning operational task/Attempt state, and external deployment owning Worker process lifetime | Preserve the same Engine/Dispatch/Worker boundary when the replacement Net removes the bridge |
 | configured-repository unknown-open-PR discovery | Adopt in DS10–DS11 | No workflow discovery responsibility |
 | dashboard event/projection/publication/outcome and final-close convergence | Bridge only the retained dashboard request/outcome without changing retained behavior | Adopt as the first accepted concrete replacement-subnet design |
 | exact production subnet accepted locally before larger composition | Not a CV21 workflow implementation; bridge correspondence is accepted locally as an adapter | Adopt recursively for every production subnet |
@@ -29,86 +29,69 @@ where the decisions arose; this register assigns current delivery ownership.
 
 ### DS1
 
-CV21 adopts the isolated gate, immutable one-PR binding, one-cut execution,
-detached posture, fresh reconstruction, exact replay, owner-local/root
+CV21 adopts the isolated gate, immutable one-PR binding, one-checkpoint execution,
+detached state, fresh reconstruction, exact replay, owner-local/root
 simulation, independent checkers, and resource evidence. It replaces DS1's new
 minimal workflow seed with the sole bridge's construction of the current real
 Net and seed.
 
 ### DS2
 
-CV21 adopts the complete acquisition/admission chain:
+CV21 adopts the complete Webhook Inbox and Intake chain:
 
 ```text
-PullRequestSnapshot + ObservationProvenance
+verified DeliveryId + raw body
+  -> later normalization
   -> focused observation + ObservationKey
-  -> IngressManifest + AdmissionGrant
+  -> durable novel authorization
   -> identified History admission
-  -> fold
+  -> History-owned completion
 ```
 
-Webhook acquisition is first; later exact reads use the same seam. The HTTP
-request ends after durable host custody, before a readiness turn. Duplicate,
-corroboration, collision, incomparable evidence, custody, acknowledgement,
-admission, and fold cuts remain distinct. The bridge translates the accepted
-focused observation into the retained input; it does not become another
-admission ledger.
+HTTP bounds exact headers/body, verifies HMAC, and commits every valid signed
+delivery's raw body before returning HTTP 200. JSON parsing, normalization,
+provider-route binding, observation projection, and History admission happen in
+a later host-owned `WebhookInboxWorker`, not a Motus Worker. Same DeliveryId and
+body is a transport duplicate; changed content is a collision whose digest does
+not overwrite the original raw evidence.
 
-Tasks 1–5 now implement this chain through immutable source-neutral staging,
-unfinished identified History acceptance, exact source completion, detached
-post-fold projection, and separate host completion. The chain includes the
-exact Head observation/key, one acquisition manifest and grant, ordered entry,
-closed durable classification, finite SQLite custody, detached reconstruction,
-separate host-composed authority turns, one exact bridge conversion, and public
-Petrus acceptance/completion. The task-4 cut ends after adjacent
-`ExternalEventDelivered` and `FiringBegun`; task 5 exact-reoffers immutable
-authority to recover that carrier, completes only its occurrence, validates the
-terminal History batch and real retained marking, then records host completion
-only after a fresh fold proof.
+The application transaction stores one durable authorization for the first
+delivery that owns a novel `ObservationKey`. Exact same semantics is a
+duplicate, key/bytes disagreement is rejected, and a PR Identity may own many
+distinct observations. Policy and provider provenance remain outside semantic
+equality. Only an authorized novel observation calls public
+`Engine.accept_delivery`; the Inbox marks `recorded` only after History accepts
+it. Process loss between those writes exact-reoffers the same identified
+delivery before marking the Inbox row. `recorded` does not mean workflow
+completion.
 
 The complete first bridge correspondence is fixed under
-`workflow-bridge/head-seen-history-fold@3`: source-neutral
-`HeadObservation` maps to retained `HeadSeen` at `on_head` only for local
-incarnation 1, open, non-draft, non-merged evidence. Head/base SHAs are exact;
-only explicit true mergeability maps true; policy comes from the exact
-manifest; and strict-base/base-current map to true/false. The stable version-1
-delivery identity binds bridge, manifest, grant digest, entry order, and key.
-Task 5 deliberately supersedes task 4's acceptance-only `@2` identity because
-the complete mapping now includes terminal-order validation and post-fold
-projection; fresh construction has no old roots to migrate. Exact reoffer
-recovers one unfinished occurrence from History or proves its exact successful
-terminal. No host or readiness accepted pointer exists. The strict detached
-fold posture proves subject/instance, identity/occurrence, running phase, local
-incarnation 1, source-neutral branch tips, retained folded SHAs, mergeability,
-policy, strict/current-base posture, no unfinished occurrence, and the
-`observation_folded` cut without leaking retained or Petrus values.
+`workflow-bridge/head-seen-intake@4`. `HeadObservation` maps to retained
+`HeadSeen` at `on_head` only for generation 1, open, non-draft, non-merged
+evidence. Head/base SHAs are exact, only explicit true mergeability maps true,
+policy comes from durable Inbox authorization, and strict-base/base-current map
+to true/false. The version-2 History identity binds bridge, observation key,
+and policy revision.
 
-History remains the sole admission/fold ledger. The finite host completion
-receipt is only a custody acknowledgement keyed by the original route and
-delivery. It binds custody generation, subject/instance, bridge,
-manifest/grant/digest/entry/key, History delivery/occurrence, and both cut
-identities. A first exact write inserts once; exact replay reconstructs without
-write; changed correlation never overwrites. The original normalized delivery
-and any late quarantine evidence remain intact.
+History remains the sole admission and completion ledger. A later PR authority
+turn selects the oldest unfinished bridged occurrence from one bounded History
+page, exact-reoffers it, and calls public `Engine.complete_delivery`. A
+successful retry is derived from its exact History terminal; no host completion
+table or receipt exists.
 
-The host registration and readiness-root singletons are reconstructed through
-type-valid, byte-bounded projections; malformed stored values never cross the
-boundary or enter detached diagnostics. The cumulative root mounts unchanged
-owner-local staging and requires exact equality from ingress authority through
-History fold and host completion. All History, catalog/completion rows, files,
-bytes, marking places/tokens, and diagnostics stop at fixed ceilings before
-complete materialization. History load reserves 128 KiB of aggregate database/
-WAL/shared-memory capacity. New acceptance reserves 1 MiB for two records;
-unfinished completion remeasures and reserves 1 MiB for its two terminal
-records, while ended exact reoffer reserves no append headroom. Strict retained
-acquisition, observation, History, runtime-snapshot, and host-receipt decoder
-failures become fixed cause-free owner diagnostics.
+Fresh construction has three stable SQLite files regardless of PR count:
+`hamsterdan.sqlite3`, `history.sqlite3`, and `dispatch.sqlite3`. The application
+file contains exactly `pr_workflows` and `webhook_inbox`. No catalog,
+readiness-ingress database, per-PR History database, manifest, grant, admission
+decision, or completion ledger remains. Application rows, shared History,
+SQLite pages, raw and canonical values, diagnostics, and per-workflow History
+records all stop at explicit finite bounds before complete materialization.
 
 ### DS3
 
 CV21 adopts Activity/occurrence projection, Impetus History request authority,
-Motus Dispatch operational custody, exact terminal comparison, and opaque host
-posture. It does not implement the accepted new dashboard subnet. CV22 owns that
+Motus Dispatch operational state, exact terminal comparison, and opaque host
+state. It does not implement the accepted new dashboard subnet. CV22 owns that
 event, projection, publication, outcome, closure, and local-subnet contract.
 CV21 DS3 instead proves that the retained dashboard request crosses the bridge,
 becomes durable pending Dispatch work, and admits a scripted operational
@@ -151,9 +134,9 @@ resolve these before its first affected implementation:
 |---|---|
 | public Petrus bounded replay/resume and selected-occurrence repair seams | DS1–DS4 as first required; do not use private `Instance` state |
 | DS5 narrow currentness witness versus later lifecycle ownership | DS5 Plan must preserve DS9 as complete lifecycle-policy owner or rule a smaller proven first-call-site seam |
-| exact delivered agent-result custody | DS5 |
-| Git object/CAS/orphan recovery and causal publication custody | DS6 |
-| registration, discovery target, catalog, and runnable ownership conflicts | DS9–DS11, ruled before the first shared store/API |
+| exact delivered agent-result state | DS5 |
+| Git object/CAS/orphan recovery and causal publication state | DS6 |
+| registration, discovery target, and runnable ownership conflicts | DS9–DS11, ruled before the first affected API |
 | closed predecessor-obligation manifest for qualification | DS12 |
 
 No recommendation in the audit changes an API merely by appearing in this

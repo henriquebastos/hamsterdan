@@ -2,12 +2,12 @@
 code: CV21
 level: Value
 status: Active
-status_reason: the alpha decision keeps CV21 as the quality track without production pressure; DS2 tasks 1–5 are delivered and await Navigator Experience Report acceptance and closure
-updated: 2026-09-01
+status_reason: the alpha decision keeps CV21 as the quality track without production pressure; DS1 and DS2 are complete, and DS3 through DS12 remain planned
+updated: 2026-09-02
 related:
   - ../../decisions/records/2026-08-28T1453Z-cv20-fragments-into-outer-system-and-workflow-replacement-values.md
   - ../../decisions/records/2026-08-28T2037Z-cv21-activities-run-in-separately-supervised-motus-workers.md
-  - ../../decisions/records/2026-08-28T0152Z-pr-observations-use-source-neutral-admission-and-history-authority.md
+  - ../../decisions/records/2026-09-01T1159Z-webhook-inbox-hands-novel-observations-to-history.md
   - ../../decisions/records/2026-08-28T0153Z-configured-repository-recovery-discovers-unknown-open-pull-requests.md
   - ../cv20-composable-reconstructible-hamsterdan/index.md
   - ../cv22-decomposable-readiness-workflow/index.md
@@ -29,7 +29,7 @@ only operational runtime.
 
 ## Value
 
-The new GitHub, agent, readiness, host, operator, custody, authority, effect,
+The new GitHub, agent, readiness, host, operator, Inbox, authority, effect,
 recovery, discovery, fairness, observability, and simulation owners compose
 through explicit typed capabilities. Their complete behavior can be exercised
 and exactly replayed against the real retained Net without importing or reusing
@@ -100,10 +100,8 @@ DS1 bridged lifecycle -> DS2 ingress -> DS3 retained-Net Activity
 11. [CV21.DS11 — Supervise multiple PRs fairly](cv21-ds11-supervise-multiple-prs-fairly.md)
 12. [CV21.DS12 — Qualify the outer system and workflow bridge](cv21-ds12-qualify-outer-system-and-bridge.md)
 
-CV21.DS1 is complete. DS2 remains `Active`; tasks 1–5 in its confirmed serial
-ladder are delivered and await Navigator Experience Report acceptance and
-closure. DS3 through DS12 remain `Planned`; none is pulled merely because its
-predecessor's implementation completed. Each selected tracer must expand into
+CV21.DS1 and DS2 are complete. DS3 through DS12 remain `Planned`; none is pulled
+merely because its predecessor completed. Each selected tracer must expand into
 reviewable User and Technical Stories and pass its own API-strengthening Plan
 Checkpoint before implementation.
 
@@ -119,7 +117,7 @@ CV21 is complete when:
 3. architecture evidence proves that only the bridge imports the allowlisted
    current workflow entry points and that no old type escapes it;
 4. the bridge translation census covers every observation, Activity work,
-   terminal, timer command, occurrence, and detached posture used by the
+   terminal, timer command, occurrence, and detached state used by the
    retained workflow;
 5. the new outer system uses only fresh disposable state and remains absent from
    runtime configuration, deployment, and operator selection; and

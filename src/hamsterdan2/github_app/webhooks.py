@@ -21,9 +21,11 @@ from hamsterdan2.github_app.models import (
     ProviderRoute,
     ProviderUpdatedAt,
     PullRequestAction,
+    PullRequestIdentity,
     PullRequestSnapshot,
-    PullRequestSubject,
     RepositoryFullName,
+    VerifiedWebhookDelivery,
+    WebhookEvent,
 )
 
 
@@ -176,11 +178,16 @@ def validated_delivery_id(headers: dict[bytes, bytes]) -> DeliveryId:
         raise WebhookRefusalError("invalid_delivery_id") from None
 
 
-def validate_media_and_event(headers: dict[bytes, bytes]) -> None:
+def validate_media_type(headers: dict[bytes, bytes]) -> None:
     if headers.get(b"content-type") != b"application/json":
         raise WebhookRefusalError("unsupported_content_type")
-    if headers.get(b"x-github-event") != b"pull_request":
-        raise WebhookRefusalError("unsupported_event")
+
+
+def validated_event(headers: dict[bytes, bytes]) -> WebhookEvent:
+    try:
+        return WebhookEvent(header_text(headers, b"x-github-event"))
+    except ValueError:
+        raise WebhookRefusalError("unsupported_event") from None
 
 
 def verify_body(secret: str, body: bytes, signature: str) -> None:
@@ -212,7 +219,7 @@ def normalized_webhook(
             repository_full_name=envelope.repository.full_name,
         ),
         snapshot=PullRequestSnapshot(
-            subject=PullRequestSubject(
+            pr_identity=PullRequestIdentity(
                 installation_id=envelope.installation.id,
                 repository_id=envelope.repository.id,
                 pull_request_number=pull.number,
@@ -230,7 +237,7 @@ def normalized_webhook(
 
 
 class GitHubWebhook:
-    """Verify exact request bytes before producing one bounded provider value."""
+    """Verify exact bytes at HTTP intake without parsing their envelope."""
 
     def __init__(self, *, webhook_secret: str, maximum_body_bytes: int = MAX_BODY_BYTES) -> None:
         if not webhook_secret or len(webhook_secret.encode()) > MAX_SECRET_BYTES:
@@ -240,18 +247,28 @@ class GitHubWebhook:
         self._webhook_secret = webhook_secret
         self.maximum_body_bytes = maximum_body_bytes
 
-    def normalize(
+    def verify(
         self,
         headers: Iterable[tuple[bytes, bytes]],
         body: bytes,
-    ) -> NormalizedPullRequestWebhook:
+    ) -> VerifiedWebhookDelivery:
         projected = security_headers(headers)
         if len(body) > self.maximum_body_bytes:
             raise WebhookRefusalError("body_too_large")
         validated_content_length(projected, body)
-        validate_media_and_event(projected)
+        validate_media_type(projected)
         signature = validated_signature(projected)
         delivery_id = validated_delivery_id(projected)
+        event = validated_event(projected)
         verify_body(self._webhook_secret, body, signature)
-        envelope = parse_envelope(body)
-        return normalized_webhook(envelope, delivery_id=delivery_id)
+        return VerifiedWebhookDelivery(delivery_id=delivery_id, event=event, body=body)
+
+
+class GitHubWebhookNormalizer:
+    """Parse verified raw evidence on a later host-owned Inbox turn."""
+
+    def normalize(self, delivery: VerifiedWebhookDelivery) -> NormalizedPullRequestWebhook:
+        if delivery.event != "pull_request":
+            raise WebhookRefusalError("unsupported_event")
+        envelope = parse_envelope(delivery.body)
+        return normalized_webhook(envelope, delivery_id=delivery.delivery_id)

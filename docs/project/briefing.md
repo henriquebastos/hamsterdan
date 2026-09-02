@@ -75,11 +75,12 @@ Navigator approval, followed by one bounded monitoring proof and the tag.
 quality track without gating that alpha. Its non-selectable outer-system
 reconstruction uses one temporary bridge to the current working Net. CV21.DS1
 provides the isolated replacement gate and locally qualified host/readiness/
-bridge lifecycle under `src/hamsterdan2`; CV21.DS2 is active, with tasks 1–5
-delivered through exact retained fold, detached post-fold projection, and
-separate host completion. Navigator Experience Report acceptance and DS2
-closure remain; DS3 is not pulled. The replacement uses only fresh disposable
-state and has no runtime selector or deployment.
+bridge lifecycle under `src/hamsterdan2`; CV21.DS2's glossary-aligned
+replacement is accepted and complete. Signed raw webhook evidence enters one
+shared Webhook Inbox, a later host worker authorizes only novel semantic
+observations, and Petrus History alone owns acceptance and completion. DS3 is
+not pulled. The replacement uses only fresh disposable state and has no runtime
+selector or deployment.
 
 [CV22](roadmap/cv22-decomposable-readiness-workflow/index.md) then replaces that
 bridge with recursively independent production subnets and owns final cutover.
