@@ -137,7 +137,8 @@ def _review_cell(facts: _Facts) -> str:
     status = str(review.get("status", "pending"))
     cell = _REVIEW_CELL.get(status, f"⚠️ {status}")
     if status == "unable":
-        return f"{cell} · {review.get('category', '')}"
+        category = str(review.get("category", ""))
+        return cell if category in ("", "unable") else f"{cell} · {category}"
     if "count" in findings:
         count = int(findings["count"] or 0)
         if count == 0:

@@ -330,6 +330,8 @@ class PrReadinessV5Application:
 
     @staticmethod
     def _intent_arg(kind: str, arguments: dict[str, Any], comment: str) -> str:
+        if kind in {"reply", "status"}:
+            return str(arguments.get("message", ""))
         if kind in _MUTATIONS:
             return str(arguments.get("request", ""))
         if kind in {"dismiss", "acknowledge", "defer"}:
@@ -354,7 +356,7 @@ class PrReadinessV5Application:
     def _intent_declarations() -> list[dict[str, object]]:
         arguments = {
             "reply": ["message"],
-            "status": [],
+            "status": ["message"],
             "acknowledge": ["findings"],
             "dismiss": ["findings"],
             "defer": ["findings"],

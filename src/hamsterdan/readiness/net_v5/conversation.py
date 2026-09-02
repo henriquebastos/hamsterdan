@@ -70,6 +70,30 @@ _RECOVER_ROUTES = {
     "push": ("mut.recover", "mutation"),
 }
 
+# reply vocabulary: every deterministic answer is a plain sentence in
+# Dan's register — internal grade/kind tokens never reach the human. A
+# pure intent publishes the agent-composed message itself.
+_NO_CHANGE_TEXT = "I can't act on that — nothing in the workflow changed."
+_PURE_FALLBACK_TEXT = "Nothing new to report — the summary comment is current."
+_TERMINAL_TEXT = "This PR is closed — nothing changes here anymore."
+_PROVISIONAL_TEXT = "My own update is still landing — ask again once it settles."
+_QUIESCENT_TEXT = "This PR is a draft — I hold changes until it's ready for review."
+_UNKNOWN_RECOVERY_TEXT = "I don't recognize that operation, so I can't recover it."
+_NOTED_TEXT = {
+    "acknowledge": "Noted.",
+    "dismiss": "Noted — that finding is dismissed.",
+    "defer": "Noted — that finding is set aside.",
+    "snooze": "Noted — reminders are snoozed.",
+    "resume": "Noted — reminders are back on.",
+    "reassign": "Noted.",
+    "recover_publication": "On it — I'm retrying that publication now.",
+}
+_STARTED_TEXT = {
+    "change": "On it — I'm making that change and will push to this PR.",
+    "update_base": "On it — I'm updating this branch from its base.",
+    "resolve_conflict": "On it — I'm resolving the conflict and will push the result.",
+}
+
 # -- folds ---------------------------------------------------------------
 
 
@@ -97,19 +121,19 @@ def _classify(binding, outputs):
     grade = _GRADES.get(intent.kind)
 
     if grade is None or not intent.authorized:
-        text = "no workflow change"
+        text = _NO_CHANGE_TEXT
     elif grade == "pure":
-        text = f"answer:{intent.kind}"
+        text = intent.arg or _PURE_FALLBACK_TEXT
     elif grade == "note":
         if intent.phase == "terminal":
-            text = f"declined:{intent.kind}:terminal"
+            text = _TERMINAL_TEXT
         else:
-            text = f"noted:{intent.kind}"
+            text = _NOTED_TEXT[intent.kind]
             if intent.kind == "recover_publication":
                 prefix = intent.arg.split(":", 1)[0]
                 found = _RECOVER_ROUTES.get(prefix)
                 if found is None:
-                    text = "declined:recover_publication:unknown-target"
+                    text = _UNKNOWN_RECOVERY_TEXT
                 else:
                     target_place, target_name = found
                     routes[target_place] = (RecoverFact(target=target_name, op=intent.arg),)
@@ -119,13 +143,13 @@ def _classify(binding, outputs):
                     routes[noted[0]] = noted[2]
     else:  # committing
         if intent.phase != "running":
-            text = f"declined:{intent.kind}:{intent.phase}"
+            text = _TERMINAL_TEXT if intent.phase == "terminal" else _QUIESCENT_TEXT
         elif intent.provisional:
             # A4.3: our own push is between the land and its webhook —
             # further mutations are declined BEFORE any gate attempt
-            text = f"declined:{intent.kind}:provisional"
+            text = _PROVISIONAL_TEXT
         else:
-            text = f"started:{intent.kind}"
+            text = _STARTED_TEXT[intent.kind]
             routes["mut.requests"] = (
                 MutationRequest(
                     op=intent.kind,
