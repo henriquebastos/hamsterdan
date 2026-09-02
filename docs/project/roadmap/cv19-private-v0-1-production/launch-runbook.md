@@ -83,3 +83,31 @@ the safe state: deliveries queue durably upstream and GitHub's **Recent
 deliveries → Redeliver** covers anything missed. Follow the operator runbook's
 isolated-handoff rules if the legacy PAT service must take over; never run two
 writers.
+
+## Deployment recovery and rollback facts — recorded at v0.1.0 (Gate B, 2026-09-01)
+
+The `v0.1.0` tag points at revision `7df442608a99d50f4a5bf3955113e5a68337f6aa`,
+the accepted candidate behind image
+`sha256:f7cb8481a4e9286be38e02af5780fe4ecb8840bf2791b8f43b0f53932da09c82`.
+
+- **The artifact, not the build, is authoritative.** Image builds are not
+  bit-reproducible: rebuilding the same clean revision produced a different
+  image identity (`sha256:7083b925…`). Recovering the accepted artifact means
+  exporting it from where it runs (`docker save | gzip` over the pinned SSH,
+  `docker load` locally preserves the image id) and reconstructing the
+  manifest — never trusting a rebuild to reproduce it.
+- **Deploy and provision are idempotent.** Repeating `deploy.py --manifest …`
+  reported ok=17 changed=0 and `runtime.py provision` ok=39 changed=0
+  (configure ok=23 changed=0) against the healthy VM, so either can be re-run
+  as a recovery step without side effects.
+- **Restart converges.** A supervised `systemctl restart hamsterdan`
+  mid-journey reconverged in ~11 s with no duplicate comments and no
+  unresolved activities (proven on PR #62).
+- **Missed deliveries are redeliverable.** There is no durable queue upstream
+  of the exe.dev share; while the service is down GitHub records failed
+  deliveries, and **Recent deliveries → Redeliver** replays them. Prefer a
+  ping over redelivering a real event: a real `workflow_run` redelivery re-woke
+  monitoring on an unrelated open PR during launch.
+- **Ingress detaches in one credential-free step.** `share set-private` on
+  exe.dev, or repointing the App webhook URL; neither touches the VM or any
+  secret.
