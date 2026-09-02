@@ -161,6 +161,7 @@ class HostGitPublisher:
                     expected_head=expected_head,
                     base_head=base_head,
                     merge_base=merge_base,
+                    self_caused_head=commit,
                 )
                 if recovered.disposition == "existing":
                     return GitPublishResult(recovered.commit, True)
@@ -171,6 +172,7 @@ class HostGitPublisher:
                 expected_head=expected_head,
                 base_head=base_head,
                 merge_base=merge_base,
+                self_caused_head=commit,
             )
             if verified.disposition != "existing":
                 raise GitPublishError(
@@ -186,12 +188,21 @@ class HostGitPublisher:
         expected_head: str,
         base_head: str,
         merge_base: bool = False,
+        self_caused_head: str = "",
     ) -> GitReconciliation:
         """Find a prior operation in the complete first-parent PR history.
 
         ``absent`` is returned only when the provider's PR projection and
         remote ref agree and the complete search succeeded. Any identity
         collision or unreadable evidence fails closed.
+
+        ``self_caused_head`` names the one commit THIS publication just
+        created: immediately after our own CAS the remote ref already
+        shows it while GitHub's PR projection still shows the pre-push
+        head, because the projection catches up asynchronously with the
+        very webhook our push emits. That lag is the push succeeding,
+        not a divergence, so it alone is tolerated; every other
+        ref/projection disagreement still fails closed.
         """
 
         try:
@@ -218,7 +229,8 @@ class HostGitPublisher:
             if len(remote) != 1:
                 raise GitPublishError(PublicationCategory.BOUNDARY_UNAVAILABLE, "Git remote ref lookup is incoherent")
             fields = remote[0].split()
-            if len(fields) != 2 or fields[1] != destination or fields[0] != pull.head:
+            lagging = bool(self_caused_head) and fields[0] == self_caused_head and pull.head == expected_head
+            if len(fields) != 2 or fields[1] != destination or (fields[0] != pull.head and not lagging):
                 raise GitPublishError(
                     PublicationCategory.BOUNDARY_UNAVAILABLE,
                     "Git remote ref differs from the current PR projection",

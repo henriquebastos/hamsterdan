@@ -11,7 +11,7 @@ actually be in.
 
 from __future__ import annotations
 
-from hamsterdan.readiness.net_v5.board import render_board
+from hamsterdan.readiness.net_v5.board import gate_facts, render_board
 
 HEAD = "3ff7d1067d8437340e39d2ad38c06ab4631a7c4f"
 BASE = "a83e9223f7ffc6b0af919b0b8261fa2578261b41"
@@ -168,3 +168,40 @@ class TestAttentionStates:
         board = render_board([state(), "garbage-without-structure"])
         assert "⚠️ unrecognized: `garbage-without-structure`" in board
         assert "| CI checks |" in board
+
+
+class TestGateFacts:
+    """The conversation agent reads the fold the rendered board shows.
+
+    gate_facts is the board's fold as data — latest fact per concern,
+    only open faults and in-flight pushes — so a comment is always
+    interpreted against exactly the state its author saw on the board,
+    never against a stale or already-recovered fact.
+    """
+
+    def test_the_latest_fact_per_concern_wins(self) -> None:
+        facts = gate_facts([state(), checks("pending"), checks("success"), human(approval=True)])
+        assert [fact["kind"] for fact in facts] == ["state", "checks", "human"]
+        [checks_fact] = [fact for fact in facts if fact["kind"] == "checks"]
+        assert checks_fact["body"] == {"status": "success"}
+
+    def test_an_open_fault_reaches_the_agent_with_its_recovery_identity(self) -> None:
+        entries = [state(), f"fault:{ {'where': 'review', 'op': 'op-1', 'status': 'faulted', 'reason': 'timeout'} }"]
+        [fault] = [fact for fact in gate_facts(entries) if fact["kind"] == "fault"]
+        assert (fault["body"]["op"], fault["body"]["reason"]) == ("op-1", "timeout")
+
+    def test_a_resolved_fault_never_reaches_the_agent(self) -> None:
+        entries = [
+            state(),
+            f"fault:{ {'where': 'review', 'op': 'op-1', 'status': 'faulted', 'reason': 'timeout'} }",
+            f"fault:{ {'where': 'review', 'op': 'op-1', 'status': 'resolved'} }",
+        ]
+        assert not [fact for fact in gate_facts(entries) if fact["kind"] == "fault"]
+
+    def test_a_settled_push_never_reaches_the_agent(self) -> None:
+        entries = [
+            state(),
+            f"mutation_pending:{ {'op': 'repair', 'op_key': 'k1'} }",
+            f"mutation_settled:{ {'op': 'repair', 'op_key': 'k1'} }",
+        ]
+        assert not [fact for fact in gate_facts(entries) if fact["kind"] == "mutation_pending"]

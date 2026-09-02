@@ -614,3 +614,66 @@ def test_host_derived_patch_publishes_and_replays_through_complete_local_authori
     assert recovered is not None and recovered.head == published.head
     assert authority.graphql.calls == 1
     assert evidence.accepted
+
+
+class ProjectionLagRefCAS(LocalRefCAS):
+    """A CAS whose PR projection has not reprojected the pushed head yet."""
+
+    def compare_and_swap_ref(self, repository: str, ref: str, expected_head: str, commit: str) -> None:
+        super().compare_and_swap_ref(repository, ref, expected_head, commit)
+        self.authority.head = expected_head
+
+
+def test_publish_settle_tolerates_only_its_own_lagging_pr_projection(
+    tmp_path: Path, repository: tuple[Path, Path, str, str]
+) -> None:
+    """After our own CAS the remote ref already shows the commit we just
+    created while GitHub's PR projection still shows the pre-push head —
+    the projection catches up with the very webhook the push emits. That
+    lag is the push succeeding and must settle as Pushed, not fault; the
+    same divergence seen by anyone else still fails closed."""
+    work, remote, head, _ = repository
+    receiver = GitPiWorkspaceProvider(tmp_path / "receiver")
+    request = CodingRequest("change", "owner/repo", 7, 2, head, head, "hamsterdan/change/lag")
+    result_root = tmp_path / "settled"
+
+    with receiver.open("coding", str(remote), request, "change:lag:1") as prepared:
+        extract_workspace_archive(prepared.archive, result_root)
+        (result_root / "bounded.txt").write_text("qualified\n")
+        diff, changed = prepared.reconcile(workspace_archive(result_root))
+
+    result = CodingResult(
+        "change",
+        request.repository,
+        request.pull_request,
+        request.epoch,
+        request.head,
+        request.base,
+        request.ref,
+        "changed",
+        "not_attempted",
+        diff,
+        changed,
+        [{"command": "credential-free", "status": "passed"}],
+        "Apply bounded diagnostic change",
+    )
+    authority = LocalPublicationAuthority(work, remote, head)
+    authority.graphql = ProjectionLagRefCAS(authority, work, remote)
+    subject = HostGitPublisher(authority, str(remote))  # type: ignore[arg-type]
+
+    published = subject.publish(
+        result,
+        operation="change:lag",
+        payload_digest="e" * 64,
+        expected_head=head,
+        base_head=head,
+    )
+
+    assert authority.graphql.calls == 1 and published.head != head
+    with pytest.raises(GitPublishError, match="differs from the current PR projection"):
+        subject.reconcile(
+            operation="change:lag",
+            payload_digest="e" * 64,
+            expected_head=head,
+            base_head=head,
+        )

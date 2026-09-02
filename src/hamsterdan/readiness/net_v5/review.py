@@ -17,6 +17,7 @@ decision can race it.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from hashlib import sha256
 
 from petrus.impetus.dsl import petri_handler
@@ -68,6 +69,17 @@ _MARKER_OPERATION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 
 def _live(findings, dismissed) -> list[dict]:
     return [f for f in findings if f["id"] not in dismissed]
+
+
+def live_findings(memory: Mapping) -> list[dict]:
+    """The open finding set the human currently sees.
+
+    Reads a review-memory token's data: the last successful round's
+    validated findings minus every dismissal, so a comment such as
+    "apply your suggested fixes" resolves against the findings the
+    published review actually shows.
+    """
+    return [dict(f) for f in _live(memory.get("findings", ()), set(memory.get("dismissed", ())))]
 
 
 def _status(findings, dismissed) -> ReviewStatus:

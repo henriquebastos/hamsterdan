@@ -264,6 +264,7 @@ class PrReadinessV5Application:
     def _classify(self, conversation: AdmittedConversation, claim: CurrentClaim) -> CommentSeen:
         operation = self._conversation_operation(conversation.delivery_id)
         declarations = self._intent_declarations()
+        gates, findings = self._runtime().conversation_context()
         request = ConversationRequest(
             repository=self.authority.repository,
             pull_request=self.authority.pr_number,
@@ -277,8 +278,8 @@ class PrReadinessV5Application:
             },
             actor={"id": conversation.actor_id, "login": conversation.actor_login},
             dashboard={"phase": claim.phase, "head": claim.head},
-            gates=[],
-            findings=[],
+            gates=gates,
+            findings=findings,
             allowed_intents=declarations,
         )
         try:

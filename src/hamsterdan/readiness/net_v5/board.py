@@ -184,6 +184,24 @@ def _attention(facts: _Facts) -> list[str]:
     return lines
 
 
+def gate_facts(entries: Sequence[str]) -> list[dict]:
+    """The same distilled fold the rendered board shows, as data.
+
+    The conversation agent must interpret a comment against exactly
+    what its author saw on the board, so this shares the board's fold:
+    latest fact per concern, only OPEN faults and in-flight pushes, and
+    the escalation only while CI evidence has not obsoleted it.
+    """
+    facts = _Facts(entries)
+    derived = ("fault", "mutation_pending", "mutation_settled", "human_needed")
+    view = [{"kind": kind, "body": dict(body)} for kind, body in facts.latest.items() if kind not in derived]
+    view.extend({"kind": "fault", "body": dict(body)} for body in facts.faults.values())
+    view.extend({"kind": "mutation_pending", "body": dict(body)} for body in facts.mutations.values())
+    if facts.human_needed is not None:
+        view.append({"kind": "human_needed", "body": dict(facts.human_needed)})
+    return view
+
+
 def render_board(entries: Sequence[str]) -> str:
     facts = _Facts(entries)
     table = "\n".join(f"| {gate} | {cell} |" for gate, cell in _rows(facts))

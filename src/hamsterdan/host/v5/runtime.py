@@ -47,7 +47,9 @@ from hamsterdan.host.v5.claim import CurrentClaim
 from hamsterdan.host.v5.ingress import IngressEntry
 from hamsterdan.host.v5.timers import V5TimerStore
 from hamsterdan.readiness.net_v5 import build_net_v5, seed_marking
+from hamsterdan.readiness.net_v5.board import gate_facts
 from hamsterdan.readiness.net_v5.gating import DURABLE_PUBLICATION_GATES, wire_gates
+from hamsterdan.readiness.net_v5.review import live_findings
 from hamsterdan.readiness.net_v5.topology import DERIVED, GATES
 
 _INGRESS_FOLDS = {
@@ -447,6 +449,23 @@ class V5Runtime:
                 raise RuntimeError("V5 timer History delivery identity is malformed")
             facts.append(fact)
         return tuple(facts)
+
+    def conversation_context(self) -> tuple[list[dict], list[dict]]:
+        """The board facts and open findings a fresh comment is read against.
+
+        Reads the marking BEFORE the comment's own delivery folds, so
+        the agent interprets the comment against the state its author
+        saw. Either baton may be legitimately out of its place (an
+        upsert in flight, a closed Instance); the context then narrows
+        instead of blocking classification.
+        """
+        boards = tuple(self.engine.marking.place(NetPath("dash.memory"))) or tuple(
+            self.engine.marking.place(NetPath("dash.done"))
+        )
+        gates = gate_facts(boards[0].data["entries"]) if boards else []
+        memories = tuple(self.engine.marking.place(NetPath("review.memory")))
+        findings = live_findings(memories[0].data) if memories else []
+        return gates, findings
 
     def deliver_timer_ack(self, value: TimerCommandApplied, identity: str) -> object:
         return self.deliver(IngressEntry.from_value("on_timer_command_applied", value, identity))

@@ -2159,3 +2159,68 @@ def test_v5_close_cancels_exact_host_timer_before_reminder_loop_retires(tmp_path
     with sqlite3.connect(tmp_path / "application" / "timers.sqlite3") as database:
         assert database.execute("SELECT state FROM v5_timers ORDER BY timer_id").fetchall() == [("cancelled",)]
     application.close()
+
+
+def test_v5_comment_classification_reads_the_published_findings_and_board_facts(tmp_path: Path) -> None:
+    """A comment such as "apply your suggested fixes" must be interpreted
+    against the findings and gate states its author saw on the PR — an
+    empty context makes the agent deny its own published review."""
+    finding = {
+        "id": "f-ttl-unit",
+        "path": "gate.py",
+        "line": 10,
+        "related_locations": [],
+        "title": "Interpret the lease TTL as seconds",
+        "body": "ttl_seconds is passed as minutes.",
+        "severity": "high",
+        "confidence": 1.0,
+        "evidence": "timedelta(minutes=ttl_seconds)",
+        "blocking": True,
+        "suggestion": "",
+    }
+    captured = []
+
+    class BlockingRunner(Runner):
+        def review(self, repository_url, request, *, operation, attempt, is_current=None):
+            return ReviewResult(
+                request.repository,
+                request.pull_request,
+                request.epoch,
+                request.head,
+                request.base,
+                "blocking",
+                [dict(finding)],
+                [],
+            )
+
+        def converse(self, repository_url, request, *, operation, attempt, is_current=None):
+            captured.append(request)
+            return super().converse(
+                repository_url, request, operation=operation, attempt=attempt, is_current=is_current
+            )
+
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        Authority(),  # type: ignore[arg-type]
+        BlockingRunner(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+    application.process_observation(Observation(delivery(), "pull_request", "opened", 44, 23, 31, "owner/repo", 7))
+    application.settle()
+
+    identity = delivery()
+    observation = Observation(identity, "issue_comment", "created", 44, 23, 31, "owner/repo", 7)
+    conversation = AdmittedConversation(identity, 19, 5, "human", "MEMBER", "apply your suggested fixes")
+    application.process_observation(observation, conversation=conversation)
+
+    [request] = captured
+    assert request.findings == [finding]
+    kinds = [fact["kind"] for fact in request.gates]
+    assert {"state", "checks", "review", "findings"} <= set(kinds)
+    [findings_fact] = [fact for fact in request.gates if fact["kind"] == "findings"]
+    assert (findings_fact["body"]["count"], findings_fact["body"]["blocking"]) == (1, 1)
+    application.close()

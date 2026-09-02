@@ -28,6 +28,7 @@ from harness import (
 )
 
 from hamsterdan.readiness.net_v5 import seed_marking
+from hamsterdan.readiness.net_v5.review import live_findings
 
 HOLD_AGENT = frozenset({"review_agent"})
 HOLD_PUBLISH = frozenset({"publish_gate"})
@@ -710,3 +711,26 @@ class TestDismissalAndClose:
 def test_seed_refuses_a_noncanonical_global_subject(subject: str) -> None:
     with pytest.raises(ValueError, match="subject"):
         seed_marking(subject)
+
+
+class TestLiveFindings:
+    """The conversation agent sees the finding set the human sees.
+
+    live_findings reads a review-memory token: the last successful
+    round's validated findings minus every dismissal — so "apply your
+    suggested fixes" resolves against the published review instead of
+    an empty context, and a dismissed finding is never re-litigated.
+    """
+
+    def test_the_open_set_is_the_last_round_minus_dismissals(self) -> None:
+        memory = {
+            "findings": [
+                {"id": "f01", "title": "ttl", "blocking": True},
+                {"id": "f02", "title": "approvals", "blocking": True},
+            ],
+            "dismissed": ["f01"],
+        }
+        assert live_findings(memory) == [{"id": "f02", "title": "approvals", "blocking": True}]
+
+    def test_a_memory_without_rounds_yields_an_empty_context(self) -> None:
+        assert live_findings({}) == []

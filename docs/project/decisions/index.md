@@ -29,3 +29,5 @@ settled direction by superseding its record explicitly rather than drifting.
 - [Webhook ingress uses the exe.dev share](records/2026-09-01T1240Z-webhook-ingress-uses-the-exe-dev-share.md)
 - [PR monitoring narrows to watched authors](records/2026-09-01T2057Z-pr-monitoring-narrows-to-watched-authors.md)
 - [Findings publish as per-finding inline suggestions](records/2026-09-02T0320Z-findings-publish-as-per-finding-inline-suggestions.md)
+- [Evidence captures are full-page and full-screen](records/2026-09-02T1940Z-evidence-captures-are-full-page-and-full-screen.md)
+- [Operator credentials live in a standing config store](records/2026-09-02T1941Z-operator-credentials-live-in-a-standing-config-store.md)

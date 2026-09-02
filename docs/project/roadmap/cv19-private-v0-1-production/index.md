@@ -2,8 +2,8 @@
 code: CV19
 level: Value
 status: Active
-status_reason: the 2026-08-31 alpha decision resumed CV19 as the delivery focus; the qualified inactive candidate is retained and launch still requires separate explicit Navigator approval
-updated: 2026-08-31
+status_reason: Gate B, the v0.1.0 tag, and the PR #63 hero journey are done, but on 2026-09-02 the Navigator extended the done condition — a complete offline proof package for one clean hero journey and monitoring across all personal and HBNetwork repositories
+updated: 2026-09-02
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
   - ../../decisions/records/2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
@@ -90,6 +90,17 @@ open-source release.
 4. Accepted history is committed and pushed, the private `v0.1.0` release/tag is
    separately authorized and created, and deployment recovery/rollback facts
    are recorded without credentials.
+5. *(Added 2026-09-02 by the Navigator.)* A complete offline proof package for
+   one clean hero journey exists: full-screen recordings and full-page stills at
+   every checkpoint, a narrative with evidence Henrique can present from, and
+   the exported durable data — History records, webhook inbox rows, agent
+   session transcripts, review requests, published comments with their URLs,
+   Hamsterdan-authored commits, CI run outcomes, and the exact image and petrus
+   pins — sufficient to reconstruct and analyze the journey without rerunning
+   it.
+6. *(Added 2026-09-02 by the Navigator.)* Hamsterdan monitors all of Henrique's
+   personal repositories and all HBNetwork repositories through the tracked
+   configuration snapshot.
 
 ## Excluded until after private production proof
 
