@@ -303,10 +303,9 @@ def test_runtime_environment_template_resolves_app_identity_and_carries_no_secre
     assert "HAMSTERDAN_REMINDER_SECONDS=259200" in assignments
 
 
-def test_development_secret_template_is_rendered_by_direnv_from_the_development_vault() -> None:
+def test_development_secret_template_resolves_only_from_the_development_vault() -> None:
     root = Path(__file__).parents[2]
     template = (root / "env-dev.tpl").read_text()
-    envrc = (root / ".envrc").read_text()
     assignments = [line for line in template.splitlines() if line and not line.startswith("#")]
 
     assert [line.split("=", 1)[0] for line in assignments] == [
@@ -323,9 +322,6 @@ def test_development_secret_template_is_rendered_by_direnv_from_the_development_
         "PETRUS_GITHUB_TOKEN",
     ]
     assert all(line.split("=", 1)[1].startswith('"op://hamsterdan-dev/') for line in assignments)
-    assert "op inject --force -i env-dev.tpl -o .env && chmod 600 .env" in envrc
-    assert "watch_file env-dev.tpl" in envrc
-    assert "dotenv .env" in envrc
 
 
 def test_deployment_authority_resolves_only_from_the_operations_vault() -> None:

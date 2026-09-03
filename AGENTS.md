@@ -91,7 +91,9 @@ project policy.
 with one committed template.
 
 `hamsterdan-dev` is what a sandbox reads. direnv renders `env-dev.tpl` into the
-gitignored `.env` and loads it; regenerate with `rm .env && direnv reload`.
+gitignored `.env` and loads it; regenerate with `rm .env && direnv reload`. The
+`.envrc` that does it is untracked, because how an individual loads a template
+is personal; `~/.config/op/envrc.reference` holds the recipe.
 
 `hamsterdan-prod` is what the running service reads. Provisioning installs
 `env-prod.tpl` and that box's own service-account token, and every service start
