@@ -35,7 +35,9 @@ export const nextBeatFrame = (
 ): number =>
   currentFrame +
   readingFrames(mainText, options) +
-  secondsToFrames(options.transitionMarginSeconds ?? 0.8);
+  secondsToFrames(
+    options.transitionMarginSeconds ?? VIDEO.reading.transitionMarginSeconds,
+  );
 
 export const eventAfterGuideFrame = (guideFrame: number): number =>
   guideFrame + secondsToFrames(VIDEO.reading.guideLeadSeconds);

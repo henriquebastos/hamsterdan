@@ -2,8 +2,10 @@ import {createHash} from "node:crypto";
 import {mkdir, rename, rm, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {createRequire} from "node:module";
-import type {Browser, Locator, Page} from "playwright";
-import {parseManifest, type CaptureManifest, type Checkpoint} from "./manifest";
+import type {Browser, BrowserContext, Locator, Page} from "playwright";
+import {parseManifest, type CaptureManifest, type Checkpoint, type PullRequestState} from "./manifest";
+import {pngDimensions} from "./png";
+import type {Region} from "./region";
 
 export type FixtureResponse = Readonly<{
   status: number;
@@ -23,18 +25,26 @@ export type CaptureOptions = Readonly<{
   now: Date;
 }>;
 
+export type Fixture = (url: URL, method: string) => FixtureResponse | undefined | Promise<FixtureResponse | undefined>;
+
 export type FixtureCaptureOptions = CaptureOptions &
   Readonly<{
-    fixture: (url: URL, method: string) => FixtureResponse | undefined;
+    fixture: Fixture;
   }>;
 
-type AssertionReport = Readonly<{
+export type AssertionReport = Readonly<{
   id: string;
   matched: true;
   expectedSha256: string;
 }>;
 
-type CheckpointReport = Readonly<{
+export type DomReport = Readonly<{
+  file: string;
+  sha256: string;
+  byteLength: number;
+}>;
+
+export type CheckpointReport = Readonly<{
   id: string;
   kind: Checkpoint["kind"];
   target: string;
@@ -44,6 +54,12 @@ type CheckpointReport = Readonly<{
   file: string;
   sha256: string;
   dimensions: Readonly<{width: number; height: number}>;
+  capture: Readonly<{fullPage: true; scrollHeight: number; attempts: number}>;
+  dom: Readonly<{before: DomReport; after: DomReport}>;
+  // Document-coordinate bounding box of the checkpoint's target element, so a
+  // static journey can still be framed readably when consecutive stills carry
+  // no meaningful pixel difference.
+  anchor: Region;
   scope: Readonly<{normalizedTextLength: number; normalizedTextSha256: string}>;
   assertions: readonly AssertionReport[];
 }>;
@@ -84,10 +100,10 @@ const isPassiveGitHubPost = (url: URL): boolean =>
   (url.hostname === "github.com" && url.pathname === "/commits/badges") ||
   (url.hostname === "github.com" && /^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/commits\/checks-statuses-rollups$/.test(url.pathname));
 
-const sha256 = (value: string | Uint8Array): string => createHash("sha256").update(value).digest("hex");
-const normalizeText = (value: string): string => value.replace(/\s+/g, " ").trim();
+export const sha256 = (value: string | Uint8Array): string => createHash("sha256").update(value).digest("hex");
+export const normalizeText = (value: string): string => value.replace(/\s+/g, " ").trim();
 
-const visibleCount = (locator: Locator): Promise<number> =>
+export const visibleCount = (locator: Locator): Promise<number> =>
   locator.evaluateAll((elements) =>
     elements.filter((element) => (element as HTMLElement).checkVisibility({checkOpacity: true, checkVisibilityCSS: true}))
       .length,
@@ -100,19 +116,64 @@ const requireVisible = async (locator: Locator, label: string, expected = 1): Pr
   }
 };
 
-const assertion = (id: string, expected: string): AssertionReport => ({
+export const assertion = (id: string, expected: string): AssertionReport => ({
   id,
   matched: true,
   expectedSha256: sha256(normalizeText(expected)),
 });
 
-const pngDimensions = (bytes: Uint8Array): {width: number; height: number} => {
-  const signature = "89504e470d0a1a0a";
-  if (bytes.length < 24 || Buffer.from(bytes.subarray(0, 8)).toString("hex") !== signature) {
-    throw new Error("browser screenshot is not a PNG");
+export const STATE_LABEL_STATUS: Readonly<Record<PullRequestState, string>> = {
+  open: "pullOpened",
+  closed: "pullClosed",
+  merged: "pullMerged",
+};
+
+// The 2026-09-02 evidence ruling: a still is only evidence when it shows the
+// whole page, so a full-page PNG must be exactly as tall as the page's own real
+// height. That height is max(document.body.scrollHeight,
+// document.documentElement.scrollHeight) — the body number alone runs short
+// whenever a trailing margin escapes the body box. A browser never renders
+// below the viewport, so a page shorter than the viewport is exactly one
+// viewport tall.
+export const expectedStillHeight = (scrollHeight: number, viewportHeight: number): number =>
+  Math.max(scrollHeight, viewportHeight);
+
+export const pageScrollHeight = (page: Page): Promise<number> =>
+  page.evaluate(() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+
+// Document-coordinate box, so it stays valid against a full-page still no
+// matter where the page happens to be scrolled when it is measured.
+export const documentBox = (locator: Locator): Promise<Region> =>
+  locator.first().evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.round(rect.left + window.scrollX)),
+      y: Math.max(0, Math.round(rect.top + window.scrollY)),
+      width: Math.max(1, Math.round(rect.width)),
+      height: Math.max(1, Math.round(rect.height)),
+    };
+  });
+
+const FULL_PAGE_ATTEMPTS = 3;
+
+export const captureFullPage = async (
+  page: Page,
+  label: string,
+  viewport: Readonly<{width: number; height: number}>,
+): Promise<{png: Uint8Array; dimensions: {width: number; height: number}; scrollHeight: number; attempts: number}> => {
+  let observed = "";
+  for (let attempt = 1; attempt <= FULL_PAGE_ATTEMPTS; attempt += 1) {
+    const scrollHeight = await pageScrollHeight(page);
+    const png = await page.screenshot({type: "png", fullPage: true, animations: "disabled", caret: "hide"});
+    const dimensions = pngDimensions(png, `${label} screenshot`);
+    if (dimensions.width === viewport.width && dimensions.height === expectedStillHeight(scrollHeight, viewport.height)) {
+      return {png, dimensions, scrollHeight, attempts: attempt};
+    }
+    observed = `${dimensions.width}x${dimensions.height} against viewport ${viewport.width}x${viewport.height} and page height ${scrollHeight}`;
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(250);
   }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  return {width: view.getUint32(16), height: view.getUint32(20)};
+  throw new Error(`${label} full-page screenshot stayed cropped after ${FULL_PAGE_ATTEMPTS} attempts: ${observed}`);
 };
 
 const checkpointScope = (page: Page, checkpoint: Checkpoint): Locator => {
@@ -133,7 +194,7 @@ const validatePage = async (
   page: Page,
   manifest: CaptureManifest,
   checkpoint: Checkpoint,
-): Promise<{scope: Locator; scopeText: string; assertions: AssertionReport[]}> => {
+): Promise<{scope: Locator; scopeText: string; anchor: Region; assertions: AssertionReport[]}> => {
   if (page.url() !== checkpoint.url) {
     throw new Error(`checkpoint ${checkpoint.id} redirected to an unexpected identity`);
   }
@@ -154,9 +215,10 @@ const validatePage = async (
   assertions.push(assertion("repository", manifest.repository));
 
   if (checkpoint.kind === "issue-comment" || checkpoint.kind === "review" || checkpoint.kind === "pr-checks") {
-    const openState = page.locator('[data-component="StateLabel"][data-status="pullOpened"]');
-    if ((await visibleCount(openState)) < 1) {
-      throw new Error(`checkpoint ${checkpoint.id} does not show an open pull request`);
+    const status = STATE_LABEL_STATUS[manifest.expectedState];
+    const stateLabel = page.locator(`[data-component="StateLabel"][data-status="${status}"]`);
+    if ((await visibleCount(stateLabel)) < 1) {
+      throw new Error(`checkpoint ${checkpoint.id} does not show a ${manifest.expectedState} pull request`);
     }
     assertions.push(assertion("pull-request-state", manifest.expectedState));
   }
@@ -220,12 +282,62 @@ const validatePage = async (
   }
   await focus.first().evaluate((element) => element.scrollIntoView({block: "center", inline: "nearest"}));
   await page.waitForTimeout(50);
-  return {scope, scopeText, assertions};
+  return {scope, scopeText, anchor: await documentBox(scope), assertions};
 };
 
-const timestampSlug = (instant: Date): string => instant.toISOString().replace(/[-:]/g, "").replace(".000", "");
+// One definition of the anonymous, nonpersistent, strictly read-only browsing
+// surface, shared by the manifest-checkpoint lane and the watched state lane so
+// neither can drift away from the other's security properties.
+export const openReadOnlyContext = async (
+  browser: Browser,
+  viewport: Readonly<{width: number; height: number}>,
+  fixture?: Fixture,
+): Promise<{context: BrowserContext; unsafeRequests: string[]}> => {
+  const context = await browser.newContext({
+    viewport,
+    deviceScaleFactor: 1,
+    locale: "en-US",
+    timezoneId: "UTC",
+    colorScheme: "dark",
+    reducedMotion: "reduce",
+    serviceWorkers: "block",
+    acceptDownloads: false,
+  });
+  const initialStorage = await context.storageState();
+  if (initialStorage.cookies.length !== 0 || initialStorage.origins.length !== 0) {
+    await context.close();
+    throw new Error("live capture browser context did not start empty");
+  }
 
-const validateSource = (source: CaptureSource): void => {
+  const unsafeRequests: string[] = [];
+  await context.route("**/*", async (route) => {
+    const request = route.request();
+    const method = request.method();
+    const url = new URL(request.url());
+    if (method !== "GET" && method !== "HEAD") {
+      if (method !== "POST" || !isPassiveGitHubPost(url)) {
+        unsafeRequests.push(`${method} ${url.origin}${url.pathname}`);
+      }
+      await route.abort("blockedbyclient");
+      return;
+    }
+    if (url.protocol !== "https:" || !ALLOWED_HOSTS.has(url.hostname) || url.username !== "" || url.password !== "") {
+      await route.abort("blockedbyclient");
+      return;
+    }
+    const response = await fixture?.(url, method);
+    if (response) {
+      await route.fulfill({status: response.status, headers: response.headers, body: response.body, contentType: "text/html"});
+      return;
+    }
+    await route.continue();
+  });
+  return {context, unsafeRequests};
+};
+
+export const timestampSlug = (instant: Date): string => instant.toISOString().replace(/[-:]/g, "").replace(".000", "");
+
+export const validateSource = (source: CaptureSource): void => {
   if (!/^[0-9a-f]{40}$/.test(source.gitCommit) || source.clean !== true) {
     throw new Error("capture source must identify a clean committed revision");
   }
@@ -246,47 +358,23 @@ const captureEvidence = async (
   const temporaryDirectory = join(options.outputRoot, `.tmp-${name}-${crypto.randomUUID()}`);
   const checkpointDirectory = join(temporaryDirectory, "checkpoints");
   await mkdir(checkpointDirectory, {recursive: true});
+  await mkdir(join(temporaryDirectory, "dom"), {recursive: true});
 
-  const context = await options.browser.newContext({
-    viewport: manifest.viewport,
-    deviceScaleFactor: 1,
-    locale: "en-US",
-    timezoneId: "UTC",
-    colorScheme: "dark",
-    reducedMotion: "reduce",
-    serviceWorkers: "block",
-    acceptDownloads: false,
-  });
-  const initialStorage = await context.storageState();
-  if (initialStorage.cookies.length !== 0 || initialStorage.origins.length !== 0) {
-    await context.close();
+  const writeDom = async (checkpointId: string, phase: "before" | "after", html: string): Promise<DomReport> => {
+    const relativeFile = `dom/${checkpointId}.${phase}.html`;
+    const bytes = Buffer.from(html, "utf8");
+    await writeFile(join(temporaryDirectory, relativeFile), bytes, {flag: "wx"});
+    return {file: relativeFile, sha256: sha256(bytes), byteLength: bytes.byteLength};
+  };
+
+  let opened: {context: BrowserContext; unsafeRequests: string[]};
+  try {
+    opened = await openReadOnlyContext(options.browser, manifest.viewport, fixture);
+  } catch (error) {
     await rm(temporaryDirectory, {recursive: true, force: true});
-    throw new Error("live capture browser context did not start empty");
+    throw error;
   }
-
-  const unsafeRequests: string[] = [];
-  await context.route("**/*", async (route) => {
-    const request = route.request();
-    const method = request.method();
-    const url = new URL(request.url());
-    if (method !== "GET" && method !== "HEAD") {
-      if (method !== "POST" || !isPassiveGitHubPost(url)) {
-        unsafeRequests.push(`${method} ${url.origin}${url.pathname}`);
-      }
-      await route.abort("blockedbyclient");
-      return;
-    }
-    if (url.protocol !== "https:" || !ALLOWED_HOSTS.has(url.hostname) || url.username !== "" || url.password !== "") {
-      await route.abort("blockedbyclient");
-      return;
-    }
-    const response = fixture?.(url, method);
-    if (response) {
-      await route.fulfill({status: response.status, headers: response.headers, body: response.body, contentType: "text/html"});
-      return;
-    }
-    await route.continue();
-  });
+  const {context, unsafeRequests} = opened;
 
   const page = await context.newPage();
   const checkpoints: CheckpointReport[] = [];
@@ -307,14 +395,14 @@ const captureEvidence = async (
       if (unsafeRequests.length > 0) {
         throw new Error(`checkpoint ${checkpoint.id} violated the read-only boundary`);
       }
+      // Layer 1 of the evidence ruling: the rendered DOM on both sides of the
+      // action this checkpoint performs on the page (its focus scroll).
+      const before = await writeDom(checkpoint.id, "before", await page.content());
       const validated = await validatePage(page, manifest, checkpoint);
-      const screenshot = await page.screenshot({type: "png", animations: "disabled", caret: "hide"});
-      const dimensions = pngDimensions(screenshot);
-      if (dimensions.width !== manifest.viewport.width || dimensions.height !== manifest.viewport.height) {
-        throw new Error(`checkpoint ${checkpoint.id} screenshot dimensions changed`);
-      }
+      const after = await writeDom(checkpoint.id, "after", await page.content());
+      const full = await captureFullPage(page, `checkpoint ${checkpoint.id}`, manifest.viewport);
       const relativeFile = `checkpoints/${checkpoint.id}.png`;
-      await writeFile(join(temporaryDirectory, relativeFile), screenshot, {flag: "wx"});
+      await writeFile(join(temporaryDirectory, relativeFile), full.png, {flag: "wx"});
       checkpoints.push({
         id: checkpoint.id,
         kind: checkpoint.kind,
@@ -323,8 +411,11 @@ const captureEvidence = async (
         finalUrl: page.url(),
         capturedAt,
         file: relativeFile,
-        sha256: sha256(screenshot),
-        dimensions,
+        sha256: sha256(full.png),
+        dimensions: full.dimensions,
+        capture: {fullPage: true, scrollHeight: full.scrollHeight, attempts: full.attempts},
+        dom: {before, after},
+        anchor: validated.anchor,
         scope: {
           normalizedTextLength: validated.scopeText.length,
           normalizedTextSha256: sha256(validated.scopeText),

@@ -20,6 +20,7 @@ usage: scripts/check quick [PATH ...]
        scripts/check release
        scripts/check audit
        scripts/check mutation
+       scripts/check demo-video
 
 quick     lint and format-check Python PATHs, type-check production source, and enforce architecture rules
 hamsterdan2  enforce the isolated strict replacement gate
@@ -28,6 +29,7 @@ full      quick, Bun, build, and fixed-seed randomized routine tests on four wor
 release   full plus one additional fixed-seed serial routine test run
 audit     report repository lint, complexity, and structural findings; fail only on a broken probe
 mutation  report curated pure-semantic mutants without a score threshold; fail only on a broken probe
+demo-video  gate the evidence-capture tooling; on-demand only, never part of full, release, or CI
 EOF
 }
 
@@ -98,7 +100,6 @@ full() {
     reject_paths full "$@" || return
     quick
     bun test ./tests/amp_webhook_relay.test.ts
-    (cd tools/demo-video && bun run check)
     rm -rf dist
     uv build
     routine_tests 1729 -n 4 --dist load --maxschedchunk=1 --durations=20 --durations-min=0.5
@@ -151,6 +152,11 @@ audit() {
     report_findings "ast-grep structural practices" uv run ast-grep scan
 }
 
+demo_video() {
+    reject_paths demo-video "$@" || return
+    (cd tools/demo-video && bun run check)
+}
+
 mutation() {
     reject_paths mutation "$@" || return
     if uv run mutmut run --max-children 1; then
@@ -188,6 +194,9 @@ case "$profile" in
         ;;
     mutation)
         mutation "$@"
+        ;;
+    demo-video)
+        demo_video "$@"
         ;;
     -h|--help)
         usage

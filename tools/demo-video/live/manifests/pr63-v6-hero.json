@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "slug": "pr63-v6-hero",
+  "repository": "HBNetwork/demo-pr-readiness",
+  "pullRequest": 63,
+  "expectedState": "closed",
+  "expectedHead": "ae84a2ae080ef38fdb330ad6317754853d1a0085",
+  "viewport": {"width": 1280, "height": 720},
+  "actors": [
+    {"login": "henriquebastos", "href": "/henriquebastos"},
+    {"login": "hamster-dan", "href": "/apps/hamster-dan"}
+  ],
+  "checkpoints": [
+    {
+      "id": "findings",
+      "kind": "issue-comment",
+      "target": "5503038348",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/63#issuecomment-5503038348",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "Hamsterdan review findings",
+        "Interpret the lease TTL as seconds"
+      ],
+      "focusText": "Hamsterdan review findings",
+      "holdSeconds": 5
+    },
+    {
+      "id": "change-request",
+      "kind": "issue-comment",
+      "target": "5503139291",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/63#issuecomment-5503139291",
+      "actor": "henriquebastos",
+      "expectedText": [
+        "apply the three fixes from your review findings comment"
+      ],
+      "focusText": "apply the three fixes from your review findings comment",
+      "holdSeconds": 5
+    },
+    {
+      "id": "readiness",
+      "kind": "issue-comment",
+      "target": "5503360116",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/63#issuecomment-5503360116",
+      "actor": "hamster-dan",
+      "expectedText": [
+        "Hamsterdan readiness advisory",
+        "Humans keep merge authority"
+      ],
+      "focusText": "Hamsterdan readiness advisory",
+      "holdSeconds": 4
+    }
+  ]
+}

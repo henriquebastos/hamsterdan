@@ -15,6 +15,7 @@ export const VIDEO = {
     wordsPerSecond: 3.8,
     minimumHoldSeconds: 2.5,
     guideLeadSeconds: 1.2,
+    transitionMarginSeconds: 0.8,
   },
 } as const;
 

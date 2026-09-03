@@ -25,10 +25,16 @@ run, operation-scoped recovery, status conversation, Cris's approval, and final
 readiness. `pr56-v5-clean-green.json` covers exact-head green checks, the
 successful Actions run, App dashboard, and readiness advisory.
 `pr57-v5-transient-ci.json` covers the failed first Actions attempt, successful
-rerun of that exact run and head, dashboard progression, and readiness. The
-browser context is anonymous, nonpersistent, and read only. It accepts no
+rerun of that exact run and head, dashboard progression, and readiness.
+`pr63-v6-hero.json` covers the closed production hero journey on PR #63: the
+App's review findings, Henrique's change request, and the readiness advisory.
+The browser context is anonymous, nonpersistent, and read only. It accepts no
 login, cookie file, token, storage state, user profile, or arbitrary selector
 from the manifest.
+
+`expectedState` declares the pull-request state the capture must observe —
+`open`, `closed`, or `merged`. The capture asserts the matching GitHub state
+label and fails closed on any other state.
 
 Run capture only from a clean committed worktree. The capture validates the
 repository, PR state, exact head identity, actor identity, and checkpoint text
@@ -43,25 +49,114 @@ capture_dir="$(bun run --silent live/capture-cli.ts "$manifest")"
 bun run live/render-cli.ts "$manifest" "$capture_dir"
 ```
 
-The `capture:pr61` and `render:pr61` package scripts remain shortcuts for the
-complete hero manifest.
+The `capture:pr61`/`render:pr61` and `capture:pr63`/`render:pr63` package
+scripts remain shortcuts for the complete hero manifests.
 
 The output is written under:
 
 ```text
 output/live/<manifest-slug>/<utc>-<manifest-digest>/
-  checkpoints/*.png
+  dom/<checkpoint>.before.html
+  dom/<checkpoint>.after.html
+  checkpoints/<checkpoint>.png
   report.json
   hamsterdan-<manifest-slug>-live-checkpoints.mp4
   SHA256SUMS
 ```
 
+Each checkpoint produces the three layers the 2026-09-02 evidence ruling
+requires, in that order of authority:
+
+1. The rendered DOM saved as HTML on both sides of the action the checkpoint
+   performs on the page — `before` immediately after the checkpoint document is
+   ready, `after` once the checkpoint's focus scroll has run.
+2. A full-page PNG whose pixel height is verified mechanically against the
+   page's own real height,
+   `max(document.body.scrollHeight, document.documentElement.scrollHeight)`, at
+   capture time. The body number alone runs short whenever a trailing margin
+   escapes the body box. A mismatch is retried up to three times and then fails
+   the whole capture; a cropped still is never published. A page shorter than
+   the viewport is exactly one viewport tall. No PDF is written anywhere.
+3. The video: either the literal montage MP4 or the transition render, both
+   assembled after the run from those stills.
+
+Each checkpoint also records `anchor`, the document-coordinate bounding box of
+its target element. Pixels alone cannot say which comment a still is about, and
+the transition renderer needs that box to frame a static journey.
+
 The report records bounded provenance, assertion hashes, final URLs, browser
-version, screenshot hashes and dimensions, and `ffprobe` video metadata. It
-does not retain page HTML, headers, cookies, HAR files, traces, arbitrary page
-text, or credentials. The renderer rejects missing, changed, reordered, or
-unreported PNGs and adds no cards, captions, overlays, interpolation, or
-simulated browser chrome.
+version, still hashes and dimensions, the observed `scrollHeight` and attempt
+count, the target's anchor box, the DOM file hashes and byte lengths, and
+`ffprobe` video metadata. It
+embeds no page HTML, headers, cookies, HAR files, traces, arbitrary page text,
+or credentials — the DOM lives only in `dom/`, hash-bound by the report. The
+renderer rejects missing, changed, reordered, or unreported PNGs and DOM files,
+rejects any still whose pixels no longer match its recorded height, and adds no
+cards, captions, overlays, interpolation, or simulated browser chrome. Because
+full-page stills are taller than the montage canvas, each still is fitted whole
+into the frame and letterboxed; it is never cropped back to the viewport. A
+1280×4653 page fitted into 1280×720 is an unreadable sliver, so the montage is
+an integrity artifact, not the deliverable a viewer watches. For that, render
+transitions.
+
+## Watch a live journey
+
+`bun run watch <manifest> [--poll-seconds=N] [--duration-seconds=N]` reloads the
+pull-request page on a cadence and records one numbered state — before and after
+DOM plus a height-verified full-page PNG — every time the page's visible content
+actually changes. The cadence, total duration, state ceiling, and caption come
+from the manifest's optional `watch` block; the two CLI flags override cadence
+and duration. States are numbered `state-001` upward and carry their own
+timestamps, so the capture is the complete ordered sequence of page states.
+
+The browser context, allowed hosts, read-only routing, and fail-closed checks
+are the ones the checkpoint lane uses. Every poll re-asserts the repository, the
+declared pull-request state, and at least one declared actor; a challenge page,
+a login redirect, or a state change fails the whole run without publishing. A
+run that never saw two distinct states fails rather than publishing a video of
+one frame repeated. Output goes to `output/live/<slug>-states/<utc>-<digest>/`.
+
+## Render readable transitions
+
+```sh
+bun run transitions <manifest> <capture directory>          # checkpoint capture
+bun run transitions <manifest> <capture directory> --states # watched sequence
+```
+
+The transition renderer shows, at 1:1, the part of the page that changed:
+
+- it diffs each consecutive pair of stills by row and column and takes the
+  bounding box of the changed pixels;
+- when that box fits the 1280×664 evidence pane, the video holds state N for
+  one guide lead, crossfades for one transition margin, then holds state N+1
+  for its caption's reading time — all cropped from the real stills;
+- when the two stills are pixel-identical, or the change is smeared across the
+  whole page (a closed pull request redraws every relative timestamp), it
+  frames the arriving checkpoint's recorded `anchor` instead;
+- when the capture recorded no anchor, it walks the camera evenly down the
+  page, one window per state.
+
+Pacing comes from `src/timing.ts` — the same words-per-second and minimum-hold
+rules the Remotion lane uses — rounded to whole frames so the encoded duration
+equals the planned duration. Every caption is manifest text: a checkpoint
+transition uses the arriving checkpoint's asserted `focusText`, and a watched
+transition uses `watch.caption` with the state number.
+
+The only authored pixels are a 1280×56 caption strip below the evidence pane.
+Nothing is scaled, so text stays exactly as the browser rendered it.
+
+Output is a sibling directory that never rewrites the capture:
+
+```text
+<capture directory>/transitions/
+  hamsterdan-<manifest-slug>-<live|fixture>-transitions.mp4
+  transitions.json
+  SHA256SUMS
+```
+
+`transitions.json` binds the render to the capture by manifest hash and report
+hash, and records every transition's framing decision, crop window, changed
+pixel count, pacing, and caption alongside the `ffprobe` video metadata.
 
 This deliverable is a **checkpoint montage captured later from surviving public
 evidence**, not contemporaneous footage of the original interactions. Inspect

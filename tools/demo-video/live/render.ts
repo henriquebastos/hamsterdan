@@ -2,7 +2,10 @@ import {createHash} from "node:crypto";
 import {constants} from "node:fs";
 import {lstat, mkdtemp, open, readdir, realpath, rename, rm, writeFile} from "node:fs/promises";
 import {basename, isAbsolute, join, relative, sep} from "node:path";
+import {expectedStillHeight} from "./capture";
 import {parseManifest, type CaptureManifest} from "./manifest";
+import {pngDimensions} from "./png";
+import type {Region} from "./region";
 
 export type VideoReport = Readonly<{
   file: string;
@@ -17,7 +20,9 @@ export type VideoReport = Readonly<{
   audioStreams: 0;
 }>;
 
-type ReportCheckpoint = Readonly<{
+export type ReportDom = Readonly<{file: string; sha256: string; byteLength: number}>;
+
+export type ReportCheckpoint = Readonly<{
   id: string;
   kind: string;
   target: string;
@@ -27,13 +32,22 @@ type ReportCheckpoint = Readonly<{
   file: string;
   sha256: string;
   dimensions: Readonly<{width: number; height: number}>;
+  capture: Readonly<{fullPage: true; scrollHeight: number; attempts: number}>;
+  dom: Readonly<{before: ReportDom; after: ReportDom}>;
+  anchor: Region | null;
   scope: Readonly<{normalizedTextLength: number; normalizedTextSha256: string}>;
   assertions: readonly Readonly<{id: string; matched: true; expectedSha256: string}>[];
 }>;
 
-type CaptureReportKind = "github-live-checkpoint-capture" | "github-fixture-checkpoint-capture";
+export type CheckpointCaptureKind = "github-live-checkpoint-capture" | "github-fixture-checkpoint-capture";
 
-type PendingReport<Kind extends CaptureReportKind> = Readonly<{
+export type StateSequenceCaptureKind =
+  | "github-live-state-sequence-capture"
+  | "github-fixture-state-sequence-capture";
+
+export type CaptureReportKind = CheckpointCaptureKind | StateSequenceCaptureKind;
+
+export type PendingReport<Kind extends CaptureReportKind> = Readonly<{
   schema: 1;
   kind: Kind;
   slug: string;
@@ -67,38 +81,70 @@ const CHECKPOINT_KEYS = [
   "file",
   "sha256",
   "dimensions",
+  "capture",
+  "dom",
+  "anchor",
   "scope",
   "assertions",
 ];
 
-const record = (value: unknown, label: string): Record<string, unknown> => {
+export const record = (value: unknown, label: string): Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${label} is invalid`);
   return value as Record<string, unknown>;
 };
 
-const exactKeys = (value: Record<string, unknown>, expected: readonly string[], label: string): void => {
-  const actual = Object.keys(value).sort();
+export const exactKeys = (
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  label: string,
+  optional: readonly string[] = [],
+): void => {
+  const actual = Object.keys(value)
+    .filter((key) => !optional.includes(key))
+    .sort();
   const keys = [...expected].sort();
   if (actual.length !== keys.length || actual.some((key, index) => key !== keys[index])) {
     throw new Error(`${label} has an unknown or missing field`);
   }
 };
 
-const string = (value: unknown, pattern: RegExp, label: string): string => {
+export const string = (value: unknown, pattern: RegExp, label: string): string => {
   if (typeof value !== "string" || !pattern.test(value)) throw new Error(`${label} is invalid`);
   return value;
 };
 
-const integer = (value: unknown, label: string): number => {
+export const integer = (value: unknown, label: string): number => {
   if (!Number.isInteger(value) || (value as number) < 0) throw new Error(`${label} is invalid`);
   return value as number;
 };
 
-const parsePendingReport = <Kind extends CaptureReportKind>(raw: unknown, expectedKind: Kind): PendingReport<Kind> => {
+export const parseAnchor = (raw: unknown, label: string): Region | null => {
+  if (raw === undefined || raw === null) return null;
+  const value = record(raw, label);
+  exactKeys(value, ["x", "y", "width", "height"], label);
+  const anchor = {
+    x: integer(value.x, `${label} x`),
+    y: integer(value.y, `${label} y`),
+    width: integer(value.width, `${label} width`),
+    height: integer(value.height, `${label} height`),
+  };
+  if (anchor.width === 0 || anchor.height === 0) throw new Error(`${label} is empty`);
+  return anchor;
+};
+
+export const parsePendingReport = <Kind extends CaptureReportKind>(
+  raw: unknown,
+  expectedKind: Kind,
+  // A montage renderer may only complete a pending capture. A transition
+  // render reads a capture without writing to it, so it also accepts one whose
+  // montage was already rendered.
+  options: Readonly<{allowRendered?: boolean}> = {},
+): PendingReport<Kind> => {
   const value = record(raw, "report");
   exactKeys(value, REPORT_KEYS, "report");
-  if (value.schema !== 1 || value.kind !== expectedKind || value.video !== null) {
-    throw new Error(`report is not a pending ${expectedKind === "github-live-checkpoint-capture" ? "live" : "fixture"} capture`);
+  const videoAcceptable = value.video === null || (options.allowRendered === true && typeof value.video === "object");
+  if (value.schema !== 1 || value.kind !== expectedKind || !videoAcceptable) {
+    throw new Error(`report is not a pending ${expectedKind.startsWith("github-live") ? "live" : "fixture"} capture`);
   }
   const source = record(value.source, "report source");
   exactKeys(source, SOURCE_KEYS, "report source");
@@ -114,7 +160,9 @@ const parsePendingReport = <Kind extends CaptureReportKind>(raw: unknown, expect
   }
   const checkpoints = value.checkpoints.map((rawCheckpoint, index): ReportCheckpoint => {
     const checkpoint = record(rawCheckpoint, `report checkpoint ${index}`);
-    exactKeys(checkpoint, CHECKPOINT_KEYS, `report checkpoint ${index}`);
+    // A capture recorded before anchor boxes existed carries no anchor; the
+    // transition renderer falls back to a page walk for it.
+    exactKeys(checkpoint, CHECKPOINT_KEYS.filter((key) => key !== "anchor"), `report checkpoint ${index}`, ["anchor"]);
     const dimensions = record(checkpoint.dimensions, `report checkpoint ${index} dimensions`);
     exactKeys(dimensions, ["width", "height"], `report checkpoint ${index} dimensions`);
     const scope = record(checkpoint.scope, `report checkpoint ${index} scope`);
@@ -132,16 +180,53 @@ const parsePendingReport = <Kind extends CaptureReportKind>(raw: unknown, expect
         expectedSha256: string(item.expectedSha256, /^[0-9a-f]{64}$/, "assertion hash"),
       };
     });
-    if (dimensions.width !== width || dimensions.height !== height) {
-      throw new Error(`report checkpoint ${index} dimensions differ from the viewport`);
+    const captureBlock = record(checkpoint.capture, `report checkpoint ${index} capture`);
+    exactKeys(captureBlock, ["fullPage", "scrollHeight", "attempts"], `report checkpoint ${index} capture`);
+    if (captureBlock.fullPage !== true) {
+      throw new Error(`report checkpoint ${index} is not a full-page capture`);
     }
+    const scrollHeight = integer(captureBlock.scrollHeight, `report checkpoint ${index} scroll height`);
+    const attempts = integer(captureBlock.attempts, `report checkpoint ${index} capture attempts`);
+    if (scrollHeight === 0 || attempts === 0) {
+      throw new Error(`report checkpoint ${index} capture is invalid`);
+    }
+    const observedWidth = integer(dimensions.width, `report checkpoint ${index} width`);
+    const observedHeight = integer(dimensions.height, `report checkpoint ${index} height`);
+    if (observedWidth !== width) {
+      throw new Error(`report checkpoint ${index} width differs from the viewport`);
+    }
+    if (observedHeight !== expectedStillHeight(scrollHeight, height)) {
+      throw new Error(`report checkpoint ${index} height is cropped against its recorded scrollHeight`);
+    }
+
+    const id = string(checkpoint.id, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, "checkpoint id");
+    const domBlock = record(checkpoint.dom, `report checkpoint ${index} dom`);
+    exactKeys(domBlock, ["before", "after"], `report checkpoint ${index} dom`);
+    const dom = Object.fromEntries(
+      (["before", "after"] as const).map((phase) => {
+        const entry = record(domBlock[phase], `report checkpoint ${index} ${phase} DOM`);
+        exactKeys(entry, ["file", "sha256", "byteLength"], `report checkpoint ${index} ${phase} DOM`);
+        const byteLength = integer(entry.byteLength, `report checkpoint ${index} ${phase} DOM size`);
+        if (byteLength === 0) throw new Error(`report checkpoint ${index} ${phase} DOM is empty`);
+        return [
+          phase,
+          {
+            file: string(entry.file, new RegExp(`^dom/${id}\\.${phase}\\.html$`), `checkpoint ${phase} DOM file`),
+            sha256: string(entry.sha256, /^[0-9a-f]{64}$/, `checkpoint ${phase} DOM hash`),
+            byteLength,
+          },
+        ];
+      }),
+    ) as {before: ReportDom; after: ReportDom};
+
     const kind = string(
       checkpoint.kind,
-      /^(?:issue-comment|review|commit|pr-checks|actions-run|actions-attempt)$/,
+      /^(?:issue-comment|review|commit|pr-checks|actions-run|actions-attempt|state)$/,
       "checkpoint kind",
     );
     return {
-      id: string(checkpoint.id, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, "checkpoint id"),
+      id,
+      anchor: parseAnchor(checkpoint.anchor, `report checkpoint ${index} anchor`),
       kind,
       target: string(
         checkpoint.target,
@@ -153,7 +238,9 @@ const parsePendingReport = <Kind extends CaptureReportKind>(raw: unknown, expect
       capturedAt: string(checkpoint.capturedAt, /^\d{4}-\d{2}-\d{2}T/, "checkpoint instant"),
       file: string(checkpoint.file, /^checkpoints\/[a-z0-9]+(?:-[a-z0-9]+)*\.png$/, "checkpoint file"),
       sha256: string(checkpoint.sha256, /^[0-9a-f]{64}$/, "checkpoint hash"),
-      dimensions: {width, height},
+      dimensions: {width: observedWidth, height: observedHeight},
+      capture: {fullPage: true, scrollHeight, attempts},
+      dom,
       scope: {
         normalizedTextLength: integer(scope.normalizedTextLength, "scope text length"),
         normalizedTextSha256: string(scope.normalizedTextSha256, /^[0-9a-f]{64}$/, "scope hash"),
@@ -178,20 +265,20 @@ const parsePendingReport = <Kind extends CaptureReportKind>(raw: unknown, expect
   };
 };
 
-const sha256 = (value: Uint8Array | string): string => createHash("sha256").update(value).digest("hex");
+export const sha256 = (value: Uint8Array | string): string => createHash("sha256").update(value).digest("hex");
 
-const containedBy = (root: string, candidate: string): boolean => {
+export const containedBy = (root: string, candidate: string): boolean => {
   const path = relative(root, candidate);
   return path !== "" && !isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`);
 };
 
-const canonicalDirectory = async (path: string, label: string): Promise<string> => {
+export const canonicalDirectory = async (path: string, label: string): Promise<string> => {
   const metadata = await lstat(path);
   if (metadata.isSymbolicLink() || !metadata.isDirectory()) throw new Error(`${label} must be a non-symlink directory`);
   return realpath(path);
 };
 
-const readRegularFile = async (root: string, path: string, label: string): Promise<Uint8Array> => {
+export const readRegularFile = async (root: string, path: string, label: string): Promise<Uint8Array> => {
   const metadata = await lstat(path);
   if (metadata.isSymbolicLink() || !metadata.isFile()) throw new Error(`${label} must be a non-symlink regular file`);
   const canonical = await realpath(path);
@@ -211,7 +298,7 @@ const readRegularFile = async (root: string, path: string, label: string): Promi
   }
 };
 
-const requireAbsent = async (path: string, label: string): Promise<void> => {
+export const requireAbsent = async (path: string, label: string): Promise<void> => {
   try {
     const metadata = await lstat(path);
     const kind = metadata.isSymbolicLink() ? "symlink" : "existing path";
@@ -221,7 +308,7 @@ const requireAbsent = async (path: string, label: string): Promise<void> => {
   }
 };
 
-const run = async (arguments_: string[]): Promise<string> => {
+export const run = async (arguments_: string[]): Promise<string> => {
   const child = Bun.spawn(arguments_, {stdout: "pipe", stderr: "pipe"});
   const [stdout, stderr, exit] = await Promise.all([
     new Response(child.stdout).text(),
@@ -294,6 +381,8 @@ const renderCapturedEvidence = async <Kind extends CaptureReportKind>(
   const captureDirectory = await canonicalDirectory(directory, "capture directory");
   const checkpointDirectory = await canonicalDirectory(join(captureDirectory, "checkpoints"), "checkpoint directory");
   if (!containedBy(captureDirectory, checkpointDirectory)) throw new Error("checkpoint directory escapes the capture directory");
+  const domDirectory = await canonicalDirectory(join(captureDirectory, "dom"), "DOM directory");
+  if (!containedBy(captureDirectory, domDirectory)) throw new Error("DOM directory escapes the capture directory");
   const reportPath = join(captureDirectory, "report.json");
   let report: PendingReport<Kind>;
   try {
@@ -330,11 +419,38 @@ const renderCapturedEvidence = async <Kind extends CaptureReportKind>(
     throw new Error("checkpoint directory contains an unreported PNG input");
   }
 
+  const expectedDomNames = report.checkpoints.flatMap(({dom}) => [basename(dom.before.file), basename(dom.after.file)]).sort();
+  const observedDomNames = (await readdir(domDirectory, {withFileTypes: true}))
+    .filter(({name}) => name.endsWith(".html"))
+    .map(({name}) => name)
+    .sort();
+  if (
+    expectedDomNames.length !== observedDomNames.length ||
+    expectedDomNames.some((name, index) => name !== observedDomNames[index])
+  ) {
+    throw new Error("DOM directory contains an unreported HTML input");
+  }
+
   const verifiedInputs: Uint8Array[] = [];
   for (const checkpoint of report.checkpoints) {
     const bytes = await readRegularFile(captureDirectory, join(captureDirectory, checkpoint.file), `checkpoint ${checkpoint.id}`);
     const observedHash = sha256(bytes);
     if (observedHash !== checkpoint.sha256) throw new Error(`checkpoint ${checkpoint.id} hash does not match the report`);
+    const observed = pngDimensions(bytes, `checkpoint ${checkpoint.id} still`);
+    if (observed.width !== checkpoint.dimensions.width || observed.height !== checkpoint.dimensions.height) {
+      throw new Error(`checkpoint ${checkpoint.id} still is cropped against its recorded scrollHeight`);
+    }
+    for (const phase of ["before", "after"] as const) {
+      const dom = checkpoint.dom[phase];
+      const domBytes = await readRegularFile(
+        captureDirectory,
+        join(captureDirectory, dom.file),
+        `checkpoint ${checkpoint.id} ${phase} DOM`,
+      );
+      if (sha256(domBytes) !== dom.sha256 || domBytes.byteLength !== dom.byteLength) {
+        throw new Error(`checkpoint ${checkpoint.id} ${phase} DOM does not match the report`);
+      }
+    }
     verifiedInputs.push(bytes);
   }
 
@@ -368,7 +484,13 @@ const renderCapturedEvidence = async <Kind extends CaptureReportKind>(
         stagedInputs[index],
       );
     }
-    const inputs = manifest.checkpoints.map((_, index) => `[${index}:v]setsar=1,format=yuv420p[v${index}]`).join(";");
+    // Checkpoint stills are full-page, so each one is taller than the montage
+    // canvas. Fit the whole page inside the frame; never crop it back.
+    const {width, height} = manifest.viewport;
+    const fit =
+      `scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
+      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,format=yuv420p`;
+    const inputs = manifest.checkpoints.map((_, index) => `[${index}:v]${fit}[v${index}]`).join(";");
     const concat = manifest.checkpoints.map((_, index) => `[v${index}]`).join("");
     ffmpeg.push(
       "-filter_complex",
@@ -405,7 +527,11 @@ const renderCapturedEvidence = async <Kind extends CaptureReportKind>(
     const reportTemporary = join(stagingDirectory, "report.json");
     const sumsTemporary = join(stagingDirectory, "SHA256SUMS");
     const sums = [
-      ...report.checkpoints.map(({sha256: digest, file}) => `${digest}  ${file}`),
+      ...report.checkpoints.flatMap(({sha256: digest, file, dom}) => [
+        `${dom.before.sha256}  ${dom.before.file}`,
+        `${digest}  ${file}`,
+        `${dom.after.sha256}  ${dom.after.file}`,
+      ]),
       `${video.sha256}  ${video.file}`,
       `${sha256(reportBytes)}  report.json`,
     ].join("\n");

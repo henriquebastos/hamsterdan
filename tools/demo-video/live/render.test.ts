@@ -1,5 +1,6 @@
 import {afterAll, beforeAll, describe, expect, test} from "bun:test";
-import {cp, mkdtemp, readFile, rename, symlink, writeFile} from "node:fs/promises";
+import {createHash} from "node:crypto";
+import {cp, mkdtemp, readdir, readFile, rename, rm, symlink, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {chromium, type Browser} from "playwright";
@@ -45,8 +46,12 @@ const manifestValue = {
 };
 const manifestBytes = Buffer.from(JSON.stringify(manifestValue));
 const manifest: CaptureManifest = parseManifest(manifestValue);
+const FIT_FILTER =
+  `scale=${manifest.viewport.width}:${manifest.viewport.height}:force_original_aspect_ratio=decrease,` +
+  `pad=${manifest.viewport.width}:${manifest.viewport.height}:(ow-iw)/2:(oh-ih)/2:color=black`;
 
-const fixtureHtml = `<!doctype html><html><head><title>PR61 · HBNetwork/demo-pr-readiness</title></head><body>
+const fixtureHtml = `<!doctype html><html><head><title>PR61 · HBNetwork/demo-pr-readiness</title>
+  <style>body{margin:0;display:flow-root}</style></head><body>
   <header><a href="/HBNetwork/demo-pr-readiness">HBNetwork / demo-pr-readiness</a></header>
   <main>
     <span data-component="StateLabel" data-status="pullOpened">Open</span>
@@ -116,20 +121,79 @@ describe("verified checkpoint montage", () => {
     for (const [index, second] of [1, 3].entries()) {
       const decoded = join(directory, `decoded-${index}.png`);
       await run("ffmpeg", "-loglevel", "error", "-ss", String(second), "-i", result.path, "-frames:v", "1", decoded);
-      const comparison = await run(
+      // Each still is full-page and therefore taller than the montage canvas;
+      // the frame must be that whole still fitted in, never a crop of it.
+      const fitted = join(directory, `fitted-${index}.png`);
+      await run(
         "ffmpeg",
+        "-loglevel",
+        "error",
         "-i",
         join(directory, report.checkpoints[index].file),
-        "-i",
-        decoded,
-        "-lavfi",
-        "psnr",
-        "-f",
-        "null",
-        "-",
+        "-vf",
+        `${FIT_FILTER},format=yuv420p`,
+        "-frames:v",
+        "1",
+        fitted,
       );
+      const comparison = await run("ffmpeg", "-i", fitted, "-i", decoded, "-lavfi", "psnr", "-f", "null", "-");
       const average = Number(comparison.match(/average:([0-9.]+)/)?.[1]);
       expect(average).toBeGreaterThan(30);
+    }
+    expect((await readdir(directory, {recursive: true})).filter((name) => name.endsWith(".pdf"))).toEqual([]);
+  }, 30_000);
+
+  test("rejects a still whose recorded height stops matching its scrollHeight", async () => {
+    const directory = await copySeed();
+    const reportPath = join(directory, "report.json");
+    const report = JSON.parse(await readFile(reportPath, "utf8"));
+    report.checkpoints[0].capture.scrollHeight = report.checkpoints[0].dimensions.height - 1;
+    await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+    await expect(renderFixtureEvidence(manifestBytes, directory, new Date("2026-08-17T08:05:00Z"))).rejects.toThrow(
+      /cropped/,
+    );
+  });
+
+  test("rejects a still whose pixels were cropped after the report was written", async () => {
+    const directory = await copySeed();
+    const still = join(directory, "checkpoints", "findings-top.png");
+    const cropped = join(directory, "cropped.png");
+    await run("ffmpeg", "-loglevel", "error", "-i", still, "-vf", "crop=1280:720:0:0", cropped);
+    const bytes = await readFile(cropped);
+    await rm(cropped);
+    await writeFile(still, bytes);
+
+    const reportPath = join(directory, "report.json");
+    const report = JSON.parse(await readFile(reportPath, "utf8"));
+    report.checkpoints[0].sha256 = createHash("sha256").update(bytes).digest("hex");
+    await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+    await expect(renderFixtureEvidence(manifestBytes, directory, new Date("2026-08-17T08:05:00Z"))).rejects.toThrow(
+      /cropped/,
+    );
+  }, 30_000);
+
+  test("rejects an unreported DOM input", async () => {
+    const directory = await copySeed();
+    await cp(join(directory, "dom/findings-top.before.html"), join(directory, "dom/extra.before.html"));
+    await expect(renderFixtureEvidence(manifestBytes, directory, new Date("2026-08-17T08:05:00Z"))).rejects.toThrow(
+      /unreported HTML/,
+    );
+  });
+
+  test("rejects a tampered checkpoint DOM", async () => {
+    const directory = await copySeed();
+    await writeFile(join(directory, "dom/findings-top.after.html"), "<html>rewritten</html>");
+    await expect(renderFixtureEvidence(manifestBytes, directory, new Date("2026-08-17T08:05:00Z"))).rejects.toThrow(
+      /after DOM does not match/,
+    );
+  });
+
+  test("checksums the before and after DOM alongside every still", async () => {
+    const directory = await copySeed();
+    await renderFixtureEvidence(manifestBytes, directory, new Date("2026-08-17T08:05:00Z"));
+    const sums = await readFile(join(directory, "SHA256SUMS"), "utf8");
+    for (const line of ["dom/findings-top.before.html", "dom/findings-top.after.html", "checkpoints/findings-top.png"]) {
+      expect(sums).toContain(line);
     }
   }, 30_000);
 

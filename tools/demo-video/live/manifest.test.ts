@@ -1,6 +1,6 @@
 import {describe, expect, test} from "bun:test";
 import {readFile} from "node:fs/promises";
-import {parseManifest} from "./manifest";
+import {parseManifest, watchedPageUrl} from "./manifest";
 
 const validManifest = () => ({
   schema: 1,
@@ -64,8 +64,46 @@ describe("live capture manifest", () => {
     ]);
   });
 
+  test("admits the committed PR63 production hero manifest", async () => {
+    const raw = JSON.parse(await readFile(new URL("./manifests/pr63-v6-hero.json", import.meta.url), "utf8"));
+    const parsed = parseManifest(raw);
+    expect(parsed.slug).toBe("pr63-v6-hero");
+    expect(parsed.expectedState).toBe("closed");
+    expect(parsed.checkpoints).toHaveLength(3);
+  });
+
+  test("carries no watch plan unless the manifest declares one", () => {
+    expect(parseManifest(validManifest()).watch).toBeNull();
+  });
+
+  test("carries the watch cadence, duration, and caption a live journey needs", () => {
+    const value = {...validManifest(), watch: {pollSeconds: 5, durationSeconds: 300, maxStates: 12, caption: "PR 61"}};
+    expect(parseManifest(value).watch).toEqual({pollSeconds: 5, durationSeconds: 300, maxStates: 12, caption: "PR 61"});
+  });
+
+  test.each([
+    ["unknown watch field", {pollSeconds: 5, durationSeconds: 300, maxStates: 12, caption: "PR 61", selector: "body"}],
+    ["cadence longer than the duration", {pollSeconds: 300, durationSeconds: 5, maxStates: 12, caption: "PR 61"}],
+    ["zero cadence", {pollSeconds: 0, durationSeconds: 300, maxStates: 12, caption: "PR 61"}],
+    ["single-state ceiling", {pollSeconds: 5, durationSeconds: 300, maxStates: 1, caption: "PR 61"}],
+    ["empty caption", {pollSeconds: 5, durationSeconds: 300, maxStates: 12, caption: ""}],
+  ])("rejects a watch plan with %s", (_name, watch) => {
+    expect(() => parseManifest({...validManifest(), watch})).toThrow();
+  });
+
+  test("derives the watched page URL from the repository and pull request", () => {
+    expect(watchedPageUrl(parseManifest(validManifest()))).toBe("https://github.com/HBNetwork/demo-pr-readiness/pull/61");
+  });
+
   test("accepts the closed public GitHub contract", () => {
     expect(parseManifest(validManifest()).slug).toBe("pr61-v5-hero");
+  });
+
+  test("carries the pull-request state the capture must observe", () => {
+    for (const state of ["open", "closed", "merged"] as const) {
+      expect(parseManifest({...validManifest(), expectedState: state}).expectedState).toBe(state);
+    }
+    expect(() => parseManifest({...validManifest(), expectedState: "draft"})).toThrow(/expectedState/);
   });
 
   test("accepts one exact GitHub Actions run attempt identity", () => {

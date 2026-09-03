@@ -41,6 +41,26 @@ store; their reproducible source belongs here.
   cookies, tokens, arbitrary selectors, page scripts, or mutation-capable UI
   actions.
 - Render only hash-verified browser screenshots in manifest order. Do not use
-  Remotion, overlays, captions, transitions, or synthetic browser chrome.
+  Remotion, overlays, or synthetic browser chrome.
+- The montage renderer (`live/render.ts`) stays literal: no captions, no
+  transitions, no interpolation. The transition renderer
+  (`live/transition-render.ts`) may crop those same stills at 1:1, crossfade
+  between two of them, and add one caption strip below the evidence pane. Its
+  caption text must come from the manifest, never from new prose, and no other
+  authored pixel may appear.
+- Keep every checkpoint's three evidence layers: before and after DOM HTML, a
+  full-page PNG verified against
+  `max(document.body.scrollHeight, document.documentElement.scrollHeight)`, and
+  the montage assembled from those stills. Never add PDF output.
+- Record each checkpoint's target-element anchor box in document coordinates.
+  A static journey has no meaningful pixel diff, and the anchor is the only
+  thing that can frame it honestly.
+- A watched journey (`live/watch.ts`) reuses the same anonymous, nonpersistent,
+  read-only context and records one numbered state each time the watched page's
+  visible content changes. It fails closed on repository, pull-request-state,
+  actor, and challenge-page drift exactly like the checkpoint lane.
+- Do not hand a pending Playwright-backed promise to `expect(...).rejects`;
+  bun:test settles it about one second per browser round trip. Settle the
+  promise first, then assert on the error.
 - Run acceptance capture from a clean committed revision, inspect every PNG,
   and watch the complete encoded montage once.

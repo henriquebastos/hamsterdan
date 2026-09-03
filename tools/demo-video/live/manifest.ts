@@ -1,5 +1,9 @@
 export type CheckpointKind = "issue-comment" | "review" | "commit" | "pr-checks" | "actions-run" | "actions-attempt";
 
+export type PullRequestState = "open" | "closed" | "merged";
+
+export const PULL_REQUEST_STATES: readonly PullRequestState[] = ["open", "closed", "merged"];
+
 export type Actor = Readonly<{
   login: string;
   href: string;
@@ -16,17 +20,30 @@ export type Checkpoint = Readonly<{
   holdSeconds: number;
 }>;
 
+// A watched journey records the pull-request page every time its content
+// actually changes, instead of visiting a fixed list of surviving anchors.
+export type WatchPlan = Readonly<{
+  pollSeconds: number;
+  durationSeconds: number;
+  maxStates: number;
+  caption: string;
+}>;
+
 export type CaptureManifest = Readonly<{
   schema: 1;
   slug: string;
   repository: string;
   pullRequest: number;
-  expectedState: "open";
+  expectedState: PullRequestState;
   expectedHead: string;
   viewport: Readonly<{width: number; height: number}>;
   actors: readonly Actor[];
   checkpoints: readonly Checkpoint[];
+  watch: WatchPlan | null;
 }>;
+
+export const watchedPageUrl = (manifest: CaptureManifest): string =>
+  `https://github.com/${manifest.repository}/pull/${manifest.pullRequest}`;
 
 const EXACT_KEYS = {
   manifest: [
@@ -43,7 +60,10 @@ const EXACT_KEYS = {
   viewport: ["width", "height"],
   actor: ["login", "href"],
   checkpoint: ["id", "kind", "target", "url", "actor", "expectedText", "focusText", "holdSeconds"],
+  watch: ["pollSeconds", "durationSeconds", "maxStates", "caption"],
 } as const;
+
+const OPTIONAL_MANIFEST_KEYS = ["watch"] as const;
 
 const requireRecord = (value: unknown, label: string): Record<string, unknown> => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -52,8 +72,15 @@ const requireRecord = (value: unknown, label: string): Record<string, unknown> =
   return value as Record<string, unknown>;
 };
 
-const requireExactKeys = (value: Record<string, unknown>, keys: readonly string[], label: string) => {
-  const actual = Object.keys(value).sort();
+const requireExactKeys = (
+  value: Record<string, unknown>,
+  keys: readonly string[],
+  label: string,
+  optional: readonly string[] = [],
+) => {
+  const actual = Object.keys(value)
+    .filter((key) => !optional.includes(key))
+    .sort();
   const expected = [...keys].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
     throw new Error(`${label} must contain exactly: ${keys.join(", ")}`);
@@ -126,10 +153,14 @@ const expectedCheckpointUrl = (
 
 export const parseManifest = (raw: unknown): CaptureManifest => {
   const value = requireRecord(raw, "manifest");
-  requireExactKeys(value, EXACT_KEYS.manifest, "manifest");
-  if (value.schema !== 1 || value.expectedState !== "open") {
+  requireExactKeys(value, EXACT_KEYS.manifest, "manifest", OPTIONAL_MANIFEST_KEYS);
+  if (value.schema !== 1) {
     throw new Error("unsupported live capture manifest");
   }
+  if (typeof value.expectedState !== "string" || !PULL_REQUEST_STATES.includes(value.expectedState as PullRequestState)) {
+    throw new Error("expectedState is invalid");
+  }
+  const expectedState = value.expectedState as PullRequestState;
 
   const slug = requireString(value.slug, "slug", /^[a-z0-9]+(?:-[a-z0-9]+)*$/, 64);
   const repository = requireString(
@@ -232,15 +263,31 @@ export const parseManifest = (raw: unknown): CaptureManifest => {
     throw new Error("checkpoint ids must be unique");
   }
 
+  let watch: WatchPlan | null = null;
+  if (value.watch !== undefined && value.watch !== null) {
+    const rawWatch = requireRecord(value.watch, "watch");
+    requireExactKeys(rawWatch, EXACT_KEYS.watch, "watch");
+    watch = {
+      pollSeconds: requireInteger(rawWatch.pollSeconds, "watch.pollSeconds", 1, 60),
+      durationSeconds: requireInteger(rawWatch.durationSeconds, "watch.durationSeconds", 2, 900),
+      maxStates: requireInteger(rawWatch.maxStates, "watch.maxStates", 2, 64),
+      caption: requireString(rawWatch.caption, "watch.caption", /^[\x20-\x7e]+$/, 200),
+    };
+    if (watch.pollSeconds > watch.durationSeconds) {
+      throw new Error("watch.pollSeconds must fit inside watch.durationSeconds");
+    }
+  }
+
   return {
     schema: 1,
     slug,
     repository,
     pullRequest,
-    expectedState: "open",
+    expectedState,
     expectedHead,
     viewport,
     actors,
     checkpoints,
+    watch,
   };
 };
