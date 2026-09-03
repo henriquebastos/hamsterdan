@@ -345,6 +345,10 @@ def test_deployment_authority_resolves_only_from_the_operations_vault() -> None:
     ]
     assert all(line.split("=", 1)[1].startswith("op://example-ops/") for line in assignments)
 
+    # An agent key is identified by the provider that issued it, so switching
+    # providers is a visible item change rather than a silent value swap.
+    assert "op://example-ops/anthropic/credential" in template
+
     # A development sandbox must never hold authority over the production host.
     assert "hamsterdan-ops" not in development
     assert "EXE_DEV" not in development
