@@ -84,3 +84,11 @@ fencing.
 
 Follow `docs/process/development-guide.md` for commands, validation, and local
 project policy.
+
+## Secrets
+
+Secrets resolve from 1Password via the committed `env.tpl`; direnv injects them
+into the shell automatically (no rendered file on dev machines). Orbs and
+servers render `env.tpl` to `.env` once at boot with `op-env-refresh` (auth via
+`OP_SERVICE_ACCOUNT_TOKEN`). After rotating a credential in 1Password, re-enter
+the directory (`direnv reload`) or re-run `op-env-refresh`.
