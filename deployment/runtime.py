@@ -24,16 +24,16 @@ from hamsterdan.github_app.config import ConfigurationError, installation_accoun
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INSTALLATIONS = ROOT / "deployment" / "config" / "installations.toml"
+RUNTIME_TEMPLATE = ROOT / "env-prod.tpl"
 MAX_SECRET_BYTES = 64 * 1024
-_CLIENT_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 _SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
-_WORKFLOW_PATH = re.compile(r"[A-Za-z0-9_./-]+")
 _STRIPPED_ENVIRONMENT_PREFIXES = (
     "AMP_",
     "ANTHROPIC_",
     "EXE_DEV_",
     "GH_",
     "GITHUB_",
+    "OP_",
     "OPENAI_",
     "OPENROUTER_",
     "PETRUS_",
@@ -114,19 +114,30 @@ class InstallationConfiguration:
         return cls(len(accounts), sum(len(account.repositories) for account in accounts), content)
 
 
+def _declared_agent_route(path: Path) -> tuple[str, str]:
+    declarations = {"HAMSTERDAN_PI_PROVIDER": "", "HAMSTERDAN_PI_MODEL": ""}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise RuntimeDeploymentError("runtime environment template is unavailable") from error
+    for line in lines:
+        name, _, value = line.partition("=")
+        if name in declarations:
+            declarations[name] = value
+    if not all(declarations.values()):
+        raise RuntimeDeploymentError("runtime environment template declares no agent route")
+    return declarations["HAMSTERDAN_PI_PROVIDER"], declarations["HAMSTERDAN_PI_MODEL"]
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     app_id: int
     app_slug: str
-    client_id: str
     installations: InstallationConfiguration
-    workflow_path: str
-    reminder_seconds: int
     provider: str
     model: str
-    github_private_key: str = field(repr=False)
-    webhook_secret: str = field(repr=False)
     agent_key: str = field(repr=False)
+    op_token: str = field(repr=False)
 
     @classmethod
     def from_environment(
@@ -134,48 +145,28 @@ class RuntimeConfig:
         environment: Mapping[str, str] | None = None,
         *,
         installations_path: Path = DEFAULT_INSTALLATIONS,
+        template_path: Path = RUNTIME_TEMPLATE,
     ) -> RuntimeConfig:
         values = os.environ if environment is None else environment
         provider, model, agent_key = _provider(values)
+        if (provider, model) != _declared_agent_route(template_path):
+            raise RuntimeDeploymentError("agent provider authority does not match the runtime environment template")
         return cls(
             app_id=_positive_decimal(values, "GITHUB_APP_ID", "GitHub App id"),
             app_slug=_matches(values, "GITHUB_APP_SLUG", "GitHub App slug", _SLUG),
-            client_id=_matches(values, "GITHUB_APP_CLIENT_ID", "GitHub App client id", _CLIENT_ID),
             installations=InstallationConfiguration.from_file(installations_path),
-            workflow_path=_matches(values, "READINESS_WORKFLOW_PATH", "workflow path", _WORKFLOW_PATH),
-            reminder_seconds=_positive_decimal(values, "READINESS_REMINDER_SECONDS", "reminder seconds"),
             provider=provider,
             model=model,
-            github_private_key=_secret(values, "GITHUB_APP_PRIVATE_KEY_PEM", "GitHub App private key"),
-            webhook_secret=_secret(values, "GITHUB_APP_WEBHOOK_SECRET", "GitHub App webhook secret"),
             agent_key=agent_key,
+            op_token=_secret(values, "OP_SERVICE_ACCOUNT_TOKEN_VPS", "target secret-provider authority"),
         )
-
-    def render_environment(self) -> str:
-        values = (
-            ("HAMSTERDAN_GITHUB_APP_ID", str(self.app_id)),
-            ("HAMSTERDAN_GITHUB_APP_SLUG", self.app_slug),
-            ("HAMSTERDAN_GITHUB_CLIENT_ID", self.client_id),
-            ("HAMSTERDAN_GITHUB_INSTALLATIONS_FILE", "/run/config/hamsterdan/installations.toml"),
-            ("HAMSTERDAN_STATE_PATH", "/var/lib/hamsterdan"),
-            ("HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE", "/run/secrets/hamsterdan/github-app.pem"),
-            ("HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE", "/run/secrets/hamsterdan/webhook-secret"),
-            ("HAMSTERDAN_PI_PROVIDER", self.provider),
-            ("HAMSTERDAN_PI_MODEL", self.model),
-            ("HAMSTERDAN_PI_API_KEY_FILE", "/run/secrets/hamsterdan/agent-api-key"),
-            ("HAMSTERDAN_WORKFLOW_PATH", self.workflow_path),
-            ("HAMSTERDAN_REMINDER_SECONDS", str(self.reminder_seconds)),
-        )
-        return "".join(f"{name}={value}\n" for name, value in values)
 
 
 @dataclass(frozen=True)
 class RuntimeFiles:
-    environment: Path
     installations: Path
-    github_private_key: Path
-    webhook_secret: Path
     agent_key: Path
+    op_token: Path
 
 
 def _write_private(path: Path, value: str) -> None:
@@ -194,18 +185,14 @@ def materialized_runtime(config: RuntimeConfig, *, parent: Path | None = None) -
     root = Path(tempfile.mkdtemp(prefix="hamsterdan-runtime-", dir=parent))
     root.chmod(0o700)
     files = RuntimeFiles(
-        environment=root / "hamsterdan.env",
         installations=root / "installations.toml",
-        github_private_key=root / "github-app.pem",
-        webhook_secret=root / "webhook-secret",
         agent_key=root / "agent-api-key",
+        op_token=root / "op-token",
     )
     try:
-        _write_private(files.environment, config.render_environment())
         _write_private(files.installations, config.installations.content)
-        _write_private(files.github_private_key, config.github_private_key)
-        _write_private(files.webhook_secret, config.webhook_secret)
         _write_private(files.agent_key, config.agent_key)
+        _write_private(files.op_token, config.op_token)
         yield files
     finally:
         shutil.rmtree(root)
@@ -222,10 +209,8 @@ def ansible_invocation(
         "candidate_image_id": candidate.image_id,
         "candidate_revision": candidate.revision,
         "runtime_agent_key": str(files.agent_key),
-        "runtime_environment": str(files.environment),
         "runtime_installations": str(files.installations),
-        "runtime_github_private_key": str(files.github_private_key),
-        "runtime_webhook_secret": str(files.webhook_secret),
+        "runtime_op_token": str(files.op_token),
         "expected_app_id": config.app_id,
         "expected_app_slug": config.app_slug,
         "expected_installation_count": config.installations.account_count,

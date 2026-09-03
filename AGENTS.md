@@ -87,8 +87,12 @@ project policy.
 
 ## Secrets
 
-Secrets resolve from 1Password via the committed `env.tpl`; direnv injects them
-into the shell automatically (no rendered file on dev machines). The deploy
-renders `env.tpl` to the runtime `.env` on the target with `op inject`, using
-that environment's `OP_SERVICE_ACCOUNT_TOKEN`. After rotating a credential in
-1Password, run `direnv reload` locally; remotes pick it up on next deploy.
+1Password holds every credential, split into the `hamsterdan-dev` and
+`hamsterdan-prod` vaults. On a dev machine, direnv renders the committed
+`env-dev.tpl` into the gitignored `.env` and loads it; regenerate with
+`rm .env && direnv reload`. On the target, provisioning installs the committed
+`env-prod.tpl` and that box's own service-account token, and every service start
+renders `/etc/hamsterdan/hamsterdan.env` and fetches the App private key and
+webhook secret from `hamsterdan-prod`. Rotation is therefore: edit the item in
+1Password, then `systemctl restart hamsterdan`. The deploy never carries or
+persists those values.

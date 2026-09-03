@@ -109,11 +109,41 @@ GitHub credential, and does not start the Hamsterdan host.
 
 ## Provision and validate an inactive runtime
 
-Runtime provisioning consumes the same role-named App, installation,
-repository, readiness, and agent-provider inputs used by `.agents/setup`, plus
-the exe.dev API and SSH inputs above. Values remain in temporary controller
-files and private VM files; secret values do not enter Ansible arguments or the
-generated environment file.
+Runtime provisioning consumes the role-named App identity, installation, and
+repository inputs used by `.agents/setup`, the exe.dev API and SSH inputs above,
+one qualified agent-provider key, and `OP_SERVICE_ACCOUNT_TOKEN_VPS`: the
+target's own 1Password service-account token, persisted on the VM as owner-only
+`/etc/hamsterdan/op-token`.
+
+The App private key, the webhook secret, and the runtime environment are no
+longer produced by the deploy. Provisioning installs a pinned, checksum-verified
+`op` CLI, the target token, and the committed `env-prod.tpl` at
+`/etc/hamsterdan/env-prod.tpl`. The systemd unit's `ExecStartPre` steps then run
+as root before every `docker run`: they read the token from its file, render
+`/etc/hamsterdan/hamsterdan.env` with `op inject`, fetch `github-app.pem`, and
+write the webhook secret, all from the `hamsterdan-prod` vault. That is the
+rotation contract — change the item in 1Password, run
+`systemctl restart hamsterdan`, and the new credentials are live. The token
+never appears in a command argument.
+
+`GITHUB_APP_PRIVATE_KEY_PEM`, `GITHUB_APP_WEBHOOK_SECRET`,
+`GITHUB_APP_CLIENT_ID`, `READINESS_WORKFLOW_PATH`, and
+`READINESS_REMINDER_SECONDS` are therefore no longer read by this command; the
+last four are declared in `env-prod.tpl` instead.
+
+The agent-provider key has no 1Password item, so it remains a controller input
+carried as a temporary private file into `/etc/hamsterdan/secrets/agent-api-key`
+under the existing no-implicit-replacement guard. Provisioning refuses to start
+when the selected provider key disagrees with the `HAMSTERDAN_PI_PROVIDER` and
+`HAMSTERDAN_PI_MODEL` pair `env-prod.tpl` declares. Values remain in temporary
+controller files and private VM files; secret values do not enter Ansible
+arguments.
+
+No-launch validation still needs App credentials, so the playbook resolves a
+throwaway copy of the environment, private key, and webhook secret into a
+private temporary directory, runs the one-shot validation container against it,
+and deletes it on both the success and failure paths. Nothing secret is
+published to `/etc/hamsterdan/` by the deploy.
 
 Select the exact previously qualified manifest:
 
@@ -141,6 +171,10 @@ Add or remove account blocks and repository lines in
 uv run --frozen python deployment/runtime.py configure \
   --file deployment/config/installations.toml
 ```
+
+It requires a runtime the service has started at least once, because the
+boot-rendered `/etc/hamsterdan/hamsterdan.env` and `/etc/hamsterdan/secrets/`
+credentials are the custody it validates against.
 
 This command does not build, transfer, or replace an OCI image; change the
 systemd unit; rotate secrets; or alter VM infrastructure. It uses the exact

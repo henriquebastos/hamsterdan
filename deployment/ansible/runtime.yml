@@ -11,16 +11,18 @@
     runtime_state: /var/lib/hamsterdan
     runtime_unit: /etc/systemd/system/hamsterdan.service
     runtime_image_identity: /etc/hamsterdan/image-id
+    runtime_op_token_file: /etc/hamsterdan/op-token
+    runtime_environment_template: /etc/hamsterdan/env-prod.tpl
+    runtime_vault: hamsterdan-prod
+    op_version: 2.35.0
+    op_archive_sha256: 4457ade59850b852c64c77164235b34dd0b984ef7826eb0ccd32f1fd78a2ceb7
+    op_archive_url: "https://cache.agilebits.com/dist/1P/op2/pkg/v{{ op_version }}/op_linux_amd64_v{{ op_version }}.zip"
+    op_directory: "/opt/hamsterdan/op/{{ op_version }}"
+    op_archive: "{{ op_directory }}/op_linux_amd64_v{{ op_version }}.zip"
+    op_command: "{{ op_directory }}/op"
     managed_secret_files:
-      - source: "{{ runtime_github_private_key }}"
-        destination: "{{ runtime_secrets }}/github-app.pem"
-        owner: "10001"
-        group: "10001"
-      - source: "{{ runtime_webhook_secret }}"
-        destination: "{{ runtime_secrets }}/webhook-secret"
-        owner: "10001"
-        group: "10001"
-      - source: "{{ runtime_agent_key }}"
+      - name: agent-api-key
+        source: "{{ runtime_agent_key }}"
         destination: "{{ runtime_secrets }}/agent-api-key"
         owner: "10001"
         group: "10001"
@@ -129,6 +131,88 @@
           owner: "10001"
           mode: "0700"
 
+    - name: Create the pinned secret-provider CLI directory
+      ansible.builtin.file:
+        path: "{{ op_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Fetch the pinned secret-provider CLI archive
+      ansible.builtin.get_url:
+        url: "{{ op_archive_url }}"
+        dest: "{{ op_archive }}"
+        checksum: "sha256:{{ op_archive_sha256 }}"
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Extract the pinned secret-provider CLI
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - -m
+          - zipfile
+          - -e
+          - "{{ op_archive }}"
+          - "{{ op_directory }}"
+        creates: "{{ op_command }}"
+
+    - name: Give the pinned secret-provider CLI executable custody
+      ansible.builtin.file:
+        path: "{{ op_command }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Read the installed secret-provider CLI version
+      ansible.builtin.command:
+        argv:
+          - "{{ op_command }}"
+          - --version
+      register: op_installed
+      changed_when: false
+
+    - name: Require the exact pinned secret-provider CLI version
+      ansible.builtin.assert:
+        that:
+          - op_installed.stdout == op_version
+
+    - name: Install the target secret-provider authority
+      ansible.builtin.copy:
+        src: "{{ runtime_op_token }}"
+        dest: "{{ runtime_op_token_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Read the target secret-provider authority
+      ansible.builtin.slurp:
+        src: "{{ runtime_op_token_file }}"
+      register: op_authority
+      no_log: true
+
+    - name: Inspect the runtime environment template path
+      ansible.builtin.stat:
+        path: "{{ runtime_environment_template }}"
+        follow: false
+      register: runtime_template_before
+
+    - name: Refuse an unsafe existing runtime environment template
+      ansible.builtin.assert:
+        that:
+          - not runtime_template_before.stat.exists or (runtime_template_before.stat.isreg and not runtime_template_before.stat.islnk)
+
+    - name: Install the boot-resolved runtime environment template
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../env-prod.tpl"
+        dest: "{{ runtime_environment_template }}"
+        owner: root
+        group: root
+        mode: "0644"
+
     - name: Inspect existing managed secret files
       ansible.builtin.stat:
         path: "{{ item.destination }}"
@@ -182,6 +266,8 @@
         follow: false
       loop:
         - "{{ runtime_root }}/hamsterdan.env"
+        - "{{ runtime_secrets }}/github-app.pem"
+        - "{{ runtime_secrets }}/webhook-secret"
         - "{{ runtime_config }}/installations.toml"
         - "{{ runtime_image_identity }}"
       register: runtime_configuration_before
@@ -211,13 +297,97 @@
             mode: "0755"
           changed_when: false
 
-        - name: Stage the candidate environment
+        - name: Render the throwaway validation environment from the installed template
+          ansible.builtin.command:
+            argv:
+              - "{{ op_command }}"
+              - inject
+              - --in-file
+              - "{{ runtime_environment_template }}"
+              - --out-file
+              - "{{ staged_config.path }}/hamsterdan.env"
+              - --file-mode
+              - "0600"
+              - --force
+          environment:
+            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
+          changed_when: false
+          no_log: true
+
+        - name: Create throwaway validation secret custody
+          ansible.builtin.tempfile:
+            state: directory
+            path: "{{ runtime_root }}"
+            prefix: .candidate-secrets-
+          register: validation_secrets
+          changed_when: false
+
+        - name: Give the image user throwaway validation secret custody
+          ansible.builtin.file:
+            path: "{{ validation_secrets.path }}"
+            state: directory
+            owner: "10001"
+            group: "10001"
+            mode: "0700"
+          changed_when: false
+
+        - name: Resolve the App private key for validation only
+          ansible.builtin.command:
+            argv:
+              - "{{ op_command }}"
+              - document
+              - get
+              - github-app.pem
+              - --vault
+              - "{{ runtime_vault }}"
+              - --out-file
+              - "{{ validation_secrets.path }}/github-app.pem"
+              - --file-mode
+              - "0600"
+              - --force
+          environment:
+            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
+          changed_when: false
+          no_log: true
+
+        - name: Resolve the webhook secret for validation only
+          ansible.builtin.command:
+            argv:
+              - "{{ op_command }}"
+              - read
+              - "op://{{ runtime_vault }}/github-app/webhook_secret"
+              - --out-file
+              - "{{ validation_secrets.path }}/webhook-secret"
+              - --file-mode
+              - "0600"
+              - --no-newline
+              - --force
+          environment:
+            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
+          changed_when: false
+          no_log: true
+
+        - name: Copy installed secret custody into the throwaway validation set
           ansible.builtin.copy:
-            src: "{{ runtime_environment }}"
-            dest: "{{ staged_config.path }}/hamsterdan.env"
-            owner: root
-            group: root
+            src: "{{ item.destination }}"
+            remote_src: true
+            dest: "{{ validation_secrets.path }}/{{ item.name }}"
+            owner: "10001"
+            group: "10001"
             mode: "0600"
+          loop: "{{ managed_secret_files }}"
+          changed_when: false
+          no_log: true
+
+        - name: Give the image user readable throwaway validation secrets
+          ansible.builtin.file:
+            path: "{{ validation_secrets.path }}/{{ item }}"
+            owner: "10001"
+            group: "10001"
+            mode: "0600"
+          loop:
+            - github-app.pem
+            - webhook-secret
           changed_when: false
 
         - name: Stage the installation configuration
@@ -260,7 +430,7 @@
               - --env-file
               - "{{ staged_config.path }}/hamsterdan.env"
               - --mount=type=bind,source={{ validation_state.path }},target=/var/lib/hamsterdan
-              - --mount=type=bind,source={{ runtime_secrets }},target=/run/secrets/hamsterdan,readonly
+              - --mount=type=bind,source={{ validation_secrets.path }},target=/run/secrets/hamsterdan,readonly
               - --mount=type=bind,source={{ staged_config.path }},target=/run/config/hamsterdan,readonly
               - "{{ candidate_image_id }}"
               - validate
@@ -289,6 +459,12 @@
             state: absent
           when: staged_config is defined and staged_config.path is defined
 
+        - name: Remove failed throwaway validation secret custody
+          ansible.builtin.file:
+            path: "{{ validation_secrets.path }}"
+            state: absent
+          when: validation_secrets is defined and validation_secrets.path is defined
+
         - name: Remove failed isolated candidate validation state
           ansible.builtin.file:
             path: "{{ validation_state.path }}"
@@ -298,15 +474,6 @@
         - name: Report bounded validation failure
           ansible.builtin.fail:
             msg: Runtime validation failed; the service remains inactive.
-
-    - name: Publish the validated runtime environment atomically
-      ansible.builtin.copy:
-        src: "{{ staged_config.path }}/hamsterdan.env"
-        remote_src: true
-        dest: "{{ runtime_root }}/hamsterdan.env"
-        owner: root
-        group: root
-        mode: "0600"
 
     - name: Publish the validated installation configuration atomically
       ansible.builtin.copy:
@@ -328,6 +495,12 @@
     - name: Remove staged candidate configuration
       ansible.builtin.file:
         path: "{{ staged_config.path }}"
+        state: absent
+      changed_when: false
+
+    - name: Remove throwaway validation secret custody
+      ansible.builtin.file:
+        path: "{{ validation_secrets.path }}"
         state: absent
       changed_when: false
 
