@@ -200,6 +200,7 @@ def test_runtime_playbook_installs_an_inactive_exact_image_service_and_validates
     root = Path(__file__).parents[2]
     playbook = (root / "deployment" / "ansible" / "runtime.yml").read_text()
     configuration = (root / "deployment" / "ansible" / "configure.yml").read_text()
+    custody = (root / "deployment" / "ansible" / "vars" / "runtime-custody.yml").read_text()
     unit = (root / "deployment" / "ansible" / "templates" / "hamsterdan.service.j2").read_text()
 
     assert "candidate_image_id" in playbook
@@ -215,11 +216,13 @@ def test_runtime_playbook_installs_an_inactive_exact_image_service_and_validates
     assert "runtime_image_identity" in playbook
     assert "reconciled_installations" in playbook
     assert "isolated candidate validation state" in playbook
-    assert "runtime_op_token_file: /etc/hamsterdan/op-token" in playbook
-    assert "runtime_environment_template: /etc/hamsterdan/env-prod.tpl" in playbook
-    assert "runtime_vault: hamsterdan-prod" in playbook
-    assert "op_version: 2.35.0" in playbook
-    assert "op_archive_sha256: 4457ade59850b852c64c77164235b34dd0b984ef7826eb0ccd32f1fd78a2ceb7" in playbook
+    assert "runtime_op_token_file: /etc/hamsterdan/op-token" in custody
+    assert "runtime_environment_template: /etc/hamsterdan/env-prod.tpl" in custody
+    assert "runtime_vault: hamsterdan-prod" in custody
+    assert "op_version: 2.35.0" in custody
+    assert "op_archive_sha256: 4457ade59850b852c64c77164235b34dd0b984ef7826eb0ccd32f1fd78a2ceb7" in custody
+    assert "vars_files:\n    - vars/runtime-custody.yml" in playbook
+    assert "vars_files:\n    - vars/runtime-custody.yml" in configuration
     assert 'checksum: "sha256:{{ op_archive_sha256 }}"' in playbook
     assert "op_installed.stdout == op_version" in playbook
     assert 'src: "{{ playbook_dir }}/../../env-prod.tpl"' in playbook
@@ -231,6 +234,11 @@ def test_runtime_playbook_installs_an_inactive_exact_image_service_and_validates
     assert "configuration_publication.changed and service_before.stdout == 'active'" in configuration
     assert "current configuration and service are unchanged" in configuration
     assert "ansible_python_interpreter: /usr/bin/python3" in configuration
+    assert "/etc/hamsterdan/hamsterdan.env" not in configuration
+    assert "Render the throwaway validation environment from the installed template" in configuration
+    assert "Remove throwaway validation secret custody" in configuration
+    assert '--env-file\n              - "{{ staged_config.path }}/hamsterdan.env"' in configuration
+    assert "source={{ validation_secrets.path }},target=/run/secrets/hamsterdan,readonly" in configuration
     assert "127.0.0.1:8000:8000" in unit
     assert "{{ candidate_image_id }}" in unit
     assert "--pull=never" in unit
@@ -307,7 +315,6 @@ def test_development_secret_template_is_rendered_by_direnv_from_the_development_
         "CF_ACCESS_CLIENT_ID",
         "CF_ACCESS_CLIENT_SECRET",
         "E2B_API_KEY",
-        "EXE_DEV_API_TOKEN",
         "GITHUB_HENRIQUEBASTOS_HOSTS",
         "HAMSTERDAN_GITHUB_WORKFLOW_TOKEN",
         "OPENAI_AGENT_API_KEY",
@@ -319,3 +326,31 @@ def test_development_secret_template_is_rendered_by_direnv_from_the_development_
     assert "op inject --force -i env-dev.tpl -o .env && chmod 600 .env" in envrc
     assert "watch_file env-dev.tpl" in envrc
     assert "dotenv .env" in envrc
+
+
+def test_deployment_authority_resolves_only_from_the_operations_vault() -> None:
+    root = Path(__file__).parents[2]
+    template = (root / "env-ops.tpl").read_text()
+    launcher = (root / "scripts" / "ops").read_text()
+    development = (root / "env-dev.tpl").read_text()
+    assignments = [line for line in template.splitlines() if line and not line.startswith("#")]
+
+    assert [line.split("=", 1)[0] for line in assignments] == [
+        "ANTHROPIC_AGENT_API_KEY",
+        "EXE_DEV_API_TOKEN",
+        "EXE_DEV_SSH_PRIVATE_KEY_B64",
+        "GITHUB_APP_ID",
+        "GITHUB_APP_SLUG",
+        "OP_SERVICE_ACCOUNT_TOKEN_VPS",
+    ]
+    assert all(line.split("=", 1)[1].startswith("op://example-ops/") for line in assignments)
+
+    # A development sandbox must never hold authority over the production host.
+    assert "hamsterdan-ops" not in development
+    assert "EXE_DEV" not in development
+
+    # A workstation authenticates personally; only a headless environment
+    # substitutes a service account.
+    assert 'export OP_SERVICE_ACCOUNT_TOKEN="$OP_SA_HAMSTERDAN_OPS"' in launcher
+    assert "unset OP_SERVICE_ACCOUNT_TOKEN" in launcher
+    assert 'exec op run --env-file=env-ops.tpl -- "$@"' in launcher

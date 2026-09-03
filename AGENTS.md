@@ -87,12 +87,21 @@ project policy.
 
 ## Secrets
 
-1Password holds every credential, split into the `hamsterdan-dev` and
-`hamsterdan-prod` vaults. On a dev machine, direnv renders the committed
-`env-dev.tpl` into the gitignored `.env` and loads it; regenerate with
-`rm .env && direnv reload`. On the target, provisioning installs the committed
+1Password holds every credential, split by who reads it into three vaults, each
+with one committed template.
+
+`hamsterdan-dev` is what a sandbox reads. direnv renders `env-dev.tpl` into the
+gitignored `.env` and loads it; regenerate with `rm .env && direnv reload`.
+
+`hamsterdan-prod` is what the running service reads. Provisioning installs
 `env-prod.tpl` and that box's own service-account token, and every service start
 renders `/etc/hamsterdan/hamsterdan.env` and fetches the App private key and
-webhook secret from `hamsterdan-prod`. Rotation is therefore: edit the item in
-1Password, then `systemctl restart hamsterdan`. The deploy never carries or
-persists those values.
+webhook secret. Rotation is therefore: edit the item in 1Password, then
+`systemctl restart hamsterdan`. The deploy never carries or persists those
+values.
+
+`hamsterdan-ops` is what a deployer reads, and neither of the other two can
+reach it. Run every deployment command through `scripts/ops`, which resolves
+`env-ops.tpl` with `op run` for that one command. A workstation authenticates
+personally and asks for a fingerprint; a headless environment exports
+`OP_SA_HAMSTERDAN_OPS` instead. Nothing else differs between them.

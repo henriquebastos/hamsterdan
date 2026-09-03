@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Run one deployment command under hamsterdan-ops authority.
+#
+# Headless environments export OP_SA_HAMSTERDAN_OPS and resolve the template
+# with that service account. A workstation exports nothing and authenticates
+# personally, so every deployment from a laptop is an explicit human act.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+if [[ $# -eq 0 ]]; then
+    echo "usage: scripts/ops COMMAND [ARG ...]" >&2
+    exit 2
+fi
+
+if [[ -n "${OP_SA_HAMSTERDAN_OPS:-}" ]]; then
+    export OP_SERVICE_ACCOUNT_TOKEN="$OP_SA_HAMSTERDAN_OPS"
+else
+    unset OP_SERVICE_ACCOUNT_TOKEN
+fi
+
+exec op run --env-file=env-ops.tpl -- "$@"

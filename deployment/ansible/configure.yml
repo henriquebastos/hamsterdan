@@ -3,14 +3,12 @@
   hosts: all
   gather_facts: true
   become: true
+  vars_files:
+    - vars/runtime-custody.yml
   vars:
     ansible_python_interpreter: /usr/bin/python3
-    runtime_root: /etc/hamsterdan
-    runtime_config: /etc/hamsterdan/config
-    runtime_environment: /etc/hamsterdan/hamsterdan.env
     runtime_installations_file: /etc/hamsterdan/config/installations.toml
-    runtime_image_identity: /etc/hamsterdan/image-id
-    runtime_secrets: /etc/hamsterdan/secrets
+    runtime_agent_key_file: /etc/hamsterdan/secrets/agent-api-key
 
   tasks:
     - name: Validate target and configuration expectations
@@ -32,7 +30,13 @@
           kind: directory
         - path: "{{ runtime_secrets }}"
           kind: directory
-        - path: "{{ runtime_environment }}"
+        - path: "{{ runtime_op_token_file }}"
+          kind: file
+        - path: "{{ runtime_environment_template }}"
+          kind: file
+        - path: "{{ runtime_agent_key_file }}"
+          kind: file
+        - path: "{{ op_command }}"
           kind: file
         - path: "{{ runtime_installations_file }}"
           kind: file
@@ -51,6 +55,12 @@
       loop: "{{ runtime_custody.results }}"
       loop_control:
         label: "{{ item.item.path }}"
+
+    - name: Read the installed target secret-provider authority
+      ansible.builtin.slurp:
+        src: "{{ runtime_op_token_file }}"
+      register: op_authority
+      no_log: true
 
     - name: Read the installed exact image identity
       ansible.builtin.slurp:
@@ -120,6 +130,98 @@
             mode: "0644"
           changed_when: false
 
+        - name: Render the throwaway validation environment from the installed template
+          ansible.builtin.command:
+            argv:
+              - "{{ op_command }}"
+              - inject
+              - --in-file
+              - "{{ runtime_environment_template }}"
+              - --out-file
+              - "{{ staged_config.path }}/hamsterdan.env"
+              - --file-mode
+              - "0600"
+              - --force
+          environment:
+            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
+          changed_when: false
+          no_log: true
+
+        - name: Create throwaway validation secret custody
+          ansible.builtin.tempfile:
+            state: directory
+            path: "{{ runtime_root }}"
+            prefix: .configuration-secrets-
+          register: validation_secrets
+          changed_when: false
+
+        - name: Give the image user throwaway validation secret custody
+          ansible.builtin.file:
+            path: "{{ validation_secrets.path }}"
+            state: directory
+            owner: "10001"
+            group: "10001"
+            mode: "0700"
+          changed_when: false
+
+        - name: Resolve the App private key for validation only
+          ansible.builtin.command:
+            argv:
+              - "{{ op_command }}"
+              - document
+              - get
+              - github-app.pem
+              - --vault
+              - "{{ runtime_vault }}"
+              - --out-file
+              - "{{ validation_secrets.path }}/github-app.pem"
+              - --file-mode
+              - "0600"
+              - --force
+          environment:
+            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
+          changed_when: false
+          no_log: true
+
+        - name: Resolve the webhook secret for validation only
+          ansible.builtin.command:
+            argv:
+              - "{{ op_command }}"
+              - read
+              - "op://{{ runtime_vault }}/github-app/webhook_secret"
+              - --out-file
+              - "{{ validation_secrets.path }}/webhook-secret"
+              - --file-mode
+              - "0600"
+              - --no-newline
+              - --force
+          environment:
+            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
+          changed_when: false
+          no_log: true
+
+        - name: Copy installed agent authority into the throwaway validation set
+          ansible.builtin.copy:
+            src: "{{ runtime_agent_key_file }}"
+            remote_src: true
+            dest: "{{ validation_secrets.path }}/agent-api-key"
+            owner: "10001"
+            group: "10001"
+            mode: "0600"
+          changed_when: false
+          no_log: true
+
+        - name: Give the image user readable throwaway validation secrets
+          ansible.builtin.file:
+            path: "{{ validation_secrets.path }}/{{ item }}"
+            owner: "10001"
+            group: "10001"
+            mode: "0600"
+          loop:
+            - github-app.pem
+            - webhook-secret
+          changed_when: false
+
         - name: Create isolated validation state
           ansible.builtin.tempfile:
             state: directory
@@ -149,9 +251,9 @@
               - --security-opt=no-new-privileges
               - --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=268435456,mode=0700,uid=10001,gid=10001
               - --env-file
-              - "{{ runtime_environment }}"
+              - "{{ staged_config.path }}/hamsterdan.env"
               - --mount=type=bind,source={{ validation_state.path }},target=/var/lib/hamsterdan
-              - --mount=type=bind,source={{ runtime_secrets }},target=/run/secrets/hamsterdan,readonly
+              - --mount=type=bind,source={{ validation_secrets.path }},target=/run/secrets/hamsterdan,readonly
               - --mount=type=bind,source={{ staged_config.path }},target=/run/config/hamsterdan,readonly
               - "{{ installed_image_id }}"
               - validate
@@ -169,6 +271,12 @@
             path: "{{ staged_config.path }}"
             state: absent
           when: staged_config is defined and staged_config.path is defined
+
+        - name: Remove failed throwaway validation secret custody
+          ansible.builtin.file:
+            path: "{{ validation_secrets.path }}"
+            state: absent
+          when: validation_secrets is defined and validation_secrets.path is defined
 
         - name: Remove failed isolated validation state
           ansible.builtin.file:
@@ -193,6 +301,12 @@
     - name: Remove staged configuration
       ansible.builtin.file:
         path: "{{ staged_config.path }}"
+        state: absent
+      changed_when: false
+
+    - name: Remove throwaway validation secret custody
+      ansible.builtin.file:
+        path: "{{ validation_secrets.path }}"
         state: absent
       changed_when: false
 

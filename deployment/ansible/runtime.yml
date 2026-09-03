@@ -3,23 +3,12 @@
   hosts: all
   gather_facts: true
   become: true
+  vars_files:
+    - vars/runtime-custody.yml
   vars:
     ansible_python_interpreter: /usr/bin/python3
-    runtime_root: /etc/hamsterdan
-    runtime_config: /etc/hamsterdan/config
-    runtime_secrets: /etc/hamsterdan/secrets
     runtime_state: /var/lib/hamsterdan
     runtime_unit: /etc/systemd/system/hamsterdan.service
-    runtime_image_identity: /etc/hamsterdan/image-id
-    runtime_op_token_file: /etc/hamsterdan/op-token
-    runtime_environment_template: /etc/hamsterdan/env-prod.tpl
-    runtime_vault: hamsterdan-prod
-    op_version: 2.35.0
-    op_archive_sha256: 4457ade59850b852c64c77164235b34dd0b984ef7826eb0ccd32f1fd78a2ceb7
-    op_archive_url: "https://cache.agilebits.com/dist/1P/op2/pkg/v{{ op_version }}/op_linux_amd64_v{{ op_version }}.zip"
-    op_directory: "/opt/hamsterdan/op/{{ op_version }}"
-    op_archive: "{{ op_directory }}/op_linux_amd64_v{{ op_version }}.zip"
-    op_command: "{{ op_directory }}/op"
     managed_secret_files:
       - name: agent-api-key
         source: "{{ runtime_agent_key }}"

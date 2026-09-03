@@ -59,41 +59,53 @@ the current checkout.
 
 ## Qualify a candidate on exe.dev
 
-Install the locked development tools with `uv sync --frozen`. The deployment
-requires these project secrets in its environment:
+Install the locked development tools with `uv sync --frozen`. Every deployment
+command runs through `scripts/ops`, which resolves the committed `env-ops.tpl`
+with `op run` for that one command and never writes a rendered file:
 
-- `EXE_DEV_API_TOKEN`, allowed to run `ls` and `new`;
-- `EXE_DEV_SSH_PRIVATE_KEY_B64`, an unencrypted SSH private key encoded as one
-  base64 line.
+```shell
+scripts/ops uv run --frozen python deployment/exe_vm.py ...
+```
 
-Register the matching public key with exe.dev and scope it to the VM ownership
-tag:
+The template resolves only from the `hamsterdan-ops` vault, which holds the
+deployment authority the running service must never be able to read: the exe.dev
+API token, the exe.dev SSH key as one base64 line, the App identity, the agent
+key, and the target's own service-account token. Neither `hamsterdan-dev` nor
+`hamsterdan-prod` carries any of it, so a stolen sandbox token cannot reach the
+production host and the production host cannot reprovision itself.
+
+Authority comes from one of two places and nothing else. A workstation exports
+no service account, so `op run` authenticates personally and every deployment
+from a laptop costs a deliberate Touch ID confirmation. A headless environment
+exports `OP_SA_HAMSTERDAN_OPS`, and `scripts/ops` substitutes it for the
+duration of the command. That single variable is the only difference between the
+two, so the command a human types is the command automation runs.
+
+Register the exe.dev public key and scope it to the VM ownership tag:
 
 ```shell
 cat /path/to/key.pub | ssh exe.dev ssh-key add --tag=hamsterdan
 ```
 
-For a key held in 1Password, request OpenSSH format before encoding it:
+To replace the stored key, encode it as one line before writing the item, and do
+not print or persist that output:
 
 ```shell
-op read 'op://VAULT/ITEM/private key?ssh-format=openssh' | base64 | tr -d '\n'
+op read 'op://example-ops/example-ssh-key/credential' | base64 -d   # recover
 ```
-
-Do not print or persist that output. Send it directly to the environment or
-secret manager.
 
 The owned VM contract is `hamsterdan-prod`, tag `hamsterdan`, two CPUs, 4 GiB
 RAM, 20 GiB disk, and exe.dev's default exeuntu image. Creation requires the
 exact confirmation value and has no automatic deletion counterpart:
 
 ```shell
-uv run --frozen python deployment/exe_vm.py ensure --confirm-create hamsterdan-prod
+scripts/ops uv run --frozen python deployment/exe_vm.py ensure --confirm-create hamsterdan-prod
 ```
 
 Deploy an already verified clean candidate by its manifest:
 
 ```shell
-uv run --frozen python deployment/deploy.py \
+scripts/ops uv run --frozen python deployment/deploy.py \
   --manifest dist/deployment/<revision>/release.json
 ```
 
@@ -109,10 +121,10 @@ GitHub credential, and does not start the Hamsterdan host.
 
 ## Provision and validate an inactive runtime
 
-Runtime provisioning consumes the role-named App identity, installation, and
-repository inputs used by `.agents/setup`, the exe.dev API and SSH inputs above,
-one qualified agent-provider key, and `OP_SERVICE_ACCOUNT_TOKEN_VPS`: the
-target's own 1Password service-account token, persisted on the VM as owner-only
+Runtime provisioning consumes the installation and repository inputs from
+`deployment/config/installations.toml` plus everything `env-ops.tpl` resolves,
+including `OP_SERVICE_ACCOUNT_TOKEN_VPS`: the target's own 1Password
+service-account token, persisted on the VM as owner-only
 `/etc/hamsterdan/op-token`.
 
 The App private key, the webhook secret, and the runtime environment are no
@@ -131,9 +143,11 @@ never appears in a command argument.
 `READINESS_REMINDER_SECONDS` are therefore no longer read by this command; the
 last four are declared in `env-prod.tpl` instead.
 
-The agent-provider key has no 1Password item, so it remains a controller input
-carried as a temporary private file into `/etc/hamsterdan/secrets/agent-api-key`
-under the existing no-implicit-replacement guard. Provisioning refuses to start
+The agent-provider key is deployment authority rather than runtime authority:
+the target cannot fetch it for itself, so `env-ops.tpl` resolves it and the
+controller carries it as a temporary private file into
+`/etc/hamsterdan/secrets/agent-api-key` under the existing
+no-implicit-replacement guard. Provisioning refuses to start
 when the selected provider key disagrees with the `HAMSTERDAN_PI_PROVIDER` and
 `HAMSTERDAN_PI_MODEL` pair `env-prod.tpl` declares. Values remain in temporary
 controller files and private VM files; secret values do not enter Ansible
@@ -148,7 +162,7 @@ published to `/etc/hamsterdan/` by the deploy.
 Select the exact previously qualified manifest:
 
 ```shell
-uv run --frozen python deployment/runtime.py \
+scripts/ops uv run --frozen python deployment/runtime.py \
   provision \
   --manifest dist/deployment/<revision>/release.json
 ```
@@ -168,13 +182,16 @@ Add or remove account blocks and repository lines in
 `deployment/config/installations.toml`, then apply only that file:
 
 ```shell
-uv run --frozen python deployment/runtime.py configure \
+scripts/ops uv run --frozen python deployment/runtime.py configure \
   --file deployment/config/installations.toml
 ```
 
-It requires a runtime the service has started at least once, because the
-boot-rendered `/etc/hamsterdan/hamsterdan.env` and `/etc/hamsterdan/secrets/`
-credentials are the custody it validates against.
+It requires a provisioned runtime but not a started one. Like provisioning, it
+resolves a throwaway environment, App private key, and webhook secret from
+`env-prod.tpl` and the installed target token, validates the proposed
+configuration against them, and deletes them on both the success and failure
+paths. Nothing it validates against depends on a previous service start, and the
+authoritative fetch remains the unit's `ExecStartPre`.
 
 This command does not build, transfer, or replace an OCI image; change the
 systemd unit; rotate secrets; or alter VM infrastructure. It uses the exact
