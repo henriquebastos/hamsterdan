@@ -1,5 +1,5 @@
 ---
-status: Active
+status: Completed
 captured: 2026-09-04
 navigator: Henrique
 source: ../roadmap/cv19-private-v0-1-production/proof/pr80.md
@@ -197,7 +197,47 @@ Bun, TypeScript, and distribution checks passed. A final focused startup run
 passed seven tests after strengthening the queued code-change case; no runtime
 code changed after the release gate began.
 
-Production promotion is next under the Navigator's standing deployment
+Production promotion ran under the Navigator's standing deployment
 authorization. Capacity was checked first: 2.5 GB free on the 20 GB VM, with
 the current `14f41d8` and prior `e3a79bb` image candidates retained. This is a
 verified release promotion, not a deployment to discover behavior.
+
+## 1h. Production activation and startup evidence
+
+Revision `2f1b646906bcd8e3b13f6b969eed808f6d70e905` was built from the clean
+commit, verified locally, qualified remotely, and activated at
+2026-09-04T23:35:38Z. Its exact image is
+`sha256:441d880dd0036df4860179e96228e5f38abe189a02bbda9343bbf5acf9bfc49e`.
+Deployment and provisioning each repeated with `changed=0, failed=0`.
+The active service reported zero restarts, health `ok`, and zero scheduler
+error classes. The selected provider remains OpenAI with `gpt-5.6-sol`.
+
+[PR82](https://github.com/HBNetwork/demo-pr-readiness/pull/82) opened at
+23:36:00Z on head `e7b843f038e116abf5b59017633b1a15de5e0beb`. Its initial
+summary comment, ID `5547672034`, appeared at 23:36:09Z. A GitHub snapshot
+captured that comment showing "Dan's review: reviewing" while review was still
+pending. History records the first `DashLanded` at sequence 208, completion of
+`startup.finish` at 231, and the first normal Activity request, `review.agent`,
+at 235. Every normal Activity request follows the initial successful summary.
+
+Review occurrence 62 returned `AgentReview` with zero findings on that exact
+head. Publication occurrence 64 returned `ReviewLanded`. Eleven successful
+dashboard publications retained the single App summary comment. Two earlier
+`RoundDeferred` terminals reflect webhook custody; no blocked, fault, unable,
+or failed terminal occurred. Later summary publication was pending alongside
+review, demonstrating that ongoing updates no longer hold startup custody.
+
+All six CI jobs passed. The clean-green scenario requested no human reviewer;
+its existing policy reached readiness without a submitted human review. The
+same summary became all-clear, and exactly one readiness advisory appeared,
+ID `5547681486`. Both initial and final inspectors passed six checks. The final
+preclosure History contained 792 records, no pending Activities, and no error
+terminals. This incremental startup proof does not replace PR80's three-actor
+repair, requested-changes, approval, and thread-resolution evidence.
+
+PR82 was closed unmerged after capture. The
+[manifest](proof/rs036-pr82-manifest.json) records the exact release identity,
+ordering assertions, local evidence hashes, and archive. It contains metadata
+and GitHub evidence, not new media or agent-transcript captures. Raw webhook
+payloads and secrets remain excluded. All operations used the headless service
+account and fingerprint-pinned SSH through `scripts/ops`.

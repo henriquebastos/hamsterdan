@@ -24,3 +24,9 @@ candidate artifacts. A durable fix should reserve enough space before transfer
 and remove only explicitly eligible deployment artifacts while preserving the
 running image, a qualified rollback candidate, and all application state.
 Do not use an unrestricted Docker or filesystem prune as that policy.
+
+RS-036 revisited this obligation before deploying `2f1b646`: the VM had 2.5 GB
+free, and the current `14f41d8` and prior `e3a79bb` candidates were retained.
+The deployment completed without cleanup or capacity failure. The manual check
+satisfied this promotion's prerequisite; automated preflight and bounded
+retention remain unresolved before future deployments.

@@ -48,12 +48,13 @@ existing Hamsterdan capability outside the delivery roadmap.
 
 ## Active
 
-- [RS-036 — Publish the initial summary before review](rs-036-publish-initial-summary-before-review.md):
-  initialize the summary before releasing normal Activities; later updates retain
-  their existing independent loop.
+None.
 
 ## Closed
 
+- [RS-036 — Publish the initial summary before review](rs-036-publish-initial-summary-before-review.md):
+  deployed initial summary publication before all normal Activities; PR82 proved
+  startup ordering, independent later updates, and clean readiness.
 - [RS-034 — Distribute slow tests across routine workers](rs-034-distribute-slow-tests-across-workers.md):
   replaced module-scoped batching with one-test chunks, preserving all routine
   evidence while reducing measured local wall time by 27.4% to 39.4%.

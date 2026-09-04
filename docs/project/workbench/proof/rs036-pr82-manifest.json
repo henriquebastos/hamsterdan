@@ -1,0 +1,276 @@
+{
+  "schema": 1,
+  "refinement": "RS-036",
+  "repository": "HBNetwork/demo-pr-readiness",
+  "pull_request": 82,
+  "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/82",
+  "outcome": "initial-summary-before-normal-activities-proven-in-production",
+  "closed_unmerged": true,
+  "closed_at": "2026-09-04T23:38:32Z",
+  "head": "e7b843f038e116abf5b59017633b1a15de5e0beb",
+  "production_revision": "2f1b646906bcd8e3b13f6b969eed808f6d70e905",
+  "production_image": "sha256:441d880dd0036df4860179e96228e5f38abe189a02bbda9343bbf5acf9bfc49e",
+  "provider": "openai",
+  "model": "gpt-5.6-sol",
+  "manual_provider_proof_issue": 81,
+  "manual_provider_comment": 5547518436,
+  "summary_comment": 5547672034,
+  "summary_created_at": "2026-09-04T23:36:09Z",
+  "summary_updated_at": "2026-09-04T23:37:31Z",
+  "seconds_from_open_to_summary": 9,
+  "readiness_advisory": 5547681486,
+  "startup_completion_sequence": 231,
+  "history_verification": {
+    "dashboard_publications": 11,
+    "errors": [],
+    "first_dash_landed_sequence": 208,
+    "first_dash_occurrence": 21,
+    "first_normal_request_sequence": 235,
+    "first_normal_transition": "review.agent",
+    "history_records": 792,
+    "ok": true,
+    "review_landed_occurrences": [
+      64
+    ],
+    "reviews": [
+      {
+        "findings": 0,
+        "head": "e7b843f038e116abf5b59017633b1a15de5e0beb",
+        "occurrence": 62,
+        "sequence": 380
+      }
+    ]
+  },
+  "ci_jobs_passed": 6,
+  "initial_inspector_checks": 6,
+  "final_inspector_checks": 6,
+  "release_tests": {
+    "parallel_passed": 1267,
+    "serial_passed": 1267,
+    "declared_platform_deselections": 18
+  },
+  "deployment_repeat": {
+    "changed": 0,
+    "failed": 0
+  },
+  "provisioning_repeat": {
+    "changed": 0,
+    "failed": 0
+  },
+  "limitations": [
+    "Evidence files and archive are local ignored artifacts; this manifest and the narrative are committed.",
+    "Bounded incremental startup proof; no new media, agent transcripts, or full durable-state export.",
+    "Structured runtime observations omit prompts, Activity bodies, secrets, and raw webhook payloads.",
+    "Clean-green requested no human reviewer; readiness followed existing policy without a submitted human review.",
+    "PR80 retains the separate complete repair, requested-changes, thread-resolution, and approval proof.",
+    "Later dashboard failure independence and crash-cut recovery are qualified locally, not injected into production.",
+    "Two RoundDeferred terminals record webhook-custody synchronization, with no error terminal."
+  ],
+  "files": [
+    {
+      "path": ".amp/runtime/rs036-before-health.txt",
+      "bytes": 442,
+      "sha256": "bb1144707c78f5f6bdd08736692989e59280efc7c58803b58abf668f3615e1ac"
+    },
+    {
+      "path": ".amp/runtime/rs036-build.log",
+      "bytes": 21082,
+      "sha256": "7ca42a2ff0e11e65a7f8000e591d3a5a2289565f5c35242a7ab21ea1ed2cee2b"
+    },
+    {
+      "path": ".amp/runtime/rs036-create.json",
+      "bytes": 245,
+      "sha256": "dc5e118e4db54d6023d15740f5ca0bcf71255d5a4f306c2b3d9002c4e0256078"
+    },
+    {
+      "path": ".amp/runtime/rs036-deploy-first.log",
+      "bytes": 2661,
+      "sha256": "19ce1fd928b2ea07aaa0003cf17b2f747bfd21eb5cbc0d669ea656c2c12d1f61"
+    },
+    {
+      "path": ".amp/runtime/rs036-deploy-repeat.log",
+      "bytes": 2710,
+      "sha256": "6216d8cd4edc8337a8c1c94d88d3d9ed1a1623b6916c0fc4ade584ef2e775e7f"
+    },
+    {
+      "path": ".amp/runtime/rs036-deployed-health.txt",
+      "bytes": 441,
+      "sha256": "bbe863f732ee0ec5845b9935ce58384a4cf60258f7168e6a49fe662aecc0bdd0"
+    },
+    {
+      "path": ".amp/runtime/rs036-deployed-provider.json",
+      "bytes": 76,
+      "sha256": "ca38d80098dc7979b704da374bf170e8e99adde0209de3644d0eead3ca48c362"
+    },
+    {
+      "path": ".amp/runtime/rs036-image-verify.log",
+      "bytes": 374,
+      "sha256": "3597046d5578e349a88331a90a120805bb0931bee302d2637729680834179ea3"
+    },
+    {
+      "path": ".amp/runtime/rs036-prod-disk.txt",
+      "bytes": 2534,
+      "sha256": "06b857d8888db79aec9230170c1086a8be81eccf60f1363dda389419224e2262"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/01-opening-github.json",
+      "bytes": 30425,
+      "sha256": "7dc3f4c4cb7ae74b418780bf2be82d50a6ade7c7e9615fec0c20629ce7a0302f"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/02-runtime.jsonl",
+      "bytes": 70358,
+      "sha256": "fd1da412ed8c5b5c5b446da73d80c155e4f4fdc291b54b9fc637b1d60a3ef1fd"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/03-summary-github.json",
+      "bytes": 62158,
+      "sha256": "0443f205ebfbf96c32dbba7d65c76d9be0c5a90e77ed24b73b41568323e953ee"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/04-runtime.jsonl",
+      "bytes": 111315,
+      "sha256": "f7ec82e9692ccbf27b7f2962d1b523409713ce4a7cf866feeb8a05ca07200712"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/05-ci-github.json",
+      "bytes": 62218,
+      "sha256": "3a98f369aac770cb915b67c4519b4022dd07997c40581f92669911922a595841"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/06-runtime.jsonl",
+      "bytes": 172309,
+      "sha256": "7ea0e15cdddbf5e23ea4d128e2d56dd8cfae88000dba917ef03a06a78c588fc5"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/07-verified-history.json",
+      "bytes": 378,
+      "sha256": "4af20f4f5b3a67982b77cc743bb138bed3c2662e177c7663c9872dae76e954c1"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/08-inspect.json",
+      "bytes": 2121,
+      "sha256": "f41cc687fa59446b4d679136df045937e74e954a1486d6e80da7e0874e427e90"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/09-reviewed-github.json",
+      "bytes": 62223,
+      "sha256": "2c0557f58f89b3c9d5ac55703d4cfb089b70633c49c7fe52af4df76acb389307"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/10-ci-github.json",
+      "bytes": 66851,
+      "sha256": "16a387802f865c7275b3ba429d16b52bab62332e1732448dbd0c720b51836de2"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/11-final-inspect.json",
+      "bytes": 2618,
+      "sha256": "56cd1c071eb8f71ed6d03742c6c6a07efb767e82c2ab334bcda74f2b5a914241"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/12-final-runtime.jsonl",
+      "bytes": 237059,
+      "sha256": "5570850d269eaf9cb76a653a604b686f5d514dc0ca088b60e2ff4db9d7b09ffe"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/13-final-health.txt",
+      "bytes": 442,
+      "sha256": "01f9e9cd7e8ff9cc1d6b51f4115af735b7826118dc0e7c2b10cf6ca52ce25e6d"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/14-final-github.json",
+      "bytes": 66851,
+      "sha256": "16a387802f865c7275b3ba429d16b52bab62332e1732448dbd0c720b51836de2"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/15-final-verified-history.json",
+      "bytes": 379,
+      "sha256": "019d584cb0df1bf490942a7315adbf88b1714fd65a3c71ac53dd75dc40427365"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/16-close.txt",
+      "bytes": 86,
+      "sha256": "7717fe887f2af91a379554f65388fe8cc26407c9519c474446d722c8cd235418"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/17-closed-github.json",
+      "bytes": 61627,
+      "sha256": "240826aa4b1ace80eb43469067c073d8b4fb4d32975f5eb9054a7398e298e293"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/18-closed-runtime.jsonl",
+      "bytes": 237339,
+      "sha256": "23ef459a52a0c56ebe4716701b1640d202826ba9aac850496fbc1b3384687884"
+    },
+    {
+      "path": ".amp/runtime/rs036-proof/pr82/19-closed-health.txt",
+      "bytes": 442,
+      "sha256": "ea3e4c692e68bd96c3156e5103ba26451a77042929ce0aaf3f376a106b0500a0"
+    },
+    {
+      "path": ".amp/runtime/rs036-provider-independent.json",
+      "bytes": 261,
+      "sha256": "7fa239ada55c46c0c22698d4497812b3891627cf3bdb47e5b7f0d3294b54b46e"
+    },
+    {
+      "path": ".amp/runtime/rs036-provider-proof.json",
+      "bytes": 1011,
+      "sha256": "262a993e5a1ade8c355cfb073cc181facbbccd87857f283338f3668c78a43618"
+    },
+    {
+      "path": ".amp/runtime/rs036-provision-first.log",
+      "bytes": 32960,
+      "sha256": "564782fc074f05f53ee0694a6e1ed4e45f4f341e3586c999f2958b349ad54d08"
+    },
+    {
+      "path": ".amp/runtime/rs036-provision-repeat.log",
+      "bytes": 32840,
+      "sha256": "8d389473f36c6e6a8c57e4fc0e7b9f7cee65343838713934c6f47f69672c4573"
+    },
+    {
+      "path": ".amp/runtime/rs036-quick-final.log",
+      "bytes": 164,
+      "sha256": "8783806b17bec59733f359bb55b6b79bf2b2eb11e847486e7e7923bed40270df"
+    },
+    {
+      "path": ".amp/runtime/rs036-release.log",
+      "bytes": 10305,
+      "sha256": "e687d7d220463ace21df960f78ff0b3d6a43b233f20de7fac175599250210b7b"
+    },
+    {
+      "path": ".amp/runtime/rs036-start.log",
+      "bytes": 97,
+      "sha256": "34aeb8d3b81811b7172a40b569def690917ce74e4478c813d16d190fd7c17ee3"
+    },
+    {
+      "path": ".amp/runtime/rs036-startup-final.log",
+      "bytes": 98,
+      "sha256": "e05675e677b0dfc0614671fc154ba2e7b5877c32f357b1a4814d2d5a1da415fe"
+    },
+    {
+      "path": ".amp/runtime/rs036-stop.log",
+      "bytes": 9,
+      "sha256": "cb6f82a52d11c260ee6936511d22d5a7db55f8e7c5afe9f03ea847350ce860c5"
+    },
+    {
+      "path": ".amp/runtime/rs036_provider_config.py",
+      "bytes": 299,
+      "sha256": "adb8043df0e195dc66a1ffb1e1aa1ddd0183ad96a67bf90c66810268ef041641"
+    },
+    {
+      "path": ".amp/runtime/verify_pr82_startup.py",
+      "bytes": 1898,
+      "sha256": "dd6a8241a4b4733fa0020bf4b382f2e455cb4f4ef1b5378ce141cbb253e0232d"
+    },
+    {
+      "path": "dist/deployment/2f1b646906bcd8e3b13f6b969eed808f6d70e905/release.json",
+      "bytes": 944,
+      "sha256": "8e08f35f31c63894bce867b82e2b9e8c4d63b9772c4d71bca1f4dee89405372d"
+    }
+  ],
+  "archive": {
+    "path": ".amp/runtime/rs036-pr82-proof.tar.gz",
+    "bytes": 82224,
+    "sha256": "afae3b139c71e22ea78759e7e2334cf6828f07aceaf63476b3569a3d7a7890cd"
+  }
+}

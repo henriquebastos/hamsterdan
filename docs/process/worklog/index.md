@@ -121,3 +121,4 @@ file per milestone. Record outcomes and verification, not every edit.
 
 - [2026-09-04 — PR79 discarded; missing review diff reproduced](entries/2026-09-04T2200Z-pr79-review-input-diagnosis.md)
 - [2026-09-04 — PR80 completed the clean production proof](entries/2026-09-04T2157Z-pr80-clean-production-proof.md)
+- [2026-09-04 — Initial summary startup proven in production](entries/2026-09-04T2338Z-initial-summary-startup-proven-in-production.md)

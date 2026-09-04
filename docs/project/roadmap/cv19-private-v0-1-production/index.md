@@ -28,7 +28,15 @@ open-source release.
 
 ## Current state
 
-Production is active on revision `14f41d8a519a8202411e0d1fc1c823949b494cee`.
+Production is active on revision `2f1b646906bcd8e3b13f6b969eed808f6d70e905`.
+[RS-036](../../workbench/rs-036-publish-initial-summary-before-review.md) added
+initial summary publication before normal Activities. PR82 proved the first
+summary before review, subsequent updates to the same comment, six green jobs,
+and one readiness advisory with clean History. Its release gate passed 1,267
+parallel and 1,267 serial tests, with 18 declared platform deselections.
+Deployment and provisioning both repeated with zero changes; production is
+healthy with zero restarts and the OpenAI `gpt-5.6-sol` selection retained.
+
 [PR80 passed the clean journey](proof/pr80.md): three findings in one native
 review, App-authored repair, six green repaired-head jobs, a zero-finding
 rereview and automatic thread resolution before approval, one final advisory,
@@ -40,7 +48,7 @@ production still admits one repository.
 
 PR78 and PR79 were discarded after reply-custody and source-anchor failures.
 Their reproduced corrections are included in the deployed revision. Manual
-provider proofs preceded local/release gates and deployment. The final gate
+provider proofs preceded local/release gates and deployment. The PR80 gate
 passed 1,256 parallel and 1,256 serial tests with 18 platform deselections.
 Deployment qualification and runtime provisioning both repeated with zero
 changes. A full-disk interruption was recovered by deleting three old unused
