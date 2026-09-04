@@ -19,6 +19,8 @@ these implementations must match:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from hamsterdan.contracts.readiness_v5 import (
@@ -137,6 +139,10 @@ class FakePublisher:
             ("finding", operation, head, text, path, line, related_locations, suggestion, authority_operation)
         )
         return self._outcome()
+
+    def findings(self, epoch, head, findings, *, authority_operation):
+        self.calls.append(("findings", head, findings, authority_operation))
+        return tuple(self._outcome() for _finding in findings)
 
     def reminder_operation(self, operation, *, context):
         # presence-only reconciliation BEFORE claim/recipient reads
@@ -499,18 +505,49 @@ class TestPublishGate:
         )
         lookups = [c for c in publisher.calls if c[0] == "finding_find"]
         assert [operation for _, operation, _head in lookups] == ["findings:h1:i1:f1", "findings:h1:i1:f2"]
-        anchored, plain = [c for c in publisher.calls if c[0] == "finding"]
-        assert anchored[1:] == (
+        [batch] = [c for c in publisher.calls if c[0] == "findings"]
+        assert batch[1] == "h1" and batch[3] == "findings:h1:i1"
+        [anchored] = batch[2]
+        assert (
+            anchored.operation,
+            anchored.text,
+            anchored.path,
+            anchored.line,
+            anchored.related_locations,
+            anchored.suggestion,
+        ) == (
             "findings:h1:i1:f1",
-            "h1",
             "The TTL is read as minutes.",
             "src/gate.py",
             10,
             (("src/models.py", 18),),
             "    return issued_at + timedelta(seconds=ttl_seconds)",
-            "findings:h1:i1",
         )
+        [plain] = [c for c in publisher.calls if c[0] == "finding"]
         assert plain[1] == "findings:h1:i1:f2" and plain[4] == "" and plain[5] == 0
+
+    def test_all_anchored_findings_share_one_native_review_mutation(self) -> None:
+        work = replace(
+            self.WORK,
+            findings=[
+                *self.WORK.findings[:1],
+                {
+                    "id": "f2",
+                    "blocking": True,
+                    "body": "Only true approvals may count.",
+                    "path": "src/gate.py",
+                    "line": 16,
+                },
+            ],
+        )
+        publisher = FakePublisher()
+
+        result = gates(publisher).publish_gate(work)
+
+        assert isinstance(result, ReviewLanded)
+        [batch] = [call for call in publisher.calls if call[0] == "findings"]
+        assert [finding.operation for finding in batch[2]] == ["findings:h1:i1:f1", "findings:h1:i1:f2"]
+        assert not [call for call in publisher.calls if call[0] == "finding"]
 
     def test_an_unmarkable_finding_id_degrades_to_its_digest(self) -> None:
         work = Publishable(

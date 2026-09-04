@@ -526,6 +526,31 @@ class ScenarioProvider:
             if "<!-- hamsterdan-rerun " in str(comment["body"]):
                 self.rerun_requests += 1
             return WireResponse(201, comment)
+        if method == "POST" and path == "/repos/owner/repo/pulls/7/reviews" and isinstance(body, dict):
+            review_id = 2_000 + len(self.human_reviews) + 1
+            for item in body.get("comments", []):
+                comment = {
+                    "id": 1_000 + len(self.review_comments) + 1,
+                    "html_url": f"https://github.com/owner/repo/pull/7#discussion_r{len(self.review_comments) + 1}",
+                    "body": item.get("body", ""),
+                    "user": {"login": BOT},
+                    "commit_id": body.get("commit_id"),
+                    "path": item.get("path"),
+                    "line": item.get("line"),
+                    "side": item.get("side"),
+                    "pull_request_review_id": review_id,
+                }
+                self.review_comments.append(comment)
+                self.writes.append((method, path, int(comment["id"]), str(comment["body"])))
+            review = {
+                "id": review_id,
+                "html_url": f"https://github.com/owner/repo/pull/7#pullrequestreview-{review_id}",
+                "submitted_at": "2026-08-16T00:00:01Z",
+                "state": "COMMENTED",
+                "user": {"login": BOT},
+            }
+            self.human_reviews.append(review)
+            return WireResponse(200, review)
         if method == "POST" and path == "/repos/owner/repo/pulls/7/comments" and isinstance(body, dict):
             comment = {
                 "id": 1_000 + len(self.review_comments) + 1,

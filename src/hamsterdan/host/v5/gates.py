@@ -65,7 +65,7 @@ from hamsterdan.contracts.readiness_v5 import (
     ReviewLanded,
     ReviewMoved,
 )
-from hamsterdan.github_app.models import GitHubBoundaryError, PublicationResult
+from hamsterdan.github_app.models import FindingPublication, GitHubBoundaryError, PublicationResult
 from hamsterdan.host.v5.claim import ClaimReader, CurrentClaim
 from hamsterdan.readiness.net_v5.board import render_board
 
@@ -141,6 +141,15 @@ class PublicationProvider(Protocol):
         link: str = "",
         authority_operation: str | None = None,
     ) -> PublicationResult: ...
+
+    def findings(
+        self,
+        epoch: int,
+        head: str,
+        findings: tuple[FindingPublication, ...],
+        *,
+        authority_operation: str,
+    ) -> tuple[PublicationResult, ...]: ...
 
     def finding_find(self, operation: str, head: str) -> PublicationResult | None: ...
 
@@ -354,10 +363,33 @@ class V5PublicationGates:
                         findings=work.findings,
                         mem=work.mem,
                     )
-                # one anchored comment per finding; a partial landing is
-                # safe because every identity reconciles lookup-first on
-                # the next attempt
+                anchored = tuple(
+                    FindingPublication(
+                        operation=_finding_operation(work.op, finding),
+                        text=str(finding.get("body", "")),
+                        **_finding_arguments(finding),
+                    )
+                    for finding in pending
+                    if finding.get("path") and finding.get("line")
+                )
+                for result in (
+                    self.publisher.findings(
+                        work.incarnation,
+                        work.head,
+                        anchored,
+                        authority_operation=work.op,
+                    )
+                    if anchored
+                    else ()
+                ):
+                    unproven = _unproven(result)
+                    if unproven == "blocked":
+                        return blocked()
+                    if unproven is not None:
+                        return ReviewFault(reason=unproven, mem=work.mem)
                 for finding in pending:
+                    if finding.get("path") and finding.get("line"):
+                        continue
                     result = self.publisher.finding(
                         _finding_operation(work.op, finding),
                         work.incarnation,

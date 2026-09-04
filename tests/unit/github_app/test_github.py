@@ -12,6 +12,7 @@ from hamsterdan.github_app.gateway import GitHubAuthority
 from hamsterdan.github_app.models import (
     ActionsJobSnapshot,
     ActionsRunSnapshot,
+    FindingPublication,
     GitHubBoundaryError,
     RerunRefusedError,
     WireResponse,
@@ -695,6 +696,73 @@ def test_finding_publishes_native_inline_suggestion_with_related_locations() -> 
     )
     assert "```suggestion\nif state.is_ready:\n```" in str(request[2]["body"])
     assert fences == [("owner/repo", 7, 3, HEAD, "finding-activity")]
+
+
+def test_anchored_findings_publish_as_one_native_review_batch() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    comments = "/repos/owner/repo/pulls/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/reviews"
+    fake = FakeTransport()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fake.responses[("POST", reviews)] = WireResponse(200, {"id": 8, "html_url": "review-url"})
+    fences: list[tuple] = []
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append(args))
+    findings = (
+        FindingPublication("finding-activity:f1", "First finding", "src/one.py", 4, suggestion="fixed_one()"),
+        FindingPublication("finding-activity:f2", "Second finding", "src/two.py", 9),
+        FindingPublication("finding-activity:f3", "Third finding", "src/three.py", 12),
+    )
+
+    results = publisher.findings(3, HEAD, findings, authority_operation="finding-activity")
+
+    assert all(result.status == "created" and result.inline for result in results)
+    [request] = [call for call in fake.calls if call[:2] == ("POST", reviews)]
+    assert request[2] is not None
+    assert request[2]["commit_id"] == HEAD and request[2]["event"] == "COMMENT"
+    assert [(item["path"], item["line"], item["side"]) for item in request[2]["comments"]] == [
+        ("src/one.py", 4, "RIGHT"),
+        ("src/two.py", 9, "RIGHT"),
+        ("src/three.py", 12, "RIGHT"),
+    ]
+    assert all("<!-- hamsterdan:finding" in item["body"] for item in request[2]["comments"])
+    assert "```suggestion\nfixed_one()\n```" in request[2]["comments"][0]["body"]
+    assert fences == [("owner/repo", 7, 3, HEAD, "finding-activity")]
+
+
+def test_ambiguous_accepted_review_batch_reconciles_every_finding_without_reposting() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    comments = "/repos/owner/repo/pulls/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/reviews"
+
+    class AcceptedReview(FakeTransport):
+        def request(self, method: str, path: str, body=None) -> WireResponse:
+            self.calls.append((method, path, body))
+            assert method == "POST" and path == reviews and body is not None
+            self.page_values[f"{comments}?per_page=100"] = tuple(
+                {
+                    "id": index,
+                    "html_url": f"inline-{index}",
+                    "body": item["body"],
+                    "user": {"login": "hamsterdan[bot]"},
+                }
+                for index, item in enumerate(body["comments"], start=10)
+            )
+            raise GitHubBoundaryError("qualified ambiguous outcome")
+
+    fake = AcceptedReview()
+    fake.page_values[f"{comments}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+    findings = (
+        FindingPublication("finding-activity:f1", "First finding", "src/one.py", 4),
+        FindingPublication("finding-activity:f2", "Second finding", "src/two.py", 9),
+    )
+
+    results = publisher.findings(3, HEAD, findings, authority_operation="finding-activity")
+
+    assert all(result.status == "existing" and result.inline for result in results)
+    assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 1
 
 
 def test_definitive_inline_denial_falls_back_to_one_immutable_issue_comment() -> None:

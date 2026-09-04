@@ -115,3 +115,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-09-04 — Production provider drift failed closed; OpenAI custody corrected](entries/2026-09-04T0053Z-production-provider-drift-failed-closed-openai-custody-corrected.md)
 - [2026-09-04 — Inline finding transient retry qualified locally](entries/2026-09-04T0220Z-inline-finding-transient-retry-qualified-locally.md)
 - [2026-09-04 — Reused-head Actions association qualified locally](entries/2026-09-04T1247Z-reused-head-actions-association-qualified-locally.md)
+- [2026-09-04 — Native review batch qualified against GitHub before deployment](entries/2026-09-04T1935Z-native-review-batch-qualified-before-deployment.md)

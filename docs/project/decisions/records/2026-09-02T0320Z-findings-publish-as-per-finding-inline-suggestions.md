@@ -43,13 +43,16 @@ presentation regressed that reader experience.
 ## Consequences
 
 - The V5 findings publication seam moves from one immutable batch
-  operation to per-finding anchored review comments, keeping
-  lookup-first identity and exact-head fencing per finding.
-- A transient HTTP rejection consumes the inline publisher's bounded retries
-  only after lookup proves the finding absent. It waits GitHub's documented
-  60-second minimum before the first retry and backs off to 120 seconds before
-  the final attempt; every retry receives a fresh exact-head fence. The
-  publication Activity's heartbeat window covers those bounded waits.
+  conversation operation to per-finding anchored review comments. All anchored
+  findings for one review round travel in one native GitHub review submission;
+  each still owns its marker identity and resolvable thread. Lookup-first
+  reconciliation proves every marker independently, while one exact-head fence
+  guards the batch mutation.
+- A transient HTTP rejection consumes the review submission's bounded retries
+  only after lookup proves the missing findings absent. It waits GitHub's
+  documented 60-second minimum before the first retry and backs off to 120
+  seconds before the final attempt; every retry receives a fresh exact-head
+  fence. The publication Activity's heartbeat window covers those bounded waits.
   Structured payload and
   authorization failures do not retry. A transport ambiguity follows the
   same lookup, backoff, and fresh-fence sequence because no HTTP response exists

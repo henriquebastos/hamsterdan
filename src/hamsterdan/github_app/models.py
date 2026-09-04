@@ -163,6 +163,17 @@ class PublicationResult:
 
 
 @dataclass(frozen=True)
+class FindingPublication:
+    operation: str
+    text: str
+    path: str
+    line: int
+    related_locations: tuple[tuple[str, int], ...] = ()
+    suggestion: str = ""
+    link: str = ""
+
+
+@dataclass(frozen=True)
 class RerunIssue:
     """One rerun issuance plus the pre-request evidence cut: the newest
     (run_id, attempt) the provider reported for the head in the FINAL

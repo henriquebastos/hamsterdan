@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from time import sleep
 from typing import Any, Protocol, cast
 from urllib.parse import quote
@@ -12,6 +13,7 @@ from .gateway import GitHubAuthority
 from .models import (
     ActionsRunSnapshot,
     CommentReference,
+    FindingPublication,
     GitHubBoundaryError,
     ProviderFailureClass,
     PublicationResult,
@@ -32,6 +34,16 @@ _INLINE_UNAVAILABLE_MESSAGES = frozenset(
 _DIAGNOSTIC_FIELDS = frozenset({"body", "commit_id", "line", "path", "pull_request_review_thread.line", "side"})
 _DIAGNOSTIC_CODES = frozenset({"already_exists", "custom", "invalid", "missing", "unprocessable"})
 _TRANSIENT_RETRY_SECONDS = (60, 120)
+
+
+@dataclass(frozen=True)
+class _FindingContent:
+    marker: str
+    inline_detail: str
+    inline_payload: str
+    fallback_detail: str
+    fallback_payload: str
+    legacy_payload: str
 
 
 class CommentPublisher:
@@ -63,6 +75,7 @@ class CommentPublisher:
         self.root = f"/repos/{repository}/issues/{pr_number}/comments"
         self.edit_root = f"/repos/{repository}/issues/comments"
         self.review_root = f"/repos/{repository}/pulls/{pr_number}/comments"
+        self.review_batch_root = f"/repos/{repository}/pulls/{pr_number}/reviews"
 
     @staticmethod
     def marker(kind: str, operation: str, head: str) -> str:
@@ -314,56 +327,23 @@ class CommentPublisher:
         link: str = "",
         authority_operation: str | None = None,
     ) -> PublicationResult:
-        marker = self.marker("finding", operation, head)
-        location = f"`{path}:{line}`" if path and line > 0 else ""
-        related = (
-            "Related locations:\n"
-            + "\n".join(
-                f"- [`{related_path}:{related_line}`]"
-                f"(https://github.com/{self.repository}/blob/{head}/{quote(related_path, safe='/')}#L{related_line})"
-                for related_path, related_line in related_locations
-            )
-            if related_locations
-            else ""
-        )
-        suggestion_block = f"```suggestion\n{suggestion}\n```" if suggestion else ""
-        # the inline comment sits on the line it is about, so it carries
-        # no location line; only the conversation fallback names the line
-        inline_detail = "\n\n".join(
-            item for item in (text, related, suggestion_block, f"Link: {link}" if link else "") if item
-        )
-        fallback_detail = "\n\n".join(
-            item
-            for item in (
-                text,
-                f"Primary location: {location}" if location else "",
-                related,
-                suggestion_block,
-                f"Link: {link}" if link else "",
-            )
-            if item
-        )
-        inline_payload = f"{inline_detail}\n\n{marker}"
-        fallback_payload = f"{fallback_detail}\n\n{marker}"
-        legacy_detail = "\n".join(
-            item
-            for item in (text, f"Location: {path}:{line}" if location else "", f"Link: {link}" if link else "")
-            if item
-        )
-        legacy_payload = f"{legacy_detail}\n\n{marker}"
+        finding = FindingPublication(operation, text, path, line, related_locations, suggestion, link)
+        content = self._finding_content(finding, head)
+        marker = content.marker
+        location = bool(path and line > 0)
         existing_review = self._find_review(marker) if location else None
         if existing_review is not None:
             # the pre-split composition landed the location line inline;
             # a held comment in that shape reconciles instead of colliding
-            if existing_review.get("body") not in (inline_payload, fallback_payload):
+            if existing_review.get("body") not in (content.inline_payload, content.fallback_payload):
                 raise ValueError("stable publication operation collided with a different payload")
             return PublicationResult("existing", _reference(existing_review), inline=True)
         existing_issue = self._find(marker)
         if existing_issue is not None:
             compatible_legacy = (
-                not suggestion and not related_locations and existing_issue.get("body") == legacy_payload
+                not suggestion and not related_locations and existing_issue.get("body") == content.legacy_payload
             )
-            if existing_issue.get("body") != fallback_payload and not compatible_legacy:
+            if existing_issue.get("body") != content.fallback_payload and not compatible_legacy:
                 raise ValueError("stable publication operation collided with a different payload")
             return PublicationResult("existing", _reference(existing_issue), inline=False)
         if location:
@@ -371,7 +351,7 @@ class CommentPublisher:
                 operation,
                 epoch,
                 head,
-                inline_detail,
+                content.inline_detail,
                 path,
                 line,
                 authority_operation=authority_operation,
@@ -379,9 +359,167 @@ class CommentPublisher:
             if result.capability_available:
                 return result
         result = self.immutable(
-            "finding", operation, epoch, head, fallback_detail, authority_operation=authority_operation
+            "finding", operation, epoch, head, content.fallback_detail, authority_operation=authority_operation
         )
         return PublicationResult(result.status, result.reference, result.capability_available, inline=False)
+
+    def findings(
+        self,
+        epoch: int,
+        head: str,
+        findings: tuple[FindingPublication, ...],
+        *,
+        authority_operation: str,
+    ) -> tuple[PublicationResult, ...]:
+        if not findings or any(not finding.path or finding.line <= 0 for finding in findings):
+            raise ValueError("a native review batch requires anchored findings")
+        if len({finding.operation for finding in findings}) != len(findings):
+            raise ValueError("a native review batch requires unique finding operations")
+
+        contents = tuple(self._finding_content(finding, head) for finding in findings)
+        results: dict[str, PublicationResult] = {}
+        pending = self._reconcile_finding_batch(findings, contents, results)
+        reconciliation_required = False
+        for attempt in range(len(_TRANSIENT_RETRY_SECONDS) + 1):
+            if reconciliation_required:
+                pending = self._reconcile_pending_batch(pending, results)
+                reconciliation_required = False
+            if not pending:
+                return tuple(results[finding.operation] for finding in findings)
+            self.fence(self.repository, self.pr_number, epoch, head, authority_operation)
+            try:
+                if self.fault is not None:
+                    self.fault("before_call", self.repository, self.pr_number, "finding", authority_operation)
+                response = self.transport.request(
+                    "POST",
+                    self.review_batch_root,
+                    {
+                        "body": "I found review issues on this head; details are attached to the relevant lines.",
+                        "commit_id": head,
+                        "event": "COMMENT",
+                        "comments": [
+                            {
+                                "body": content.inline_payload,
+                                "path": finding.path,
+                                "line": finding.line,
+                                "side": "RIGHT",
+                            }
+                            for finding, content in pending
+                        ],
+                    },
+                )
+                if self.fault is not None:
+                    self.fault("after_call", self.repository, self.pr_number, "finding", authority_operation)
+            except GitHubBoundaryError:
+                try:
+                    pending = self._reconcile_pending_batch(pending, results)
+                except GitHubBoundaryError:
+                    reconciliation_required = True
+                if not pending:
+                    return tuple(results[finding.operation] for finding in findings)
+                if attempt == len(_TRANSIENT_RETRY_SECONDS):
+                    raise
+                self.retry_delay(_TRANSIENT_RETRY_SECONDS[attempt])
+                continue
+            if response.status == 200:
+                reference = _lenient_reference(_response_mapping(response.body))
+                for finding, _content in pending:
+                    results[finding.operation] = PublicationResult("created", reference, inline=True)
+                return tuple(results[finding.operation] for finding in findings)
+            pending = self._reconcile_pending_batch(pending, results)
+            if not pending:
+                return tuple(results[finding.operation] for finding in findings)
+            if _transient_inline_rejection(response):
+                if attempt < len(_TRANSIENT_RETRY_SECONDS):
+                    self.retry_delay(_TRANSIENT_RETRY_SECONDS[attempt])
+                    continue
+                raise _inline_rejection(response, "transient_http_rejection")
+            raise _inline_rejection(response, _inline_failure_class(response))
+        raise AssertionError("bounded native review recovery exhausted without an outcome")
+
+    def _reconcile_pending_batch(
+        self,
+        pending: tuple[tuple[FindingPublication, _FindingContent], ...],
+        results: dict[str, PublicationResult],
+    ) -> tuple[tuple[FindingPublication, _FindingContent], ...]:
+        return self._reconcile_finding_batch(
+            tuple(finding for finding, _content in pending),
+            tuple(content for _finding, content in pending),
+            results,
+        )
+
+    def _reconcile_finding_batch(
+        self,
+        findings: tuple[FindingPublication, ...],
+        contents: tuple[_FindingContent, ...],
+        results: dict[str, PublicationResult],
+    ) -> tuple[tuple[FindingPublication, _FindingContent], ...]:
+        review_comments = self._review_comments()
+        issue_comments = self._comments()
+        pending: list[tuple[FindingPublication, _FindingContent]] = []
+        for finding, content in zip(findings, contents, strict=True):
+            existing_review = _find_marked(review_comments, self.bot_login, content.marker)
+            if existing_review is not None:
+                if existing_review.get("body") not in (content.inline_payload, content.fallback_payload):
+                    raise ValueError("stable publication operation collided with a different payload")
+                results[finding.operation] = PublicationResult("existing", _reference(existing_review), inline=True)
+                continue
+            existing_issue = _find_marked(issue_comments, self.bot_login, content.marker)
+            if existing_issue is not None:
+                if existing_issue.get("body") != content.fallback_payload:
+                    raise ValueError("stable publication operation collided with a different payload")
+                results[finding.operation] = PublicationResult("existing", _reference(existing_issue), inline=False)
+                continue
+            pending.append((finding, content))
+        return tuple(pending)
+
+    def _finding_content(self, finding: FindingPublication, head: str) -> _FindingContent:
+        marker = self.marker("finding", finding.operation, head)
+        location = f"`{finding.path}:{finding.line}`" if finding.path and finding.line > 0 else ""
+        related = (
+            "Related locations:\n"
+            + "\n".join(
+                f"- [`{related_path}:{related_line}`]"
+                f"(https://github.com/{self.repository}/blob/{head}/{quote(related_path, safe='/')}#L{related_line})"
+                for related_path, related_line in finding.related_locations
+            )
+            if finding.related_locations
+            else ""
+        )
+        suggestion_block = f"```suggestion\n{finding.suggestion}\n```" if finding.suggestion else ""
+        inline_detail = "\n\n".join(
+            item
+            for item in (finding.text, related, suggestion_block, f"Link: {finding.link}" if finding.link else "")
+            if item
+        )
+        fallback_detail = "\n\n".join(
+            item
+            for item in (
+                finding.text,
+                f"Primary location: {location}" if location else "",
+                related,
+                suggestion_block,
+                f"Link: {finding.link}" if finding.link else "",
+            )
+            if item
+        )
+        legacy_detail = "\n".join(
+            item
+            for item in (
+                finding.text,
+                f"Location: {finding.path}:{finding.line}" if location else "",
+                f"Link: {finding.link}" if finding.link else "",
+            )
+            if item
+        )
+        return _FindingContent(
+            marker=marker,
+            inline_detail=inline_detail,
+            inline_payload=f"{inline_detail}\n\n{marker}",
+            fallback_detail=fallback_detail,
+            fallback_payload=f"{fallback_detail}\n\n{marker}",
+            legacy_payload=f"{legacy_detail}\n\n{marker}",
+        )
 
     def finding_find(self, operation: str, head: str) -> PublicationResult | None:
         """Presence-only lookup of one landed finding under (operation,
@@ -564,6 +702,13 @@ def _diagnostic_atom(value: object, allowed: frozenset[str], fallback: str) -> s
 
 def _final_marker(body: str, marker: str) -> bool:
     return body == marker or body.endswith(f"\n\n{marker}")
+
+
+def _find_marked(comments: tuple[dict[str, Any], ...], bot_login: str, marker: str) -> Mapping[str, Any] | None:
+    return next(
+        (item for item in comments if _login(item) == bot_login and _final_marker(str(item.get("body", "")), marker)),
+        None,
+    )
 
 
 def _login(value: Mapping[str, Any]) -> str | None:
