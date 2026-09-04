@@ -1132,6 +1132,16 @@ class DashFault(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class SummaryPublished(WorkflowModel):
+    digest: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class SummaryPending(WorkflowModel):
+    pass
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class DashHeal(WorkflowModel):
     """A poke from the landed fold to the self-heal transition: the board
     landed an exact-but-drifted recovery request. Carries the full

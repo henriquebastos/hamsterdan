@@ -14,6 +14,7 @@ from harness import (
     comment,
     comment_held,
     deliver,
+    deliver_held,
     one,
     projection,
     see_head,
@@ -270,6 +271,14 @@ class TestReplyGate:
         # occurrence could double-post (both gate calls would observe
         # "absent") — the second recovery must be inert
         engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+        )
         world = world_of(engine)
         world["comments_mode"] = "unknown"
         comment_held(engine, dispatch, definitions, "c1", "status")
@@ -310,6 +319,14 @@ class TestReplyGate:
         # two questions in flight at once: neither holds the other's
         # custody — pending is per-id, unlike the one-at-a-time batons
         engine, _, dispatch, definitions = spawn_held()
+        deliver_held(
+            engine,
+            dispatch,
+            definitions,
+            "on_head",
+            "HeadSeen",
+            {"head": "h1", "base": "b1", "mergeable": True, "policy": "p1"},
+        )
         comment_held(engine, dispatch, definitions, "c1", "status", hold=frozenset({"reply_gate"}))
         comment_held(engine, dispatch, definitions, "c2", "reply", hold=frozenset({"reply_gate"}))
         assert memory(engine)["pending"] == {

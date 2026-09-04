@@ -1360,6 +1360,13 @@ def _application_after_dashboard_custody_race(
         public_clone_url="https://github.com/owner/repo.git",
         custody_path=path,
     )
+    # Establish startup and the clear review before approval triggers the
+    # dashboard/readiness race this fixture owns.
+    approved = authority.review
+    authority.review = HumanReviewSnapshot((), (), (), (), 0, "available")
+    application.process_observation(Observation(delivery(), "pull_request", "opened", 44, 23, 31, "owner/repo", 7))
+    application.settle()
+    authority.review = approved
     original_request = authority.transport.request
     inserted = False
 
@@ -1814,6 +1821,76 @@ def test_v5_restart_fails_closed_on_malformed_announcement_wake_history(
             Runner(),  # type: ignore[arg-type]
             **options,
         )
+
+
+@pytest.mark.parametrize("restart_cut", ["none", "queued", "published", "started"])
+def test_initial_summary_lands_before_review_and_survives_restart(tmp_path: Path, restart_cut: str) -> None:
+    authority = Authority()
+    events = []
+
+    class ObservingRunner(Runner):
+        def review(self, *args, **kwargs):
+            summaries = [
+                comment
+                for comment in authority.transport.comments
+                if "<!-- hamsterdan:dashboard -->" in str(comment["body"])
+            ]
+            assert len(summaries) == 1
+            assert "reviewing" in str(summaries[0]["body"])
+            events.append("review started after summary")
+            return super().review(*args, **kwargs)
+
+    def open_application():
+        return PrReadinessV5Application(
+            tmp_path / "application",
+            SUBJECT,
+            authority,  # type: ignore[arg-type]
+            ObservingRunner(),  # type: ignore[arg-type]
+            agent_settle=lambda operations: None,
+            bot_login="hamsterdan-test[bot]",
+            public_clone_url="https://github.com/owner/repo.git",
+            custody_path=tmp_path / "webhooks.sqlite3",
+            dispatch_path=tmp_path / "activity-dispatch.sqlite3",
+        )
+
+    application = open_application()
+    application.process_observation(Observation(delivery(), "pull_request", "opened", 44, 23, 31, "owner/repo", 7))
+    application.settle()
+    assert events == []
+    assert not any(
+        isinstance(record, ActivityRequested) and record.activity == "review_agent"
+        for record in application._runtime().engine.records
+    )
+    if restart_cut == "queued":
+        application.close()
+        application = open_application()
+        application.settle()
+        assert events == []
+
+    assert application.run_durable_activities(1) == 1
+    if restart_cut == "published":
+        application.close()
+        application = open_application()
+    application.settle()
+    assert events == ["review started after summary"]
+    if restart_cut == "started":
+        application.close()
+        application = open_application()
+        application.settle()
+        assert events == ["review started after summary"]
+    for _ in range(20):
+        processed = application.run_durable_activities(20)
+        application.settle()
+        if not processed:
+            break
+    else:
+        pytest.fail("summary updates did not settle")
+    summaries = [
+        comment for comment in authority.transport.comments if "<!-- hamsterdan:dashboard -->" in str(comment["body"])
+    ]
+    assert len(summaries) == 1
+    assert "✅ clear" in str(summaries[0]["body"])
+    application.close()
 
 
 def test_v5_durable_publications_use_an_instance_queue_owned_by_the_application(tmp_path: Path) -> None:

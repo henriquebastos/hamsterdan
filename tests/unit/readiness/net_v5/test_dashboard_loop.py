@@ -188,15 +188,19 @@ class TestBlockedAndRecovery:
         assert len(state["blocked"]["entries"]) < len(accumulated)  # real drift
         assert board(world) == []
         retained = dict(state["blocked"])
+        attempt_count = len(attempts(world))
+        assert world["agent_calls"] == 0
         world["dash_mode"] = None
         comment(engine, "c1", "recover_publication", arg=f"dash:{retained['digest']}")
         state = memory(engine)
         assert state["blocked"] == {} and state["faulted"] == {}
         # the recovery reissued the retained request VERBATIM, then the
         # self-heal published the full accumulated state
-        assert attempts(world)[-2] == retained
-        assert attempts(world)[-1] == {"entries": accumulated, "digest": state["digest"]}
-        assert board(world) == accumulated
+        assert attempts(world)[attempt_count] == retained
+        assert attempts(world)[attempt_count + 1]["entries"] == accumulated
+        assert board(world)[: len(accumulated)] == accumulated
+        assert board(world) == state["entries"]
+        assert world["agent_calls"] == 1
 
     def test_unknown_terminal_retains_exact_effect_and_recovers_once(self) -> None:
         # an unknown terminal folds Faulted with the EXACT effect
@@ -213,11 +217,14 @@ class TestBlockedAndRecovery:
         assert digest  # the exact attempted effect identity is retained
         desired = list(state["entries"])
         assert board(world) == []  # nothing landed
+        assert world["agent_calls"] == 0
         world["dash_mode"] = None
         comment(engine, "c1", "recover_publication", arg=f"dash:{digest}")
         state = memory(engine)
         assert state["faulted"] == {} and state["blocked"] == {}
-        assert board(world) == desired  # the full desired state landed
+        assert board(world)[: len(desired)] == desired
+        assert board(world) == state["entries"]
+        assert world["agent_calls"] == 1
         assert upserts(world).count(digest) == 1  # the exact digest, once
 
     def test_recovery_reissues_the_exact_request_then_self_heals(self) -> None:
@@ -236,6 +243,8 @@ class TestBlockedAndRecovery:
         assert exact["entries"] and exact["digest"]
         desired_before = list(state["entries"])
         assert len(desired_before) > len(exact["entries"])  # real drift
+        attempt_count = len(attempts(world))
+        assert world["agent_calls"] == 0
         world["dash_mode"] = None
         comment(engine, "c1", "recover_publication", arg=f"dash:{exact['digest']}")
         landed = upserts(world)
@@ -243,11 +252,12 @@ class TestBlockedAndRecovery:
         assert landed.count(exact["digest"]) == 1  # and only once
         # the recovery replayed the retained request VERBATIM before the
         # self-heal published the drifted desired state
-        assert attempts(world)[-2] == {"entries": exact["entries"], "digest": exact["digest"]}
-        assert attempts(world)[-1]["entries"] == desired_before
+        assert attempts(world)[attempt_count] == {"entries": exact["entries"], "digest": exact["digest"]}
+        assert attempts(world)[attempt_count + 1]["entries"] == desired_before
         # the drift healed: the board shows exactly the desired state,
         # and memory agrees with what actually landed
-        assert board(world) == desired_before
+        assert board(world)[: len(desired_before)] == desired_before
+        assert world["agent_calls"] == 1
         state = memory(engine)
         assert state["faulted"] == {} and state["blocked"] == {}
         assert state["digest"] == state["landed"]

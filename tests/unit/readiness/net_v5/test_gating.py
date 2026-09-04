@@ -41,6 +41,9 @@ def _replace(marking: Marking, place: str, color: str, data: dict) -> Marking:
 
 def _marking(work: ReplyReq | DashReq | AnnounceReq) -> Marking:
     marking = seed_marking(INSTANCE)
+    # This fixture represents an already-started publication, including legacy History.
+    pending = NetPath("startup.pending")
+    marking = marking.consume(pending, marking.place(pending))
     if isinstance(work, ReplyReq):
         [memory] = marking.place(NetPath("conv.memory"))
         marking = _replace(
@@ -307,6 +310,9 @@ def test_restart_settles_a_legacy_unlanded_announcement_moved_without_posting(tm
         "policy": "p1",
     }
     marking = seed_marking(INSTANCE)
+    # This fixture represents an already-started publication, including legacy History.
+    pending = NetPath("startup.pending")
+    marking = marking.consume(pending, marking.place(pending))
     [snapshot] = marking.place(NetPath("ready.snap"))
     retained = {
         **snapshot.data,

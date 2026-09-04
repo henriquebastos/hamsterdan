@@ -65,6 +65,10 @@ every effect. Each PR has an independent Engine and History. Durable webhook,
 Dispatch, timer, and runnable stores survive host reconstruction. Hamsterdan
 never merges.
 
+For newly observed PRs, the initial summary must land before other workflow
+Activities start. Later summary updates keep updating that same comment and
+do not pause the workflow.
+
 Start with:
 
 - `src/hamsterdan/host/service.py` for runtime composition and custody;

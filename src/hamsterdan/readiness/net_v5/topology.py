@@ -8,7 +8,8 @@ facts. Readiness also carries LOOP-INTERNAL inhibit arcs on its own
 mailboxes: they make authority and producer ordering explicit and allow
 an announce only from a snapshot that has folded every fact already
 mailed to it. These are structural preconditions, not cross-loop control
-places.
+places. The composer's one-time startup precondition inhibits effect gates
+until the initial summary lands; pure intake and recovery remain available.
 Every decision is a pure fold on token data. Ingress doors are the only
 no-input transitions; the engine's identified delivery is the only
 deduplication anywhere.
@@ -25,7 +26,18 @@ from __future__ import annotations
 from petrus.impetus.dsl import BuiltNet, NetSpec
 from petrus.impetus.petrinet import Marking
 
-from hamsterdan.readiness.net_v5 import ci, conversation, dashboard, esc, life, mutation, readiness, reminders, review
+from hamsterdan.readiness.net_v5 import (
+    ci,
+    conversation,
+    dashboard,
+    esc,
+    life,
+    mutation,
+    readiness,
+    reminders,
+    review,
+    startup,
+)
 
 _LOOPS = (life, ci, esc, review, mutation, conversation, dashboard, reminders, readiness)
 
@@ -44,10 +56,12 @@ for _loop in _LOOPS:
 
 def build_net_v5() -> BuiltNet:
     net = NetSpec("pr_v5")
+    startup.declare(net.s)
     for loop in _LOOPS:
         loop.declare(net.s)
     for loop in _LOOPS:
         loop.wire(net)
+    startup.wire(net, GATES)
     return net.build()
 
 
@@ -61,7 +75,7 @@ def seed_marking(subject: str, *, reminder_delay_s: int = 3 * 24 * 60 * 60) -> M
         or not subject.isprintable()
     ):
         raise ValueError("V5 workflow subject is malformed")
-    contributions: dict = {}
+    contributions: dict = startup.seed()
     for loop in _LOOPS:
         if loop in (review, reminders):
             seeded = loop.seed(subject)

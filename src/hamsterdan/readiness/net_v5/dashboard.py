@@ -3,8 +3,8 @@
 Owns the DashMemory baton. Every sibling loop mails GateFacts here; the
 fold accumulates them into the projection log and republishes the board
 on digest drift ONLY — drift is a DECISION (fold), the upsert an
-effect. The dashboard is a pure sink (no foreign outputs) and
-authority-orthogonal by design (A5): a stale board row is corrected by
+effect. Successful publication releases workflow startup. The projection
+remains authority-orthogonal (A5): a stale board row is corrected by
 the next upsert, never fenced.
 
 Custody is a held baton: memory leaves its place while an upsert is in
@@ -34,6 +34,7 @@ from hamsterdan.contracts.readiness_v5 import (
     DashReq,
     GateFact,
     RecoverFact,
+    SummaryPublished,
 )
 from hamsterdan.readiness.net_v5.folding import route, values
 
@@ -86,6 +87,10 @@ def _fold_landed(binding, outputs):
         blocked={},
         faulted={},
     )
+    emitted = {
+        "dash.memory": (mem,),
+        "startup.published": (SummaryPublished(digest=out.digest),),
+    }
     if out.desired_digest != out.digest or list(out.desired_entries) != list(out.entries):
         # a recovery landed the EXACT retained request, but the desired
         # state drifted while the fault was held: poke the self-heal
@@ -94,8 +99,8 @@ def _fold_landed(binding, outputs):
         # compared too: a cyclic drift (A→B→A) returns to the retained
         # digest with MORE entries, and the digest alone would hide it.
         heal = DashHeal(entries=tuple(out.desired_entries), digest=out.desired_digest)
-        return route(outputs, {"dash.memory": (mem,), "dash.heal": (heal,)})
-    return route(outputs, {"dash.memory": (mem,)})
+        emitted["dash.heal"] = (heal,)
+    return route(outputs, emitted)
 
 
 def _fold_deferred(binding, outputs):
@@ -260,6 +265,7 @@ def wire(net) -> None:
         >> (
             dash.p.memory,
             dash.p.heal,
+            net.s.startup.p.published,
         )
     )
     # self-heal after a recovery landed an exact-but-drifted retained

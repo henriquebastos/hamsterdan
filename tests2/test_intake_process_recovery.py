@@ -248,13 +248,13 @@ class TestProcessRecovery:
 
         with sqlite3.connect(tmp_path / "hamsterdan.sqlite3") as connection:
             assert connection.execute("SELECT COUNT(*) FROM pr_workflows").fetchone()[0] == 0
-        assert history_length(tmp_path) == 21
+        assert history_length(tmp_path) == 22
 
         open_pr(tmp_path)
 
         with sqlite3.connect(tmp_path / "hamsterdan.sqlite3") as connection:
             assert connection.execute("SELECT COUNT(*) FROM pr_workflows").fetchone()[0] == 1
-        assert history_length(tmp_path) == 21
+        assert history_length(tmp_path) == 22
 
     def test_inbox_commit_survives_loss_before_http_acknowledgement(self, tmp_path: Path) -> None:
         body = pull_request_body()
@@ -276,7 +276,7 @@ class TestProcessRecovery:
 
         run_until_sigkill(history_acceptance_child, tmp_path)
 
-        assert history_length(tmp_path) == 23
+        assert history_length(tmp_path) == 24
         with sqlite3.connect(tmp_path / "hamsterdan.sqlite3") as connection:
             assert connection.execute("SELECT intake_authorized, intake_outcome FROM webhook_inbox").fetchone() == (
                 1,
@@ -289,7 +289,7 @@ class TestProcessRecovery:
         ).process_delivery(DELIVERY_ID)
         assert recovered.outcome == "recorded"
         assert recovered.occurrence == 1
-        assert history_length(tmp_path) == 23
+        assert history_length(tmp_path) == 24
 
     def test_history_completion_survives_loss_before_caller_acknowledgement(self, tmp_path: Path) -> None:
         open_pr(tmp_path)
@@ -303,8 +303,8 @@ class TestProcessRecovery:
 
         run_until_sigkill(history_completion_child, tmp_path)
 
-        assert history_length(tmp_path) == 25
+        assert history_length(tmp_path) == 26
         recovered = build_pull_request_authority(state_root=tmp_path).complete_next_observation(PR_IDENTITY)
         assert recovered.disposition == "already_completed"
         assert recovered.occurrence == 1
-        assert history_length(tmp_path) == 25
+        assert history_length(tmp_path) == 26

@@ -5,9 +5,6 @@ existing Hamsterdan capability outside the delivery roadmap.
 
 ## Candidate, not pulled
 
-- [RS-036 — Publish the initial summary before review](rs-036-publish-initial-summary-before-review.md):
-  PR80 and a local reproduction show inline review work overtaking the queued
-  initial summary; investigation is complete and the ordering fix remains a candidate.
 - [RS-035 — Make orb setup independent of ambient USER](rs-035-make-orb-setup-independent-of-ambient-user.md):
   stop the Docker-feedback setup step from depending on an optional ambient
   identity variable and restore the scrubbed-environment full-gate tests.
@@ -51,7 +48,9 @@ existing Hamsterdan capability outside the delivery roadmap.
 
 ## Active
 
-None.
+- [RS-036 — Publish the initial summary before review](rs-036-publish-initial-summary-before-review.md):
+  initialize the summary before releasing normal Activities; later updates retain
+  their existing independent loop.
 
 ## Closed
 

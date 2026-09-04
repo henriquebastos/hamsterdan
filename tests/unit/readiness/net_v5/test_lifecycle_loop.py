@@ -331,6 +331,19 @@ class TestCensus:
                 ("ready.facts", "inhibit", "ready.migrate_mutation_settled"),
                 ("ready.facts", "inhibit", "ready.migrate_fault_raised"),
             }
+            | {
+                ("startup.pending", "inhibit", transition)
+                for transition in (
+                    "startup.absorb_update",
+                    "review.agent",
+                    "review.publish",
+                    "esc.rerun_gate",
+                    "mut.git_gate",
+                    "conv.reply",
+                    "rem.gate",
+                    "ready.gate",
+                )
+            }
         )
         assert exceptional == expected
         filtered_arcs = [arc for arc in built.net.arcs if arc.filter is not None]

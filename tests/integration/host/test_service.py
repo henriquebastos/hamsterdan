@@ -1334,6 +1334,8 @@ def test_selected_v5_stages_authority_that_arrives_during_normalization_before_r
 
     host.process(host.custody.pending()[0])
 
+    assert review_calls == []
+    host.pump()
     operation = f"review:github:44:31:pr:7:{provider.head}:i1"
     assert review_calls == [(operation, 1)]
     assert host.custody.status(first_delivery) == "terminal"
@@ -1414,7 +1416,7 @@ def test_selected_v5_restart_replays_settled_webhook_after_death_before_acknowle
         if value.get("record") == "ExternalEventDelivered"
     )
     assert crash_observation == [(delivery, 1, "pending", 1)]
-    assert runner_calls == [(f"review:github:44:31:pr:7:{provider.head}:i1", 1)]
+    assert runner_calls == []
     assert all(identities.count(identity) == 1 for identity in expected)
     assert not any(identity.startswith("host-reconcile:") for identity in identities)
     with sqlite3.connect(tmp_path / "webhooks.sqlite3") as database:
@@ -1430,7 +1432,7 @@ def test_selected_v5_restart_replays_settled_webhook_after_death_before_acknowle
         assert database.execute(
             "SELECT status,attempts,reason,error_class FROM inbox WHERE delivery_id=?", (delivery,)
         ).fetchone() == ("pending", 0, None, None)
-    assert runner_calls == [(f"review:github:44:31:pr:7:{provider.head}:i1", 1)]
+    assert runner_calls == []
     assert tuple(provider.calls) == provider_calls
     assert history.read_text() == before_restart
 
@@ -1447,7 +1449,7 @@ def test_selected_v5_restart_replays_settled_webhook_after_death_before_acknowle
     try:
         assert second.sweep("startup") == 1
         assert second.custody.status(delivery) == "terminal"
-        assert runner_calls == [(f"review:github:44:31:pr:7:{'a' * 40}:i1", 1)]
+        assert runner_calls == []
         assert tuple(provider.calls) == provider_calls
         assert history.read_text() == before_restart
         assert second.runnable.count() == 1
@@ -1554,6 +1556,7 @@ def test_selected_v5_restart_rebuilds_timer_after_crash_before_runnable_hint(
     first._application(44, 31, 7)
     assert first.sweep("startup") == 1
     assert first.runnable.count() == 1
+    first.pump()
 
     def die_before_runnable_hint(instance: str, settled: DriveOutcome) -> None:
         assert instance == "github:44:31:pr:7"
@@ -1567,7 +1570,7 @@ def test_selected_v5_restart_rebuilds_timer_after_crash_before_runnable_hint(
         first.run_due()
 
     history = tmp_path / "applications" / "44" / "31" / "7" / "history.jsonl"
-    assert len(provider.comments) == 1
+    assert sum("hamsterdan:reminder" in str(item["body"]) for item in provider.comments) == 1
     assert (
         sum(
             value.get("record") == "ExternalEventDelivered" and value.get("source") == "on_timer"
@@ -1599,11 +1602,11 @@ def test_selected_v5_restart_rebuilds_timer_after_crash_before_runnable_hint(
         assert second.sweep("startup") == 1
         assert second.runnable.count() == 1
         assert second.run_due() == 0
-        assert len(provider.comments) == 1
+        assert sum("hamsterdan:reminder" in str(item["body"]) for item in provider.comments) == 1
 
         clock_us[0] = 21_000_000
         assert second.run_due() == 1
-        assert len(provider.comments) == 2
+        assert sum("hamsterdan:reminder" in str(item["body"]) for item in provider.comments) == 2
         assert (
             sum(
                 value.get("record") == "ExternalEventDelivered" and value.get("source") == "on_timer"

@@ -238,9 +238,9 @@ class TestWebhookInboxHandoff:
         assert first_response.status_code == second_response.status_code == 200
         assert first.outcome == "recorded"
         assert second.outcome == "duplicate"
-        assert len(accepted_history) == 23
-        assert history_records(tmp_path / "history.sqlite3")[:23] == accepted_history
-        assert len(history_records(tmp_path / "history.sqlite3")) == 25
+        assert len(accepted_history) == 24
+        assert history_records(tmp_path / "history.sqlite3")[:24] == accepted_history
+        assert len(history_records(tmp_path / "history.sqlite3")) == 26
         assert completion.disposition == "completed"
         assert completion.checkpoint == "observation_folded"
         with sqlite3.connect(tmp_path / "hamsterdan.sqlite3") as connection:
@@ -453,7 +453,7 @@ class TestIntakeClassification:
 
         assert result.outcome == "rejected"
         assert result.reason == "unsupported_head_lifecycle"
-        assert len(history_records(tmp_path / "history.sqlite3")) == 21
+        assert len(history_records(tmp_path / "history.sqlite3")) == 22
 
     def test_durable_authorization_survives_policy_change_and_late_transport_collision(self, tmp_path: Path) -> None:
         open_pull_request(tmp_path)
@@ -501,9 +501,9 @@ class TestIntakeClassification:
         assert duplicate.outcome == "duplicate"
         assert duplicate.reason == "same_observation"
         assert duplicate.delivery_identity is None
-        assert len(history_records(tmp_path / "history.sqlite3")) == 21
+        assert len(history_records(tmp_path / "history.sqlite3")) == 22
         assert worker.process_delivery(FIRST_DELIVERY).outcome == "recorded"
-        assert len(history_records(tmp_path / "history.sqlite3")) == 23
+        assert len(history_records(tmp_path / "history.sqlite3")) == 24
 
     def test_concurrent_semantic_offers_converge_on_one_history_acceptance(self, tmp_path: Path) -> None:
         open_pull_request(tmp_path)
@@ -517,7 +517,7 @@ class TestIntakeClassification:
             results = tuple(executor.map(worker.process_delivery, (FIRST_DELIVERY, SECOND_DELIVERY)))
 
         assert sorted(result.outcome for result in results) == ["duplicate", "recorded"]
-        assert len(history_records(tmp_path / "history.sqlite3")) == 23
+        assert len(history_records(tmp_path / "history.sqlite3")) == 24
 
 
 class TestHistoryOwnership:
@@ -543,7 +543,7 @@ class TestHistoryOwnership:
         assert (first_completion.disposition, first_completion.occurrence) == ("completed", 1)
         assert (second_completion.disposition, second_completion.occurrence) == ("completed", 2)
         assert (replay.disposition, replay.occurrence) == ("already_completed", 2)
-        assert len(history_records(tmp_path / "history.sqlite3")) == 29
+        assert len(history_records(tmp_path / "history.sqlite3")) == 30
 
     def test_shared_history_is_partitioned_by_pr_identity_not_by_database_file(self, tmp_path: Path) -> None:
         second_pr = PullRequestIdentity(installation_id=44, repository_id=31, pull_request_number=8)
@@ -559,10 +559,10 @@ class TestHistoryOwnership:
         second = worker.process_delivery(SECOND_DELIVERY)
 
         assert first.observation_key != second.observation_key
-        assert len(history_records(tmp_path / "history.sqlite3")) == 23
+        assert len(history_records(tmp_path / "history.sqlite3")) == 24
         other_history = SqliteHistoryStore(tmp_path / "history.sqlite3", "github:44:31:pr:8")
         try:
-            assert len(other_history.records) == 23
+            assert len(other_history.records) == 24
         finally:
             other_history.close()
         assert sorted(path.name for path in tmp_path.glob("*.sqlite3")) == [
@@ -618,7 +618,7 @@ class TestDurableIntegrity:
             raw = connection.execute(
                 """
                 SELECT payload FROM impetus_history_events
-                WHERE instance = ? AND position = 23
+                WHERE instance = ? AND position = 24
                 """,
                 ("github:44:31:pr:7",),
             ).fetchone()[0]
@@ -627,7 +627,7 @@ class TestDurableIntegrity:
             connection.execute(
                 """
                 UPDATE impetus_history_events SET payload = ?
-                WHERE instance = ? AND position = 23
+                WHERE instance = ? AND position = 24
                 """,
                 (json.dumps(mutated, separators=(",", ":"), sort_keys=True), "github:44:31:pr:7"),
             )
@@ -646,7 +646,7 @@ class TestDurableIntegrity:
             rows = connection.execute(
                 """
                 SELECT position, payload FROM impetus_history_events
-                WHERE instance = ? AND position IN (23, 24)
+                WHERE instance = ? AND position IN (24, 25)
                 ORDER BY position
                 """,
                 ("github:44:31:pr:7",),
