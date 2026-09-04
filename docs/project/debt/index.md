@@ -12,3 +12,4 @@ an item only when debt should outlive one story's review notes.
 - [Readiness DST composition split resolved through generated use](items/readiness-dst-composition-must-split-before-campaign-expansion.md)
 - [exe.dev default exeuntu image cannot be pinned](items/exe-dev-default-exeuntu-image-cannot-be-pinned.md)
 - [Non-blocking quality audit baseline remains unresolved](items/non-blocking-quality-audit-baseline-remains-unresolved.md)
+- [Blocked publication results omit the provider failure class](items/blocked-publication-results-omit-provider-failure-class.md)

@@ -432,6 +432,8 @@ class CommentPublisher:
                 return PublicationResult("existing", _reference(recovered), inline=True)
             if _inline_unavailable(response):
                 return PublicationResult("inline_unavailable", capability_available=False)
+            if not attempt and _transient_inline_rejection(response):
+                continue
             raise GitHubBoundaryError("GitHub did not prove inline finding publication")
         raise AssertionError("bounded inline finding recovery exhausted without an outcome")
 
@@ -491,6 +493,20 @@ def _inline_unavailable(response: WireResponse) -> bool:
         return False
     message = response.body.get("message")
     return isinstance(message, str) and message.strip().casefold() in _INLINE_UNAVAILABLE_MESSAGES
+
+
+def _transient_inline_rejection(response: WireResponse) -> bool:
+    if response.status == 429 or response.status >= 500:
+        return True
+    if not isinstance(response.body, Mapping):
+        return False
+    message = response.body.get("message")
+    if not isinstance(message, str):
+        return False
+    normalized = message.strip().casefold()
+    if response.status == 403:
+        return "secondary rate limit" in normalized or "abuse detection" in normalized
+    return response.status == 422 and normalized == "validation failed" and not response.body.get("errors")
 
 
 def _final_marker(body: str, marker: str) -> bool:

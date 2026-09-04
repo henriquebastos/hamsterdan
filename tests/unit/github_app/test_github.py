@@ -750,6 +750,7 @@ def test_inline_authorization_or_payload_failure_does_not_fall_back(response: Wi
         publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
 
     assert not [call for call in fake.calls if call[:2] == ("POST", issues)]
+    assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 1
 
 
 def test_ambiguous_accepted_inline_finding_recovers_without_a_second_mutation() -> None:
@@ -806,6 +807,48 @@ def test_inline_before_call_fault_retries_only_after_a_fresh_fence() -> None:
     assert result.status == "created" and result.inline
     assert len(fences) == 2
     assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 1
+
+
+@pytest.mark.parametrize(
+    "transient",
+    [
+        WireResponse(403, {"message": "You have exceeded a secondary rate limit"}),
+        WireResponse(422, {"message": "Validation Failed"}),
+        WireResponse(429, {"message": "Too Many Requests"}),
+        WireResponse(500, {"message": "Server Error"}),
+    ],
+)
+def test_inline_transient_http_rejection_retries_after_lookup_and_a_fresh_fence(
+    transient: WireResponse,
+) -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+
+    class TransientRejection(FakeTransport):
+        def __init__(self) -> None:
+            super().__init__()
+            self.attempts = 0
+
+        def request(self, method: str, path: str, body=None) -> WireResponse:
+            self.calls.append((method, path, body))
+            if method == "POST" and path == reviews:
+                self.attempts += 1
+                if self.attempts == 1:
+                    return transient
+                return WireResponse(201, {"id": 12, "html_url": "inline-url"})
+            return super().request(method, path, body)
+
+    fake = TransientRejection()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fences: list[str] = []
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append("fenced"))
+
+    result = publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
+
+    assert result.status == "created" and result.inline
+    assert fake.attempts == 2
+    assert fences == ["fenced", "fenced"]
 
 
 def test_inline_retry_stops_when_the_fresh_second_fence_rejects_authority() -> None:

@@ -45,6 +45,10 @@ presentation regressed that reader experience.
 - The V5 findings publication seam moves from one immutable batch
   operation to per-finding anchored review comments, keeping
   lookup-first identity and exact-head fencing per finding.
+- A transient HTTP rejection consumes the inline publisher's one bounded
+  retry only after lookup proves the finding absent; the retry receives a
+  fresh exact-head fence. Structured payload and authorization failures do
+  not retry.
 - Anchor rejection falls back to one immutable conversation comment,
   never disguised as success; authorization failures still fail closed.
 - Native review comments create resolvable threads, so human review
