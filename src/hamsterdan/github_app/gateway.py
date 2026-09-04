@@ -318,10 +318,14 @@ class GitHubAuthority:
             f"{self.root}/actions/workflows/{path}/runs?event=pull_request&head_sha={head.lower()}&per_page=20",
             "workflow_runs",
         )
-        # Closed historical PRs may be returned with an empty pull_requests
-        # projection. They cannot authorize this exact-head operation and must
-        # not make otherwise valid current evidence unavailable.
-        runs = [_run(value, workflow, self.pr_number) for value in values if value.get("head_sha") == head]
+        # GitHub can return runs from an earlier PR when a commit is reused.
+        # Once that PR closes, its pull_requests projection is empty. Only the
+        # current PR association can authorize a run for this workflow.
+        runs = [
+            _run(value, workflow, self.pr_number)
+            for value in values
+            if value.get("head_sha") == head and self.pr_number in _run_pull_numbers(value)
+        ]
         return tuple(sorted(runs, key=lambda run: (run.attempt, run.id), reverse=True))
 
     def select_run(self, workflow: str, head: str) -> ActionsRunSnapshot | None:
@@ -398,7 +402,6 @@ _FINDING_MARKER_HEAD = re.compile(r"<!-- hamsterdan:finding operation=[^ >]+ hea
 def _run(value: Mapping[str, Any], workflow: str, pr_number: int) -> ActionsRunSnapshot:
     expected = workflow.removeprefix(".github/workflows/")
     path = value.get("path")
-    pulls = value.get("pull_requests")
     identifier, attempt = value.get("id"), value.get("run_attempt")
     head, event, status, conclusion = (
         value.get("head_sha"),
@@ -406,9 +409,7 @@ def _run(value: Mapping[str, Any], workflow: str, pr_number: int) -> ActionsRunS
         value.get("status"),
         value.get("conclusion"),
     )
-    valid_pulls = isinstance(pulls, list) and any(
-        isinstance(pull, dict) and type(pull.get("number")) is int and pull["number"] == pr_number for pull in pulls
-    )
+    valid_pulls = pr_number in _run_pull_numbers(value)
     if (
         type(identifier) is not int
         or identifier <= 0
@@ -425,6 +426,15 @@ def _run(value: Mapping[str, Any], workflow: str, pr_number: int) -> ActionsRunS
     ):
         raise GitHubBoundaryError("GitHub Actions run evidence is malformed or outside the requested PR workflow")
     return ActionsRunSnapshot(identifier, head.lower(), workflow, attempt, status, conclusion)
+
+
+def _run_pull_numbers(value: Mapping[str, Any]) -> tuple[int, ...]:
+    pulls = value.get("pull_requests")
+    if not isinstance(pulls, list) or any(
+        not isinstance(pull, dict) or type(pull.get("number")) is not int or pull["number"] <= 0 for pull in pulls
+    ):
+        raise GitHubBoundaryError("GitHub Actions run pull request evidence is malformed")
+    return tuple(pull["number"] for pull in pulls)
 
 
 def _job(value: Mapping[str, Any], required: set[str]) -> ActionsJobSnapshot:

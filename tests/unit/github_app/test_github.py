@@ -118,7 +118,7 @@ def test_pull_snapshot_resolves_current_base_ref_instead_of_stale_pr_base_sha() 
     assert snapshot.base != BASE
 
 
-def test_exact_head_workflow_selection_adopts_completed_draft_run() -> None:
+def test_exact_head_workflow_selection_ignores_closed_historical_run_for_reused_head() -> None:
     fake = FakeTransport()
     path = f"/repos/owner/repo/actions/workflows/ci.yml/runs?event=pull_request&head_sha={HEAD}&per_page=20"
     fake.responses[("GET", path)] = WireResponse(
@@ -128,7 +128,7 @@ def test_exact_head_workflow_selection_adopts_completed_draft_run() -> None:
             "workflow_runs": [
                 {
                     "id": 2,
-                    "head_sha": "c" * 40,
+                    "head_sha": HEAD,
                     "path": ".github/workflows/ci.yml",
                     "run_attempt": 3,
                     "event": "pull_request",
