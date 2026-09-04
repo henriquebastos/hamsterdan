@@ -29,3 +29,15 @@ streamed directly from `hamsterdan-dev` into a deployer-owned
 `hamsterdan-ops/petrus-github-token` item without printing or local persistence.
 The operations template and its exact-name contract now include that build-only
 authority; it remains absent from production runtime custody.
+
+The first fresh run after deploying the immediate retry, PR #66, retained all
+three findings and published the first two before the third returned the same
+blocked terminal. It was closed unmerged and discarded before human review or
+repair. PR #64 had already proved that the exact third payload and anchor could
+publish unchanged after time passed, isolating the remaining defect to retry
+timing. [GitHub's REST guidance](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#exceeding-the-rate-limit)
+requires waiting at least one minute after a secondary limit when no provider
+delay is available. The publisher now makes
+that bounded pause before its single retry, and the publication Activity has a
+120-second heartbeat window so the wait remains one valid execution. Injected
+delay and composition regressions cover both timings without slowing tests.

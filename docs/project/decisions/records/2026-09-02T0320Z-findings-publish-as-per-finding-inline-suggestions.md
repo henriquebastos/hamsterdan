@@ -46,9 +46,11 @@ presentation regressed that reader experience.
   operation to per-finding anchored review comments, keeping
   lookup-first identity and exact-head fencing per finding.
 - A transient HTTP rejection consumes the inline publisher's one bounded
-  retry only after lookup proves the finding absent; the retry receives a
-  fresh exact-head fence. Structured payload and authorization failures do
-  not retry.
+  retry only after lookup proves the finding absent. Before the retry, it
+  waits GitHub's documented 60-second minimum for a secondary limit; the
+  retry then receives a fresh exact-head fence. The publication Activity's
+  heartbeat window covers that bounded wait. Structured payload and
+  authorization failures do not retry.
 - Anchor rejection falls back to one immutable conversation comment,
   never disguised as success; authorization failures still fail closed.
 - Native review comments create resolvable threads, so human review

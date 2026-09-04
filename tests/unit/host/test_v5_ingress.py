@@ -842,6 +842,24 @@ def test_v5_application_stages_grant_before_identified_delivery_and_replays_froz
     application.close()
 
 
+def test_v5_finding_publication_heartbeat_covers_the_transient_retry_pause(tmp_path: Path) -> None:
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        Authority(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=tmp_path / "webhooks.sqlite3",
+    )
+
+    definition = application._runtime().activity("publish_gate")
+
+    assert definition is not None and definition.declaration.heartbeat_timeout == 120
+    application.close()
+
+
 def test_v5_application_reconciliation_is_stable_across_startup_and_periodic_reasons(tmp_path: Path) -> None:
     path = tmp_path / "webhooks.sqlite3"
     authority = Authority()

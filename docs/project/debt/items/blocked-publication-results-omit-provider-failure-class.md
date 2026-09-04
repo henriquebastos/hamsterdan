@@ -18,11 +18,10 @@ the original HTTP status or transport failure cannot be distinguished from
 History.
 
 The inline publisher now retries recognized transient HTTP outcomes once after
-lookup-first reconciliation and a fresh authority fence. That closes the
-user-visible partial-publication defect encountered in PR #64. The remaining
-diagnostic obligation is to carry a secret-safe failure class through the
-blocked Activity result and operator inspection without storing provider
-payloads.
+lookup-first reconciliation, GitHub's documented 60-second secondary-limit
+pause, and a fresh authority fence. The remaining diagnostic obligation is to
+carry a secret-safe failure class through the blocked Activity result and
+operator inspection without storing provider payloads.
 
 Resolve this item when a blocked publication report distinguishes at least a
 transport ambiguity, a transient HTTP rejection, and a capability denial; the

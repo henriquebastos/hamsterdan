@@ -56,6 +56,7 @@ _ALLOWED = (
 )
 _UNFENCED_PREFIXES = ("reply:", "reminder:", "dash:")
 _RECOVERY_OPERATION = re.compile(r"[!-~]{1,256}\Z")
+_PUBLICATION_HEARTBEAT_SECONDS = 120
 
 
 class PrReadinessV5Application:
@@ -152,7 +153,12 @@ class PrReadinessV5Application:
             "announce_gate": publications.announce_gate,
         }
         definitions: dict[str, ActivityDefinition] = {
-            name: activity(implementation, name=name, converter=converter)
+            name: activity(
+                implementation,
+                name=name,
+                heartbeat_timeout=_PUBLICATION_HEARTBEAT_SECONDS if name == "publish_gate" else None,
+                converter=converter,
+            )
             for name, implementation in implementations.items()
         }
         self.runtime = V5Runtime.open(

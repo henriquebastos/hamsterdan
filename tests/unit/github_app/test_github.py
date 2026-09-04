@@ -842,13 +842,22 @@ def test_inline_transient_http_rejection_retries_after_lookup_and_a_fresh_fence(
     fake.page_values[f"{reviews}?per_page=100"] = ()
     fake.page_values[f"{issues}?per_page=100"] = ()
     fences: list[str] = []
-    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append("fenced"))
+    delays: list[float] = []
+    publisher = CommentPublisher(
+        fake,
+        "owner/repo",
+        7,
+        "hamsterdan[bot]",
+        lambda *args: fences.append("fenced"),
+        retry_delay=delays.append,
+    )
 
     result = publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
 
     assert result.status == "created" and result.inline
     assert fake.attempts == 2
     assert fences == ["fenced", "fenced"]
+    assert delays == [60]
 
 
 def test_inline_retry_stops_when_the_fresh_second_fence_rejects_authority() -> None:

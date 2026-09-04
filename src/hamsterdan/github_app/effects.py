@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
+from time import sleep
 from typing import Any, Protocol, cast
 from urllib.parse import quote
 
@@ -27,6 +28,7 @@ _MARKER_KINDS = frozenset({"conversation", "finding", "readiness", "reminder"})
 _INLINE_UNAVAILABLE_MESSAGES = frozenset(
     {"line is not in diff", "pull request review thread line must be part of the diff"}
 )
+_TRANSIENT_RETRY_SECONDS = 60
 
 
 class CommentPublisher:
@@ -40,17 +42,20 @@ class CommentPublisher:
         bot_login: str,
         fence: Fence,
         fault: EffectFault | None = None,
+        *,
+        retry_delay: Callable[[float], None] = sleep,
     ):
         normalized_login = bot_login.strip().casefold()
         if not normalized_login or not normalized_login.endswith("[bot]"):
             raise ValueError("bot login must be the configured GitHub App bot login")
-        self.transport, self.repository, self.pr_number, self.bot_login, self.fence, self.fault = (
+        self.transport, self.repository, self.pr_number, self.bot_login, self.fence, self.fault, self.retry_delay = (
             transport,
             repository,
             pr_number,
             normalized_login,
             fence,
             fault,
+            retry_delay,
         )
         self.root = f"/repos/{repository}/issues/{pr_number}/comments"
         self.edit_root = f"/repos/{repository}/issues/comments"
@@ -433,6 +438,7 @@ class CommentPublisher:
             if _inline_unavailable(response):
                 return PublicationResult("inline_unavailable", capability_available=False)
             if not attempt and _transient_inline_rejection(response):
+                self.retry_delay(_TRANSIENT_RETRY_SECONDS)
                 continue
             raise GitHubBoundaryError("GitHub did not prove inline finding publication")
         raise AssertionError("bounded inline finding recovery exhausted without an outcome")
