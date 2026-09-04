@@ -241,3 +241,8 @@ ordering assertions, local evidence hashes, and archive. It contains metadata
 and GitHub evidence, not new media or agent-transcript captures. Raw webhook
 payloads and secrets remain excluded. All operations used the headless service
 account and fingerprint-pinned SSH through `scripts/ops`.
+
+The subsequent [PR83 full hero proof](../roadmap/cv19-private-v0-1-production/proof/pr83.md)
+also passed on this deployment, including initial summary ordering, three
+findings, App repair, clear rereview, automatic thread resolution before
+approval, and final readiness. Its separate manifest owns that later evidence.

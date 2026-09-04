@@ -2,7 +2,7 @@
 code: CV19
 level: Value
 status: Active
-status_reason: PR80 passed the clean production journey; capture-package acceptance and monitoring across all personal and HBNetwork repositories remain
+status_reason: PR83 passed the full hero journey with initial summary first; capture-package acceptance and broader repository monitoring remain
 updated: 2026-09-04
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
@@ -29,6 +29,14 @@ open-source release.
 ## Current state
 
 Production is active on revision `2f1b646906bcd8e3b13f6b969eed808f6d70e905`.
+[PR83 passed the full hero journey](proof/pr83.md) on this revision, including
+initial summary ordering, three findings in one review, App repair, six green
+jobs on both heads, clear rereview and automatic thread resolution before
+approval, and one final readiness advisory. Both strict inspectors passed all
+ten checks. Offline replay reconstructed its 2,325-record clean History.
+The PR was closed unmerged after capture; its
+[manifest](proof/pr83-manifest.json) records the artifacts and capture limits.
+
 [RS-036](../../workbench/rs-036-publish-initial-summary-before-review.md) added
 initial summary publication before normal Activities. PR82 proved the first
 summary before review, subsequent updates to the same comment, six green jobs,

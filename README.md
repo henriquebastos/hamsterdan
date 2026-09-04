@@ -21,8 +21,9 @@ journeys and real GitHub evidence for clean green, transient-CI recovery, and a
 complete three-actor repair. The current candidate passes the local full gate.
 GitHub-hosted Actions is currently blocked before job start by the account's
 payment/spending state, so hosted CI is not claimed green for this candidate.
-The production host is active on exe.dev. PR80 passed the clean review/repair/
-readiness journey; its capture package, stated media limits, and remaining
+The production host is active on exe.dev. PR83 passed the full review/repair/
+readiness journey with initial summary publication before other Activities;
+its capture package, stated media limits, and remaining
 repository-monitoring work live under
 [CV19](docs/project/roadmap/cv19-private-v0-1-production/index.md).
 

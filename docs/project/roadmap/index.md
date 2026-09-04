@@ -11,7 +11,8 @@ belongs in each item's own metadata; this index routes to current owners.
   makes the CV19 v1 launch the first production alpha. Gate B, the `v0.1.0`
   tag, two follow-up releases, and the PR #63 hero journey are done.
   PR80 completed the clean hero journey and offline proof package. RS-036 and
-  PR82 then established initial summary publication before normal Activities.
+  PR82 established initial summary publication before normal Activities; PR83
+  then passed the full hero journey on that deployed startup fix.
   Capture-package acceptance and monitoring across all personal and HBNetwork
   repositories remain open.
 

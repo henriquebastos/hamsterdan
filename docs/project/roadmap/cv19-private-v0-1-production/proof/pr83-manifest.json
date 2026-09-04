@@ -1,0 +1,799 @@
+{
+  "schema": 1,
+  "repository": "HBNetwork/demo-pr-readiness",
+  "pull_request": 83,
+  "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+  "outcome": "clean-hero-journey-with-initial-summary-first",
+  "closed_unmerged": true,
+  "closed_at": "2026-09-04T23:51:54Z",
+  "opening_head": "d6e243889110b25298b7e96b4f684b9922097f1a",
+  "repaired_head": "15b910728f2aa63a89256d69043cbc73d0bf8e29",
+  "capture_revision": "0f101a070fa87d693a3ac0b952c9c302dbff5dd4",
+  "production_revision": "2f1b646906bcd8e3b13f6b969eed808f6d70e905",
+  "production_image": "sha256:441d880dd0036df4860179e96228e5f38abe189a02bbda9343bbf5acf9bfc49e",
+  "petrus_revision": "4e5c2500af4eb439e8e8f5ec108982c81bfc7427",
+  "provider": "openai",
+  "model": "gpt-5.6-sol",
+  "summary_comment": 5547729357,
+  "summary_created_at": "2026-09-04T23:44:52Z",
+  "seconds_from_open_to_summary": 14,
+  "opening_review": 5118743948,
+  "request_changes_review": 5118745660,
+  "repair_request_comment": 5547742993,
+  "approval_review": 5118756832,
+  "readiness_advisory": 5547763435,
+  "opening_ci_jobs_passed": 6,
+  "repaired_ci_jobs_passed": 6,
+  "initial_strict_checks": 10,
+  "final_strict_checks": 10,
+  "threads_resolved_before_approval": 3,
+  "history_verification": {
+    "errors": [],
+    "first_dash_landed_sequence": 318,
+    "first_normal_request_sequence": 345,
+    "history_records": 2325,
+    "ok": true,
+    "pending": [],
+    "review_landed": [
+      {
+        "occurrence": 95,
+        "sequence": 565
+      },
+      {
+        "occurrence": 298,
+        "sequence": 1733
+      }
+    ],
+    "reviews": [
+      {
+        "findings": 3,
+        "head": "d6e243889110b25298b7e96b4f684b9922097f1a",
+        "occurrence": 93,
+        "sequence": 553
+      },
+      {
+        "findings": 0,
+        "head": "15b910728f2aa63a89256d69043cbc73d0bf8e29",
+        "occurrence": 296,
+        "sequence": 1721
+      }
+    ],
+    "startup_completion_sequence": 341,
+    "variants": {
+      "ADeferred": 1,
+      "ALanded": 1,
+      "AgentReview": 2,
+      "DashLanded": 24,
+      "Pushed": 1,
+      "Replied": 1,
+      "ReviewLanded": 2,
+      "RoundDeferred": 3
+    }
+  },
+  "offline_replay": {
+    "records": 2325,
+    "result": "passed"
+  },
+  "dashboard_states": 24,
+  "completed_agent_sessions": 4,
+  "release_tests": {
+    "parallel_passed": 1267,
+    "serial_passed": 1267,
+    "declared_platform_deselections": 18,
+    "rerun_for_this_proof": false
+  },
+  "limitations": [
+    "Local artifacts and archive stay ignored; narrative and hashes are committed.",
+    "Three deferred agent attempts produced no session transcript; all four completed sessions are exported.",
+    "Raw webhook payloads and credential material are excluded.",
+    "Recordings capture the browser viewport, not the macOS desktop.",
+    "Recordings passed full decoding and have no audio; complete real-time playback review and a separate checkpoint montage are not claimed.",
+    "03-initial-summary has one DOM snapshot; later checkpoints retain before/after DOM snapshots.",
+    "Initial stills share the recording session; accepted replacement and later stills use a separate anonymous session and the browser default dark theme.",
+    "CV19 capture acceptance and broader repository monitoring remain open."
+  ],
+  "capture_review": {
+    "accepted_pngs": [
+      "03-initial-summary.png",
+      "12-findings.png",
+      "14-changes-requested.png",
+      "22-repair-request-verified.png",
+      "26-repair-pushed.png",
+      "33-clear-before-approval.png",
+      "35-approved.png",
+      "40-all-clear.png",
+      "50-closed.png"
+    ],
+    "rejected_pngs": {
+      "06-reviewing.png": "Repeated viewport tiles despite matching full-page dimensions.",
+      "17-repair-requested.png": "Repeated viewport tiles; 22-repair-request-verified.png preserves both human instructions and the App commit."
+    },
+    "inspection": "Every PNG was visually inspected; rejected files remain audit evidence and are not accepted captures.",
+    "recordings": {
+      "hero-journey.webm": {
+        "duration": "365.800000",
+        "width": 1280,
+        "height": 720,
+        "codec": "vp8",
+        "full_decode": "passed",
+        "audio_streams": 0
+      },
+      "final-walkthrough.webm": {
+        "duration": "20.100000",
+        "width": 1280,
+        "height": 720,
+        "codec": "vp8",
+        "full_decode": "passed",
+        "audio_streams": 0
+      }
+    },
+    "limitations": [
+      "Recordings capture the browser viewport, not the macOS desktop.",
+      "Recordings passed full decoding and have no audio; complete real-time playback review and a separate checkpoint montage are not claimed.",
+      "03-initial-summary has one DOM snapshot; later checkpoints retain before/after DOM snapshots.",
+      "Initial stills share the recording session; accepted replacement and later stills use a separate anonymous session and the browser default dark theme."
+    ]
+  },
+  "files": [
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/01-opening-github.json",
+      "bytes": 57887,
+      "sha256": "f4c4db5dbb2230576592ed95ceea3d1ddb35ef37ab546f13fbae77d4363e72c7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/02-runtime.jsonl",
+      "bytes": 45977,
+      "sha256": "80d0518902b21f5672a02adf4044e0d80db7c5e5e45bc2c69852ba3d00e6e397"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/03-initial-summary-dimensions.json",
+      "bytes": 50,
+      "sha256": "eb58c891239ef9e9efe44db180342e17aaa3dc26f61b23315db3741b4643be99"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/03-initial-summary.html",
+      "bytes": 270808,
+      "sha256": "c5549f007a6121078ad10d2cea627ac8554163d3dd87dc45d0e0fd05e6bbeade"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/03-initial-summary.png",
+      "bytes": 181893,
+      "sha256": "fb60e73c468e1e00b5cb0867b189b2fedaa467c0964d948008f543716b8b52a5"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/04-summary-github.json",
+      "bytes": 68123,
+      "sha256": "d8fc48aa4a0825560fdb7397341e0f6d6f0efdfc36f9789d694a0a71e3cfa310"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/05-runtime.jsonl",
+      "bytes": 123598,
+      "sha256": "b639d6070c7312155a3e8016f48f068a55ab3928c0ca49f450d6f6ecbf183ccc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/06-reviewing-dimensions.json",
+      "bytes": 50,
+      "sha256": "eb58c891239ef9e9efe44db180342e17aaa3dc26f61b23315db3741b4643be99"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/06-reviewing.after.html",
+      "bytes": 270850,
+      "sha256": "468853bd72b0dc299dec647b72835c8647823745c7e0e59cb28b2811c8ca8360"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/06-reviewing.before.html",
+      "bytes": 270808,
+      "sha256": "008ef5a663160a5d56c8cd4cfea7bf5c51a06b029070903f0470a78c92029a27"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/06-reviewing.png",
+      "bytes": 210725,
+      "sha256": "13c1059bbdf1198d751fe52145fb6e2011e366ab4c41a53e68658b0715371eac"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/07-runtime.jsonl",
+      "bytes": 161886,
+      "sha256": "4789066ce2ef34b2d5a02b37d09ef839a5dd3c5fd81e69819f1de8549659bf3b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/08-ci-github.json",
+      "bytes": 68163,
+      "sha256": "8259767ea8226c18937beda047dd68d03938272cf55bd24dc7f03d6acbf12af3"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/09-runtime.jsonl",
+      "bytes": 172362,
+      "sha256": "fcb2ec6e09188f98b28013409eae587f1a7166c5d2b17095bd3609199d5436c0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/10-opening-inspect.json",
+      "bytes": 4217,
+      "sha256": "70b90a1abd634c11c81991a6607028244b889d7ab605bcad0e943492aa573470"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/11-findings-github.json",
+      "bytes": 86780,
+      "sha256": "2005eb5f2878680902ca25acd85ea1a3e965cfa7f5e2538a4107eaa619969700"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/12-findings-dimensions.json",
+      "bytes": 132,
+      "sha256": "fa79f2da28fd217b10b0fea6541929481f934df647fc2bae5034795f9515b044"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/12-findings.after.html",
+      "bytes": 342908,
+      "sha256": "aeb9691289f702c767242c8d056b19bab5fd4ad01425740e65178dec45b4cbfa"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/12-findings.before.html",
+      "bytes": 342908,
+      "sha256": "d540fe03cf759ab5042f888fa839bac1a914adb891e4ae065ade99afdb32121a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/12-findings.png",
+      "bytes": 412571,
+      "sha256": "b7122867fea8cd77914fbea661a72214cedebd6aff75337327f49f5943a02e67"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/13-request-changes.json",
+      "bytes": 1659,
+      "sha256": "dbdd0a460ca73d0afadac8e10ecd5742a2cd563c56ce47a3efb495fef03b7f5c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/14-changes-requested-dimensions.json",
+      "bytes": 132,
+      "sha256": "6e461fb0cc3577cf8667962afd9a637c4bbfc5d337a6fe80634001df0c50ebe3"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/14-changes-requested.after.html",
+      "bytes": 358301,
+      "sha256": "ee6d6e96d46f59ec66d2c89fa933983956068e44acef4706caf5758ab6865e8e"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/14-changes-requested.before.html",
+      "bytes": 358301,
+      "sha256": "fff5f57d08d08ec4e87bdcd12de16ed74b8a2e702669deb21d55c3ae72a6993b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/14-changes-requested.png",
+      "bytes": 443911,
+      "sha256": "904d66e867526beba6e7ed75c93586c9429e09561b3a3d2065dfe833435abedf"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/15-runtime.jsonl",
+      "bytes": 335996,
+      "sha256": "a97b4371ed088db4fe407517c6700ef80b9268e562f8c377b77f505fd6a9e33d"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/16-repair-request.json",
+      "bytes": 1806,
+      "sha256": "4f0d7e14369a418d89303c7ab69a7b9ded30e4d22ef71718e4fdbec97afa5590"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/17-repair-requested-dimensions.json",
+      "bytes": 132,
+      "sha256": "dd2ec4e6fe713b58cc20e1ff342ad3d370f53b89a5ec7b0e1f8efcd0c4f7be72"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/17-repair-requested.after.html",
+      "bytes": 367489,
+      "sha256": "515ae6b5f7a6caf2a6c7b493cd4dc9123a835a73a71cf9a9ee4c934594908ac8"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/17-repair-requested.before.html",
+      "bytes": 367489,
+      "sha256": "6e42c98e60574e61ae1accac37d13b654b67557c45530d1e054ffadc111c900f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/17-repair-requested.png",
+      "bytes": 601301,
+      "sha256": "58f2478db223af96e6c49b5e647049ddf4f1fbf3f65047638af7bcb519d87805"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/18-repair-started-github.json",
+      "bytes": 89918,
+      "sha256": "b5b99f1e4f4cdab7f135a57303bb7ba1482930d15ce850f1ab4b56b4c04a24a0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/19-runtime.jsonl",
+      "bytes": 336277,
+      "sha256": "b107b9bff4bdd8b411145110299b1cc6a8c7e26bd0829fb8b970d051d1471be3"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/20-runtime.jsonl",
+      "bytes": 365875,
+      "sha256": "5742bde73ff31e9623074619ee4e43dae975be6a0206c88d63fc334212a4f1ec"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/21-repair-progress-github.json",
+      "bytes": 89918,
+      "sha256": "b5b99f1e4f4cdab7f135a57303bb7ba1482930d15ce850f1ab4b56b4c04a24a0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/22-repair-request-verified-dimensions.json",
+      "bytes": 132,
+      "sha256": "f953a9b349569c3d5d0a92f2f5031a55391b4b9781df2b1781b273a5d39542db"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/22-repair-request-verified.after.html",
+      "bytes": 382291,
+      "sha256": "36c70597328211075dcc4ece5f34608e4d728e0835de1e3b78cc317e06956cb8"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/22-repair-request-verified.before.html",
+      "bytes": 382209,
+      "sha256": "3a779f55537f352cb9af4b3e20dc1137849b6f5a21a293f91e1aae8f345fee32"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/22-repair-request-verified.png",
+      "bytes": 477159,
+      "sha256": "c75d7094bf0582a2bfca87272a2cdd2e10927e8cd1ca53b6bfd997c8de4edf3b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/23-runtime.jsonl",
+      "bytes": 389292,
+      "sha256": "caa9b1cf0bf04b08a95bb85d323a17dc843a7b42aed4142456f41bbd476da28c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/24-repair-progress-github.json",
+      "bytes": 98977,
+      "sha256": "e06b7384dccd474d8110a314750285088627cd258f468973a47f8a2ad89421cd"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/25-runtime.jsonl",
+      "bytes": 483914,
+      "sha256": "bc0a5c8a7b2b9006130b55d30a544dc85c1468cefdb0bec90b19b450267ef221"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/26-repair-pushed-dimensions.json",
+      "bytes": 132,
+      "sha256": "f953a9b349569c3d5d0a92f2f5031a55391b4b9781df2b1781b273a5d39542db"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/26-repair-pushed.after.html",
+      "bytes": 382291,
+      "sha256": "b103037d384a24d9a165132f8f3cd8c815505deb4243690b52da20a2af122101"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/26-repair-pushed.before.html",
+      "bytes": 382209,
+      "sha256": "c4271bccfbc18989c9f5325eea6da1cdf6d8bb503fd3a2809dc9a2877f5a703f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/26-repair-pushed.png",
+      "bytes": 477213,
+      "sha256": "2ca7f949b52fae8a88918ced3b650b165cee53a8bf216710c8b24ddbe6ce5ed6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/27-repair-commit.json",
+      "bytes": 6021,
+      "sha256": "3adfdba2cf0ab93185f7a7f4f8679b709c2ac733169a3b833f0d6830618628ba"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/28-runtime.jsonl",
+      "bytes": 514186,
+      "sha256": "389f9532c9b3113aa7eaa63dbb41409f4e8d9a096501d5b720cfe6b75374c3f4"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/29-rereview-github.json",
+      "bytes": 99066,
+      "sha256": "79ae3718355c121fe22da1421ef0c665fc9c548aff163a2e0a6d9125d6f49790"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/30-runtime.jsonl",
+      "bytes": 576922,
+      "sha256": "b6e39c6642abf2dde2adf294212ec0a52cd62d4938af39a43ff3bc45a98e4f41"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/31-before-approval-github.json",
+      "bytes": 99040,
+      "sha256": "ea85b71579d0c501659714e4a5ad185c3f4a13dd1e8ef6e534a8c8aacba0dc07"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/32-before-approval-history.json",
+      "bytes": 611,
+      "sha256": "24b6f0bc8cb762849daa442aa94fb5b8290e8d173b508ead5bb53b5b4634b752"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/33-clear-before-approval-dimensions.json",
+      "bytes": 132,
+      "sha256": "19910be3ab90f72b716d92ff5c7dbbea7f4644ed0584345fb94488b80ecadaca"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/33-clear-before-approval.after.html",
+      "bytes": 345697,
+      "sha256": "8d136fba5d79e05461c8e6afbebf0a4904861e1580fa40c141dab6c1d8f2eccf"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/33-clear-before-approval.before.html",
+      "bytes": 345573,
+      "sha256": "cb0249b44bbdbf4e468149afb0d8bfbe34dd45802c5c45f27c84ac3833b93f94"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/33-clear-before-approval.png",
+      "bytes": 301458,
+      "sha256": "1e55c6d1a93ec627e1106b254338181d4d70794b64764061e41e6dc3f2465b34"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/34-approval.json",
+      "bytes": 1649,
+      "sha256": "c6b2cab08756ea55d6351bf26700df931a817b33323c8f5da04816af028a44d7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/35-approved-dimensions.json",
+      "bytes": 132,
+      "sha256": "4a0ffd0ebb866b53932c235cd2bfd068a54bdaa73eed5bfd7722e2f96be92c65"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/35-approved.after.html",
+      "bytes": 359361,
+      "sha256": "4f244fc723433debbf8c71ca56a60dd19dce91ccd35d4e5ec0bcaf5c1f7e79cd"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/35-approved.before.html",
+      "bytes": 359237,
+      "sha256": "1471a410c174cc8fe15b448aef5d93234effc18029a3b90656459839f8753274"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/35-approved.png",
+      "bytes": 317529,
+      "sha256": "22120226905c4af6e470ba598a4083aadd71e538aae83578f8e1800f89cc6fc7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/36-approved-github.json",
+      "bytes": 101016,
+      "sha256": "1050524a3679700cbd92b4a4d8fd09ba37eb40c1e74915d801f84f302dcf1e02"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/37-runtime.jsonl",
+      "bytes": 649683,
+      "sha256": "8515d548b512b2551fca136e5964bde04911b7a9a75b982ff37c5880b1b2e5b6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/38-final-inspect.json",
+      "bytes": 4738,
+      "sha256": "75aee13af7429ebd51356d581f5f25244039e14650b622248fbdb2fb0cdc8478"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/39-ready-github.json",
+      "bytes": 105611,
+      "sha256": "a1dbd478b6c45867f3cfab3157488103d4df98d4032f1692924eaf39e788419e"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/40-all-clear-dimensions.json",
+      "bytes": 132,
+      "sha256": "c19a3f6f8b84870bac6ef3d0ed16290ad078386656dd8c518a50b117635fe8bf"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/40-all-clear.after.html",
+      "bytes": 367938,
+      "sha256": "783842bbfb4fcd314608bb013427ed9d3ee5edb06161be1ffc23936b5d47189b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/40-all-clear.before.html",
+      "bytes": 367856,
+      "sha256": "6ee8be383e306ac13446953b577062bb084584f359cf3cc46c62b67b97655b17"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/40-all-clear.png",
+      "bytes": 344129,
+      "sha256": "1f92df54c5ce2b50936df67febb47329269bcc0cd79e8af35f55b782b9b2fd48"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/41-final-runtime.jsonl",
+      "bytes": 695011,
+      "sha256": "494b91b8a3e5684f037fd24434f45c329de127a3f16ebc11c31f27dff6bac0df"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/42-final-health.txt",
+      "bytes": 442,
+      "sha256": "e53a3985b699e7114b0c2be5eba54aaeca26a7643027718ab7e35e9a5e96adb2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/43-final-history.json",
+      "bytes": 641,
+      "sha256": "e3ccaf17c2eca713c761d1fe142a338b7c53695f213c28dbb789287708cd0028"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/44-offline-replay.txt",
+      "bytes": 397,
+      "sha256": "493eca20272928d1787be9628f87543df44ce9b5b936fc4a5be7312df989c9ec"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/45-recording-metadata.json",
+      "bytes": 347,
+      "sha256": "1a0fee881f7c758c384028f1590d14c04c0cbecab5d13359d4f908ef88c83ca0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/46-close.txt",
+      "bytes": 86,
+      "sha256": "2e898041c5739665508fc458cb49e98b5626e71e0e4d49a1689d8f9d4d734479"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/47-closed-github.json",
+      "bytes": 100387,
+      "sha256": "33225b730831f36a2c6f4365a0dc99a9fdbbf078d1055a40bf7b7bb4963c782d"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/48-closed-runtime.jsonl",
+      "bytes": 738740,
+      "sha256": "8c0538427c2832718ed1c24bc39a498a180218c663449e3ab6e28005bb0ca61c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/49-closed-health.txt",
+      "bytes": 442,
+      "sha256": "bbda884a72a5949eb0875715962720c971db628b790c11eee3898891c254b666"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/50-closed-dimensions.json",
+      "bytes": 132,
+      "sha256": "856b3ad55fffa3e59ef86e45f7f5948d935643d4aec5e91ee31dba1c9d56aa44"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/50-closed.after.html",
+      "bytes": 370544,
+      "sha256": "0f60c0261a38a0dac59b19c6a56303e4f52fb48243fb947fc1f14963975c656f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/50-closed.before.html",
+      "bytes": 370420,
+      "sha256": "bdabeca5dec9d8be8fec2688d1554b3005663f1fff3559fc2b20a83ed0238c33"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/50-closed.png",
+      "bytes": 351583,
+      "sha256": "06c8c7b0afaf5ca51a08a1dd11c268818a2e1809c3edea8ded1d8da3c893eb11"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/51-capture-review.json",
+      "bytes": 1558,
+      "sha256": "08270d26a07e5d574d14282d9e78cf2e46cb5ec5a9ce099085c1c00757b87d44"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/durable-export.tar.gz",
+      "bytes": 129280,
+      "sha256": "35c8240ca778d54fb07dc32fe7c72b810d2f8495d744f95b559a36b63889023e"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/final-walkthrough.webm",
+      "bytes": 550825,
+      "sha256": "041cd8259edb2086802d2e9e33364003eb3e55c63a960cf2d4be679178def25b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/hero-journey.webm",
+      "bytes": 2781753,
+      "sha256": "0b3a69722754cb3ebda6801e89a4aa1b4c222517297ada12cf2659ee3a3b7e67"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/MANIFEST.json",
+      "bytes": 2634,
+      "sha256": "519c7a5822c877afd0c4a6f2149a3fe9928be666937fee592a204287aa47fa35"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/README.md",
+      "bytes": 8661,
+      "sha256": "f5cc3eb0ccfd94eeef58544639ab6443841983211a9fe06c64f4f6d5f2baf4d0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0001.md",
+      "bytes": 389,
+      "sha256": "bf1e21fe5ec80b35a1f3e27f232ce1b227672ed93fa843ea73b7b6b9690a19a4"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0002.md",
+      "bytes": 414,
+      "sha256": "70b3e710989aae73a375d15d95a8d8c9fcc6cd14eac11d16a44ddf39e1d36b5e"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0003.md",
+      "bytes": 414,
+      "sha256": "70b3e710989aae73a375d15d95a8d8c9fcc6cd14eac11d16a44ddf39e1d36b5e"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0004.md",
+      "bytes": 409,
+      "sha256": "fed4bbf77519a57c2d650447e7ed9338b683a244e6b49d165c7d48b7ba21e304"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0005.md",
+      "bytes": 414,
+      "sha256": "ae45985e46ac2d216a3bc0cdbb54cf91b9c19703fb7d10c6bfce3e7683d2a1bd"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0006.md",
+      "bytes": 414,
+      "sha256": "ae45985e46ac2d216a3bc0cdbb54cf91b9c19703fb7d10c6bfce3e7683d2a1bd"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0007.md",
+      "bytes": 402,
+      "sha256": "bf23f3c97d68359d3c8a16892d9b1c6e115644a0254b0085c514096680aa002a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0008.md",
+      "bytes": 466,
+      "sha256": "980ea354ec19350df63964b886b397a30ce03b497ec07cabbbd67bdb89e0ea77"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0009.md",
+      "bytes": 465,
+      "sha256": "a0d15d67bb9bd9ee05e08f152138499629c00a9336274db5c581a5d632de508a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0010.md",
+      "bytes": 465,
+      "sha256": "a0d15d67bb9bd9ee05e08f152138499629c00a9336274db5c581a5d632de508a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0011.md",
+      "bytes": 470,
+      "sha256": "b4afe08f3bcff3dc127334eeb5530a2fa1bf9ddcc9fb1a2fbb689bd705529247"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0012.md",
+      "bytes": 475,
+      "sha256": "86d8bca8474a0b4a8a53b746e8f5d4348751bf0aa3f4184be36e5a1858a429dc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0013.md",
+      "bytes": 470,
+      "sha256": "b4afe08f3bcff3dc127334eeb5530a2fa1bf9ddcc9fb1a2fbb689bd705529247"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0014.md",
+      "bytes": 470,
+      "sha256": "8b68746373a50499aa79a0c1d0d26e066a750f7710700aae39ebba0311b35867"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0015.md",
+      "bytes": 470,
+      "sha256": "8b68746373a50499aa79a0c1d0d26e066a750f7710700aae39ebba0311b35867"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0016.md",
+      "bytes": 474,
+      "sha256": "3ade7ed531ba98a7f217494dbede4242eaa3cb3699e005f309bc3087f09b81cc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0017.md",
+      "bytes": 474,
+      "sha256": "17f6985838109d64f43cef327525a1929685da09788948ceef4807bd8345ba7f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0018.md",
+      "bytes": 474,
+      "sha256": "17f6985838109d64f43cef327525a1929685da09788948ceef4807bd8345ba7f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0019.md",
+      "bytes": 470,
+      "sha256": "8b68746373a50499aa79a0c1d0d26e066a750f7710700aae39ebba0311b35867"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0020.md",
+      "bytes": 437,
+      "sha256": "6025560396c4847031a36da8f1f3b6888729046d4e580e9049be783009ef5f4a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0021.md",
+      "bytes": 434,
+      "sha256": "b8542c07e23b69ae5f60e0b1195b89b00b4d64f2f7dfc09cdc8877e751d1a436"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0022.md",
+      "bytes": 434,
+      "sha256": "b8542c07e23b69ae5f60e0b1195b89b00b4d64f2f7dfc09cdc8877e751d1a436"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0023.md",
+      "bytes": 447,
+      "sha256": "1dfc95b2b543fa1ae0091b48a06ab864deef5d887c7023e62f8e45f6427ac996"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/0024.md",
+      "bytes": 447,
+      "sha256": "1dfc95b2b543fa1ae0091b48a06ab864deef5d887c7023e62f8e45f6427ac996"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/boards/index.md",
+      "bytes": 3438,
+      "sha256": "51ccf8ffc224651829101b5c1e4ea7768466155555043b18a568509a1c80bad6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/history/history.jsonl",
+      "bytes": 1181408,
+      "sha256": "5b1f591d59acf6b15240dc35a2d99da1c3f7db6855beac7315e1de9503c1a3a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/history/index.md",
+      "bytes": 204616,
+      "sha256": "cb9b38bc122d9d6c19d3a0dba0296f3fc0a69471dd49344a3b5b49c63ee1bfe1"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/identity/binding.json",
+      "bytes": 128,
+      "sha256": "f5414fa8bf638d4510e4aff9c3805b0f7c637026a7f346295d7c08f953745844"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/identity/index.json",
+      "bytes": 94,
+      "sha256": "21631f81c2e224ded1fa088ca8d25f13847688de41dc0354baa3576fd9e4360f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/identity/runtime-identity.txt",
+      "bytes": 210,
+      "sha256": "3a43ed7e70221b693def492587ab3563ea974299dddb48f7dd77e0231496168f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/index.json",
+      "bytes": 4636,
+      "sha256": "cd1b32849a443d9573d1a3f90e3fe4580586d3e99fa9746d57f8903cf05b60bf"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-43525483d5147cb093a436e367f1cf4d43716cc761655990b6add83c8100dfd0.json",
+      "bytes": 5330,
+      "sha256": "3a37c7839179450df3f4cfdd0f6553968b5e51f48a1cb14d65c14ed044cecf76"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-43525483d5147cb093a436e367f1cf4d43716cc761655990b6add83c8100dfd0.session.jsonl",
+      "bytes": 58911,
+      "sha256": "99de99bece8d3b348d848e53d08752e50b670f4a4708492168cba09199bf71a0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-49a46075677a8066860649c54530d34d4a469cd5f24a03bc1c3eeb35b9532a86.json",
+      "bytes": 16565,
+      "sha256": "4df08f56b301bd584fe76021f98aaf03e0d570b058f0516061fdc2543d0199b2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-49a46075677a8066860649c54530d34d4a469cd5f24a03bc1c3eeb35b9532a86.session.jsonl",
+      "bytes": 21010,
+      "sha256": "4a54c706f699b33e1da24744f977cb77cf8e403398314aee7bd313c7f0802b1f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-56d1c253862147516468258993d936334fd6b22d32be9ff01f167fb0324e4d54.json",
+      "bytes": 4322,
+      "sha256": "7e4e13c8ec37fa4eb9d0ba94cb6f94ba38cfa165c863c356f7b99d1ffdfc5cf2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-64717a1ca42cae72119190f5a414b87c39fb95e67b8dd926ede035c5fd52bc2e.json",
+      "bytes": 7460,
+      "sha256": "579c63361d19b87b2d023f2b53dd29a1a144e02f3e8c24585f9fb01d915af9e1"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-64717a1ca42cae72119190f5a414b87c39fb95e67b8dd926ede035c5fd52bc2e.session.jsonl",
+      "bytes": 69681,
+      "sha256": "003b3f6e89a446291e491c434b7f37ed7c9d48da4e0b702ef1a3516ce54ab48a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-651edef79fa56f9bc419c5a987e34301a53165e24e8e48caa5f3d42751224fbb.json",
+      "bytes": 3380,
+      "sha256": "0aff63e75a06bbce74d41561ff2af00f0e78ce657ff35699b642ae0e66e66491"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-68506054be4386005a3427b6c83f1b62707ffd31eb11056e07ce38285d23a078.json",
+      "bytes": 15740,
+      "sha256": "bcf7c4456db76af390c54d9ea0e3d00c79f89ce891126cecda87850f6a73c341"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-bd34ffbf6847426b415b87e0fe77528a214ffa05e0618c9437859876d6bd074d.json",
+      "bytes": 2500,
+      "sha256": "087511d8e4685425312730d90d98952e1e418e60f06a883ee8a7ebcd22f89fc6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/transcripts/pi-bd34ffbf6847426b415b87e0fe77528a214ffa05e0618c9437859876d6bd074d.session.jsonl",
+      "bytes": 23712,
+      "sha256": "9231b6ba5507d648e6c26c13fb15c23a95c5d295414a7b56ee05a17b54e2a309"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr83/pr83-durable-evidence/webhooks/inbox.jsonl",
+      "bytes": 36302,
+      "sha256": "df45709e5e602125cec7b05bee45f35bbf7fb73f4294b7440da1cc8137241a09"
+    }
+  ],
+  "archive": {
+    "path": "tools/demo-video/output/proof/cv19-pr83-proof.tar.gz",
+    "bytes": 8513548,
+    "sha256": "1408543c469d2a7d997a0651fd0eb153062d38a42bc2491ba47be6c552fc42da"
+  }
+}

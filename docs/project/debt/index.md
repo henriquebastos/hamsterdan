@@ -14,3 +14,4 @@ an item only when debt should outlive one story's review notes.
 - [Non-blocking quality audit baseline remains unresolved](items/non-blocking-quality-audit-baseline-remains-unresolved.md)
 - [Blocked publication results omit the provider failure class](items/blocked-publication-results-omit-provider-failure-class.md)
 - [Production candidate retention can exhaust disk](items/production-candidate-retention-can-exhaust-disk.md)
+- [Full-page capture dimensions do not detect repeated tiles](items/full-page-capture-dimensions-do-not-detect-repeated-tiles.md)

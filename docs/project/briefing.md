@@ -68,8 +68,9 @@ after private production qualification.
 movement: the private `v0.1.0` launch of the current V5 runtime is the first
 production alpha. The supervised host is active on the owned `hamsterdan-prod`
 exe.dev VM, and Gate B and the `v0.1.0` tag are complete. CV19 remains active
-for capture-package acceptance and repository-monitoring scope. PR80 passed the
-clean journey and was closed unmerged after capture. Its roadmap and linked
+for capture-package acceptance and repository-monitoring scope. PR83 passed the
+full hero journey with initial summary first and was closed unmerged after
+capture. Its roadmap and linked
 worklog own current revisions, media limits, and discarded proof runs.
 
 [CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) continues as the
