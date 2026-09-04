@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "repository": "HBNetwork/demo-pr-readiness",
+  "pull_request": 78,
+  "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/78",
+  "outcome": "discarded",
+  "reason": "ReplyBlocked at conv.reply occurrence 207 after Pushed occurrence 212",
+  "closed_unmerged": true,
+  "opening_head": "8ce2b3bc71e7bc1cbbd83d5bc92a7c4433ae1390",
+  "repaired_head": "15ce3c81ef549c2667210fa43446b2e91deae7c8",
+  "production_revision": "3afb99ca1ca8799ddc1db6c24697fb0192e0faf4",
+  "production_image": "sha256:72c7d1a0cca710b27dc31f6a44aebc3609f028bc55f1b7c40ce63cee61188350",
+  "opening_review": 5117731031,
+  "initial_strict_checks": 10,
+  "repaired_ci_jobs_passed": 6,
+  "manual_reply_proof_url": "https://github.com/HBNetwork/demo-pr-readiness/pull/78#issuecomment-5546416889",
+  "limitations": [
+    "No approval or final readiness acceptance was attempted after the blocked terminal.",
+    "Full-screen recordings and raw agent transcripts were not captured for this discarded run.",
+    "Runtime export contains selected metadata, not raw History or webhook payloads.",
+    "Evidence files are local ignored artifacts; this manifest commits their identities and hashes."
+  ],
+  "files": [
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/01-opening-pr.json",
+      "bytes": 17447,
+      "sha256": "51b54de11ded83fdb6f29725e7bdb16d7be33a53200404bf2552a8ba3426c95a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/02-opening-review-comments.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/03-opening-issue-comments.json",
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/04-activity-history.jsonl",
+      "bytes": 2913,
+      "sha256": "bdc49d85c1dba03812b548f61fadc9ffa73d2230e2105316fcba6d48660dbed4"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/05-initial-inspection.json",
+      "bytes": 4217,
+      "sha256": "6bd8a4777c8f9bdc02d92ed16cad6c32cb7954c087c912ca29ff1817b1f1bcfb"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/06-opening-findings.json",
+      "bytes": 10301,
+      "sha256": "51f4d68ee6307a4de1be6dcf9cf250bfa93f5259ec3bc681e085b456fcf95990"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/07-repair-history.jsonl",
+      "bytes": 3348,
+      "sha256": "7ee476659bdd9e38ffc62a9b1d820b55c0ed9a423edc3eda4024cefb4ae1a8a7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/08-repair-request-full-page.png",
+      "bytes": 438988,
+      "sha256": "54ae3156cae05da2bc873feb0375b78055421859899be6be54a599d75356cebd"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/09-production-health.txt",
+      "bytes": 454,
+      "sha256": "4a76ca375857919851807f603ee94efc395e8320ce5c53ea06624fe048f6d26a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/10-repair-history.jsonl",
+      "bytes": 3348,
+      "sha256": "7ee476659bdd9e38ffc62a9b1d820b55c0ed9a423edc3eda4024cefb4ae1a8a7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/11-repair-history.jsonl",
+      "bytes": 3348,
+      "sha256": "7ee476659bdd9e38ffc62a9b1d820b55c0ed9a423edc3eda4024cefb4ae1a8a7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/12-repair-history.jsonl",
+      "bytes": 3764,
+      "sha256": "5dea22972a750ac77e62ae251b217bf25feb9cbf8c473a3fb7e32fa30009cf3a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/13-failed-pr.json",
+      "bytes": 16496,
+      "sha256": "9954e2f37863bb1f07f94cd85f468176a511a265c1e26e3dbbdd06c5693a9f95"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/14-failed-comments.json",
+      "bytes": 5685,
+      "sha256": "13b0456bdb8382de6fd76e1b1f7760478245909ae5a63e696a203fc700dd2590"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/15-reviews.json",
+      "bytes": 3408,
+      "sha256": "5ad3777b1afa22ffebf028a990b41e934b1c0f1916f08362c218398ff9ddacc8"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/16-discarded-full-page.png",
+      "bytes": 449676,
+      "sha256": "d5192fbe100200d2674980a714befff410892d4e7e3797d3a32ad96f9c2b4772"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/18-manual-reply-provider-proof.json",
+      "bytes": 140,
+      "sha256": "393575f3aede21d0a99d2b2477067c6f9e7f78ecbf30507f9f5b19cafa15e0be"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/19-runtime-observation.jsonl",
+      "bytes": 509193,
+      "sha256": "0f367e69bee9cb994d5c46d6ded70df2f97956e2a71caaab0be397781b196292"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/20-closed-pr.json",
+      "bytes": 2706,
+      "sha256": "17d25034b94ea398efd951f11a58a42353a3f9e8aaaabaffbba957823a473e66"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr78/21-production-health.txt",
+      "bytes": 442,
+      "sha256": "6c9f10e83d625c200a308c3da653a402c07ffb35579b2ccaf5e4d7bdf8508c78"
+    }
+  ]
+}

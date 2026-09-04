@@ -66,10 +66,10 @@ after private production qualification.
 
 [CV19](roadmap/cv19-private-v0-1-production/index.md) owns the current delivery
 movement: the private `v0.1.0` launch of the current V5 runtime is the first
-production alpha. Its exact candidate and configuration remain qualified on the
-owned `hamsterdan-prod` exe.dev VM; its last recorded systemd posture was
-disabled and inactive. The supervised launch still requires separate explicit
-Navigator approval, followed by one bounded monitoring proof and the tag.
+production alpha. The supervised host is active on the owned `hamsterdan-prod`
+exe.dev VM, and Gate B and the `v0.1.0` tag are complete. CV19 remains active
+for the extended clean-journey proof package and repository-monitoring scope.
+Its roadmap and linked worklog own current revisions and discarded proof runs.
 
 [CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) continues as the
 quality track without gating that alpha. Its non-selectable outer-system

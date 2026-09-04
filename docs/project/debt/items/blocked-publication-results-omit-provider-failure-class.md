@@ -48,3 +48,10 @@ Resolve this item when a blocked publication report distinguishes at least a
 transport ambiguity, a transient HTTP rejection, and a capability denial; the
 classification survives restart and export; and tests prove no credential or
 unbounded provider body enters History.
+
+PR78 exposed the same diagnostic gap in `ReplyBlocked`: it carries no reason
+distinguishing pending intake, an unstaged head, and a provider denial. Local
+reproduction identified the reply's incorrectly strict context reader. The new
+`deployment.observe` command correlates History, dispatch, inbox, and health
+metadata without exporting payloads, but does not add missing historical
+failure classes. Keep this obligation open for other blocked publications.

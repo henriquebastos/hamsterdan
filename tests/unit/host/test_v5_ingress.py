@@ -22,7 +22,17 @@ from petrus.motus.dispatch import LocalDispatch
 
 from hamsterdan.agents.protocol import ConversationResult, ReviewResult
 from hamsterdan.contracts.readiness import AdmittedConversation
-from hamsterdan.contracts.readiness_v5 import AWake, CommentSeen, DraftSeen, HeadSeen, HumanSeen, ReadySeen, RoundWake
+from hamsterdan.contracts.readiness_v5 import (
+    AWake,
+    CommentSeen,
+    DraftSeen,
+    HeadSeen,
+    HumanSeen,
+    ReadySeen,
+    Replied,
+    ReplyReq,
+    RoundWake,
+)
 from hamsterdan.github_app.models import (
     ActionsEvidence,
     ActionsRunSnapshot,
@@ -839,6 +849,47 @@ def test_v5_application_stages_grant_before_identified_delivery_and_replays_froz
     ]
     assert tuple(runtime.engine.records) == first_records
     assert settled == []
+    application.close()
+
+
+@pytest.mark.parametrize("pending_webhook", [False, True])
+def test_repair_acknowledgement_lands_while_the_pushed_head_awaits_intake(
+    tmp_path: Path, pending_webhook: bool
+) -> None:
+    authority = Authority()
+    path = tmp_path / "webhooks.sqlite3"
+    application = PrReadinessV5Application(
+        tmp_path / "application",
+        SUBJECT,
+        authority,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        agent_settle=lambda operations: None,
+        bot_login="hamsterdan-test[bot]",
+        public_clone_url="https://github.com/owner/repo.git",
+        custody_path=path,
+    )
+    identity = delivery()
+    application.ingress.stage(identity, SUBJECT, projection(identity, "on_ready"))
+    authority.pull = replace(authority.pull, head="c" * 40)
+    if pending_webhook:
+        with sqlite3.connect(path) as database:
+            database.execute(
+                "CREATE TABLE inbox (delivery_id TEXT PRIMARY KEY, status TEXT NOT NULL, observation TEXT NOT NULL)"
+            )
+            database.execute(
+                "INSERT INTO inbox VALUES (?, 'pending', ?)",
+                (delivery(), json.dumps({"installation_id": 44, "repository_id": 31, "pull_request_number": 7})),
+            )
+    definition = application.activity("reply_gate")
+    assert definition is not None
+    work = ReplyReq(id="comment-7", text="I will repair the requested findings.")
+
+    result = definition.function(work=work)
+
+    assert result == Replied(id=work.id, text=work.text)
+    assert len(authority.transport.comments) == 1
+    assert definition.function(work=work) == result
+    assert len(authority.transport.comments) == 1
     application.close()
 
 

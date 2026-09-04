@@ -147,7 +147,8 @@ class PrReadinessV5Application:
             "review_agent": review.review_agent,
             "publish_gate": publications.publish_gate,
             "git_gate": mutation.git_gate,
-            "reply_gate": publications.reply_gate,
+            # Replies retain their admitted context while a repair's new head awaits intake.
+            "reply_gate": replace(publications, claim=lambda: self.ingress.claim(self.instance_id)).reply_gate,
             "dash_gate": publications.dash_gate,
             "reminder_gate": publications.reminder_gate,
             "announce_gate": publications.announce_gate,

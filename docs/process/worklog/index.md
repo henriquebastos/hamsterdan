@@ -117,3 +117,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-09-04 — Reused-head Actions association qualified locally](entries/2026-09-04T1247Z-reused-head-actions-association-qualified-locally.md)
 - [2026-09-04 — Native review batch qualified against GitHub before deployment](entries/2026-09-04T1935Z-native-review-batch-qualified-before-deployment.md)
 - [2026-09-04 — Clear rereview thread resolution qualified before deployment](entries/2026-09-04T2018Z-clear-rereview-thread-resolution-qualified-before-deployment.md)
+- [2026-09-04 — PR78 discarded and reply custody reproduced](entries/2026-09-04T2105Z-pr78-reply-custody-diagnosis.md)

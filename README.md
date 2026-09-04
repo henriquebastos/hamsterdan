@@ -21,8 +21,8 @@ journeys and real GitHub evidence for clean green, transient-CI recovery, and a
 complete three-actor repair. The current candidate passes the local full gate.
 GitHub-hosted Actions is currently blocked before job start by the account's
 payment/spending state, so hosted CI is not claimed green for this candidate.
-The candidate host has not yet been launched; exact production-target selection
-and an explicitly approved monitoring proof remain under
+The production host is active on exe.dev. The extended clean-journey proof and
+its failure evidence remain under
 [CV19](docs/project/roadmap/cv19-private-v0-1-production/index.md).
 
 ## Architecture

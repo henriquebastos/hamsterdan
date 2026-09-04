@@ -3,7 +3,7 @@ code: CV19
 level: Value
 status: Active
 status_reason: Gate B, the v0.1.0 tag, and the PR #63 hero journey are done, but on 2026-09-02 the Navigator extended the done condition — a complete offline proof package for one clean hero journey and monitoring across all personal and HBNetwork repositories
-updated: 2026-09-02
+updated: 2026-09-04
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
   - ../../decisions/records/2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
@@ -27,6 +27,18 @@ repository. This is production qualification, not public package publication or
 open-source release.
 
 ## Current state
+
+The following qualification inventory predates the supervised launch. Current
+production is active on revision `3afb99ca1ca8799ddc1db6c24697fb0192e0faf4`.
+PR78 passed the opening batch-review checkpoint and produced an App-authored
+repair with six green checks, but was closed unmerged after `ReplyBlocked`.
+The [diagnosis and local fix](../../../process/worklog/entries/2026-09-04T2105Z-pr78-reply-custody-diagnosis.md)
+and [failure manifest](proof/pr78-manifest.json) own the evidence. A new clean
+journey remains required after the reply fix completes release qualification
+and deployment. Production must never be deployed merely to test provider
+behavior; manual provider proof precedes release gates and deployment.
+
+### 1. Earlier inactive qualification
 
 - Non-sharded V5 is the only runtime and all retired selector values fail
   closed.
