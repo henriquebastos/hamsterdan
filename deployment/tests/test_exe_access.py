@@ -46,6 +46,7 @@ def test_temporary_access_verifies_the_gateway_key_and_cleans_up(monkeypatch: py
         assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
         assert known_hosts_path.read_text() == HOST_KEY
         assert "StrictHostKeyChecking=yes" in access.ssh_common_args
+        assert "IdentityAgent=none" in access.ssh_common_args
         assert "UserKnownHostsFile=" in access.ssh_common_args
 
     assert not key_path.exists()

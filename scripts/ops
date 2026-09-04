@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Run one deployment command under hamsterdan-ops authority.
 #
-# Headless environments export OP_SA_HAMSTERDAN_OPS and resolve the template
-# with that service account. A workstation exports nothing and authenticates
-# personally, so every deployment from a laptop is an explicit human act.
+# OP_SA_HAMSTERDAN_OPS, including when loaded by local direnv, selects the
+# service account. Without it, op authenticates personally.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -47,6 +47,8 @@ class Access:
             "-o",
             "IdentitiesOnly=yes",
             "-o",
+            "IdentityAgent=none",
+            "-o",
             "StrictHostKeyChecking=yes",
             "-o",
             f"UserKnownHostsFile={self.known_hosts}",

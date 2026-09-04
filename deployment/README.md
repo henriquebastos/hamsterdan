@@ -75,12 +75,10 @@ token. Neither `hamsterdan-dev` nor `hamsterdan-prod` carries any of it, so a
 stolen sandbox token cannot reach the production host and the production host
 cannot reprovision itself.
 
-Authority comes from one of two places and nothing else. A workstation exports
-no service account, so `op run` authenticates personally and every deployment
-from a laptop costs a deliberate Touch ID confirmation. A headless environment
-exports `OP_SA_HAMSTERDAN_OPS`, and `scripts/ops` substitutes it for the
-duration of the command. That single variable is the only difference between the
-two, so the command a human types is the command automation runs.
+Authority comes from one of two places. With `OP_SA_HAMSTERDAN_OPS` loaded,
+including through the workstation's project `.envrc`, `scripts/ops` uses the
+operations service account for that command. Without it, `op run` authenticates
+personally and may request Touch ID. The same deployment commands support both.
 
 Register the exe.dev public key and scope it to the VM ownership tag:
 
@@ -213,6 +211,37 @@ Directly replacing the VM file and running `systemctl restart hamsterdan` uses
 the same startup contract, but the configuration command is the reproducible
 route: the tracked file remains the source of truth and malformed or
 provider-invalid input cannot replace the working copy.
+
+## 1. Inspect production without starting a host
+
+Load the project `.envrc` so `OP_SA_HAMSTERDAN_OPS` is available, then export
+one PR's runtime metadata:
+
+```shell
+scripts/ops uv run --frozen python -m deployment.observe \
+  --installation 150464548 --repository 1316665126 --pr 78 > /tmp/pr78.jsonl
+jq 'select(.result_variant == "ReplyBlocked")' /tmp/pr78.jsonl
+jq 'select(.layer == "dispatch")' /tmp/pr78.jsonl
+```
+
+`--layer history|dispatch|inbox|host` selects a layer; `--transition conv.reply`
+selects a History transition. Each line carries the collection timestamp.
+History sequence and Activity occurrence connect workflow decisions to Motus
+dispatch state. Inbox rows expose delivery IDs, attempts, and error classes.
+Host health exposes status and scheduler error classes. Stores are sampled
+sequentially, so a running Activity may change between those reads.
+
+The command uses fingerprint-pinned, batch-mode SSH with `IdentityAgent=none`.
+The private key supplied by `scripts/ops` signs directly; an installed
+1Password SSH agent cannot turn that operation into a fingerprint prompt.
+Without the operations service-account environment, `scripts/ops` still uses
+personal 1Password authentication. No credential value belongs in output.
+
+The collector reads the existing stores without replay, writes, or service
+changes. It requires the pinned LocalDispatch schema 3 and bounds History to
+64 MiB. It omits prompts, Activity inputs and result bodies, webhook payloads,
+claimant identities, and provider error prose. These metadata snapshots do not
+replace agent transcripts or a complete offline proof package.
 
 ## CI and publication boundary
 
