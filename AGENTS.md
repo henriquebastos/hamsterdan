@@ -104,6 +104,7 @@ values.
 
 `hamsterdan-ops` is what a deployer reads, and neither of the other two can
 reach it. Run every deployment command through `scripts/ops`, which resolves
-`env-ops.tpl` with `op run` for that one command. A workstation authenticates
-personally and asks for a fingerprint; a headless environment exports
-`OP_SA_HAMSTERDAN_OPS` instead. Nothing else differs between them.
+`env-ops.tpl` with `op run` for that one command. The local ignored `.envrc`
+loads project service-account tokens using the reference recipe. The wrapper
+uses `OP_SA_HAMSTERDAN_OPS` when supplied, otherwise personal authentication.
+Only this machine's tokens belong locally.
