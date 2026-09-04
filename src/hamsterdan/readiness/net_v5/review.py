@@ -310,6 +310,9 @@ def _fold_blocked(binding, outputs):
             "policy": out.policy,
             "incarnation": out.incarnation,
             "findings": list(out.findings),
+            "failure_class": out.failure_class,
+            "provider_status": out.provider_status,
+            "provider_detail": out.provider_detail,
         },
     )
     facts = _settlement_facts(mem, out.head, out.incarnation)

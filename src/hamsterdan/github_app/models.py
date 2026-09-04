@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
@@ -9,8 +10,34 @@ from typing import Any, Literal, Protocol
 MAX_LOG_BYTES = 2_097_152
 
 
+ProviderFailureClass = Literal[
+    "transport_ambiguity",
+    "transient_http_rejection",
+    "capability_denial",
+    "payload_rejection",
+    "provider_rejection",
+]
+
+
 class GitHubBoundaryError(RuntimeError):
-    """A secret-safe provider boundary failure."""
+    """A secret-safe provider boundary failure with bounded diagnostics."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failure_class: ProviderFailureClass = "transport_ambiguity",
+        provider_status: int | None = None,
+        provider_detail: str = "none",
+    ) -> None:
+        if provider_status is not None and not 100 <= provider_status <= 599:
+            raise ValueError("provider status must be an HTTP status")
+        if not provider_detail or len(provider_detail) > 96 or re.fullmatch(r"[a-z0-9_.:-]+", provider_detail) is None:
+            raise ValueError("provider detail must use the bounded diagnostic vocabulary")
+        self.failure_class = failure_class
+        self.provider_status = provider_status
+        self.provider_detail = provider_detail
+        super().__init__(message)
 
 
 class RerunRefusedError(RuntimeError):

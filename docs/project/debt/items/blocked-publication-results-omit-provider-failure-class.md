@@ -23,6 +23,13 @@ pause, and a fresh authority fence. The remaining diagnostic obligation is to
 carry a secret-safe failure class through the blocked Activity result and
 operator inspection without storing provider payloads.
 
+PR #67 showed that the remaining rejection does not enter that transient path:
+the third inline comment was absent and `review.publish` completed immediately.
+The blocked terminal now retains a closed failure class, HTTP status, and a
+bounded structural error shape made only from validated field/code atoms. It
+does not retain GitHub's message or response body. A fresh production run is
+still required to identify and remove the rejected request shape.
+
 Resolve this item when a blocked publication report distinguishes at least a
 transport ambiguity, a transient HTTP rejection, and a capability denial; the
 classification survives restart and export; and tests prove no credential or

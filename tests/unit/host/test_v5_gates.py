@@ -626,6 +626,9 @@ class TestPublishGate:
             findings=self.WORK.findings,
             effect="findings:h1:i1",
             op="findings:h1:i1",
+            failure_class="transport_ambiguity",
+            provider_status=None,
+            provider_detail="none",
             mem=self.WORK.mem,
         )
 
@@ -638,6 +641,11 @@ class TestPublishGate:
         publisher = FakePublisher(mode="capability")
         result = gates(publisher).publish_gate(self.WORK)
         assert isinstance(result, ReviewBlocked) and result.op == "findings:h1:i1"
+        assert (result.failure_class, result.provider_status, result.provider_detail) == (
+            "capability_denial",
+            None,
+            "none",
+        )
 
     def test_an_unrecognized_returned_status_fails_closed(self) -> None:
         publisher = FakePublisher(mode="unclassified")

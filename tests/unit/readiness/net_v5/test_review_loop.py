@@ -250,6 +250,9 @@ class TestPublication:
         state = memory(engine)
         assert state["pub"]["phase"] == "blocked"
         assert state["pub"]["op"] == "findings:h1:i1"
+        assert state["pub"]["failure_class"] == "transport_ambiguity"
+        assert state["pub"]["provider_status"] is None
+        assert state["pub"]["provider_detail"] == "none"
         assert world["comment_attempts"] == 3  # bounded retry, ONE occurrence
         assert state["reviewed"] == ["h1"]  # the round completed
         # the blocked findings still reach readiness/dashboard honestly

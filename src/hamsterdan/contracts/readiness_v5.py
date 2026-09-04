@@ -831,6 +831,15 @@ class ReviewBlocked(WorkflowModel):
     findings: list[dict[str, Any]]
     effect: str
     op: str
+    failure_class: Literal[
+        "transport_ambiguity",
+        "transient_http_rejection",
+        "capability_denial",
+        "payload_rejection",
+        "provider_rejection",
+    ]
+    provider_status: int | None
+    provider_detail: str
     mem: dict[str, Any]
 
 

@@ -319,16 +319,22 @@ class V5PublicationGates:
         landed = ReviewLanded(
             head=work.head, incarnation=work.incarnation, findings=work.findings, effect=work.effect, mem=work.mem
         )
-        blocked = ReviewBlocked(
-            head=work.head,
-            base=work.base,
-            policy=work.policy,
-            incarnation=work.incarnation,
-            findings=work.findings,
-            effect=work.effect,
-            op=work.op,
-            mem=work.mem,
-        )
+
+        def blocked(error: GitHubBoundaryError | None = None) -> ReviewBlocked:
+            return ReviewBlocked(
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                incarnation=work.incarnation,
+                findings=work.findings,
+                effect=work.effect,
+                op=work.op,
+                failure_class=error.failure_class if error is not None else "capability_denial",
+                provider_status=error.provider_status if error is not None else None,
+                provider_detail=error.provider_detail if error is not None else "none",
+                mem=work.mem,
+            )
+
         try:
             pending = [
                 finding
@@ -362,13 +368,13 @@ class V5PublicationGates:
                     )
                     unproven = _unproven(result)
                     if unproven == "blocked":
-                        return blocked
+                        return blocked()
                     if unproven is not None:
                         return ReviewFault(reason=unproven, mem=work.mem)
                 if self.resolve_stale_threads is not None:
                     self.resolve_stale_threads(work.head)
-        except GitHubBoundaryError:
-            return blocked
+        except GitHubBoundaryError as error:
+            return blocked(error)
         except (RuntimeError, ValueError) as error:
             return ReviewFault(reason=_reason(error), mem=work.mem)
         return landed

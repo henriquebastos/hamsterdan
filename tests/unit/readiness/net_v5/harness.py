@@ -303,6 +303,9 @@ def make_activities(world: dict):
             findings=work.findings,
             effect=work.effect,
             op=work.op,
+            failure_class="transport_ambiguity",
+            provider_status=None,
+            provider_detail="none",
             mem=work.mem,
         )
 

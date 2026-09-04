@@ -13,6 +13,7 @@ from .models import (
     ActionsRunSnapshot,
     CommentReference,
     GitHubBoundaryError,
+    ProviderFailureClass,
     PublicationResult,
     RerunIssue,
     RerunRefusedError,
@@ -28,6 +29,8 @@ _MARKER_KINDS = frozenset({"conversation", "finding", "readiness", "reminder"})
 _INLINE_UNAVAILABLE_MESSAGES = frozenset(
     {"line is not in diff", "pull request review thread line must be part of the diff"}
 )
+_DIAGNOSTIC_FIELDS = frozenset({"body", "commit_id", "line", "path", "pull_request_review_thread.line", "side"})
+_DIAGNOSTIC_CODES = frozenset({"already_exists", "custom", "invalid", "missing", "unprocessable"})
 _TRANSIENT_RETRY_SECONDS = 60
 
 
@@ -437,10 +440,12 @@ class CommentPublisher:
                 return PublicationResult("existing", _reference(recovered), inline=True)
             if _inline_unavailable(response):
                 return PublicationResult("inline_unavailable", capability_available=False)
-            if not attempt and _transient_inline_rejection(response):
-                self.retry_delay(_TRANSIENT_RETRY_SECONDS)
-                continue
-            raise GitHubBoundaryError("GitHub did not prove inline finding publication")
+            if _transient_inline_rejection(response):
+                if not attempt:
+                    self.retry_delay(_TRANSIENT_RETRY_SECONDS)
+                    continue
+                raise _inline_rejection(response, "transient_http_rejection")
+            raise _inline_rejection(response, _inline_failure_class(response))
         raise AssertionError("bounded inline finding recovery exhausted without an outcome")
 
     def reminder(
@@ -513,6 +518,47 @@ def _transient_inline_rejection(response: WireResponse) -> bool:
     if response.status == 403:
         return "secondary rate limit" in normalized or "abuse detection" in normalized
     return response.status == 422 and normalized == "validation failed" and not response.body.get("errors")
+
+
+def _inline_failure_class(response: WireResponse) -> ProviderFailureClass:
+    if response.status in {403, 404}:
+        return "capability_denial"
+    if response.status == 422:
+        return "payload_rejection"
+    return "provider_rejection"
+
+
+def _inline_rejection(response: WireResponse, failure_class: ProviderFailureClass) -> GitHubBoundaryError:
+    return GitHubBoundaryError(
+        "GitHub did not prove inline finding publication",
+        failure_class=failure_class,
+        provider_status=response.status,
+        provider_detail=_inline_provider_detail(response),
+    )
+
+
+def _inline_provider_detail(response: WireResponse) -> str:
+    if not isinstance(response.body, Mapping):
+        return "non_object_body"
+    errors = response.body.get("errors")
+    if not isinstance(errors, list) or not errors:
+        return "no_structured_errors"
+    shapes: list[str] = []
+    for error in errors[:4]:
+        if not isinstance(error, Mapping):
+            shapes.append("non_object_error")
+            continue
+        field = _diagnostic_atom(error.get("field"), _DIAGNOSTIC_FIELDS, "unknown_field")
+        code = _diagnostic_atom(error.get("code"), _DIAGNOSTIC_CODES, "unknown_code")
+        shapes.append(f"{field}:{code}")
+    return ".".join(shapes)[:96]
+
+
+def _diagnostic_atom(value: object, allowed: frozenset[str], fallback: str) -> str:
+    if not isinstance(value, str):
+        return fallback
+    normalized = value.strip().casefold().replace("/", ".")
+    return normalized if normalized in allowed else fallback
 
 
 def _final_marker(body: str, marker: str) -> bool:

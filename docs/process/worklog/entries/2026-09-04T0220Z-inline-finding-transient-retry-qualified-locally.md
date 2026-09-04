@@ -41,3 +41,13 @@ delay is available. The publisher now makes
 that bounded pause before its single retry, and the publication Activity has a
 120-second heartbeat window so the wait remains one valid execution. Injected
 delay and composition regressions cover both timings without slowing tests.
+
+PR #67 exercised that paced build from a fresh head. The first two findings
+landed, the third stayed absent beyond the retry window, and the Activity
+completed as `ReviewBlocked` without taking the delay path. The run was closed
+unmerged and discarded. Because the old blocked terminal discarded the
+provider response class, the next diagnostic slice carries only a closed class,
+HTTP status, and validated structural field/code atoms through canonical
+History. Provider messages and bodies remain outside retained state. This
+instrumentation must identify the rejection on a new disposable PR before the
+final clean proof run proceeds.

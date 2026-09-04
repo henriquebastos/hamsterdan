@@ -746,11 +746,34 @@ def test_inline_authorization_or_payload_failure_does_not_fall_back(response: Wi
     fake.responses[("POST", reviews)] = response
     publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
 
-    with pytest.raises(GitHubBoundaryError, match="did not prove inline"):
+    with pytest.raises(GitHubBoundaryError, match="did not prove inline") as caught:
         publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
 
+    expected_class = "capability_denial" if response.status in {403, 404} else "payload_rejection"
+    assert caught.value.failure_class == expected_class
+    assert caught.value.provider_status == response.status
+    assert "Validation Failed" not in caught.value.provider_detail
     assert not [call for call in fake.calls if call[:2] == ("POST", issues)]
     assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 1
+
+
+def test_inline_failure_diagnostic_rejects_provider_controlled_atoms() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fake.responses[("POST", reviews)] = WireResponse(
+        422,
+        {"message": "credential-bearing message", "errors": [{"field": "github_pat_secret", "code": "secret"}]},
+    )
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: None)
+
+    with pytest.raises(GitHubBoundaryError) as caught:
+        publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
+
+    assert caught.value.provider_detail == "unknown_field:unknown_code"
+    assert "secret" not in caught.value.provider_detail
 
 
 def test_ambiguous_accepted_inline_finding_recovers_without_a_second_mutation() -> None:
