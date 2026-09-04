@@ -2,7 +2,7 @@
 code: CV19
 level: Value
 status: Active
-status_reason: Gate B, the v0.1.0 tag, and the PR #63 hero journey are done, but on 2026-09-02 the Navigator extended the done condition — a complete offline proof package for one clean hero journey and monitoring across all personal and HBNetwork repositories
+status_reason: PR80 passed the clean production journey; capture-package acceptance and monitoring across all personal and HBNetwork repositories remain
 updated: 2026-09-04
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
@@ -28,17 +28,25 @@ open-source release.
 
 ## Current state
 
-The following qualification inventory predates the supervised launch. Current
-production is active on revision `e3a79bbfc839596f2dacec1db820efb18b159a3b`.
-PR78 passed the opening review and repair checks but was discarded after
-`ReplyBlocked`; its reply-context fix is deployed. PR79 published three findings
-in one review with clean History but failed the strict cache-anchor checks.
-The [PR79 diagnosis](../../../process/worklog/entries/2026-09-04T2200Z-pr79-review-input-diagnosis.md)
-and [failure manifest](proof/pr79-manifest.json) record the missing review diff
-and the numbered-source correction. A new clean journey remains required after
-that correction completes release qualification and deployment. Production must
-never be deployed merely to test provider behavior; manual provider proof
-precedes release gates and deployment.
+Production is active on revision `14f41d8a519a8202411e0d1fc1c823949b494cee`.
+[PR80 passed the clean journey](proof/pr80.md): three findings in one native
+review, App-authored repair, six green repaired-head jobs, a zero-finding
+rereview and automatic thread resolution before approval, one final advisory,
+and clean History. Both strict inspectors passed all ten checks. The PR was
+closed unmerged after capture. The [manifest](proof/pr80-manifest.json) records
+artifact hashes and explicit capture limits. CV19 remains Active for Navigator
+review of those captures and monitoring across the requested repository portfolio;
+production still admits one repository.
+
+PR78 and PR79 were discarded after reply-custody and source-anchor failures.
+Their reproduced corrections are included in the deployed revision. Manual
+provider proofs preceded local/release gates and deployment. The final gate
+passed 1,256 parallel and 1,256 serial tests with 18 platform deselections.
+Deployment qualification and runtime provisioning both repeated with zero
+changes. A full-disk interruption was recovered by deleting three old unused
+candidate artifacts; [candidate retention](../../debt/items/production-candidate-retention-can-exhaust-disk.md)
+remains an obligation before another deployment. Structured runtime inspection
+and unattended operations-service-account SSH are available.
 
 ### 1. Earlier inactive qualification
 

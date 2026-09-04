@@ -13,3 +13,4 @@ an item only when debt should outlive one story's review notes.
 - [exe.dev default exeuntu image cannot be pinned](items/exe-dev-default-exeuntu-image-cannot-be-pinned.md)
 - [Non-blocking quality audit baseline remains unresolved](items/non-blocking-quality-audit-baseline-remains-unresolved.md)
 - [Blocked publication results omit the provider failure class](items/blocked-publication-results-omit-provider-failure-class.md)
+- [Production candidate retention can exhaust disk](items/production-candidate-retention-can-exhaust-disk.md)

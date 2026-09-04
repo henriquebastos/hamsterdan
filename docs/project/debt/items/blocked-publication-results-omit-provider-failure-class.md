@@ -61,3 +61,8 @@ while semantic publication correctness still fails. Its missing review input
 was diagnosed from the existing offline session export. Numbered review inputs
 address that concrete defect; this diagnostic debt remains open and should not
 be mistaken for an anchor-validation guarantee.
+
+PR80 completed the clean journey with `Replied`, two `ReviewLanded` results,
+a single final advisory, and no blocked/fault/unable/failed terminal. That proves
+the concrete corrections, but does not supply missing failure classes for a
+future blocked publication; this diagnostic obligation remains open.
