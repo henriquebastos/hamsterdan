@@ -856,7 +856,7 @@ def test_v5_finding_publication_heartbeat_covers_the_transient_retry_pause(tmp_p
 
     definition = application._runtime().activity("publish_gate")
 
-    assert definition is not None and definition.declaration.heartbeat_timeout == 120
+    assert definition is not None and definition.declaration.heartbeat_timeout == 360
     application.close()
 
 

@@ -31,7 +31,7 @@ _INLINE_UNAVAILABLE_MESSAGES = frozenset(
 )
 _DIAGNOSTIC_FIELDS = frozenset({"body", "commit_id", "line", "path", "pull_request_review_thread.line", "side"})
 _DIAGNOSTIC_CODES = frozenset({"already_exists", "custom", "invalid", "missing", "unprocessable"})
-_TRANSIENT_RETRY_SECONDS = 60
+_TRANSIENT_RETRY_SECONDS = (60, 120)
 
 
 class CommentPublisher:
@@ -410,7 +410,7 @@ class CommentPublisher:
     ) -> PublicationResult:
         marker = self.marker("finding", operation, head)
         payload = f"{body}\n\n{marker}"
-        for attempt in range(2):
+        for attempt in range(len(_TRANSIENT_RETRY_SECONDS) + 1):
             self.fence(self.repository, self.pr_number, epoch, head, authority_operation or operation)
             try:
                 if self.fault is not None:
@@ -428,9 +428,9 @@ class CommentPublisher:
                     if recovered.get("body") != payload:
                         raise ValueError("stable publication operation collided with a different payload")
                     return PublicationResult("existing", _reference(recovered), inline=True)
-                if attempt:
+                if attempt == len(_TRANSIENT_RETRY_SECONDS):
                     raise
-                self.retry_delay(_TRANSIENT_RETRY_SECONDS)
+                self.retry_delay(_TRANSIENT_RETRY_SECONDS[attempt])
                 continue
             if response.status == 201 and isinstance(response.body, dict):
                 return PublicationResult("created", _reference(_response_mapping(response.body)), inline=True)
@@ -442,8 +442,8 @@ class CommentPublisher:
             if _inline_unavailable(response):
                 return PublicationResult("inline_unavailable", capability_available=False)
             if _transient_inline_rejection(response):
-                if not attempt:
-                    self.retry_delay(_TRANSIENT_RETRY_SECONDS)
+                if attempt < len(_TRANSIENT_RETRY_SECONDS):
+                    self.retry_delay(_TRANSIENT_RETRY_SECONDS[attempt])
                     continue
                 raise _inline_rejection(response, "transient_http_rejection")
             raise _inline_rejection(response, _inline_failure_class(response))

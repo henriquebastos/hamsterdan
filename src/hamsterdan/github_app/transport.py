@@ -77,8 +77,11 @@ class GitHubKitTransport:
             OSError,
             RuntimeError,
             ValueError,
-        ):
-            raise GitHubBoundaryError("GitHub request failed without a proven outcome") from None
+        ) as error:
+            raise GitHubBoundaryError(
+                "GitHub request failed without a proven outcome",
+                provider_detail=_transport_failure_detail(error),
+            ) from None
 
     @staticmethod
     def _read(chunks: Iterable[bytes], limit: int) -> bytes:
@@ -105,8 +108,11 @@ class GitHubKitTransport:
                     raw_response.close()
         except GitHubBoundaryError:
             raise
-        except GitHubException, httpx.HTTPError:
-            raise GitHubBoundaryError("GitHub download failed without a proven outcome") from None
+        except (GitHubException, httpx.HTTPError) as error:
+            raise GitHubBoundaryError(
+                "GitHub download failed without a proven outcome",
+                provider_detail=_transport_failure_detail(error),
+            ) from None
 
     def pages(self, path: str) -> tuple[dict[str, Any], ...]:
         values: list[dict[str, Any]] = []
@@ -126,6 +132,22 @@ class GitHubKitTransport:
             values.extend(cast(list[dict[str, Any]], response.body))
             current = response.next_path
         return tuple(values)
+
+
+def _transport_failure_detail(error: Exception) -> str:
+    if isinstance(error, httpx.TransportError):
+        return "http_transport"
+    if isinstance(error, GitHubException):
+        return "github_exception"
+    if isinstance(error, UnicodeDecodeError):
+        return "response_encoding"
+    if isinstance(error, json.JSONDecodeError):
+        return "response_json"
+    if isinstance(error, OSError):
+        return "os_error"
+    if isinstance(error, RuntimeError):
+        return "runtime_error"
+    return "value_error"
 
 
 class GitHubGraphQL:

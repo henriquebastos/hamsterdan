@@ -59,3 +59,12 @@ returned-HTTP branch, immediately spent its second attempt. The run was closed
 unmerged and discarded. The branch now waits the same 60 seconds before the
 fresh authority fence and second attempt; a regression proves the pause without
 sleeping in the test process.
+
+Two subsequent OpenAI rounds, PRs #69 and #70, returned the explicit `unable`
+review status before publication and were closed unmerged. PR #71 then produced
+the expected three findings: two landed, while the third exhausted the paced
+transport retry. That run was also discarded. The retry schedule is now bounded
+at three attempts with 60- and 120-second backoff, each preceded by marker
+reconciliation and followed by a fresh fence. The Activity heartbeat expands to
+cover the schedule, and an exhausted transport failure records only its fixed
+exception-family label.

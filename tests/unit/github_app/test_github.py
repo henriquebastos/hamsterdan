@@ -893,6 +893,34 @@ def test_inline_transient_http_rejection_retries_after_lookup_and_a_fresh_fence(
     assert delays == [60]
 
 
+def test_inline_transient_exhaustion_uses_bounded_exponential_backoff() -> None:
+    issues = "/repos/owner/repo/issues/7/comments"
+    reviews = "/repos/owner/repo/pulls/7/comments"
+    fake = FakeTransport()
+    fake.page_values[f"{reviews}?per_page=100"] = ()
+    fake.page_values[f"{issues}?per_page=100"] = ()
+    fake.responses[("POST", reviews)] = WireResponse(429, {"message": "Too Many Requests"})
+    fences: list[str] = []
+    delays: list[float] = []
+    publisher = CommentPublisher(
+        fake,
+        "owner/repo",
+        7,
+        "hamsterdan[bot]",
+        lambda *args: fences.append("fenced"),
+        retry_delay=delays.append,
+    )
+
+    with pytest.raises(GitHubBoundaryError) as caught:
+        publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
+
+    assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 3
+    assert fences == ["fenced", "fenced", "fenced"]
+    assert delays == [60, 120]
+    assert caught.value.failure_class == "transient_http_rejection"
+    assert caught.value.provider_status == 429
+
+
 def test_inline_retry_stops_when_the_fresh_second_fence_rejects_authority() -> None:
     issues = "/repos/owner/repo/issues/7/comments"
     reviews = "/repos/owner/repo/pulls/7/comments"
@@ -990,6 +1018,7 @@ def test_transport_normalizes_httpx_network_failures() -> None:
         transport.download("/repos/owner/repo/actions/runs/1/logs")
     assert "credential-bearing-provider-error" not in str(request_error.value)
     assert "credential-bearing-provider-error" not in str(download_error.value)
+    assert request_error.value.provider_detail == "http_transport"
 
 
 def test_policy_falls_back_only_on_effective_endpoint_404_and_rejects_malformed_evidence() -> None:

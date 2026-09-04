@@ -36,6 +36,14 @@ paced, but the transport-exception branch still retried immediately after its
 absent-marker lookup. The publisher now gives that branch the same bounded
 60-second pause before its fresh fence and only retry.
 
+PR #71 proved that one paced retry was still insufficient: findings one and
+two landed, while the third remained absent after the 60-second retry. The
+publisher now uses one additional, exponentially backed-off attempt after 120
+seconds. Transport ambiguity also retains a closed exception-family detail so
+an exhausted run can distinguish an HTTP transport failure from a GitHub client,
+response decoding, operating-system, or local runtime failure without retaining
+an exception message.
+
 Resolve this item when a blocked publication report distinguishes at least a
 transport ambiguity, a transient HTTP rejection, and a capability denial; the
 classification survives restart and export; and tests prove no credential or
