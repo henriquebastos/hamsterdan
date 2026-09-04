@@ -70,9 +70,10 @@ scripts/ops uv run --frozen python deployment/exe_vm.py ...
 The template resolves only from the `hamsterdan-ops` vault, which holds the
 deployment authority the running service must never be able to read: the exe.dev
 API token, the exe.dev SSH key as one base64 line, the App identity, the agent
-key, and the target's own service-account token. Neither `hamsterdan-dev` nor
-`hamsterdan-prod` carries any of it, so a stolen sandbox token cannot reach the
-production host and the production host cannot reprovision itself.
+key, the read-only Petrus source token, and the target's own service-account
+token. Neither `hamsterdan-dev` nor `hamsterdan-prod` carries any of it, so a
+stolen sandbox token cannot reach the production host and the production host
+cannot reprovision itself.
 
 Authority comes from one of two places and nothing else. A workstation exports
 no service account, so `op run` authenticates personally and every deployment

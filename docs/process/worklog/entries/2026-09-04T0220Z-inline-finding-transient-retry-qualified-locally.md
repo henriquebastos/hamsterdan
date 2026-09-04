@@ -21,3 +21,11 @@ transient response classes. The adjacent publisher and V5 publication-gate
 suite passes 131 tests; `scripts/check quick` passes; and `scripts/check full`
 passes 1,239 tests. The original provider response class was not retained in
 History, so that independent diagnostics gap is recorded in the debt ledger.
+
+The first clean image build then exposed a separate omission from the recent
+three-vault migration: `env-ops.tpl` did not carry the private Petrus source
+token required by the release builder. The existing read-only token was
+streamed directly from `hamsterdan-dev` into a deployer-owned
+`hamsterdan-ops/petrus-github-token` item without printing or local persistence.
+The operations template and its exact-name contract now include that build-only
+authority; it remains absent from production runtime custody.

@@ -333,6 +333,7 @@ def test_deployment_authority_resolves_only_from_the_operations_vault() -> None:
 
     assert [line.split("=", 1)[0] for line in assignments] == [
         "OPENAI_AGENT_API_KEY",
+        "PETRUS_GITHUB_TOKEN",
         "EXE_DEV_API_TOKEN",
         "EXE_DEV_SSH_PRIVATE_KEY_B64",
         "GITHUB_APP_ID",
@@ -344,6 +345,7 @@ def test_deployment_authority_resolves_only_from_the_operations_vault() -> None:
     # An agent key is identified by the provider that issued it, so switching
     # providers is a visible item change rather than a silent value swap.
     assert "op://example-ops/openai/credential" in template
+    assert "op://example-ops/petrus-github-token/credential" in template
 
     # A development sandbox must never hold authority over the production host.
     assert "hamsterdan-ops" not in development
