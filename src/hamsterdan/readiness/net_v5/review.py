@@ -34,6 +34,7 @@ from hamsterdan.contracts.readiness_v5 import (
     FindingsFact,
     FindingsFactBody,
     HeadWork,
+    PublicationDeferred,
     PublicationFaultBody,
     Publishable,
     RecoverFact,
@@ -59,7 +60,7 @@ GATES = {
     "review.agent": ("review_agent", ("AgentReview", "RoundDeferred", "RoundMoved", "RoundUnable")),
     "review.publish": (
         "publish_gate",
-        ("ReviewLanded", "ReviewMoved", "ReviewBlocked", "ReviewFault"),
+        ("ReviewLanded", "PublicationDeferred", "ReviewMoved", "ReviewBlocked", "ReviewFault"),
     ),
 }
 _MARKER_OPERATION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
@@ -173,9 +174,6 @@ def _judge(binding, outputs):
         status=_status(out.findings, mem.dismissed),
     )
     live = _live(out.findings, mem.dismissed)
-    if not live:
-        empty = EmptyReview(head=out.head, incarnation=out.incarnation, mem=mem.dump())
-        return route(outputs, {"review.empty": (empty,)})
     return route(
         outputs,
         {"review.publishable": (_publishable(out.head, out.base, out.policy, out.incarnation, live, mem),)},
@@ -223,6 +221,27 @@ def _wake_deferred(binding, outputs):
         attempt=deferred.attempt + 1,
     )
     return route(outputs, {"review.round": (reopened,)})
+
+
+def _wake_publication(binding, outputs):
+    deferred, wake = values(binding, PublicationDeferred, RoundWake)
+    if (wake.operation, wake.attempt, wake.blocker) != (
+        deferred.operation,
+        deferred.attempt,
+        deferred.blocker,
+    ):
+        raise ValueError("V5 review wake differs from its deferred publication")
+    reopened = Publishable(
+        head=deferred.head,
+        base=deferred.base,
+        policy=deferred.policy,
+        incarnation=deferred.incarnation,
+        findings=list(deferred.findings),
+        effect=deferred.effect,
+        op=deferred.operation,
+        mem=deferred.mem,
+    )
+    return route(outputs, {"review.publishable": (reopened,)})
 
 
 def _findings_fact(head: str, incarnation: int, findings, dismissed) -> FindingsFact:
@@ -417,6 +436,13 @@ def _end_deferred(binding, outputs):
     return route(outputs, {"review.done": (ended,)})
 
 
+def _end_publication_deferred(binding, outputs):
+    close, deferred = values(binding, CloseFact, PublicationDeferred)
+    mem = revive(ReviewMemory, deferred.mem)
+    ended = ReviewEnded(reviewed=mem.reviewed, pub_phase=mem.pub["phase"], reason=close.reason)
+    return route(outputs, {"review.done": (ended,)})
+
+
 def _drain_dismiss(binding, outputs):
     # a dismiss admitted while running can be applied AFTER the loop
     # retired (its transition waited on the baton a gate held in flight
@@ -454,6 +480,7 @@ def declare(s) -> None:
     review.p.round_moved(RoundMoved)
     review.p.unable(RoundUnable)
     review.p.publishable(Publishable)
+    review.p.publication_deferred(PublicationDeferred)
     review.p.empty(EmptyReview)
     review.p.landed(ReviewLanded)
     review.p.moved(ReviewMoved)
@@ -492,6 +519,11 @@ def wire(net) -> None:
         >> review.t.wake_deferred(handler=petri_handler(_wake_deferred))
         >> review.p.round
     )
+    (
+        (review.p.publication_deferred, review.p.wakes)
+        >> review.t.wake_publication(handler=petri_handler(_wake_publication))
+        >> review.p.publishable
+    )
     (review.p.round_moved >> review.t.fold_round_moved(handler=petri_handler(_round_moved)) >> review.p.memory)
     (
         review.p.output
@@ -515,6 +547,7 @@ def wire(net) -> None:
         >> review.t.publish(handler="publish_gate")
         >> (
             review.p.landed,
+            review.p.publication_deferred,
             review.p.moved,
             review.p.blocked,
             review.p.fault,
@@ -595,6 +628,11 @@ def wire(net) -> None:
     (
         (review.p.closed, review.p.deferred)
         >> review.t.end_deferred(handler=petri_handler(_end_deferred))
+        >> review.p.done
+    )
+    (
+        (review.p.closed, review.p.publication_deferred)
+        >> review.t.end_publication_deferred(handler=petri_handler(_end_publication_deferred))
         >> review.p.done
     )
     # post-close drains: a note whose apply lost the race with close is

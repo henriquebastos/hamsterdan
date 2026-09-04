@@ -36,6 +36,7 @@ from hamsterdan.contracts.readiness_v5 import (
     ADeferred,
     AnnounceReq,
     AWake,
+    PublicationDeferred,
     RoundDeferred,
     RoundWake,
     TimerCommand,
@@ -473,14 +474,17 @@ class V5Runtime:
     def deliver_timer_due(self, value: TimerDue, identity: str) -> object:
         return self.deliver(IngressEntry.from_value("on_timer", value, identity))
 
-    def review_deferred(self) -> RoundDeferred | None:
+    def review_deferred(self) -> RoundDeferred | PublicationDeferred | None:
         self._validate_review_wake_history()
-        tokens = tuple(self.engine.marking.place(NetPath("review.deferred")))
+        round_tokens = tuple(self.engine.marking.place(NetPath("review.deferred")))
+        publication_tokens = tuple(self.engine.marking.place(NetPath("review.publication_deferred")))
+        tokens = (*round_tokens, *publication_tokens)
         if not tokens:
             return None
-        if len(tokens) != 1 or tokens[0].color != "RoundDeferred":
+        if len(tokens) != 1 or tokens[0].color not in {"RoundDeferred", "PublicationDeferred"}:
             raise RuntimeError("V5 deferred review has invalid cardinality or color")
-        return self._review_value(RoundDeferred, tokens[0].data, "deferred review")
+        model = RoundDeferred if tokens[0].color == "RoundDeferred" else PublicationDeferred
+        return self._review_value(model, tokens[0].data, "deferred review")
 
     @staticmethod
     def _review_value(model, data: object, label: str):
@@ -493,15 +497,20 @@ class V5Runtime:
         deferred: set[str] = set()
         seen: set[str] = set()
         for record in self.engine.records:
-            if (
-                isinstance(record, ActivityCompleted)
-                and record.transition == NetPath("review.agent")
-                and isinstance(record.result, dict)
-                and record.result.get("$variant") == "RoundDeferred"
-            ):
+            if isinstance(record, ActivityCompleted) and record.transition in {
+                NetPath("review.agent"),
+                NetPath("review.publish"),
+            }:
+                result = record.result
+                if not isinstance(result, dict):
+                    continue
+                variant = result.get("$variant")
+                if variant not in {"RoundDeferred", "PublicationDeferred"}:
+                    continue
+                model = RoundDeferred if variant == "RoundDeferred" else PublicationDeferred
                 value = self._review_value(
-                    RoundDeferred,
-                    {key: item for key, item in record.result.items() if key != "$variant"},
+                    model,
+                    {key: item for key, item in result.items() if key != "$variant"},
                     "deferred review History terminal",
                 )
                 identity = self.review_wake_identity(

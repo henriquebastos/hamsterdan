@@ -33,6 +33,7 @@ from hamsterdan.contracts.readiness_v5 import (
     FaultM,
     MovedM,
     MutWork,
+    PublicationDeferred,
     Publishable,
     Pushed,
     RemBlocked,
@@ -83,6 +84,7 @@ def fresh_world() -> dict:
         "agent_mode": None,  # None | "unable"
         "comments": [],
         "comments_mode": None,  # None | "retryable" | "unknown"
+        "publication_blocker": None,
         "announce_blocker": None,
         "comment_attempts": 0,
         # mutation: the provider's push ledger, keyed by operation identity
@@ -243,7 +245,9 @@ def make_activities(world: dict):
         )
 
     @motus_activity(converter=converter)
-    def publish_gate(work: Publishable) -> ReviewLanded | ReviewMoved | ReviewBlocked | ReviewFault:
+    def publish_gate(
+        work: Publishable,
+    ) -> ReviewLanded | PublicationDeferred | ReviewMoved | ReviewBlocked | ReviewFault:
         # lookup-first: the SAME effect identity never posts twice — and
         # a key collision with DIFFERENT content fails closed (A2)
         prior = next((c for c in world["comments"] if c["key"] == work.effect), None)
@@ -256,6 +260,19 @@ def make_activities(world: dict):
                 findings=work.findings,
                 effect=work.effect,
                 mem=work.mem,
+            )
+        if blocker := world["publication_blocker"]:
+            return PublicationDeferred(
+                operation=work.op,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                incarnation=work.incarnation,
+                findings=work.findings,
+                effect=work.effect,
+                mem=work.mem,
+                attempt=1,
+                blocker=blocker,
             )
         for _attempt in range(3):  # bounded classified retry, ONE occurrence
             world["comment_attempts"] += 1
@@ -284,10 +301,11 @@ def make_activities(world: dict):
                     findings=work.findings,
                     mem=work.mem,
                 )
-            world["comments"].append(
-                {"key": work.effect, "kind": "findings", "head": work.head, "body": list(work.findings)}
-            )
-            world["log"].append(("comment", work.effect))
+            if work.findings:
+                world["comments"].append(
+                    {"key": work.effect, "kind": "findings", "head": work.head, "body": list(work.findings)}
+                )
+                world["log"].append(("comment", work.effect))
             return ReviewLanded(
                 head=work.head,
                 incarnation=work.incarnation,

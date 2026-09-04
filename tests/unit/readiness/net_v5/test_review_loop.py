@@ -82,12 +82,13 @@ class TestAgentRound:
         # the fact folded under the CURRENT incarnation (A1.4)
         assert one(engine, "ready.snap")["findings_blocking"] == 1
 
-    def test_empty_review_settles_without_publication(self) -> None:
+    def test_empty_review_settles_through_publication_without_a_finding_comment(self) -> None:
         engine, _ = spawn()
         world = world_of(engine)
         world["agent_findings"]["h1"] = []
         see_head(engine, "h1")
         assert findings_comments(world) == []
+        assert world["comment_attempts"] == 1
         state = memory(engine)
         assert state["reviewed"] == ["h1"]
         assert state["findings"] == []
@@ -184,6 +185,34 @@ class TestAgentRound:
 
         assert world["agent_calls"] == 2
         assert tokens(engine, "review.deferred") == []
+        assert review_facts(engine)[-1]["body"] == {"head": "h1", "status": "blocking"}
+
+    def test_publication_custody_deferral_resumes_without_another_agent_round(self) -> None:
+        engine, _ = spawn()
+        world = world_of(engine)
+        world["publication_blocker"] = "9adff0dc-4784-4eed-9c78-047d6952efed"
+
+        see_head(engine, "h1")
+
+        [deferred] = tokens(engine, "review.publication_deferred")
+        assert world["agent_calls"] == 1
+        assert findings_comments(world) == []
+
+        world["publication_blocker"] = None
+        deliver(
+            engine,
+            "on_review_round_wake",
+            "RoundWake",
+            {
+                "operation": deferred["operation"],
+                "attempt": deferred["attempt"],
+                "blocker": deferred["blocker"],
+            },
+        )
+
+        assert tokens(engine, "review.publication_deferred") == []
+        assert world["agent_calls"] == 1
+        assert comment_keys(world) == ["findings:h1:i1"]
         assert review_facts(engine)[-1]["body"] == {"head": "h1", "status": "blocking"}
 
     def test_draft_movement_before_agent_custody_is_inert_until_ready_opens_the_current_round(self) -> None:

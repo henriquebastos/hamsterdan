@@ -51,6 +51,7 @@ from hamsterdan.contracts.readiness_v5 import (
     DashFault,
     DashLanded,
     DashReq,
+    PublicationDeferred,
     Publishable,
     RemBlocked,
     RemFault,
@@ -321,7 +322,9 @@ class V5PublicationGates:
 
     # -- findings publish: FULL claim fence, one identity per finding --
 
-    def publish_gate(self, work: Publishable) -> ReviewLanded | ReviewMoved | ReviewBlocked | ReviewFault:
+    def publish_gate(
+        self, work: Publishable
+    ) -> ReviewLanded | PublicationDeferred | ReviewMoved | ReviewBlocked | ReviewFault:
         expected = CurrentClaim(
             phase="running", incarnation=work.incarnation, head=work.head, base=work.base, policy=work.policy
         )
@@ -350,7 +353,7 @@ class V5PublicationGates:
                 for finding in work.findings
                 if self.publisher.finding_find(_finding_operation(work.op, finding), work.head) is None
             ]
-            if pending:
+            if pending or (not work.findings and self.resolve_stale_threads is not None):
                 current = self.claim()
                 if current != expected:
                     return ReviewMoved(
@@ -363,48 +366,62 @@ class V5PublicationGates:
                         findings=work.findings,
                         mem=work.mem,
                     )
-                anchored = tuple(
-                    FindingPublication(
-                        operation=_finding_operation(work.op, finding),
-                        text=str(finding.get("body", "")),
-                        **_finding_arguments(finding),
+                if pending:
+                    anchored = tuple(
+                        FindingPublication(
+                            operation=_finding_operation(work.op, finding),
+                            text=str(finding.get("body", "")),
+                            **_finding_arguments(finding),
+                        )
+                        for finding in pending
+                        if finding.get("path") and finding.get("line")
                     )
-                    for finding in pending
-                    if finding.get("path") and finding.get("line")
-                )
-                for result in (
-                    self.publisher.findings(
-                        work.incarnation,
-                        work.head,
-                        anchored,
-                        authority_operation=work.op,
-                    )
-                    if anchored
-                    else ()
-                ):
-                    unproven = _unproven(result)
-                    if unproven == "blocked":
-                        return blocked()
-                    if unproven is not None:
-                        return ReviewFault(reason=unproven, mem=work.mem)
-                for finding in pending:
-                    if finding.get("path") and finding.get("line"):
-                        continue
-                    result = self.publisher.finding(
-                        _finding_operation(work.op, finding),
-                        work.incarnation,
-                        work.head,
-                        str(finding.get("body", "")),
-                        authority_operation=work.op,
-                        **_finding_arguments(finding),
-                    )
-                    unproven = _unproven(result)
-                    if unproven == "blocked":
-                        return blocked()
-                    if unproven is not None:
-                        return ReviewFault(reason=unproven, mem=work.mem)
+                    for result in (
+                        self.publisher.findings(
+                            work.incarnation,
+                            work.head,
+                            anchored,
+                            authority_operation=work.op,
+                        )
+                        if anchored
+                        else ()
+                    ):
+                        unproven = _unproven(result)
+                        if unproven == "blocked":
+                            return blocked()
+                        if unproven is not None:
+                            return ReviewFault(reason=unproven, mem=work.mem)
+                    for finding in pending:
+                        if finding.get("path") and finding.get("line"):
+                            continue
+                        result = self.publisher.finding(
+                            _finding_operation(work.op, finding),
+                            work.incarnation,
+                            work.head,
+                            str(finding.get("body", "")),
+                            authority_operation=work.op,
+                            **_finding_arguments(finding),
+                        )
+                        unproven = _unproven(result)
+                        if unproven == "blocked":
+                            return blocked()
+                        if unproven is not None:
+                            return ReviewFault(reason=unproven, mem=work.mem)
                 if self.resolve_stale_threads is not None:
                     self.resolve_stale_threads(work.head)
+        except UnstagedCustodyError as error:
+            return PublicationDeferred(
+                operation=work.op,
+                head=work.head,
+                base=work.base,
+                policy=work.policy,
+                incarnation=work.incarnation,
+                findings=work.findings,
+                effect=work.effect,
+                mem=work.mem,
+                attempt=1,
+                blocker=error.blocker,
+            )
         except GitHubBoundaryError as error:
             return blocked(error)
         except (RuntimeError, ValueError) as error:

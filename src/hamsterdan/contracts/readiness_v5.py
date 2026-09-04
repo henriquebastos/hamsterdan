@@ -787,6 +787,22 @@ class Publishable(WorkflowModel):
 
 
 @dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
+class PublicationDeferred(WorkflowModel):
+    """A findings publication waiting for custodied authority to be staged."""
+
+    operation: str
+    head: str
+    base: str
+    policy: str
+    incarnation: int
+    findings: list[dict[str, Any]]
+    effect: str
+    mem: dict[str, Any]
+    attempt: int
+    blocker: str
+
+
+@dataclass(frozen=True, config=ConfigDict(strict=True, extra="forbid"))
 class EmptyReview(WorkflowModel):
     """A round whose live findings all filtered out: nothing to post."""
 

@@ -64,6 +64,8 @@ presentation regressed that reader experience.
   the summary board's unresolved-thread count **excludes** Dan's own
   threads — the Dan's-review row already carries the finding signal,
   and counting the same problem twice would nag the reader for one
-  fact. Dan auto-resolves each thread whose finding a new head fixed,
-  so rulesets that require thread resolution before merge stay
-  consistent with an all-clear board.
+  fact. A new-head agent review with zero live findings still crosses
+  the publication Activity boundary: it creates no finding comment, but
+  refreshes authority and resolves every stale Dan thread. Rulesets that
+  require thread resolution before merge therefore stay consistent with
+  an all-clear board.

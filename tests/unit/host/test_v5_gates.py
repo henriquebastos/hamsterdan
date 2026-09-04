@@ -35,6 +35,7 @@ from hamsterdan.contracts.readiness_v5 import (
     DashFault,
     DashLanded,
     DashReq,
+    PublicationDeferred,
     Publishable,
     RemBlocked,
     RemFault,
@@ -548,6 +549,48 @@ class TestPublishGate:
         [batch] = [call for call in publisher.calls if call[0] == "findings"]
         assert [finding.operation for finding in batch[2]] == ["findings:h1:i1:f1", "findings:h1:i1:f2"]
         assert not [call for call in publisher.calls if call[0] == "finding"]
+
+    def test_a_clear_review_resolves_findings_from_the_superseded_head(self) -> None:
+        work = replace(self.WORK, findings=[])
+        publisher = FakePublisher()
+        resolved: list[str] = []
+        gate = V5PublicationGates(
+            publisher,
+            lambda: CLAIM,
+            lambda: ("reviewer", "author"),
+            resolve_stale_threads=lambda head: resolved.append(head) or 3,
+        )
+
+        result = gate.publish_gate(work)
+
+        assert isinstance(result, ReviewLanded)
+        assert resolved == ["h1"]
+        assert not [call for call in publisher.calls if call[0] in {"finding", "findings", "finding_find"}]
+
+    def test_a_clear_review_defers_behind_unstaged_webhook_custody(self) -> None:
+        work = replace(self.WORK, findings=[])
+        publisher = FakePublisher()
+        gate = V5PublicationGates(
+            publisher,
+            lambda: (_ for _ in ()).throw(UnstagedCustodyError("delivery-1")),
+            lambda: ("reviewer", "author"),
+            resolve_stale_threads=lambda _head: 0,
+        )
+
+        result = gate.publish_gate(work)
+
+        assert result == PublicationDeferred(
+            operation="findings:h1:i1",
+            head="h1",
+            base="b1",
+            policy="p1",
+            incarnation=1,
+            findings=[],
+            effect="findings:h1:i1",
+            mem=work.mem,
+            attempt=1,
+            blocker="delivery-1",
+        )
 
     def test_an_unmarkable_finding_id_degrades_to_its_digest(self) -> None:
         work = Publishable(
