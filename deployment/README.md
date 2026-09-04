@@ -143,8 +143,8 @@ never appears in a command argument.
 `READINESS_REMINDER_SECONDS` are therefore no longer read by this command; the
 last four are declared in `env-prod.tpl` instead.
 
-The agent-provider key is deployment authority rather than runtime authority:
-the target cannot fetch it for itself, so `env-ops.tpl` resolves it and the
+The agent-provider key is deployment authority rather than runtime authority.
+`env-ops.tpl` resolves the production OpenAI key from `hamsterdan-ops`, and the
 controller carries it as a temporary private file into
 `/etc/hamsterdan/secrets/agent-api-key` under the existing
 no-implicit-replacement guard. Provisioning refuses to start

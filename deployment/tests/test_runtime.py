@@ -10,8 +10,8 @@ from deployment import deploy, exe_access, runtime
 
 def environment() -> dict[str, str]:
     return {
-        "ANTHROPIC_AGENT_API_KEY": "anthropic-agent-key-canary",
-        "ANTHROPIC_API_KEY": "personal-key-must-not-win",
+        "OPENAI_AGENT_API_KEY": "openai-agent-key-canary",
+        "OPENAI_API_KEY": "personal-key-must-not-win",
         "GITHUB_APP_ID": "17",
         "GITHUB_APP_PRIVATE_KEY_PEM": "private-key-canary",
         "GITHUB_APP_SLUG": "hamster-dan",
@@ -62,21 +62,21 @@ def test_runtime_configuration_carries_target_authority_without_app_secret_mater
 
     config = runtime.RuntimeConfig.from_environment(values, installations_path=source)
 
-    assert config.provider == "anthropic"
-    assert config.model == "claude-sonnet-4-5"
-    assert config.agent_key == "anthropic-agent-key-canary"
+    assert config.provider == "openai"
+    assert config.model == "gpt-5.6-sol"
+    assert config.agent_key == "openai-agent-key-canary"
     assert config.op_token == "target-provider-token-canary"
     assert config.installations.account_count == 1
     assert config.installations.repository_count == 1
     assert "target-provider-token-canary" not in repr(config)
-    assert "anthropic-agent-key-canary" not in repr(config)
+    assert "openai-agent-key-canary" not in repr(config)
 
 
 def test_runtime_configuration_refuses_an_agent_key_the_boot_template_will_not_use(tmp_path: Path) -> None:
     values = environment()
-    for name in ("ANTHROPIC_AGENT_API_KEY", "ANTHROPIC_API_KEY"):
+    for name in ("OPENAI_AGENT_API_KEY", "OPENAI_API_KEY"):
         values.pop(name)
-    values["OPENAI_AGENT_API_KEY"] = "openai-agent-key-canary"
+    values["ANTHROPIC_AGENT_API_KEY"] = "anthropic-agent-key-canary"
 
     with pytest.raises(runtime.RuntimeDeploymentError, match="does not match the runtime environment template"):
         runtime.RuntimeConfig.from_environment(values, installations_path=installations(tmp_path))
@@ -91,7 +91,7 @@ def test_runtime_configuration_rejects_missing_or_malformed_authority_without_di
     assert "leak_canary" not in str(failure.value)
 
     values = environment()
-    for name in ("ANTHROPIC_AGENT_API_KEY", "ANTHROPIC_API_KEY"):
+    for name in ("OPENAI_AGENT_API_KEY", "OPENAI_API_KEY"):
         values.pop(name)
     with pytest.raises(runtime.RuntimeDeploymentError, match="agent provider authority is missing"):
         runtime.RuntimeConfig.from_environment(values, installations_path=installations(tmp_path))
@@ -110,7 +110,7 @@ def test_materialized_runtime_is_private_and_removed_after_use(tmp_path: Path) -
         root = files.installations.parent
         assert stat.S_IMODE(root.stat().st_mode) == 0o700
         assert files.installations.read_text() == source.read_text()
-        assert files.agent_key.read_text() == "anthropic-agent-key-canary"
+        assert files.agent_key.read_text() == "openai-agent-key-canary"
         assert files.op_token.read_text() == "target-provider-token-canary"
         assert sorted(path.name for path in root.iterdir()) == ["agent-api-key", "installations.toml", "op-token"]
         for path in (files.installations, files.agent_key, files.op_token):
@@ -147,7 +147,7 @@ def test_runtime_ansible_command_carries_paths_and_public_expectations_not_secre
     for secret in (
         "private-key-canary",
         "webhook-secret-canary",
-        "anthropic-agent-key-canary",
+        "openai-agent-key-canary",
         "target-provider-token-canary",
     ):
         assert secret not in rendered
@@ -297,8 +297,8 @@ def test_runtime_environment_template_resolves_app_identity_and_carries_no_secre
     assert "HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE=/run/secrets/hamsterdan/github-app.pem" in assignments
     assert "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE=/run/secrets/hamsterdan/webhook-secret" in assignments
     assert "HAMSTERDAN_PI_API_KEY_FILE=/run/secrets/hamsterdan/agent-api-key" in assignments
-    assert "HAMSTERDAN_PI_PROVIDER=anthropic" in assignments
-    assert "HAMSTERDAN_PI_MODEL=claude-sonnet-4-5" in assignments
+    assert "HAMSTERDAN_PI_PROVIDER=openai" in assignments
+    assert "HAMSTERDAN_PI_MODEL=gpt-5.6-sol" in assignments
     assert "HAMSTERDAN_WORKFLOW_PATH=.github/workflows/ci.yml" in assignments
     assert "HAMSTERDAN_REMINDER_SECONDS=259200" in assignments
 
@@ -332,7 +332,7 @@ def test_deployment_authority_resolves_only_from_the_operations_vault() -> None:
     assignments = [line for line in template.splitlines() if line and not line.startswith("#")]
 
     assert [line.split("=", 1)[0] for line in assignments] == [
-        "ANTHROPIC_AGENT_API_KEY",
+        "OPENAI_AGENT_API_KEY",
         "EXE_DEV_API_TOKEN",
         "EXE_DEV_SSH_PRIVATE_KEY_B64",
         "GITHUB_APP_ID",
@@ -343,7 +343,7 @@ def test_deployment_authority_resolves_only_from_the_operations_vault() -> None:
 
     # An agent key is identified by the provider that issued it, so switching
     # providers is a visible item change rather than a silent value swap.
-    assert "op://example-ops/anthropic/credential" in template
+    assert "op://example-ops/openai/credential" in template
 
     # A development sandbox must never hold authority over the production host.
     assert "hamsterdan-ops" not in development
