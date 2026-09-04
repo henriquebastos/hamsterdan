@@ -50,7 +50,9 @@ presentation regressed that reader experience.
   waits GitHub's documented 60-second minimum for a secondary limit; the
   retry then receives a fresh exact-head fence. The publication Activity's
   heartbeat window covers that bounded wait. Structured payload and
-  authorization failures do not retry.
+  authorization failures do not retry. A transport ambiguity follows the
+  same lookup, pause, and fresh-fence sequence because no HTTP response exists
+  to justify an immediate retry.
 - Anchor rejection falls back to one immutable conversation comment,
   never disguised as success; authorization failures still fail closed.
 - Native review comments create resolvable threads, so human review

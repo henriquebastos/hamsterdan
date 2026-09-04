@@ -30,6 +30,12 @@ bounded structural error shape made only from validated field/code atoms. It
 does not retain GitHub's message or response body. A fresh production run is
 still required to identify and remove the rejected request shape.
 
+That fresh diagnostic on PR #68 retained `transport_ambiguity`, no HTTP status,
+and no provider detail after the first finding landed. The HTTP retry had been
+paced, but the transport-exception branch still retried immediately after its
+absent-marker lookup. The publisher now gives that branch the same bounded
+60-second pause before its fresh fence and only retry.
+
 Resolve this item when a blocked publication report distinguishes at least a
 transport ambiguity, a transient HTTP rejection, and a capability denial; the
 classification survives restart and export; and tests prove no credential or

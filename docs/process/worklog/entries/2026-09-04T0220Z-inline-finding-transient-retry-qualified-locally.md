@@ -51,3 +51,11 @@ HTTP status, and validated structural field/code atoms through canonical
 History. Provider messages and bodies remain outside retained state. This
 instrumentation must identify the rejection on a new disposable PR before the
 final clean proof run proceeds.
+
+PR #68 supplied that evidence: one finding landed, then the retained blocked
+terminal reported `transport_ambiguity` with no HTTP status or provider detail.
+The transport-exception branch performed lookup-first recovery but, unlike the
+returned-HTTP branch, immediately spent its second attempt. The run was closed
+unmerged and discarded. The branch now waits the same 60 seconds before the
+fresh authority fence and second attempt; a regression proves the pause without
+sleeping in the test process.

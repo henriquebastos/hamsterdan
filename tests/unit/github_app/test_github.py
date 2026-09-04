@@ -815,6 +815,7 @@ def test_inline_before_call_fault_retries_only_after_a_fresh_fence() -> None:
     fake.page_values[f"{issues}?per_page=100"] = ()
     fake.responses[("POST", reviews)] = WireResponse(201, {"id": 11, "html_url": "inline-url"})
     fences: list[tuple] = []
+    delays: list[float] = []
     spent = False
 
     def fault(phase, repository, pull_request, kind, operation):
@@ -823,12 +824,21 @@ def test_inline_before_call_fault_retries_only_after_a_fresh_fence() -> None:
             spent = True
             raise GitHubBoundaryError("qualified pre-call failure")
 
-    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", lambda *args: fences.append(args), fault)
+    publisher = CommentPublisher(
+        fake,
+        "owner/repo",
+        7,
+        "hamsterdan[bot]",
+        lambda *args: fences.append(args),
+        fault,
+        retry_delay=delays.append,
+    )
 
     result = publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)
 
     assert result.status == "created" and result.inline
     assert len(fences) == 2
+    assert delays == [60]
     assert len([call for call in fake.calls if call[:2] == ("POST", reviews)]) == 1
 
 
@@ -904,7 +914,7 @@ def test_inline_retry_stops_when_the_fresh_second_fence_rejects_authority() -> N
             spent = True
             raise GitHubBoundaryError("qualified pre-call failure")
 
-    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", fence, fault)
+    publisher = CommentPublisher(fake, "owner/repo", 7, "hamsterdan[bot]", fence, fault, retry_delay=lambda _: None)
 
     with pytest.raises(RuntimeError, match="stale head"):
         publisher.finding("finding-activity:finding-id", 3, HEAD, "Conceptual concern.", path="src/one.py", line=4)

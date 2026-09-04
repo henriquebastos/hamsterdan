@@ -430,6 +430,7 @@ class CommentPublisher:
                     return PublicationResult("existing", _reference(recovered), inline=True)
                 if attempt:
                     raise
+                self.retry_delay(_TRANSIENT_RETRY_SECONDS)
                 continue
             if response.status == 201 and isinstance(response.body, dict):
                 return PublicationResult("created", _reference(_response_mapping(response.body)), inline=True)
