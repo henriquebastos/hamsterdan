@@ -87,6 +87,10 @@ class PiWorkspaceProvider(Protocol):
 _SEMANTICS = {
     "review": (
         "Review the exact supplied PR generation using the supplied policy, evidence, prior findings, and lenses. "
+        "Read request.diff_path and its companion request.diff_path + '.lines', which lists changed head files "
+        "with exact one-based line numbers including blank lines. Copy primary and related anchors from those "
+        "numbered statements; never estimate line numbers or anchor a code suggestion on an adjacent docstring. "
+        "For other related files, count every source line from one, including blank lines. "
         "Return only evidenced actionable findings with consistent lineage."
     ),
     "conversation": (

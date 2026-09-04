@@ -20,7 +20,7 @@ from petrus.agenticus.runtime.pi_a2_host import PiA2RuntimePolicy
 from petrus.motus.execution.archive import workspace_archive
 
 from hamsterdan.agents.pi import PiWorkspaceCleanupError, PiWorkspaceError
-from hamsterdan.agents.protocol import AgentRequest
+from hamsterdan.agents.protocol import AgentRequest, ReviewRequest
 
 from .git_publish import _safe_path
 
@@ -110,6 +110,8 @@ class GitPiWorkspaceProvider:
                 base, result, verify = (operation_root / name for name in ("base", "result", "verify"))
                 _clone_exact(repository_url, checkout, request.head)
                 _export_tracked(checkout, base)
+                if kind == "review" and isinstance(request, ReviewRequest):
+                    _review_inputs(checkout, base, request)
                 archive = workspace_archive(base)
                 if len(archive) > MAX_WORKSPACE_BYTES:
                     raise PiWorkspaceError("input workspace archive exceeds its bound")
@@ -144,6 +146,34 @@ class GitPiWorkspaceProvider:
                 shutil.rmtree(operation_root)
             except OSError:
                 raise PiWorkspaceCleanupError(preparation_failed=preparation_failed) from None
+
+
+def _review_inputs(checkout: Path, destination: Path, request: ReviewRequest) -> None:
+    paths = (request.diff_path, f"{request.diff_path}.lines")
+    if any(not _safe_workspace_path(path) or (destination / path).exists() for path in paths):
+        raise PiWorkspaceError("review input paths collide with repository content or are unsafe")
+    revision = f"{request.base}...{request.head}"
+    patch = _git(checkout, "diff", "--no-ext-diff", "--no-textconv", revision, "--", capture=True)
+    numbered: list[str] = []
+    for path in _git_paths(checkout, "diff", "--name-only", "--diff-filter=ACMRT", "-z", revision, "--"):
+        if not _safe_workspace_path(path):
+            raise PiWorkspaceError("review changed path is unsafe")
+        source = destination / path
+        if not source.is_file():
+            continue
+        numbered.append(f"{path}\n")
+        try:
+            lines = source.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError:
+            numbered.append("[binary file; no numbered text]\n")
+            continue
+        numbered.extend(f"{line}: {text}\n" for line, text in enumerate(lines, 1))
+    for path, content in zip(paths, (patch, "".join(numbered)), strict=True):
+        if len(content.encode()) > MAX_PATCH_BYTES:
+            raise PiWorkspaceError("review input exceeds its bound")
+        target = destination / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
 
 
 def _clone_exact(repository_url: str, destination: Path, head: str) -> None:

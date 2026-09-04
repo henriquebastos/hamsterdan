@@ -10,7 +10,7 @@ import pytest
 from petrus.agenticus.hands.contract import ToolMethod
 from petrus.motus.execution.archive import extract_workspace_archive, workspace_archive
 
-from hamsterdan.agents import CodingRequest
+from hamsterdan.agents import CodingRequest, ReviewRequest
 from hamsterdan.agents.pi import PiWorkspaceError
 from hamsterdan.host import pi_workspace
 from hamsterdan.host.pi_workspace import GitPiWorkspaceProvider, _validated_entries
@@ -73,6 +73,27 @@ def test_non_coding_workspace_policy_has_no_mutation_authority(tmp_path: Path, r
     assert list(receiver.root.iterdir()) == []
 
 
+def test_review_workspace_supplies_the_requested_diff_and_exact_numbered_head(
+    tmp_path: Path, repository: tuple[Path, str]
+) -> None:
+    source, base = repository
+    (source / "keep.txt").write_text("first\n\nthird\n")
+    git(source, "add", "keep.txt")
+    git(source, "commit", "-qm", "change")
+    head = git(source, "rev-parse", "HEAD")
+    review = ReviewRequest("owner/repo", 7, 2, head, base, "diff.patch")
+    receiver = GitPiWorkspaceProvider(tmp_path / "receiver")
+
+    with receiver.open("review", str(source), review, "pi:review-input") as prepared:
+        files = tmp_path / "files"
+        extract_workspace_archive(prepared.archive, files)
+        assert (files / "diff.patch").read_text().strip() == git(source, "diff", f"{base}...{head}")
+        assert (files / "diff.patch.lines").read_text() == "keep.txt\n1: first\n2: \n3: third\n"
+        assert ToolMethod.WORKSPACE_WRITE not in prepared.policy.capabilities
+
+    assert list(receiver.root.iterdir()) == []
+
+
 def test_changed_workspace_derives_reproducible_add_modify_delete_and_executable_patch(
     tmp_path: Path, repository: tuple[Path, str]
 ) -> None:
@@ -93,6 +114,26 @@ def test_changed_workspace_derives_reproducible_add_modify_delete_and_executable
     assert "new file mode 100755" in patch
     assert "deleted file mode 100644" in patch
     assert "-before" in patch and "+after" in patch
+    assert list(receiver.root.iterdir()) == []
+
+
+@pytest.mark.parametrize("path", ["diff.patch", "diff.patch.lines"])
+def test_review_inputs_never_overwrite_a_tracked_file(tmp_path: Path, repository: tuple[Path, str], path: str) -> None:
+    source, base = repository
+    (source / path).write_text("repository-owned\n")
+    git(source, "add", path)
+    git(source, "commit", "-qm", "tracked input name")
+    head = git(source, "rev-parse", "HEAD")
+    review = ReviewRequest("owner/repo", 7, 2, head, base, "diff.patch")
+    receiver = GitPiWorkspaceProvider(tmp_path / "receiver")
+
+    with (
+        pytest.raises(PiWorkspaceError, match="collide"),
+        receiver.open("review", str(source), review, "pi:collision"),
+    ):
+        raise AssertionError("colliding review input must not enter the agent")
+
+    assert (source / path).read_text() == "repository-owned\n"
     assert list(receiver.root.iterdir()) == []
 
 

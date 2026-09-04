@@ -55,3 +55,9 @@ reproduction identified the reply's incorrectly strict context reader. The new
 `deployment.observe` command correlates History, dispatch, inbox, and health
 metadata without exporting payloads, but does not add missing historical
 failure classes. Keep this obligation open for other blocked publications.
+
+PR79 confirmed that the metadata observer can establish clean Activity terminals
+while semantic publication correctness still fails. Its missing review input
+was diagnosed from the existing offline session export. Numbered review inputs
+address that concrete defect; this diagnostic debt remains open and should not
+be mistaken for an anchor-validation guarantee.

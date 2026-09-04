@@ -29,14 +29,16 @@ open-source release.
 ## Current state
 
 The following qualification inventory predates the supervised launch. Current
-production is active on revision `3afb99ca1ca8799ddc1db6c24697fb0192e0faf4`.
-PR78 passed the opening batch-review checkpoint and produced an App-authored
-repair with six green checks, but was closed unmerged after `ReplyBlocked`.
-The [diagnosis and local fix](../../../process/worklog/entries/2026-09-04T2105Z-pr78-reply-custody-diagnosis.md)
-and [failure manifest](proof/pr78-manifest.json) own the evidence. A new clean
-journey remains required after the reply fix completes release qualification
-and deployment. Production must never be deployed merely to test provider
-behavior; manual provider proof precedes release gates and deployment.
+production is active on revision `e3a79bbfc839596f2dacec1db820efb18b159a3b`.
+PR78 passed the opening review and repair checks but was discarded after
+`ReplyBlocked`; its reply-context fix is deployed. PR79 published three findings
+in one review with clean History but failed the strict cache-anchor checks.
+The [PR79 diagnosis](../../../process/worklog/entries/2026-09-04T2200Z-pr79-review-input-diagnosis.md)
+and [failure manifest](proof/pr79-manifest.json) record the missing review diff
+and the numbered-source correction. A new clean journey remains required after
+that correction completes release qualification and deployment. Production must
+never be deployed merely to test provider behavior; manual provider proof
+precedes release gates and deployment.
 
 ### 1. Earlier inactive qualification
 
