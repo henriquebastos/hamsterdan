@@ -48,7 +48,8 @@
     "Recordings capture browser viewport, not macOS desktop.",
     "06-request-changes.png and 14-all-clear.png rejected for repeated tiles; original DOM/API retained, 07-repair-request.png shows both human instructions, and 16-all-clear-verified.png replaces final still.",
     "Opening browser navigation initially failed; initial API snapshot and recovered opening page retained.",
-    "Broader CV19 capture acceptance and repository-monitoring expansion remain open."
+    "Broader CV19 capture acceptance and repository-monitoring expansion remain open.",
+    "HTML files retain remote asset references and omit the outer html element with theme attributes. They are serialized DOM evidence, not self-contained visual pages; confirmed 2026-09-05. Original artifacts and archive remain unchanged."
   ],
   "files": [
     {

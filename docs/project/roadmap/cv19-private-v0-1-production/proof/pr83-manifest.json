@@ -90,7 +90,8 @@
     "Recordings passed full decoding and have no audio; complete real-time playback review and a separate checkpoint montage are not claimed.",
     "03-initial-summary has one DOM snapshot; later checkpoints retain before/after DOM snapshots.",
     "Initial stills share the recording session; accepted replacement and later stills use a separate anonymous session and the browser default dark theme.",
-    "CV19 capture acceptance and broader repository monitoring remain open."
+    "CV19 capture acceptance and broader repository monitoring remain open.",
+    "HTML files retain remote asset references and omit the outer html element with theme attributes. They are serialized DOM evidence, not self-contained visual pages; confirmed 2026-09-05. Original artifacts and archive remain unchanged."
   ],
   "capture_review": {
     "accepted_pngs": [
