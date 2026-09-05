@@ -796,5 +796,10 @@
     "path": "tools/demo-video/output/proof/cv19-pr83-proof.tar.gz",
     "bytes": 8513548,
     "sha256": "1408543c469d2a7d997a0651fd0eb153062d38a42bc2491ba47be6c552fc42da"
+  },
+  "recovered_html": {
+    "manifest": "pr83-html-recovery-manifest.json",
+    "index": "tools/demo-video/output/proof/html-recovery-20260905/index.html",
+    "pages": 21
   }
 }

@@ -1,7 +1,7 @@
 ---
-status: Accepted
+status: Resolved
 raised: 2026-09-05
-revisit: Before accepting HTML as offline visual evidence or creating another proof capture
+resolved: 2026-09-05
 related:
   - ../../roadmap/cv19-private-v0-1-production/proof/pr80.md
   - ../../roadmap/cv19-private-v0-1-production/proof/pr83.md
@@ -41,4 +41,23 @@ content, and prevent runtime scripts from changing the archived view. Validate
 the result in a fresh browser with networking blocked, checking failed resource
 loads and comparing its rendered image with the captured PNG. An inline-only
 fixture cannot test the missing-resource failure. This investigation establishes
-the defect; asset packaging and historical visual recovery remain unfixed.
+the defect.
+
+## 1a. Resolution
+
+Commit `1225895` adds SingleFile Core resource packaging to both maintained
+capture paths. The full document, assets and rendered shadow DOM are archived;
+scripts are removed and automatic color-scheme conditions are frozen. Missing
+resources fail capture. Browser tests cover external CSS with nested imports,
+images and fonts, shadow content, unchanged live-page pixels, offline rendering
+under the opposite theme preference, and missing-resource rejection. All 112
+media checks pass, with no skips.
+
+The Navigator limited historical repair to PR83. Its 21 recovered HTML files
+and verification results are recorded in the
+[recovery manifest](../../roadmap/cv19-private-v0-1-production/proof/pr83-html-recovery-manifest.json).
+They restore observed GitHub root attributes and fetch public assets at recovery
+time. Original proof files and hashes remain unchanged. Absolute timestamps
+remain where the original serialization omitted rendered relative-time shadow
+content; this historical loss is explicit, not a claim of exact restoration.
+PR80 recovery is outside the accepted scope.

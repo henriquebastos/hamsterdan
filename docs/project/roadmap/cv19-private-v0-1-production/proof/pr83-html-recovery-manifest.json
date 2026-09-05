@@ -1,0 +1,1227 @@
+{
+  "schema": 1,
+  "kind": "recovered-html-derivatives",
+  "pull_request": 83,
+  "created_at": "2026-09-05T00:57:44.306178+00:00",
+  "tooling_revision": "f83fa9d6ebc49bbaad73fce0e1789f889b21b419",
+  "tooling_committed": true,
+  "html_pages": 21,
+  "offline_verified": 21,
+  "restored_online_offline_pixel_matches": 21,
+  "external_requests": 0,
+  "broken_images": 0,
+  "scripts": 0,
+  "original_archive": {
+    "path": "tools/demo-video/output/proof/cv19-pr83-proof.tar.gz",
+    "bytes": 8513548,
+    "sha256": "1408543c469d2a7d997a0651fd0eb153062d38a42bc2491ba47be6c552fc42da"
+  },
+  "index": "tools/demo-video/output/proof/html-recovery-20260905/index.html",
+  "limitations": [
+    "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+    "Rejected original PNGs 06 and 17 were not used as visual references.",
+    "Original PNG comparisons include timestamp changes and small browser rasterization differences; pixel identity with historical captures is not claimed.",
+    "PR83 only. Earlier proof recovery was excluded by the Navigator."
+  ],
+  "pages": [
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:55:41.798Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/03-initial-summary.html",
+      "sourceSha256": "c5549f007a6121078ad10d2cea627ac8554163d3dd87dc45d0e0fd05e6bbeade",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/03-initial-summary.html",
+      "sha256": "8a675b6df7fc4e2d81d6780e6c5ebc8335595fb6cfffd26b83f594d42d135845",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 7,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2",
+      "offlinePngSha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "03-initial-summary.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          1218
+        ],
+        "recovered_size": [
+          1280,
+          1218
+        ],
+        "different_pixel_fraction": 0.0012392241379310346,
+        "fraction_with_channel_difference_over_2": 0.0012007389162561576
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:55:43.930Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/06-reviewing.after.html",
+      "sourceSha256": "468853bd72b0dc299dec647b72835c8647823745c7e0e59cb28b2811c8ca8360",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.after.html",
+      "sha256": "36f679996b070bf9e33e979616941024d18339878ed861c6e4668484715fac34",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 7,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2",
+      "offlinePngSha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "06-reviewing.png",
+        "reference_accepted": false,
+        "original_size": [
+          1280,
+          1218
+        ],
+        "recovered_size": [
+          1280,
+          1218
+        ]
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:55:46.197Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/06-reviewing.before.html",
+      "sourceSha256": "008ef5a663160a5d56c8cd4cfea7bf5c51a06b029070903f0470a78c92029a27",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.before.html",
+      "sha256": "d3e2cb2f58361476fec79e88026362a57a163052930af2802509d35881ca2d11",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 7,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2",
+      "offlinePngSha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "06-reviewing.png",
+        "reference_accepted": false,
+        "original_size": [
+          1280,
+          1218
+        ],
+        "recovered_size": [
+          1280,
+          1218
+        ]
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:55:48.655Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/12-findings.after.html",
+      "sourceSha256": "aeb9691289f702c767242c8d056b19bab5fd4ad01425740e65178dec45b4cbfa",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.after.html",
+      "sha256": "df8c4ffa67ef9510714aa61fd0914f2762bdc26f2395fc79df7634057327a434",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 13,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "2ef81061a7775b1f51bc02891af7304eae55d593930b2d56b862a79366805e59",
+      "offlinePngSha256": "2ef81061a7775b1f51bc02891af7304eae55d593930b2d56b862a79366805e59",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "12-findings.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2805
+        ],
+        "recovered_size": [
+          1280,
+          2805
+        ],
+        "different_pixel_fraction": 0.0013667000891265596,
+        "fraction_with_channel_difference_over_2": 0.0013299353832442067
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:55:51.081Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/12-findings.before.html",
+      "sourceSha256": "d540fe03cf759ab5042f888fa839bac1a914adb891e4ae065ade99afdb32121a",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.before.html",
+      "sha256": "f84026e0076f6703399aa3a01ccf6818f19b7cd4ab040259d0d67dededd4e85c",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 13,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "2ef81061a7775b1f51bc02891af7304eae55d593930b2d56b862a79366805e59",
+      "offlinePngSha256": "2ef81061a7775b1f51bc02891af7304eae55d593930b2d56b862a79366805e59",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "12-findings.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2805
+        ],
+        "recovered_size": [
+          1280,
+          2805
+        ],
+        "different_pixel_fraction": 0.0013667000891265596,
+        "fraction_with_channel_difference_over_2": 0.0013299353832442067
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:55:53.606Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/14-changes-requested.after.html",
+      "sourceSha256": "ee6d6e96d46f59ec66d2c89fa933983956068e44acef4706caf5758ab6865e8e",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.after.html",
+      "sha256": "1808b19c8528f361d4fd21d462e0e0745d4f8688c7aedb2e66271f67e96163d7",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 16,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "54117b8d2e942ee25fb0b9de520284c74e54318585a6bfbe4f2e630c566b5568",
+      "offlinePngSha256": "54117b8d2e942ee25fb0b9de520284c74e54318585a6bfbe4f2e630c566b5568",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "14-changes-requested.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          3010
+        ],
+        "recovered_size": [
+          1280,
+          3010
+        ],
+        "different_pixel_fraction": 0.0015051391196013288,
+        "fraction_with_channel_difference_over_2": 0.001457122093023256
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:55:56.108Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/14-changes-requested.before.html",
+      "sourceSha256": "fff5f57d08d08ec4e87bdcd12de16ed74b8a2e702669deb21d55c3ae72a6993b",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.before.html",
+      "sha256": "64c1bb5410a95282b8b387f703fba510b787c940a8ebd319b0b4c517d305061c",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 16,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "54117b8d2e942ee25fb0b9de520284c74e54318585a6bfbe4f2e630c566b5568",
+      "offlinePngSha256": "54117b8d2e942ee25fb0b9de520284c74e54318585a6bfbe4f2e630c566b5568",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "14-changes-requested.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          3010
+        ],
+        "recovered_size": [
+          1280,
+          3010
+        ],
+        "different_pixel_fraction": 0.0015051391196013288,
+        "fraction_with_channel_difference_over_2": 0.001457122093023256
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:55:58.662Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/17-repair-requested.after.html",
+      "sourceSha256": "515ae6b5f7a6caf2a6c7b493cd4dc9123a835a73a71cf9a9ee4c934594908ac8",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.after.html",
+      "sha256": "3ddd6bd15b1992337d9e277568e3ab666446517938a795815d6c9aa1dd43b442",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 17,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "dc2909bb003778fc96ef0033cfd4ff007b00c92d29d46a78aa4272e7675504fc",
+      "offlinePngSha256": "dc2909bb003778fc96ef0033cfd4ff007b00c92d29d46a78aa4272e7675504fc",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "17-repair-requested.png",
+        "reference_accepted": false,
+        "original_size": [
+          1280,
+          3135
+        ],
+        "recovered_size": [
+          1280,
+          3135
+        ]
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:01.160Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/17-repair-requested.before.html",
+      "sourceSha256": "6e42c98e60574e61ae1accac37d13b654b67557c45530d1e054ffadc111c900f",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.before.html",
+      "sha256": "e429cd518d509742cde623a9b6d95ab2bc72436ac2e74b1708d77b59aa4c0bbf",
+      "theme": "light",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(255, 255, 255)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 17,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "dc2909bb003778fc96ef0033cfd4ff007b00c92d29d46a78aa4272e7675504fc",
+      "offlinePngSha256": "dc2909bb003778fc96ef0033cfd4ff007b00c92d29d46a78aa4272e7675504fc",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "17-repair-requested.png",
+        "reference_accepted": false,
+        "original_size": [
+          1280,
+          3135
+        ],
+        "recovered_size": [
+          1280,
+          3135
+        ]
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:03.732Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/22-repair-request-verified.after.html",
+      "sourceSha256": "36c70597328211075dcc4ece5f34608e4d728e0835de1e3b78cc317e06956cb8",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.after.html",
+      "sha256": "bed768ed86ae026f341efc06d9a1efc94dc3b6dc23a3ef3805d9f1179699e77c",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 19,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6",
+      "offlinePngSha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "22-repair-request-verified.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          3336
+        ],
+        "recovered_size": [
+          1280,
+          3336
+        ],
+        "different_pixel_fraction": 0.10964946792565947,
+        "fraction_with_channel_difference_over_2": 0.003278158723021583
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:06.282Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/22-repair-request-verified.before.html",
+      "sourceSha256": "3a779f55537f352cb9af4b3e20dc1137849b6f5a21a293f91e1aae8f345fee32",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.before.html",
+      "sha256": "a70ec3c929bcc6096385d7424cf37874cfd4e17ce290d861088f82b791799724",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 19,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6",
+      "offlinePngSha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "22-repair-request-verified.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          3336
+        ],
+        "recovered_size": [
+          1280,
+          3336
+        ],
+        "different_pixel_fraction": 0.10964946792565947,
+        "fraction_with_channel_difference_over_2": 0.003278158723021583
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:08.850Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/26-repair-pushed.after.html",
+      "sourceSha256": "b103037d384a24d9a165132f8f3cd8c815505deb4243690b52da20a2af122101",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.after.html",
+      "sha256": "9c8037b7dddd50c2033ca45aa85452a07a52616d77e232af1c8bad99d22b4c51",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 19,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6",
+      "offlinePngSha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "26-repair-pushed.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          3336
+        ],
+        "recovered_size": [
+          1280,
+          3336
+        ],
+        "different_pixel_fraction": 0.10967241831534773,
+        "fraction_with_channel_difference_over_2": 0.0032990014238609114
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:11.407Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/26-repair-pushed.before.html",
+      "sourceSha256": "c4271bccfbc18989c9f5325eea6da1cdf6d8bb503fd3a2809dc9a2877f5a703f",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.before.html",
+      "sha256": "ce2c44462b3f3d9bc1dd328553d2554a1e7efc27c8ef39f12a23464b50b4942b",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 19,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6",
+      "offlinePngSha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "26-repair-pushed.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          3336
+        ],
+        "recovered_size": [
+          1280,
+          3336
+        ],
+        "different_pixel_fraction": 0.10967241831534773,
+        "fraction_with_channel_difference_over_2": 0.0032990014238609114
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:13.809Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/33-clear-before-approval.after.html",
+      "sourceSha256": "8d136fba5d79e05461c8e6afbebf0a4904861e1580fa40c141dab6c1d8f2eccf",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.after.html",
+      "sha256": "19efd30cbb4f1308ca0d697436c14150bf41d226319510018eba1d4cf251b666",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 16,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "344b041eddfcf750348a7887c8051bc02947bba6040dce0446ff375d266a01bc",
+      "offlinePngSha256": "344b041eddfcf750348a7887c8051bc02947bba6040dce0446ff375d266a01bc",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "33-clear-before-approval.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2104
+        ],
+        "recovered_size": [
+          1280,
+          2104
+        ],
+        "different_pixel_fraction": 0.04705360325570342,
+        "fraction_with_channel_difference_over_2": 0.004064059529467681
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:16.225Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/33-clear-before-approval.before.html",
+      "sourceSha256": "cb0249b44bbdbf4e468149afb0d8bfbe34dd45802c5c45f27c84ac3833b93f94",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.before.html",
+      "sha256": "17064d9caf5c0c4320e38cf42459f0baba82bec6475ebf8c1d49cff3d8091028",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 16,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "344b041eddfcf750348a7887c8051bc02947bba6040dce0446ff375d266a01bc",
+      "offlinePngSha256": "344b041eddfcf750348a7887c8051bc02947bba6040dce0446ff375d266a01bc",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "33-clear-before-approval.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2104
+        ],
+        "recovered_size": [
+          1280,
+          2104
+        ],
+        "different_pixel_fraction": 0.04705360325570342,
+        "fraction_with_channel_difference_over_2": 0.004064059529467681
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:18.645Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/35-approved.after.html",
+      "sourceSha256": "4f244fc723433debbf8c71ca56a60dd19dce91ccd35d4e5ec0bcaf5c1f7e79cd",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.after.html",
+      "sha256": "cac1bbd5bc98e567e098540214927420b4b756da8c985f26c10e6afb1da354d4",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 18,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "132ede0d95da06baf42f5f4dfbbd33e83cc73e740146a827fe4ce6e328ccb493",
+      "offlinePngSha256": "132ede0d95da06baf42f5f4dfbbd33e83cc73e740146a827fe4ce6e328ccb493",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "35-approved.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2283
+        ],
+        "recovered_size": [
+          1280,
+          2283
+        ],
+        "different_pixel_fraction": 0.04491588644327639,
+        "fraction_with_channel_difference_over_2": 0.004103016863775733
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:21.079Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/35-approved.before.html",
+      "sourceSha256": "1471a410c174cc8fe15b448aef5d93234effc18029a3b90656459839f8753274",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.before.html",
+      "sha256": "40e392d9fcafb8b297a3bd772bdb56bcd974f6263e0d10b09935b5b7605a0682",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 18,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "132ede0d95da06baf42f5f4dfbbd33e83cc73e740146a827fe4ce6e328ccb493",
+      "offlinePngSha256": "132ede0d95da06baf42f5f4dfbbd33e83cc73e740146a827fe4ce6e328ccb493",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "35-approved.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2283
+        ],
+        "recovered_size": [
+          1280,
+          2283
+        ],
+        "different_pixel_fraction": 0.04491588644327639,
+        "fraction_with_channel_difference_over_2": 0.004103016863775733
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:23.548Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/40-all-clear.after.html",
+      "sourceSha256": "783842bbfb4fcd314608bb013427ed9d3ee5edb06161be1ffc23936b5d47189b",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.after.html",
+      "sha256": "a109080dfb04d3ea76565b4c5d6a8e4ec81b28be16cb9d4458d91431ce8d58f3",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 19,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "42e6f4cad8ea686c07b1d37de1f30d2db505f3d2bb94bdf55d244a371d2b439b",
+      "offlinePngSha256": "42e6f4cad8ea686c07b1d37de1f30d2db505f3d2bb94bdf55d244a371d2b439b",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "40-all-clear.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2459
+        ],
+        "recovered_size": [
+          1280,
+          2459
+        ],
+        "different_pixel_fraction": 0.043608936559577066,
+        "fraction_with_channel_difference_over_2": 0.004078131354209028
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:26.036Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/40-all-clear.before.html",
+      "sourceSha256": "6ee8be383e306ac13446953b577062bb084584f359cf3cc46c62b67b97655b17",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.before.html",
+      "sha256": "a5c59461b904df2da9b584589ab2386e8efdc247f18707e146e748704193195c",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 19,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "42e6f4cad8ea686c07b1d37de1f30d2db505f3d2bb94bdf55d244a371d2b439b",
+      "offlinePngSha256": "42e6f4cad8ea686c07b1d37de1f30d2db505f3d2bb94bdf55d244a371d2b439b",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "40-all-clear.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2459
+        ],
+        "recovered_size": [
+          1280,
+          2459
+        ],
+        "different_pixel_fraction": 0.043608936559577066,
+        "fraction_with_channel_difference_over_2": 0.004078131354209028
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:28.477Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/50-closed.after.html",
+      "sourceSha256": "0f60c0261a38a0dac59b19c6a56303e4f52fb48243fb947fc1f14963975c656f",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.after.html",
+      "sha256": "28f7241df10ba420849e22a66e12f09d7b892936485fefad7d354d56d2f0fdba",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 20,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "7fa2c6eb32780c5c76b6675bc180fb2ee0ca2e66825ef79d1bc61405ce036312",
+      "offlinePngSha256": "7fa2c6eb32780c5c76b6675bc180fb2ee0ca2e66825ef79d1bc61405ce036312",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "50-closed.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2527
+        ],
+        "recovered_size": [
+          1280,
+          2527
+        ],
+        "different_pixel_fraction": 0.043086231203007516,
+        "fraction_with_channel_difference_over_2": 0.004356388504155125
+      }
+    },
+    {
+      "kind": "recovered-html-derivative",
+      "recoveredAt": "2026-09-05T00:56:30.951Z",
+      "source": "tools/demo-video/output/proof/cv19-pr83/50-closed.before.html",
+      "sourceSha256": "bdabeca5dec9d8be8fec2688d1554b3005663f1fff3559fc2b20a83ed0238c33",
+      "output": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.before.html",
+      "sha256": "4f9d368859ac588263f38d399fd5cc84fdbe76d76315da003fb806fcb5089fa6",
+      "theme": "dark",
+      "url": "https://github.com/HBNetwork/demo-pr-readiness/pull/83",
+      "background": "rgb(13, 17, 23)",
+      "font": "\"Mona Sans VF\", -apple-system, \"system-ui\", \"Segoe UI\", \"Noto Sans Backtick Fix\", \"Noto Sans\", Helvetica, Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\"",
+      "images": 20,
+      "brokenImages": 0,
+      "scripts": 0,
+      "networkRequests": 0,
+      "restoredOnlinePngSha256": "7fa2c6eb32780c5c76b6675bc180fb2ee0ca2e66825ef79d1bc61405ce036312",
+      "offlinePngSha256": "7fa2c6eb32780c5c76b6675bc180fb2ee0ca2e66825ef79d1bc61405ce036312",
+      "restoredOnlinePixelsMatchOffline": true,
+      "limitations": "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",
+      "original_png_comparison": {
+        "source_png": "50-closed.png",
+        "reference_accepted": true,
+        "original_size": [
+          1280,
+          2527
+        ],
+        "recovered_size": [
+          1280,
+          2527
+        ],
+        "different_pixel_fraction": 0.043086231203007516,
+        "fraction_with_channel_difference_over_2": 0.004356388504155125
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/comparison.json",
+      "bytes": 35584,
+      "sha256": "7544e6c3685d6b04da5c89938426db3d4aa1d45418dddd982eec89dce4e9c8b3"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/index.html",
+      "bytes": 4493,
+      "sha256": "fb7c54296eb068c95fbc41c64e1be0159ebce0c6f8d61885d9a927676af76945"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/03-initial-summary.html",
+      "bytes": 891815,
+      "sha256": "8a675b6df7fc4e2d81d6780e6c5ebc8335595fb6cfffd26b83f594d42d135845"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/03-initial-summary.html.json",
+      "bytes": 1387,
+      "sha256": "52a0f6f2dee9da0a6b2edf9536fb69cd7042cc5e495d234d3f4dea15e32d230d"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/03-initial-summary.html.online.png",
+      "bytes": 185027,
+      "sha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/03-initial-summary.html.png",
+      "bytes": 185027,
+      "sha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.after.html",
+      "bytes": 891954,
+      "sha256": "36f679996b070bf9e33e979616941024d18339878ed861c6e4668484715fac34"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.after.html.json",
+      "bytes": 1387,
+      "sha256": "3358ad508c3ce41dc1f70e1c16a9e4153cd153a83edcf8f1f709937c643aeebf"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.after.html.online.png",
+      "bytes": 185027,
+      "sha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.after.html.png",
+      "bytes": 185027,
+      "sha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.before.html",
+      "bytes": 891815,
+      "sha256": "d3e2cb2f58361476fec79e88026362a57a163052930af2802509d35881ca2d11"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.before.html.json",
+      "bytes": 1389,
+      "sha256": "aad0f0fa56f8a90be7691b8f7a541f2cf971b04b0c286dd0e2f600c3ef24d9b5"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.before.html.online.png",
+      "bytes": 185027,
+      "sha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/06-reviewing.before.html.png",
+      "bytes": 185027,
+      "sha256": "40c620da7ebb7ec9c10a2337573b2336dea3b988cd55b5ef0c0f7966522703e2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.after.html",
+      "bytes": 1018867,
+      "sha256": "df8c4ffa67ef9510714aa61fd0914f2762bdc26f2395fc79df7634057327a434"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.after.html.json",
+      "bytes": 1386,
+      "sha256": "791f62edb179147bf2f0538166f5971d66aab43cd0c4793d6a6b5be79493652f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.after.html.online.png",
+      "bytes": 417958,
+      "sha256": "2ef81061a7775b1f51bc02891af7304eae55d593930b2d56b862a79366805e59"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.after.html.png",
+      "bytes": 417958,
+      "sha256": "2ef81061a7775b1f51bc02891af7304eae55d593930b2d56b862a79366805e59"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.before.html",
+      "bytes": 1018867,
+      "sha256": "f84026e0076f6703399aa3a01ccf6818f19b7cd4ab040259d0d67dededd4e85c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.before.html.json",
+      "bytes": 1388,
+      "sha256": "3f3400aba5360a922935bcc3075eb89a053598fe4ebc7003274dcac3473020fd"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.before.html.online.png",
+      "bytes": 417958,
+      "sha256": "2ef81061a7775b1f51bc02891af7304eae55d593930b2d56b862a79366805e59"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/12-findings.before.html.png",
+      "bytes": 417958,
+      "sha256": "2ef81061a7775b1f51bc02891af7304eae55d593930b2d56b862a79366805e59"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.after.html",
+      "bytes": 1040615,
+      "sha256": "1808b19c8528f361d4fd21d462e0e0745d4f8688c7aedb2e66271f67e96163d7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.after.html.json",
+      "bytes": 1404,
+      "sha256": "fb07421ca5d418712ef99fe2be3a6aaf59cb29c51776570f1d9cf6a6c7c6c344"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.after.html.online.png",
+      "bytes": 448862,
+      "sha256": "54117b8d2e942ee25fb0b9de520284c74e54318585a6bfbe4f2e630c566b5568"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.after.html.png",
+      "bytes": 448862,
+      "sha256": "54117b8d2e942ee25fb0b9de520284c74e54318585a6bfbe4f2e630c566b5568"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.before.html",
+      "bytes": 1040615,
+      "sha256": "64c1bb5410a95282b8b387f703fba510b787c940a8ebd319b0b4c517d305061c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.before.html.json",
+      "bytes": 1406,
+      "sha256": "11b0450ba74ec5b8c7cc50463d455eb1273179d8cc7e7a485520cad0e799ec92"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.before.html.online.png",
+      "bytes": 448862,
+      "sha256": "54117b8d2e942ee25fb0b9de520284c74e54318585a6bfbe4f2e630c566b5568"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/14-changes-requested.before.html.png",
+      "bytes": 448862,
+      "sha256": "54117b8d2e942ee25fb0b9de520284c74e54318585a6bfbe4f2e630c566b5568"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.after.html",
+      "bytes": 1053791,
+      "sha256": "3ddd6bd15b1992337d9e277568e3ab666446517938a795815d6c9aa1dd43b442"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.after.html.json",
+      "bytes": 1402,
+      "sha256": "2b2c2c77dae2663768db3e27659e2f7ae057c6c8ca4017f76b2418f49ad28c28"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.after.html.online.png",
+      "bytes": 468526,
+      "sha256": "dc2909bb003778fc96ef0033cfd4ff007b00c92d29d46a78aa4272e7675504fc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.after.html.png",
+      "bytes": 468526,
+      "sha256": "dc2909bb003778fc96ef0033cfd4ff007b00c92d29d46a78aa4272e7675504fc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.before.html",
+      "bytes": 1053791,
+      "sha256": "e429cd518d509742cde623a9b6d95ab2bc72436ac2e74b1708d77b59aa4c0bbf"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.before.html.json",
+      "bytes": 1404,
+      "sha256": "df06747bbc322a7d6a29f9a5bd0b0e69b57a2a5504e16c85f271379f6e9fad77"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.before.html.online.png",
+      "bytes": 468526,
+      "sha256": "dc2909bb003778fc96ef0033cfd4ff007b00c92d29d46a78aa4272e7675504fc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/17-repair-requested.before.html.png",
+      "bytes": 468526,
+      "sha256": "dc2909bb003778fc96ef0033cfd4ff007b00c92d29d46a78aa4272e7675504fc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.after.html",
+      "bytes": 1093628,
+      "sha256": "bed768ed86ae026f341efc06d9a1efc94dc3b6dc23a3ef3805d9f1179699e77c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.after.html.json",
+      "bytes": 1412,
+      "sha256": "d0a6afce19498a8fd8fc1857d1669d4af06a0aa5137742c75b68945a058cf4c8"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.after.html.online.png",
+      "bytes": 497973,
+      "sha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.after.html.png",
+      "bytes": 497973,
+      "sha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.before.html",
+      "bytes": 1093547,
+      "sha256": "a70ec3c929bcc6096385d7424cf37874cfd4e17ce290d861088f82b791799724"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.before.html.json",
+      "bytes": 1414,
+      "sha256": "04fd27386d6ae6c8ab923c48c3bb394e182c7179f3839b2f41440e2f66e3ed2f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.before.html.online.png",
+      "bytes": 497973,
+      "sha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/22-repair-request-verified.before.html.png",
+      "bytes": 497973,
+      "sha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.after.html",
+      "bytes": 1093628,
+      "sha256": "9c8037b7dddd50c2033ca45aa85452a07a52616d77e232af1c8bad99d22b4c51"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.after.html.json",
+      "bytes": 1392,
+      "sha256": "d1e2fa9fd14773d6acbe2e8530330366d5d513d62bb9e64f17f7851cc3563b5e"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.after.html.online.png",
+      "bytes": 497973,
+      "sha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.after.html.png",
+      "bytes": 497973,
+      "sha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.before.html",
+      "bytes": 1093547,
+      "sha256": "ce2c44462b3f3d9bc1dd328553d2554a1e7efc27c8ef39f12a23464b50b4942b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.before.html.json",
+      "bytes": 1394,
+      "sha256": "ed3be2841f1be917bf963512e2bc0081dc64d9486647081882529a210b07c34c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.before.html.online.png",
+      "bytes": 497973,
+      "sha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/26-repair-pushed.before.html.png",
+      "bytes": 497973,
+      "sha256": "074fd865106b8a25bdec984007048b640feb10339e321444e2505c1d930060a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.after.html",
+      "bytes": 1030517,
+      "sha256": "19efd30cbb4f1308ca0d697436c14150bf41d226319510018eba1d4cf251b666"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.after.html.json",
+      "bytes": 1408,
+      "sha256": "5e4f9f86287bf34bb906baa87b9b8fae1c20745ddab5c1d8be6ee240fb98d49b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.after.html.online.png",
+      "bytes": 315142,
+      "sha256": "344b041eddfcf750348a7887c8051bc02947bba6040dce0446ff375d266a01bc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.after.html.png",
+      "bytes": 315142,
+      "sha256": "344b041eddfcf750348a7887c8051bc02947bba6040dce0446ff375d266a01bc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.before.html",
+      "bytes": 1030297,
+      "sha256": "17064d9caf5c0c4320e38cf42459f0baba82bec6475ebf8c1d49cff3d8091028"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.before.html.json",
+      "bytes": 1410,
+      "sha256": "f2959f49f9dcb72eaa31e529476aafb93e640472141dc8ca0f1a30bdc15df6ac"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.before.html.online.png",
+      "bytes": 315142,
+      "sha256": "344b041eddfcf750348a7887c8051bc02947bba6040dce0446ff375d266a01bc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/33-clear-before-approval.before.html.png",
+      "bytes": 315142,
+      "sha256": "344b041eddfcf750348a7887c8051bc02947bba6040dce0446ff375d266a01bc"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.after.html",
+      "bytes": 1048494,
+      "sha256": "cac1bbd5bc98e567e098540214927420b4b756da8c985f26c10e6afb1da354d4"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.after.html.json",
+      "bytes": 1382,
+      "sha256": "24529473d06f0c81911316dc5e8a36da9966969a14872d30c6020a9f6b260660"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.after.html.online.png",
+      "bytes": 332036,
+      "sha256": "132ede0d95da06baf42f5f4dfbbd33e83cc73e740146a827fe4ce6e328ccb493"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.after.html.png",
+      "bytes": 332036,
+      "sha256": "132ede0d95da06baf42f5f4dfbbd33e83cc73e740146a827fe4ce6e328ccb493"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.before.html",
+      "bytes": 1048274,
+      "sha256": "40e392d9fcafb8b297a3bd772bdb56bcd974f6263e0d10b09935b5b7605a0682"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.before.html.json",
+      "bytes": 1384,
+      "sha256": "7aae9bfedbc6aba9d49456b63df6280c89dc0443b038e26e5dedea4eff22ae69"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.before.html.online.png",
+      "bytes": 332036,
+      "sha256": "132ede0d95da06baf42f5f4dfbbd33e83cc73e740146a827fe4ce6e328ccb493"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/35-approved.before.html.png",
+      "bytes": 332036,
+      "sha256": "132ede0d95da06baf42f5f4dfbbd33e83cc73e740146a827fe4ce6e328ccb493"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.after.html",
+      "bytes": 1075626,
+      "sha256": "a109080dfb04d3ea76565b4c5d6a8e4ec81b28be16cb9d4458d91431ce8d58f3"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.after.html.json",
+      "bytes": 1384,
+      "sha256": "c1b594d19f878ef7ed5ee895526c45b7eb1dbc4f1a578ff9cfa036f669bb9580"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.after.html.online.png",
+      "bytes": 360320,
+      "sha256": "42e6f4cad8ea686c07b1d37de1f30d2db505f3d2bb94bdf55d244a371d2b439b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.after.html.png",
+      "bytes": 360320,
+      "sha256": "42e6f4cad8ea686c07b1d37de1f30d2db505f3d2bb94bdf55d244a371d2b439b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.before.html",
+      "bytes": 1075545,
+      "sha256": "a5c59461b904df2da9b584589ab2386e8efdc247f18707e146e748704193195c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.before.html.json",
+      "bytes": 1386,
+      "sha256": "17d1d82556c061ec05646a25b16c3ceb7999521fe6b718549baa80cf218dae39"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.before.html.online.png",
+      "bytes": 360320,
+      "sha256": "42e6f4cad8ea686c07b1d37de1f30d2db505f3d2bb94bdf55d244a371d2b439b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/40-all-clear.before.html.png",
+      "bytes": 360320,
+      "sha256": "42e6f4cad8ea686c07b1d37de1f30d2db505f3d2bb94bdf55d244a371d2b439b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.after.html",
+      "bytes": 1080692,
+      "sha256": "28f7241df10ba420849e22a66e12f09d7b892936485fefad7d354d56d2f0fdba"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.after.html.json",
+      "bytes": 1378,
+      "sha256": "ae51bc47e807bbac5033e9cd61230f517fbc47b47db658f054759de6f33fe319"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.after.html.online.png",
+      "bytes": 368246,
+      "sha256": "7fa2c6eb32780c5c76b6675bc180fb2ee0ca2e66825ef79d1bc61405ce036312"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.after.html.png",
+      "bytes": 368246,
+      "sha256": "7fa2c6eb32780c5c76b6675bc180fb2ee0ca2e66825ef79d1bc61405ce036312"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.before.html",
+      "bytes": 1080472,
+      "sha256": "4f9d368859ac588263f38d399fd5cc84fdbe76d76315da003fb806fcb5089fa6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.before.html.json",
+      "bytes": 1380,
+      "sha256": "81525d7bfdc6b707bea30f817e4275368946213220262e4e06c030bd0e1e6854"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.before.html.online.png",
+      "bytes": 368246,
+      "sha256": "7fa2c6eb32780c5c76b6675bc180fb2ee0ca2e66825ef79d1bc61405ce036312"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/pr83/50-closed.before.html.png",
+      "bytes": 368246,
+      "sha256": "7fa2c6eb32780c5c76b6675bc180fb2ee0ca2e66825ef79d1bc61405ce036312"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/03-initial-summary.png",
+      "bytes": 181893,
+      "sha256": "fb60e73c468e1e00b5cb0867b189b2fedaa467c0964d948008f543716b8b52a5"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/12-findings.png",
+      "bytes": 412571,
+      "sha256": "b7122867fea8cd77914fbea661a72214cedebd6aff75337327f49f5943a02e67"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/14-changes-requested.png",
+      "bytes": 443911,
+      "sha256": "904d66e867526beba6e7ed75c93586c9429e09561b3a3d2065dfe833435abedf"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/22-repair-request-verified.png",
+      "bytes": 477159,
+      "sha256": "c75d7094bf0582a2bfca87272a2cdd2e10927e8cd1ca53b6bfd997c8de4edf3b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/26-repair-pushed.png",
+      "bytes": 477213,
+      "sha256": "2ca7f949b52fae8a88918ced3b650b165cee53a8bf216710c8b24ddbe6ce5ed6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/33-clear-before-approval.png",
+      "bytes": 301458,
+      "sha256": "1e55c6d1a93ec627e1106b254338181d4d70794b64764061e41e6dc3f2465b34"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/35-approved.png",
+      "bytes": 317529,
+      "sha256": "22120226905c4af6e470ba598a4083aadd71e538aae83578f8e1800f89cc6fc7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/40-all-clear.png",
+      "bytes": 344129,
+      "sha256": "1f92df54c5ce2b50936df67febb47329269bcc0cd79e8af35f55b782b9b2fd48"
+    },
+    {
+      "path": "tools/demo-video/output/proof/html-recovery-20260905/reference/50-closed.png",
+      "bytes": 351583,
+      "sha256": "06c8c7b0afaf5ca51a08a1dd11c268818a2e1809c3edea8ded1d8da3c893eb11"
+    }
+  ],
+  "archive": {
+    "path": "tools/demo-video/output/proof/cv19-pr83-html-recovery.tar.gz",
+    "bytes": 22737122,
+    "sha256": "c3da15be210837484dc652c031afd2f3ad0d14f68c6174fac20e9c0d3e9c565a"
+  },
+  "manual_browser_verification": {
+    "anonymous_session": true,
+    "networking_disabled": true,
+    "preferred_color_scheme": "light",
+    "all_clear_rendered_background": "rgb(13, 17, 23)",
+    "images": 19,
+    "broken_images": 0,
+    "scripts": 0,
+    "distinct_rendered_states_visually_inspected": 9,
+    "index_visually_inspected": true
+  }
+}

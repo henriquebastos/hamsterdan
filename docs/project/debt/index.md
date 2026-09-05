@@ -15,4 +15,4 @@ an item only when debt should outlive one story's review notes.
 - [Blocked publication results omit the provider failure class](items/blocked-publication-results-omit-provider-failure-class.md)
 - [Production candidate retention can exhaust disk](items/production-candidate-retention-can-exhaust-disk.md)
 - [Full-page capture dimensions do not detect repeated tiles](items/full-page-capture-dimensions-do-not-detect-repeated-tiles.md)
-- [HTML proof captures omit assets and root attributes](items/html-proof-captures-omit-assets-and-root-attributes.md)
+- [HTML resource packaging resolved; PR83 views recovered](items/html-proof-captures-omit-assets-and-root-attributes.md)

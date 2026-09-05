@@ -124,3 +124,5 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-09-04 — Initial summary startup proven in production](entries/2026-09-04T2338Z-initial-summary-startup-proven-in-production.md)
 - [2026-09-04 — PR83 completed the full hero journey with initial summary first](entries/2026-09-04T2352Z-pr83-full-hero-with-initial-summary.md)
 - [2026-09-05 — HTML proof fidelity diagnosed](entries/2026-09-05T0023Z-html-proof-fidelity-diagnosed.md)
+
+- [2026-09-05 — PR83 HTML recovered and verified offline](entries/2026-09-05T0057Z-pr83-html-recovered-offline.md)

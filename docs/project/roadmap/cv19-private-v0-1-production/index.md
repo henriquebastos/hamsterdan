@@ -3,7 +3,7 @@ code: CV19
 level: Value
 status: Active
 status_reason: PR83 passed the full hero journey with initial summary first; capture-package acceptance and broader repository monitoring remain
-updated: 2026-09-04
+updated: 2026-09-05
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
   - ../../decisions/records/2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
@@ -36,6 +36,9 @@ approval, and one final readiness advisory. Both strict inspectors passed all
 ten checks. Offline replay reconstructed its 2,325-record clean History.
 The PR was closed unmerged after capture; its
 [manifest](proof/pr83-manifest.json) records the artifacts and capture limits.
+Its [21 HTML views have self-contained recovered copies](proof/pr83-html-recovery-manifest.json),
+verified with networking disabled. Original evidence remains immutable;
+uncaptured relative timestamps remain an explicit historical limit.
 
 [RS-036](../../workbench/rs-036-publish-initial-summary-before-review.md) added
 initial summary publication before normal Activities. PR82 proved the first
