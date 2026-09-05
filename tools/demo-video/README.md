@@ -172,7 +172,8 @@ together as immutable versioned release assets or in durable media storage.
 
 ## 1. Render the PR83 proof demo
 
-The PR83 demo is a 148-second presentation of the repaired proof screenshots.
+The PR83 demo is a 148-second presentation of the recovered proof screenshots,
+with every page explicitly set to dark mode.
 Its storyboard is `live/manifests/pr83-demo.json`. It binds both proof manifests
 by hash and specifies the shot order, captions, reading holds and vertical pans.
 The renderer verifies each source HTML and PNG before using it. It retains the
@@ -182,13 +183,19 @@ crossfades between shots. It does not recapture GitHub or construct comments.
 ```sh
 cd tools/demo-video
 bun run check
+bun run live/pr83-dark.ts
 bun run live/proof-demo.ts stills
-# Inspect output/proof/pr83-demo/previews/ before rendering.
+# Inspect output/proof/pr83-dark-demo/previews/ before rendering.
 bun run live/proof-demo.ts render
 ```
 
 The source proof directories must already be present and match the manifests.
-The output is `output/proof/pr83-demo/hamsterdan-pr83-hero.mp4`: silent H.264,
+`pr83-dark.ts` derives all 21 pages from the recovered HTML without fetching
+assets. It changes only the root color-mode attribute, checks full-page
+screenshots under both browser color preferences, and writes
+`output/proof/pr83-dark/index.html` plus a hash manifest. If regeneration changes
+that manifest hash, update the storyboard reference and inspect new previews.
+The output is `output/proof/pr83-dark-demo/hamsterdan-pr83-hero.mp4`: silent H.264,
 1280×720, 30 fps. The output directory also contains the shot previews, source
 copies, intermediate clips, render report and checksum. This is a demonstration
 assembled from recovered screenshots with the sign-in banner removed; original

@@ -138,5 +138,5 @@ export const renderProofDemo = async (manifestPath: string, output: string, mode
 if (import.meta.main) {
   const [mode] = process.argv.slice(2);
   if (mode !== "stills" && mode !== "render") throw new Error("Usage: bun run live/proof-demo.ts stills|render");
-  await renderProofDemo(resolve("live/manifests/pr83-demo.json"), resolve("output/proof/pr83-demo"), mode);
+  await renderProofDemo(resolve("live/manifests/pr83-demo.json"), resolve("output/proof/pr83-dark-demo"), mode);
 }

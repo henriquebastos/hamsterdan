@@ -129,3 +129,4 @@ file per milestone. Record outcomes and verification, not every edit.
 
 - [2026-09-05 — PR83 sign-in banner removed from recovered views](entries/2026-09-05T0105Z-pr83-sign-in-banner-removed.md)
 - [2026-09-05 — PR83 proof demo rendered](entries/2026-09-05T0325Z-pr83-proof-demo-rendered.md)
+- [2026-09-05 — PR83 presentation made consistently dark](entries/2026-09-05T1005Z-pr83-dark-presentation.md)

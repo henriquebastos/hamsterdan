@@ -3,8 +3,8 @@
   "kind": "recovered-proof-demo",
   "slug": "pr83-hero",
   "recoveryManifest": {
-    "path": "docs/project/roadmap/cv19-private-v0-1-production/proof/pr83-html-recovery-manifest.json",
-    "sha256": "ae45a9945261b0b0c1cb4ceb9e21568e5fa40e9f1b15e1fd34c0f6ade54920af"
+    "path": "docs/project/roadmap/cv19-private-v0-1-production/proof/pr83-dark-manifest.json",
+    "sha256": "6252590aee7cbbb9b12ee19bdd2d6bf1df8e5fa965b23b92d13f541e7ce5bbc7"
   },
   "proofManifest": {
     "path": "docs/project/roadmap/cv19-private-v0-1-production/proof/pr83-manifest.json",
