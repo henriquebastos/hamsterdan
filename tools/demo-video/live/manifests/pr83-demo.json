@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "kind": "recovered-proof-demo",
+  "slug": "pr83-hero",
+  "recoveryManifest": {
+    "path": "docs/project/roadmap/cv19-private-v0-1-production/proof/pr83-html-recovery-manifest.json",
+    "sha256": "ae45a9945261b0b0c1cb4ceb9e21568e5fa40e9f1b15e1fd34c0f6ade54920af"
+  },
+  "proofManifest": {
+    "path": "docs/project/roadmap/cv19-private-v0-1-production/proof/pr83-manifest.json",
+    "sha256": "71b8102d702726f4cbf4082b8daad20c70e47a0c12b549b8be7c541af6a7789b"
+  },
+  "shots": [
+    {
+      "id": "opening",
+      "source": "03-initial-summary.html",
+      "yFrom": 0,
+      "yTo": 0,
+      "seconds": 8,
+      "caption": "Hamsterdan · PR83 production proof, shown from recovered GitHub captures."
+    },
+    {
+      "id": "summary-first",
+      "source": "03-initial-summary.html",
+      "yFrom": 360,
+      "yTo": 464,
+      "seconds": 10,
+      "caption": "The summary appears first, before Dan starts reviewing the code."
+    },
+    {
+      "id": "native-review",
+      "source": "12-findings.after.html",
+      "yFrom": 970,
+      "yTo": 1050,
+      "seconds": 6,
+      "caption": "One native GitHub review. Three findings, each attached to its own lines."
+    },
+    {
+      "id": "duration-units",
+      "source": "12-findings.after.html",
+      "yFrom": 1100,
+      "yTo": 1100,
+      "seconds": 14,
+      "caption": "Finding 1 · A lease measured in seconds was being extended by minutes."
+    },
+    {
+      "id": "approval-values",
+      "source": "12-findings.after.html",
+      "yFrom": 1540,
+      "yTo": 1580,
+      "seconds": 16,
+      "caption": "Finding 2 · Count true approvals, rather than every entry in the mapping."
+    },
+    {
+      "id": "cache-key",
+      "source": "12-findings.after.html",
+      "yFrom": 2050,
+      "yTo": 2050,
+      "seconds": 14,
+      "caption": "Finding 3 · Use the same repository normalization when storing and reading cache keys."
+    },
+    {
+      "id": "blocking-summary",
+      "source": "14-changes-requested.after.html",
+      "yFrom": 540,
+      "yTo": 540,
+      "seconds": 8,
+      "caption": "Three blocking findings are visible in the shared summary."
+    },
+    {
+      "id": "repair-request",
+      "source": "17-repair-requested.after.html",
+      "yFrom": 2360,
+      "yTo": 2380,
+      "seconds": 12,
+      "caption": "Cris requests changes. Henrique asks Dan to repair all three findings."
+    },
+    {
+      "id": "working",
+      "source": "26-repair-pushed.after.html",
+      "yFrom": 560,
+      "yTo": 560,
+      "seconds": 8,
+      "caption": "The summary shows that Dan is working on the requested change."
+    },
+    {
+      "id": "repair-commit",
+      "source": "26-repair-pushed.after.html",
+      "yFrom": 2580,
+      "yTo": 2580,
+      "seconds": 10,
+      "caption": "Dan pushes an App-authored repair commit onto the same pull request."
+    },
+    {
+      "id": "clear-rereview",
+      "source": "33-clear-before-approval.after.html",
+      "yFrom": 545,
+      "yTo": 545,
+      "seconds": 10,
+      "caption": "All six CI jobs pass. Dan’s rereview reports zero findings."
+    },
+    {
+      "id": "resolved-threads",
+      "source": "33-clear-before-approval.after.html",
+      "yFrom": 1010,
+      "yTo": 1060,
+      "seconds": 8,
+      "caption": "The three original review threads resolve automatically, before approval."
+    },
+    {
+      "id": "approval",
+      "source": "35-approved.after.html",
+      "yFrom": 1500,
+      "yTo": 1528,
+      "seconds": 10,
+      "caption": "Cris approves the repaired head: “The repaired head addresses the requested changes.”"
+    },
+    {
+      "id": "all-clear",
+      "source": "40-all-clear.after.html",
+      "yFrom": 545,
+      "yTo": 545,
+      "seconds": 10,
+      "caption": "After approval, the same summary turns green. Every gate is clear."
+    },
+    {
+      "id": "advisory",
+      "source": "40-all-clear.after.html",
+      "yFrom": 1704,
+      "yTo": 1704,
+      "seconds": 10,
+      "caption": "One readiness advisory. Humans keep merge authority; Dan never merges the PR."
+    },
+    {
+      "id": "closed",
+      "source": "50-closed.after.html",
+      "yFrom": 1772,
+      "yTo": 1772,
+      "seconds": 6,
+      "caption": "Proof complete. This disposable PR was closed without merging."
+    }
+  ]
+}

@@ -170,6 +170,31 @@ every PNG and watch the complete MP4 once before approval. Routine output stays
 ignored; publish an approved MP4, checkpoint archive, report, and checksum file
 together as immutable versioned release assets or in durable media storage.
 
+## 1. Render the PR83 proof demo
+
+The PR83 demo is a 148-second presentation of the repaired proof screenshots.
+Its storyboard is `live/manifests/pr83-demo.json`. It binds both proof manifests
+by hash and specifies the shot order, captions, reading holds and vertical pans.
+The renderer verifies each source HTML and PNG before using it. It retains the
+1280×664 evidence pane at 1:1, adds the existing 56-pixel caption strip, and
+crossfades between shots. It does not recapture GitHub or construct comments.
+
+```sh
+cd tools/demo-video
+bun run check
+bun run live/proof-demo.ts stills
+# Inspect output/proof/pr83-demo/previews/ before rendering.
+bun run live/proof-demo.ts render
+```
+
+The source proof directories must already be present and match the manifests.
+The output is `output/proof/pr83-demo/hamsterdan-pr83-hero.mp4`: silent H.264,
+1280×720, 30 fps. The output directory also contains the shot previews, source
+copies, intermediate clips, render report and checksum. This is a demonstration
+assembled from recovered screenshots with the sign-in banner removed; original
+relative timestamps are unavailable. It is not a screen recording of a live run.
+Inspect playback at normal speed before accepting the video.
+
 ## Reproduce PR47
 
 Requirements: Bun, Chromium dependencies supported by Remotion, `ffmpeg`, and

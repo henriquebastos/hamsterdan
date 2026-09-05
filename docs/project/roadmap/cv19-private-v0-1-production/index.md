@@ -39,6 +39,9 @@ The PR was closed unmerged after capture; its
 Its [21 HTML views have self-contained recovered copies](proof/pr83-html-recovery-manifest.json),
 verified with networking disabled. Original evidence remains immutable;
 uncaptured relative timestamps remain an explicit historical limit.
+A [2:28 presentation demo](proof/pr83.md#1d-presentation-video) now follows the
+complete PR83 journey using those recovered views. Its render and playback
+evidence are recorded; Navigator media acceptance remains pending.
 
 [RS-036](../../workbench/rs-036-publish-initial-summary-before-review.md) added
 initial summary publication before normal Activities. PR82 proved the first
