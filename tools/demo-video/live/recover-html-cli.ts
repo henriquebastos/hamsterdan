@@ -13,11 +13,12 @@ const browser = await chromium.launch();
 try {
   const {context, unsafeRequests} = await openReadOnlyContext(browser, {width: 1280, height: 720});
   const page = await context.newPage();
-  const restored = await page.evaluate(({original, theme, url}) => {
+  await page.emulateMedia({colorScheme: theme as "light" | "dark"});
+  const restored = await page.evaluate(({original, url}) => {
     const doc = new DOMParser().parseFromString(original, "text/html");
     doc.querySelectorAll("script, base, meta[http-equiv], link[rel=preload], link[rel=modulepreload], link[rel=prefetch]").forEach((node) => node.remove());
     doc.documentElement.lang = "en";
-    doc.documentElement.setAttribute("data-color-mode", theme);
+    doc.documentElement.setAttribute("data-color-mode", "auto");
     doc.documentElement.setAttribute("data-light-theme", "light");
     doc.documentElement.setAttribute("data-dark-theme", "dark");
     doc.documentElement.className = "js-skip-scroll-target-into-view js-focus-visible";
@@ -33,7 +34,7 @@ try {
     policy.content = "script-src 'none'; object-src 'none'; frame-src 'none'";
     doc.head.prepend(policy);
     return `<!doctype html>\n${doc.documentElement.outerHTML}`;
-  }, {original, theme, url});
+  }, {original, url});
   await page.route(url, (route) => route.fulfill({contentType: "text/html", body: restored}));
   await page.goto(url, {waitUntil: "networkidle"});
   await page.evaluate(() => document.fonts.ready);
