@@ -126,3 +126,5 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-09-05 — HTML proof fidelity diagnosed](entries/2026-09-05T0023Z-html-proof-fidelity-diagnosed.md)
 
 - [2026-09-05 — PR83 HTML recovered and verified offline](entries/2026-09-05T0057Z-pr83-html-recovered-offline.md)
+
+- [2026-09-05 — PR83 sign-in banner removed from recovered views](entries/2026-09-05T0105Z-pr83-sign-in-banner-removed.md)

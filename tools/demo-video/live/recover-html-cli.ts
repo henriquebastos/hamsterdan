@@ -16,6 +16,11 @@ try {
   await page.emulateMedia({colorScheme: theme as "light" | "dark"});
   const restored = await page.evaluate(({original, url}) => {
     const doc = new DOMParser().parseFromString(original, "text/html");
+    const signInBanner = doc.querySelector('[data-test-selector="comments-sign-in-link"]')?.closest("div.flash.flash-warn");
+    if (!signInBanner?.textContent?.includes("to join this conversation on GitHub")) {
+      throw new Error("Expected the signed-out conversation banner");
+    }
+    signInBanner.remove();
     doc.querySelectorAll("script, base, meta[http-equiv], link[rel=preload], link[rel=modulepreload], link[rel=prefetch]").forEach((node) => node.remove());
     doc.documentElement.lang = "en";
     doc.documentElement.setAttribute("data-color-mode", "auto");
@@ -63,6 +68,7 @@ try {
     kind: "recovered-html-derivative", recoveredAt: new Date().toISOString(),
     source: resolve(input), sourceSha256: sha256(original), output: resolve(output), sha256: sha256(html),
     theme, url, ...audit, networkRequests: requests.length,
+    presentationEdits: ["Removed the signed-out conversation banner at the Navigator's request."],
     restoredOnlinePngSha256: sha256(before), offlinePngSha256: sha256(png),
     restoredOnlinePixelsMatchOffline: before.equals(png),
     limitations: "Root attributes reconstructed from the observed GitHub document and PNG theme; assets fetched at recovery time. Uncaptured shadow content (including relative timestamps) cannot be recovered. Original evidence remains authoritative.",

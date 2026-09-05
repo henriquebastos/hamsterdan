@@ -327,7 +327,8 @@ bun run live/recover-html-cli.ts \
 
 Use `light` for PR83 checkpoints 03–17 and `dark` for checkpoints 22–50, as
 observed in their PNGs. Recovery restores known GitHub root attributes, blocks
-the original scripts, embeds newly fetched public assets, and reopens the
+the original scripts, removes the yellow signed-out conversation banner at the
+Navigator's request, embeds newly fetched public assets, and reopens the
 result in a fresh offline browser. Adjacent `.html.json` and `.html.png` files
 record the source/output hashes, image and network checks, and whether the
 restored online and offline screenshots match. Existing outputs are never
