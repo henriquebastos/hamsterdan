@@ -16,6 +16,7 @@
         "@types/react": "19.2.14",
         "@types/react-dom": "19.2.3",
         "playwright": "1.62.1",
+        "single-file-core": "1.5.121",
         "typescript": "5.9.3",
       },
     },
@@ -384,6 +385,8 @@
     "shebang-regex": ["shebang-regex@3.0.0", "", {}, "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A=="],
 
     "signal-exit": ["signal-exit@3.0.7", "", {}, "sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ=="],
+
+    "single-file-core": ["single-file-core@1.5.121", "", {}, "sha512-ejV/vd6C+VNi/laDCVVRMn3xQihIMBmBZaiy8V1G0IXdAzvi4vTKFEOYyh9Zgk2eMR32EEx82X0pREZPCmvlLw=="],
 
     "sisteransi": ["sisteransi@1.0.5", "", {}, "sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg=="],
 

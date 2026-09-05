@@ -2,6 +2,7 @@ import {mkdir, rename, rm, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {createRequire} from "node:module";
 import type {Page} from "playwright";
+import {archivePage} from "./archive";
 import {
   assertion,
   captureFullPage,
@@ -192,7 +193,7 @@ const watchEvidence = async (
       if (unsafeRequests.length > 0) {
         throw new Error(`${label} violated the read-only boundary`);
       }
-      const beforeHtml = await page.content();
+      const beforeHtml = await archivePage(page);
       const validated = await validateWatchedPage(page, manifest, url, label);
       const textSha256 = sha256(validated.text);
 
@@ -200,7 +201,7 @@ const watchEvidence = async (
         ordinal += 1;
         const id = stateId(ordinal);
         const before = await writeDom(id, "before", beforeHtml);
-        const after = await writeDom(id, "after", await page.content());
+        const after = await writeDom(id, "after", await archivePage(page));
         const full = await captureFullPage(page, `state ${id}`, manifest.viewport);
         const relativeFile = `checkpoints/${id}.png`;
         await writeFile(join(temporaryDirectory, relativeFile), full.png, {flag: "wx"});

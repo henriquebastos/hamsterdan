@@ -3,6 +3,7 @@ import {mkdir, rename, rm, writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {createRequire} from "node:module";
 import type {Browser, BrowserContext, Locator, Page} from "playwright";
+import {archivePage} from "./archive";
 import {parseManifest, type CaptureManifest, type Checkpoint, type PullRequestState} from "./manifest";
 import {pngDimensions} from "./png";
 import type {Region} from "./region";
@@ -397,9 +398,9 @@ const captureEvidence = async (
       }
       // Layer 1 of the evidence ruling: the rendered DOM on both sides of the
       // action this checkpoint performs on the page (its focus scroll).
-      const before = await writeDom(checkpoint.id, "before", await page.content());
+      const before = await writeDom(checkpoint.id, "before", await archivePage(page));
       const validated = await validatePage(page, manifest, checkpoint);
-      const after = await writeDom(checkpoint.id, "after", await page.content());
+      const after = await writeDom(checkpoint.id, "after", await archivePage(page));
       const full = await captureFullPage(page, `checkpoint ${checkpoint.id}`, manifest.viewport);
       const relativeFile = `checkpoints/${checkpoint.id}.png`;
       await writeFile(join(temporaryDirectory, relativeFile), full.png, {flag: "wx"});

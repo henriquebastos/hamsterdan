@@ -70,6 +70,12 @@ requires, in that order of authority:
 1. The rendered DOM saved as HTML on both sides of the action the checkpoint
    performs on the page — `before` immediately after the checkpoint document is
    ready, `after` once the checkpoint's focus scroll has run.
+   Both capture and watch use SingleFile Core to embed stylesheets, nested
+   images and fonts, and rendered shadow DOM. The complete document retains
+   its root attributes; automatic color-scheme rules are frozen to the capture
+   environment. Scripts and frames are removed. Missing required resources
+   fail the capture. The anonymous request boundary still applies to resource
+   fetches. Opening the saved HTML requires no network access.
 2. A full-page PNG whose pixel height is verified mechanically against the
    page's own real height,
    `max(document.body.scrollHeight, document.documentElement.scrollHeight)`, at
@@ -308,6 +314,26 @@ Before accepting a candidate:
 - [ ] The complete encoded video—not only stills—has been watched once.
 
 ## Artifact policy
+
+PR83's older HTML omitted root attributes and referenced remote assets. Repair
+those saved documents with the command below, writing to a separate directory:
+
+```bash
+bun run live/recover-html-cli.ts \
+  output/proof/cv19-pr83/40-all-clear.before.html \
+  output/proof/html-recovery-20260905/pr83/40-all-clear.before.html \
+  dark https://github.com/HBNetwork/demo-pr-readiness/pull/83
+```
+
+Use `light` for PR83 checkpoints 03–17 and `dark` for checkpoints 22–50, as
+observed in their PNGs. Recovery restores known GitHub root attributes, blocks
+the original scripts, embeds newly fetched public assets, and reopens the
+result in a fresh offline browser. Adjacent `.html.json` and `.html.png` files
+record the source/output hashes, image and network checks, and whether the
+restored online and offline screenshots match. Existing outputs are never
+overwritten. These are later derivatives: uncaptured relative timestamps and
+other transient browser state remain unavailable. Preserve the original proof
+archive and use its accepted PNGs for contemporaneous visual claims.
 
 Commit this studio and scenario definitions. Do not commit routine MP4 renders
 or checkpoint images. Publish approved videos as release assets so replacing a
