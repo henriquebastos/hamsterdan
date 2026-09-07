@@ -282,9 +282,10 @@ Both workflows retrieve `PETRUS_GITHUB_TOKEN` from
 `OP_SERVICE_ACCOUNT_TOKEN_BUILD`, a reader granted only the build vault.
 `export-env: false` limits delivery to the declared dependency/build step.
 The build vault and separate Mac/CI read-only readers are installed. The CI
-bootstrap was installed on 2026-09-07. The old independently edited GitHub
-`PETRUS_GITHUB_TOKEN` secret remains until the new workflow route passes;
-workflow publication and verification are pending. Reader grants, protected
+bootstrap was installed on 2026-09-07. Both workflows passed for release
+`85c109eb0099ce1aad32d041c9ca69492f3b1272` using that reader. The obsolete GitHub
+`PETRUS_GITHUB_TOKEN` secret was then removed; the build-vault item is the editing
+authority. Reader grants, protected
 local paths and operations recovery item IDs are recorded in RS-037.
 
 The OCI image candidate workflow remains manual and has no package-write

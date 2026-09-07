@@ -472,8 +472,8 @@ its child verified loader and operations credentials were absent.
 
 Installed the CI reader as GitHub Actions secret
 `OP_SERVICE_ACCOUNT_TOKEN_BUILD`; metadata confirms update at
-`2026-09-07T03:59:46Z`. The old `PETRUS_GITHUB_TOKEN` secret remains until the new
-workflow route passes. Publication and workflow evidence follow below.
+`2026-09-07T03:59:46Z`. The old `PETRUS_GITHUB_TOKEN` secret was retained until both
+new workflow routes passed, then removed. Publication evidence follows below.
 
 ## 1i. Publication and deployment-output qualification
 
@@ -486,8 +486,9 @@ retrieved its build credential, installed the exact Petrus dependency, and remov
 temporary Git authentication, then failed one existing scripted-runtime deadline
 test: 1,271 tests passed and one failed. The scripted delay stops at the runtime
 deadline and can race timeout settlement; that implementation is unchanged from
-the prior Petrus pin. Eight subsequent focused local runs passed. This is not a
-passing CI result and remains a qualification concern until the final run.
+the prior Petrus pin. Eight subsequent focused local runs passed. The final CI
+run below passed, including this test. The earlier failure remains recorded as
+an intermittent test concern; no timeout behavior was weakened to obtain a pass.
 
 A real-launcher check found that concealing the numeric App ID replaces an
 unquoted JSON number with the CLI's masking text. The host command succeeds,
@@ -497,7 +498,24 @@ the parsing failure before the fix. Both actual application Environments now
 pass host validation and the deployment JSON parser, using isolated local state.
 Concealment stays enabled; no Environment value was changed.
 
-Remaining: verify Hamsterdan publication and the new CI path; build a clean image; perform
+The follow-up fix was committed and pushed as
+`85c109eb0099ce1aad32d041c9ca69492f3b1272`. Both
+[CI](https://github.com/henriquebastos/hamsterdan/actions/runs/34084541429) and the
+[image workflow](https://github.com/henriquebastos/hamsterdan/actions/runs/34084559585)
+passed on that exact revision. CI verified build-vault retrieval, dependency
+installation, temporary-authentication removal and all selected tests. Only
+`OP_SERVICE_ACCOUNT_TOKEN_BUILD` remains in the repository's Actions secret
+listing; the obsolete standalone Petrus token copy was removed after both passes.
+The build-vault item, issuer credential and recovery copies remain intact.
+
+The clean local release image also passed canonical verification. Its manifest is
+`dist/deployment/85c109eb0099ce1aad32d041c9ca69492f3b1272/release.json`, with
+`dirty=false` and `verified=true`. Its Docker image identity is
+`sha256:de64787a2b4b39b0535bd4a3c71cdecdd306ab753f8b842bf613a63738cea071`.
+Production is still unchanged. This documentation-only receipt does not change
+the qualified application or image inputs.
+
+Remaining: qualify the clean image on the VM and perform
 supervised production cutover; verify restart
 freshness and failure behavior; retire remaining active legacy external sources.
 Remote Amp configuration remains unverified.
