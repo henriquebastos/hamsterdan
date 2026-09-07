@@ -77,59 +77,46 @@ organization, or user permission belongs in this first App. Permission
 semantics: <https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps>;
 webhook events: <https://docs.github.com/en/webhooks/webhook-events-and-payloads>.
 
-Record the App ID, client ID, and slug shown by GitHub. Generate one private key
-from the App settings. Generate a high-entropy webhook secret locally without
-putting it in shell history. Store both as **project** secrets so every new orb
-for the canonical Amp project can reproduce the same bounded runtime:
-
-```sh
-amp secrets set GITHUB_APP_PRIVATE_KEY_PEM --project --secret \
-  --data-file ~/Downloads/hamsterdan.private-key.pem
-python - <<'PY'
-import secrets
-from pathlib import Path
-p = Path('/tmp/hamsterdan-webhook-secret')
-p.write_text(secrets.token_urlsafe(48) + '\n')
-p.chmod(0o600)
-PY
-amp secrets set GITHUB_APP_WEBHOOK_SECRET --project --secret \
-  --data-file /tmp/hamsterdan-webhook-secret
-```
-
-Paste the same temporary webhook-secret value into GitHub's App webhook secret
-field without logging it, then delete the temporary file and downloaded key
-after project-secret custody is verified. Never commit either file. GitHub key guidance:
+Record the App ID, client ID, slug, private-key PEM and webhook secret in the
+selected 1Password application Environment, using the
+[shared six-variable schema](../../deployment/README.md#2-application-credentials-and-recovery).
+The provider's webhook secret must match that Environment value. Existing
+registrations retain their credentials during the migration; generating new
+issuer credentials is a separate operation. Never commit credential files.
+GitHub key guidance:
 <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps>;
 webhook security: <https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries>.
 
 ## 2. Configure and install
 
-Configure the public App registration and policy values as Amp project
-environment variables. These current HBNetwork values are not credentials:
+Development selects `hamsterdan-dev`; production selects `hamsterdan-prod`.
+Both use the same launcher and variable names. Supply an Environment-only
+reader and the pinned beta CLI as described in
+[deployment custody](../../deployment/README.md). The selected Environment
+owns App identity and AI credentials. Shared non-secret policy lives in
+`deployment/config/runtime.env`.
+
+Remote Amp settings still need migration to separate application and build
+readers. The old direct-secret project entries do not satisfy the current
+launcher. RS-037 owns that unfinished operation and fresh-orb qualification.
+
+The optional qualification identities retain their project settings:
 
 ```sh
-printf %s 4452953 | amp secrets set GITHUB_APP_ID --project --env --data-file -
-printf %s hamster-dan | amp secrets set GITHUB_APP_SLUG --project --env --data-file -
-printf %s Iv23liKF36r9YtMkGf0m | amp secrets set GITHUB_APP_CLIENT_ID --project --env --data-file -
-# Optional qualification-only human identities:
 printf %s henriquebastos | amp secrets set GITHUB_DEMO_AUTHOR_LOGIN --project --env --data-file -
 printf %s crisbastos | amp secrets set GITHUB_DEMO_REVIEWER_LOGIN --project --env --data-file -
-printf %s .github/workflows/ci.yml | \
-  amp secrets set READINESS_WORKFLOW_PATH --project --env --data-file -
-printf %s 259200 | amp secrets set READINESS_REMINDER_SECONDS --project --env --data-file -
 ```
 
 Installation accounts and repositories live in the tracked
 `deployment/config/installations.toml`, not project environment variables. Each
 `[[accounts]]` block names one GitHub account by stable ID and expected login;
 its repository lines name stable repository IDs and expected full names. Edit
-that file to change routing authority. Orb setup records its path in the
-generated runtime environment, so an orb restart reads the edited tracked file
-directly. The VM configuration-only command validates and applies it without
-rebuilding or redeploying the application:
+that file to change routing authority. The development launcher reads the
+tracked file directly on every start. The VM configuration-only command
+validates and applies it without rebuilding or redeploying the application:
 
 ```sh
-uv run --frozen python deployment/runtime.py configure \
+scripts/ops uv run --frozen python deployment/runtime.py configure \
   --file deployment/config/installations.toml
 ```
 
@@ -138,14 +125,10 @@ listed repository. The current private App is installable only on HBNetwork;
 changing its visibility or installing it on another account remains a separate
 operator-approved GitHub action.
 
-Store the App private key and webhook secret as described above. Store exactly
-one qualified direct agent-provider key as project secret
-`ANTHROPIC_AGENT_API_KEY`, `OPENAI_AGENT_API_KEY`, or
-`OPENROUTER_AGENT_API_KEY`; ambient personal keys are fallback inputs to setup,
-not runtime configuration. The pinned Petrus source repository is currently
-private, so orb installation also requires a dedicated project secret named
-`PETRUS_GITHUB_TOKEN` with read-only repository access. It is temporary build
-authority and must not be an App, provider, demo-human, or host runtime token.
+The pinned Petrus source repository is private. Install dependencies with
+`scripts/build-secrets scripts/sync-dependencies`. Its reader grants access only
+to `hamsterdan-build`, where the read-only GitHub token lives. Temporary build
+authority is removed after installation and kept out of the application child.
 
 The two demo-human identities are optional and do not gate production setup.
 Only for the controlled three-actor fixture, set both login variables above and
@@ -155,18 +138,13 @@ distinct logins validate; otherwise it retires both identity roots while still
 allowing a fully configured App/provider runtime. Role names are deliberate:
 changing the people later changes project settings, not source code.
 
-On each new orb, `.agents/setup` consumes and removes secret variables from
-installer environments. It installs the private Petrus pin through temporary
-mode-restricted Git askpass/config files and removes that authority on every
-outcome. If the optional demo pair is complete, it verifies both logins through
-the trusted preinstalled GitHub CLI while bypassing PATH-precedence wrappers.
-It then installs the pinned Pi runtime and creates ignored owned `0600` files plus
-`.amp/runtime/hamsterdan.env`. That generated file contains paths and public
-configuration, never secret values. Missing or unsafe authority removes stale
-launch configuration and leaves the source workspace usable but the host
-unstartable. Demo identity absence alone does not remove valid launch
-configuration. Secret-setting changes apply to new orbs; use the orb's supported
-process restart rather than copying values through chat.
+On each new orb, `.agents/setup` installs dependencies through the build reader,
+verifies the optional demo identities through the trusted GitHub CLI, and
+installs the pinned Pi runtime. It does not generate application credential
+files or a runtime `.env`. `scripts/hamsterdan-host` retrieves current values
+from the selected Environment on each start. Missing access or required values
+prevent startup. Edit the Environment and restart the application to refresh
+credentials while preserving runtime history.
 
 GitHub assigned this registration the slug `hamster-dan`, so its bot login is
 `hamster-dan[bot]` and its exact public mention is `@hamster-dan`. Trusted PR
@@ -180,11 +158,11 @@ select repositories**, and select only `demo-pr-readiness`. Installation docs:
 
 ## 3. Validate, serve, and prove ingress
 
-The checked launcher opens `.amp/runtime` through held, non-symlink directory
-descriptors, reads the generated environment without shell evaluation, strips
-ambient Amp, GitHub, and provider credentials, and accepts only its exact
-generated key set. The host's Git publication boundary separately runs every
-Git command with global/system config, prompts, hooks, askpass, SSH-agent, and
+The shared launcher clears inherited credentials, invokes the pinned 1Password
+CLI for the selected Environment, and removes its loader token from the
+application child. The host accepts credential values directly and removes
+GitHub credentials before agent composition. The host's Git publication boundary
+separately runs every Git command with global/system config, prompts, hooks, askpass, SSH-agent, and
 ambient credential helpers unavailable. Validate the App registration and
 selected-repository installation through that boundary. Non-sharded V5 is the
 production topology after every setup:

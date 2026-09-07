@@ -19,8 +19,8 @@ without mutation.
 The V5 route has accepted deterministic evidence across eleven semantic
 journeys and real GitHub evidence for clean green, transient-CI recovery, and a
 complete three-actor repair. The current candidate passes the local full gate.
-GitHub-hosted Actions is currently blocked before job start by the account's
-payment/spending state, so hosted CI is not claimed green for this candidate.
+GitHub-hosted CI and image qualification passed for release `85c109e` using the
+separate build-vault reader.
 The production host is active on exe.dev. PR83 passed the full review/repair/
 readiness journey with initial summary publication before other Activities;
 its capture package, stated media limits, and remaining

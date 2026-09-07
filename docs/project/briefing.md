@@ -92,14 +92,15 @@ dropped before implementation and remains design history. Neither successor is
 a runtime choice; V5 remains the sole runtime until a separately approved CV22
 cutover.
 
-The pinned Petrus source dependency is currently private. Orb installation uses
-a dedicated project-scoped `PETRUS_GITHUB_TOKEN`, removes temporary Git
-authority on every outcome, and does not put that token in host runtime state.
+The pinned Petrus source dependency is currently private. Dependency installation
+reads the token through the separate build vault, removes temporary Git authority
+on every outcome, and keeps that token out of host runtime state. Remote Amp
+settings still need migration; RS-037 owns that unfinished operation.
 Optional demo author/reviewer identities do not gate production setup.
 
-GitHub-hosted Actions currently fails before job start because of the account's
-payment/spending state. Local full-gate evidence remains valid but does not
-replace hosted CI.
+GitHub-hosted CI and image qualification passed for release `85c109e`, which is
+deployed on production through the new application Environment. RS-037 owns
+the cutover evidence and fresh comparison with PR83.
 
 After CV19's production proof, a dedicated debt item owns the repository-wide
 open-source audit, community/security documents, dependency-publication

@@ -5,9 +5,9 @@ qualifies that exact image on the owned exe.dev VM, and provisions private
 runtime custody for no-launch App validation. Initial provisioning leaves the
 service inactive. A configuration update restarts an already active service.
 
-RS-037 rollout is pending. The code below describes the prepared Environment
-contract; production still uses the prior vault/file contract until migration
-and the accepted image cutover are verified.
+RS-037 is deployed on production at `85c109e`. Provisioning, restart and isolated
+startup-failure checks passed through the Environment contract below. The
+Workbench record owns the fresh PR83 comparison and remaining remote Amp work.
 
 ## Release contract
 
@@ -251,7 +251,8 @@ Production selects `hamsterdan-prod`, ID `EXAMPLE_PROD_ENVIRONMENT_ID`.
 Each has its own read-only service account. Creation, grants, expiry and recovery
 details are recorded in RS-037. Both Environments contain the six variables and
 have passed read-only provider validation. The development reader is installed
-locally; production reader installation and service cutover remain pending.
+locally; the production reader is installed on the VM and its service cutover
+and supervised restart passed on 2026-09-07.
 
 For development, select the Environment and protected bootstrap path in the
 local ignored `.envrc`, then run `scripts/hamsterdan-host`. The local loader does
@@ -271,7 +272,7 @@ custody, or restores the intended value in the selected Environment, then repeat
 the same startup. Backups are never automatic fallbacks. Keep operation and
 workflow state intact. The accompanying Petrus fix refreshes current AI authority
 before new work after a crash. The dependency is published and pinned at
-`9ad2f7a8daac7aee03ba9529f65e18894aa8f608`; production deployment remains pending.
+`9ad2f7a8daac7aee03ba9529f65e18894aa8f608` and deployed in production.
 No issuer-side key rotation or identity revocation is part of this migration.
 
 ## 3. CI and publication boundary

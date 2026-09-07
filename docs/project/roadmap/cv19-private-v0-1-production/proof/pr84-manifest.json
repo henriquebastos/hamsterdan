@@ -1,0 +1,423 @@
+{
+  "captured_at": "2026-09-07T05:26:26.543758+00:00",
+  "pr": 84,
+  "baseline_pr": 83,
+  "release": "85c109eb0099ce1aad32d041c9ca69492f3b1272",
+  "files": [
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/01-opening-github.json",
+      "bytes": 1600,
+      "sha256": "5dbbba2c6bd5e0006739cf619bf702a92466b43f672253946500e7ef9b33f53f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/01-opening-history.jsonl",
+      "bytes": 39750,
+      "sha256": "ffed321c1342527e6f3cb54ca4e01458c0c0379df9bb61b28af447520d9d8046"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/01-opening-runtime.json",
+      "bytes": 49414,
+      "sha256": "3d11fba3a92d10891cf08c8f8f7e29f57e65d0157f9583522365aa64c8104b96"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/01-opening-summary.json",
+      "bytes": 614,
+      "sha256": "aba7195d9ddfb59f7a8e1b2e77719e5c3d16aaf1a605cfb08203e29013c70411"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/02-initial-summary.png",
+      "bytes": 135125,
+      "sha256": "53150a72bbc1a6687b3daa76653606407ba679e75e33b8c4aaa734f7210fe661"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/03-initial-summary-github.json",
+      "bytes": 4023,
+      "sha256": "f192e71e58f402f9de0d2fc356d2b42c933d955d64469b0a1121c6572a907ad4"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/03-initial-summary-history.jsonl",
+      "bytes": 136170,
+      "sha256": "c77d1353c77ccc7f39b8042bb9a965053b24bbe2a04335ebc541c8b015ca9fe6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/03-initial-summary-runtime.json",
+      "bytes": 136470,
+      "sha256": "a01d645d12fcdb2c987aac021e0e67752cab3a4a1309865b69c58c3b00411226"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/03-initial-summary-summary.json",
+      "bytes": 676,
+      "sha256": "af99f98aa033a2f6452697e118e5c243d422da46bf8aa2f1f2648fed69aa5b5e"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/04-initial-summary.png",
+      "bytes": 135125,
+      "sha256": "53150a72bbc1a6687b3daa76653606407ba679e75e33b8c4aaa734f7210fe661"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/05-fixture-comparison.json",
+      "bytes": 177,
+      "sha256": "6b7efda07d0c1e5a8a97144105d80c00cf4f01bb210308513d586c27bad90e4d"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/06-initial-summary-visible.png",
+      "bytes": 177411,
+      "sha256": "b4d01c2bc4726b7c56b083927ed63ebb4d38294b1c4b3889255f3f1016581442"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/07-opening-ci-github.json",
+      "bytes": 4424,
+      "sha256": "cf5aa2d0546d04d1ecc88c45785dd7a5ae1e59dc093086ee0bf8e65d91b99bd7"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/07-opening-ci-history.jsonl",
+      "bytes": 159895,
+      "sha256": "8f451df72eab8f573833b2f1e23be8d79ce838456f5428b9897ab74ab5ec83b8"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/07-opening-ci-runtime.json",
+      "bytes": 160207,
+      "sha256": "f8f484dc35391e03c7520d09e44fbf080e52aeec1457ee84ba4997f01e26a9d2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/07-opening-ci-summary.json",
+      "bytes": 668,
+      "sha256": "7240293645c24de5b1ea90bf7a0cc541518121b789d9c5b3f6ba6d23c8c948e1"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/08-review-progress-github.json",
+      "bytes": 4424,
+      "sha256": "812fe834c7c07473e2127b08f073593701398752ace84a819c00cb587ee58604"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/08-review-progress-history.jsonl",
+      "bytes": 182538,
+      "sha256": "bebb611b70c528c05e683919cc3f87723c6dbb93adfdc694f0ec86c0c86bd752"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/08-review-progress-runtime.json",
+      "bytes": 183946,
+      "sha256": "5903e389c90e7e753c067833487b05fad8292f0765e04fc9aaee83294bf8af92"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/08-review-progress-summary.json",
+      "bytes": 676,
+      "sha256": "af0ea8ea89c4de1c34a0723e50d2dfb2ad9f95edc836a114d8f0e2bad05ebf27"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/09-findings-github.json",
+      "bytes": 21713,
+      "sha256": "c92dc104552744d89052da0e4be3ad8a653d0de44b32ff5358c2c080972980b1"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/09-findings-history.jsonl",
+      "bytes": 442965,
+      "sha256": "7c150299714e6a2984eb7d90b350f9f9692a5a4e231376c3fb909f79f773f0df"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/09-findings-runtime.json",
+      "bytes": 344831,
+      "sha256": "bd5cb4013776f9738887a95838dd503e645b091e39beee10b2737a6998c5fa34"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/09-findings-summary.json",
+      "bytes": 887,
+      "sha256": "5a290f5742f9c82049edf34f34417bc2a7906557a0d5e76d965a17e22899934c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/10-opening-inspector.json",
+      "bytes": 4232,
+      "sha256": "aa56134c423cef8a7095c2aa7b1258cc61a75838c0ec64610ec67918cc76548e"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/11-findings.png",
+      "bytes": 404736,
+      "sha256": "e7081285171e8fa6dd179bcc2bbeffeb14c30eb3bc5ea7b8b679d5850ef13255"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/12-changes-requested.json",
+      "bytes": 1862,
+      "sha256": "fb503c752f11838a8fffbf4b745a6f68e80936f1ed0951c388077df614a11164"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/13-changes-requested-authority.json",
+      "bytes": 1371,
+      "sha256": "030b308e8312370582c8e0a0cdaa7f32df4c28e5301ca53812ad0d39cb198f95"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/14-changes-requested-github.json",
+      "bytes": 22210,
+      "sha256": "32ee28e204d9300033ea905c83a1f4aa8cc532bcaa097c5c679a4fb7a5724365"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/14-changes-requested-history.jsonl",
+      "bytes": 475862,
+      "sha256": "176f7ca69eb8b3a8b967dbf6b418b7b98bdbe720c27b116774551ccdcb704582"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/14-changes-requested-runtime.json",
+      "bytes": 369997,
+      "sha256": "9bae92d12e9890f2ab0c667544d8bca6e7ac7621ac4badc669cc4a29384aa33b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/14-changes-requested-summary.json",
+      "bytes": 887,
+      "sha256": "a243395e8c789c361fdfd51f65e16e9e131a3493327e8e497d6a32a85400c0f5"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/15-changes-requested.png",
+      "bytes": 407754,
+      "sha256": "fd495efa262e9c17a8a4877d07ad7e6fe6eb84f8a6593f7d4506674ed5b7a3a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/16-repair-instruction.json",
+      "bytes": 2043,
+      "sha256": "eb0036658356b8834ac1f54990cac386e1432e7b9c3d301a5b7c90621b1d514b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/17-repair-progress-github.json",
+      "bytes": 22800,
+      "sha256": "6dab85098f026668626bae4d1adf1e7e9649f2b14a3c4443cec8764794cb0a0d"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/17-repair-progress-history.jsonl",
+      "bytes": 514446,
+      "sha256": "acc7e57a2b591f549105198cc51d5412fd8f60d4fe7a4b049b8fafbe7aef18aa"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/17-repair-progress-runtime.json",
+      "bytes": 401956,
+      "sha256": "d427410de7d18299ea5c32a447c94607b72eebb7354fa8d1d49e1b83036fc936"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/17-repair-progress-summary.json",
+      "bytes": 936,
+      "sha256": "bc2606f09e5ed895b587ed8263c1eb01bbd4dc6ffbce7818a9acedc568bfe5d4"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/18-repair-request.png",
+      "bytes": 450360,
+      "sha256": "3c53f2c4b6a20ac0c29340040ba16a0f1e4610ad87cf7a0290a50f4526673a0c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/19-repair-status-github.json",
+      "bytes": 23764,
+      "sha256": "6d9b985337594673d94bbca5432daff22c5bdd16b1be2e7944f11c107de7b97c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/19-repair-status-history.jsonl",
+      "bytes": 691305,
+      "sha256": "a8161914f879d177a44af71493b6128651165c25e5060cc0d19c209f10739de1"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/19-repair-status-runtime.json",
+      "bytes": 522020,
+      "sha256": "2ff8657f026ae1f18d2a3d2df87d99d07639801f5d22424f2502e53efe371593"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/19-repair-status-summary.json",
+      "bytes": 962,
+      "sha256": "10a8bded63a05b1cab5a2c42d6475155279dda8ed269ed62c32a71fbd34b9bd9"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/20-repair-comparison.json",
+      "bytes": 2522,
+      "sha256": "187fc44de2aab583064bd55a61df429e7c1b1945c573f9a944cc0959ebba9ff6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/21-app-repair.png",
+      "bytes": 473627,
+      "sha256": "1a0b4e8e1a3ef5d1568709eda61f72b647f7159e05253e672410b1b6715f47b2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/22-rereview-github.json",
+      "bytes": 24312,
+      "sha256": "a9c07029f541226643d55fbfb69b6be79ff677279eb573b82925c0d0b89cde0f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/22-rereview-history.jsonl",
+      "bytes": 788825,
+      "sha256": "7e392e65afd0ebe6992af7dc4261472ca15687c31f454c2c6ef01cd122f18e08"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/22-rereview-runtime.json",
+      "bytes": 592775,
+      "sha256": "0eaf00b5e606845b2453532b81150962b2590d2afd249faa6d5e8f4fe20ba054"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/22-rereview-summary.json",
+      "bytes": 1154,
+      "sha256": "a9be3e1e48b01e0526db042b4788b239d7814313f32b10cd2c9f846a048aa9c1"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/23-before-approval-github.json",
+      "bytes": 24322,
+      "sha256": "dc26ea3c4e828b6f28c281b1cff5dddc75fdabb3ecb9c3feff57506f7c34f8f9"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/23-before-approval-history.jsonl",
+      "bytes": 799885,
+      "sha256": "2ed60756085151811c086d2c9b6efdc9699154885c239692d7c21566990d2de8"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/23-before-approval-runtime.json",
+      "bytes": 606658,
+      "sha256": "20d31a447aa24d735db9f9e8863a1c315c12325be2f390bdf29e9a506636c036"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/23-before-approval-summary.json",
+      "bytes": 1154,
+      "sha256": "70417ab8e1ea57e8e157a406b65982093fb27685e6fe2fd21e0a46e7bf17da44"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/24-before-approval-inspector.json",
+      "bytes": 4270,
+      "sha256": "ee92ac026a32be43d08cbbd1d7c6d7719b6a4c8dfe11d366f4836358883816ed"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/25-clear-before-approval.png",
+      "bytes": 473659,
+      "sha256": "caca3581d7a991cc406e0055d97df69d28301e044cdc1d031806492625d7f01b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/26-approval.json",
+      "bytes": 1852,
+      "sha256": "6149cbd611d5a7760404c444f0cc3487dfc6a11b9c6da18f03ce2e71c35ede01"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/27-after-approval-github.json",
+      "bytes": 24754,
+      "sha256": "44fa825bdbf00e88575190efeab65149650e9906288558a988aacb8fb1d142d6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/27-after-approval-history.jsonl",
+      "bytes": 1237054,
+      "sha256": "57df4374d981915e6e668ddd8e4e43959492e2bdd758577c6a8f25591a83f21f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/27-after-approval-runtime.json",
+      "bytes": 763833,
+      "sha256": "872289b117edea5fd92a254ee43e11877bc88bfe64bf600bb59f9d447e89ff41"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/27-after-approval-summary.json",
+      "bytes": 1161,
+      "sha256": "7c70da85d49574b3438ebdd375e56b3ddfbc7fcbda2ea621783e17108a58631a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/28-final-inspector.json",
+      "bytes": 4753,
+      "sha256": "84c5bdd208a2601beb016032a00e313849ca6566700ee5a2453535e3a1d6e8d8"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/29-final-github.json",
+      "bytes": 25501,
+      "sha256": "e10de61058892aa763e9be0550e2d9589bf828a237aafbb98305e80a6c55c27c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/29-final-history.jsonl",
+      "bytes": 1237054,
+      "sha256": "57df4374d981915e6e668ddd8e4e43959492e2bdd758577c6a8f25591a83f21f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/29-final-runtime.json",
+      "bytes": 763833,
+      "sha256": "719bb853e4a5ecf7cb9152d677a1e2a716188dea76956afc6f87639e7a554d52"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/29-final-summary.json",
+      "bytes": 1161,
+      "sha256": "131ed660cca021fe61294be425d830be3756e98c696506a24627f4e250b2fdc0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/30-final-authority.json",
+      "bytes": 1323,
+      "sha256": "208390224b17064bd0ce87edf49bdd1c3207db6a6459ec20158937c05be0d7a3"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/31-all-clear.png",
+      "bytes": 343609,
+      "sha256": "4a30134f8fb9c7d5211b4aa460f232f1b4940712ebe36cc7dce8a576edaa0de9"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/32-final-replay.json",
+      "bytes": 68,
+      "sha256": "0106a9ccfe0e352af7ab0bffa9c751f9f7864c671e648471e42b91a0ff3fdce0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/33-closed-github.json",
+      "bytes": 25503,
+      "sha256": "4db0fd125be351e6989468f68443df18da6f67d215a9bcd54fdf6dba60e4f7a2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/33-closed-history.jsonl",
+      "bytes": 1258262,
+      "sha256": "abc339e1e4b17be449f725a2aaabacbf1c0cb3e8654d618f28ff47476099d2aa"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/33-closed-runtime.json",
+      "bytes": 785996,
+      "sha256": "db8fee85aa3412c1fc97b6b2e69e3f2072ae2bc7a0476b199452a5c1ef2c893f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/33-closed-summary.json",
+      "bytes": 1161,
+      "sha256": "0b02808144a6cb15881d3b8e8b1f5ca9909898adb88ae35dccb997bd5714a564"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/34-closed.png",
+      "bytes": 351555,
+      "sha256": "2a3d5f4c50eae80f9edd6f61e2dce2a315eb5eb2067b492f0cbb5dbeaee011e9"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/35-closed-replay.json",
+      "bytes": 68,
+      "sha256": "972eca814ecd2b397f6f8941bfddaa8b18b74e862f77701e2b4f0d117bc979d2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/36-production-health.json",
+      "bytes": 815,
+      "sha256": "cb5ac3a57333d171179734cf4962501e2ddfc6a77c1e518bebe09276f8e5f94f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/37-closed-provider-state.json",
+      "bytes": 235,
+      "sha256": "ef271609fd70997706ba222572aeb982fb978d2a1f9cc41dd6ddc8f843a4ec9c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/38-comparison.json",
+      "bytes": 4717,
+      "sha256": "5c99b16124be551d273ff5a7163719bbed5d044f82951ad4f295a331106772b5"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/39-capture-review.json",
+      "bytes": 771,
+      "sha256": "a8e04cfba13f93c53133c95b66dc13b31fa070c77472775aa9ef5e50dbd8672a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/baseline-pr83-history.jsonl",
+      "bytes": 1181408,
+      "sha256": "5b1f591d59acf6b15240dc35a2d99da1c3f7db6855beac7315e1de9503c1a3a6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/baseline-pr83-inline-comments.json",
+      "bytes": 10733,
+      "sha256": "471e250fdd41d8238e534cae7522d8bf6cd06b23f7d5bccc95766e357bf09bc0"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/baseline-pr83.json",
+      "bytes": 4663,
+      "sha256": "9e07c0b90fe11e4eb1e30dd68735ab180147e057bc4824665d851a75a78e056c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/rs037/pr84/replay.py",
+      "bytes": 1326,
+      "sha256": "c320de724b7706be8d9fb42de9ff1b6262b77c9c3d99e65af5cb6fbaa316f4f5"
+    }
+  ],
+  "archive": {
+    "path": "tools/demo-video/output/proof/rs037/pr84-proof.tar.gz",
+    "bytes": 3715681,
+    "sha256": "ccb035380b90a5ceecfe29faee65f3ba9646d8c8d3c7e6777ed7e7a35a095471"
+  }
+}

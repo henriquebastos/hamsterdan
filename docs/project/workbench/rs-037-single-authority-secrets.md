@@ -25,7 +25,10 @@ The Navigator accepted the implementation plan on 2026-09-06: “We can make it
 work now. Let's close it.” Implementation and migration are authorized. History
 actions remain subject to the repository checkpoint. Both application
 Environments are populated and their scoped readers are created. Production
-cutover remains pending; current evidence is recorded below.
+cutover and the full PR84 comparison with PR83 passed. Remote Amp migration
+remains outstanding. The Navigator accepted the production result and authorized
+the evidence commit and push. Section 1j owns the current state;
+earlier implementation checkpoints retain the evidence available at that time.
 
 Success means editing one authoritative entry and restarting or rerunning its
 consumer applies the new value. Each application instance reads exactly its
@@ -520,6 +523,91 @@ supervised production cutover; verify restart
 freshness and failure behavior; retire remaining active legacy external sources.
 Remote Amp configuration remains unverified.
 No issuer-side rotation, identity revocation, or recovery deletion occurred.
+
+## 1j. Authorized production cutover and PR83 comparison
+
+The Navigator authorized production migration and a fresh complete hero PR,
+explicitly comparing its behavior with PR83. Use the verified `85c109e` image.
+Preserve runtime history and private recovery custody through the service stop.
+The current and preceding release images remain available; free space is checked
+before transfer because the existing candidate-retention debt applies.
+
+The comparison baseline is the linked CV19 PR83 proof and current GitHub PR83
+evidence. The same `hero-review` fixture must produce initial summary publication
+before ordinary Activities, three correctly anchored App findings, a distinct
+Cris changes-requested review, Henrique's explicit repair request, the App's
+three-expression repair, passing checks on both heads, clear rereview and automatic
+resolution of the three App threads before approval, then exactly one readiness
+advisory and an all-clear original summary. Compare semantic outcomes and durable
+operation history; model prose and timing may vary. Use a new PR and close it
+unmerged after evidence capture. PR83 remains untouched.
+
+The actual model executions, controlled fixture branch/PR writes, author repair
+comment and distinct-reviewer reviews are part of this authorized full journey.
+Keep all human credentials outside the application and agent workspace. Capture
+provider snapshots and durable evidence at each checkpoint, and report any
+deviation rather than compensating with a manual fixture repair or thread edit.
+
+The VM preflight found 1.7 GB free, healthy service state, zero scheduler errors,
+and all 626 inbox rows terminal. Removed only unused candidates `8ecc2a8`,
+`7e0abf6`, and `def7796`, after verifying no container referenced them; free space
+became 4.3 GB. The running `2f1b646` and preceding `14f41d8` images remain.
+The exact `85c109e` image passed VM qualification, then repeated with
+`changed=0, failed=0`. The service was stopped and private recovery archive
+`/root/hamsterdan-recovery/rs037-20260907T050744Z/before-cutover.tar.gz`
+was verified against all 222 original files. Runtime provisioning passed with
+`changed=8, failed=0`; repeating it produced `changed=0, failed=0`. Actual App
+validation passed through the production Environment on the VM.
+
+Production started on the qualified image and passed a supervised restart after
+the five obsolete active credential/template files were removed. Every removed
+file first matched its protected recovery hash. All 20 existing PR histories
+retain their original bytes. Of 213 original runtime files, 212 remain identical;
+the AI connection database changed during startup authority refresh and passes
+SQLite integrity validation. The service is active, with `NRestarts=0` and zero
+scheduler errors. Application values are absent from Docker metadata.
+
+Isolated hardened containers using the deployed image refused startup for a
+denied Environment, missing bootstrap, and missing required AI key. A separate
+authenticated OpenAI read passed and verified loader-token exclusion from the
+application child. No production Environment value was changed for these probes.
+
+[PR84](https://github.com/HBNetwork/demo-pr-readiness/pull/84) is the fresh hero
+comparison, opened from the exact same parent and source tree as PR83. Opening
+head `1fe175f695ed3ff17aeea3b3431b1600362ab7db` passed all six CI jobs. Initial
+summary publication, startup completion and first normal Activity appear at
+History sequences 318, 341 and 345, matching PR83. The complete
+[comparison proof](../roadmap/cv19-private-v0-1-production/proof/pr84.md) passed:
+three correctly anchored findings, identical App-authored repair patch and
+repaired source tree, six passing repaired-head jobs, clear rereview and three
+automatically resolved App threads before approval, one readiness advisory and
+the original summary all-clear. Strict opening and final inspectors passed all
+ten checks. PR84 was closed unmerged.
+
+The 2,390-record preclosure and 2,461-record post-closure histories replayed
+without provider effects. Both have no failed or pending Activities. Five review
+deferrals and one advisory deferral refer to pending webhook custody; their
+counts differ from PR83 without changing the result. Production remains healthy
+with all 681 inbox rows terminal, no runnable hints, zero scheduler error classes
+and `NRestarts=0`. All 20 pre-migration histories retain their original bytes.
+
+Remote Amp metadata still contains the old direct application/build values and
+lacks the new Environment/build readers. Those settings have not been changed
+or claimed migrated. The installed Amp CLI manages settings but offers no
+remote orb execution command; a real fresh-orb qualification remains outstanding.
+The 1Password web session expired before Amp-specific Environment readers could
+be created. A fresh sign-in was requested while the independent hero proof ran.
+Do not reuse the production reader or claim that Amp settings have migrated.
+
+Documentation coherence review replaced stale production, hosted-CI and direct
+Amp-secret instructions with the deployed contract and explicit remaining work.
+All 183 local links across the ten changed Markdown files resolve, and
+`git diff --check` passes. The 82-file comparison archive was checked against
+every manifest hash. This turn changed documentation and operational state;
+it did not change application code or rerun the already qualified full suite.
+The Navigator accepted the deployment/proof result and authorized committing
+and pushing this receipt on `main`. Remote Amp settings and fresh-orb
+qualification remain the unfinished migration work.
 
 Review: the prepared change removes cached runtime inputs and deployment secret
 copies. No new SDK, synchronization process or secret-storage service was added.

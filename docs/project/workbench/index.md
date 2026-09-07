@@ -52,7 +52,8 @@ existing Hamsterdan capability outside the delivery roadmap.
 - [RS-037: Give each credential one editing authority](rs-037-single-authority-secrets.md):
   accepted two application Environments with the same direct credential-input
   contract, separate build and operations vaults, and current AI authority after
-  crashes. Implementation and migration in progress.
+  crashes. Production cutover and PR84's full comparison with PR83 passed.
+  Production evidence accepted; remote Amp migration remains outstanding.
 
 ## Closed
 

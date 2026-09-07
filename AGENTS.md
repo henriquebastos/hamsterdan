@@ -88,8 +88,8 @@ project policy.
 ## Secrets
 
 RS-037 implements two application Environments with one shared startup contract.
-The migration is not deployed yet; consult the Workbench record before any
-production action.
+The migration is deployed on production at `85c109e`. The Workbench record owns
+the completed PR84 comparison with PR83 and remaining remote Amp migration.
 
 `hamsterdan-dev` and `hamsterdan-prod` Environments contain the GitHub App
 identity, private-key PEM, webhook secret, and AI API key using the same variable
