@@ -2085,6 +2085,20 @@ def registration_clients(repositories: tuple[tuple[int, str], ...] = ((31, "owne
     return Clients(registration=RegistrationInventory((InstallationInventory(44, 23, repositories),)))
 
 
+def test_validation_counts_remain_parseable_when_the_launcher_masks_app_identity(tmp_path: Path) -> None:
+    host = service(tmp_path, clients=registration_clients())
+    try:
+        output = json.dumps(host.reconcile_registration(), sort_keys=True)
+    finally:
+        host.close()
+    for identity in ("17", "hamsterdan-test"):
+        output = output.replace(identity, "<concealed by 1Password>")
+
+    evidence = json.loads(output)
+    assert evidence["reconciled_installations"] == 1
+    assert evidence["admitted_repositories"] == 2
+
+
 def test_restart_applies_one_complete_configuration_and_removes_former_selection(tmp_path: Path) -> None:
     composition, routes = agent_custody(tmp_path)
     first = HostService(
@@ -2109,7 +2123,7 @@ def test_restart_applies_one_complete_configuration_and_removes_former_selection
         application_factory=Application,
     )
     assert second.reconcile_registration() == {
-        "app_id": 17,
+        "app_id": "17",
         "app_slug": "hamsterdan-test",
         "reconciled_installations": 1,
         "admitted_repositories": 1,

@@ -335,7 +335,7 @@ unchanged for other projects. The project-specific Mac beta CLI is installed at
 
 | Verification | Result |
 | --- | --- |
-| `scripts/check full` | Latest run against the published Petrus pin: 1,278 routine Python tests in 83.18 seconds, 9 Bun relay tests, static/architecture/replacement checks, and distribution build passed. The GNU/Linux orb module is explicitly deselected on macOS. |
+| `scripts/check full` | Latest run including the validation-output fix: 1,279 routine Python tests in 98.05 seconds, 9 Bun relay tests, static/architecture/replacement checks, and distribution build passed. The GNU/Linux orb module is explicitly deselected on macOS. |
 | Direct GitHub/AI configuration and composition files | 137 tests passed. |
 | Shared launcher with fake provider and current/missing values | 9 tests passed, including all six required variables, exact multiline PEM, loader-token exclusion, retrieval refusal, and startup without a writable home. |
 | GNU/Linux orb setup in an isolated Linux amd64 container | 12 tests passed with no warnings after registering the platform marker in the standalone harness. Missing and contradictory USER values both resolve to effective process identity. |
@@ -473,7 +473,29 @@ its child verified loader and operations credentials were absent.
 Installed the CI reader as GitHub Actions secret
 `OP_SERVICE_ACCOUNT_TOKEN_BUILD`; metadata confirms update at
 `2026-09-07T03:59:46Z`. The old `PETRUS_GITHUB_TOKEN` secret remains until the new
-workflow route passes. No workflow was dispatched.
+workflow route passes. Publication and workflow evidence follow below.
+
+## 1i. Publication and deployment-output qualification
+
+The accepted implementation was committed and pushed as
+`bfd70e0a001acd62ff2b2625ff0a25831b8d16e9`. The
+[image workflow](https://github.com/henriquebastos/hamsterdan/actions/runs/34084283245)
+passed using the new build-vault reader. The
+[first CI run](https://github.com/henriquebastos/hamsterdan/actions/runs/34084266727)
+retrieved its build credential, installed the exact Petrus dependency, and removed
+temporary Git authentication, then failed one existing scripted-runtime deadline
+test: 1,271 tests passed and one failed. The scripted delay stops at the runtime
+deadline and can race timeout settlement; that implementation is unchanged from
+the prior Petrus pin. Eight subsequent focused local runs passed. This is not a
+passing CI result and remains a qualification concern until the final run.
+
+A real-launcher check found that concealing the numeric App ID replaces an
+unquoted JSON number with the CLI's masking text. The host command succeeds,
+but Ansible cannot parse its evidence. The validation report now renders the
+App ID as a string so masking preserves valid JSON. A regression test reproduced
+the parsing failure before the fix. Both actual application Environments now
+pass host validation and the deployment JSON parser, using isolated local state.
+Concealment stays enabled; no Environment value was changed.
 
 Remaining: verify Hamsterdan publication and the new CI path; build a clean image; perform
 supervised production cutover; verify restart

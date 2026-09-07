@@ -282,7 +282,7 @@ class HostService:
         count = self.registry.reconcile(inventory.installations)
         self.installation_ids = frozenset(item.installation_id for item in inventory.installations)
         return {
-            "app_id": self.config.app_id,
+            "app_id": str(self.config.app_id),
             "app_slug": self.config.app_slug,
             "reconciled_installations": len(inventory.installations),
             "admitted_repositories": count,
