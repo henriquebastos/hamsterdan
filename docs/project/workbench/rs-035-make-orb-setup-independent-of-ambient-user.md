@@ -1,5 +1,5 @@
 ---
-status: Candidate
+status: Active
 captured: 2026-08-27
 navigator: Henrique
 source: CV20 coherence verification
@@ -28,4 +28,9 @@ weakening the scrubbed-environment tests or broadening setup authority.
 
 ### CR-001 — Resolve the setup account from process-owned identity
 
-Status: Parked
+Status: Implemented within the accepted RS-037 work; acceptance/history pending.
+
+RS-037 replaced the ambient `$USER` argument with `id -un` while preparing the
+new build authentication path. Linux tests cover both an absent USER and a
+contradictory value and verify that the effective process identity reaches
+`usermod`. The Docker group and socket behavior is unchanged.

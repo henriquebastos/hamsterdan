@@ -30,4 +30,5 @@ settled direction by superseding its record explicitly rather than drifting.
 - [PR monitoring narrows to watched authors](records/2026-09-01T2057Z-pr-monitoring-narrows-to-watched-authors.md)
 - [Findings publish as per-finding inline suggestions](records/2026-09-02T0320Z-findings-publish-as-per-finding-inline-suggestions.md)
 - [Evidence captures are full-page and full-screen](records/2026-09-02T1940Z-evidence-captures-are-full-page-and-full-screen.md)
-- [Operator credentials live in a standing config store](records/2026-09-02T1941Z-operator-credentials-live-in-a-standing-config-store.md)
+- [Operator credentials live in a standing config store (superseded; production migration pending)](records/2026-09-02T1941Z-operator-credentials-live-in-a-standing-config-store.md)
+- [Application Environments and separate tool vaults](records/2026-09-07T0220Z-environments-own-application-credentials.md)

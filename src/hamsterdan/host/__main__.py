@@ -191,7 +191,7 @@ def inspect_instance(
 def parser() -> argparse.ArgumentParser:
     value = argparse.ArgumentParser(
         prog="python -m hamsterdan.host",
-        description="Run or validate the Hamsterdan GitHub App host. Credentials are read only from configured secret files.",
+        description="Run or validate the Hamsterdan GitHub App host. Credentials are supplied by the selected Environment.",
     )
     value.add_argument("command", choices=("serve", "validate", "inbox", "requeue", "inspect-instance"))
     value.add_argument("--delivery", help="canonical failed GitHub delivery UUID to requeue")
@@ -217,6 +217,8 @@ def main() -> int:
     pi_workspaces = None
     try:
         config = HostConfig.from_environment()
+        for name in ("HAMSTERDAN_GITHUB_PRIVATE_KEY", "HAMSTERDAN_GITHUB_WEBHOOK_SECRET"):
+            os.environ.pop(name, None)
         if args.command == "inspect-instance":
             print(
                 json.dumps(
@@ -228,6 +230,7 @@ def main() -> int:
             raise ValueError("HAMSTERDAN_READINESS_TOPOLOGY is retired; remove it to run the V5 topology")
         preflight_v5_state(config.state_path)
         installation = PiA2InstallationConfig.from_environment(os.environ, state_path=config.state_path)
+        os.environ.pop("HAMSTERDAN_PI_API_KEY", None)
         agent = compose_agent(os.environ, provider=installation.provider, model=installation.model)
         route_store = AgentRouteStore(config.state_path / "agent-routes.sqlite3")
         route_store.activate(agent, config.state_path / "applications")

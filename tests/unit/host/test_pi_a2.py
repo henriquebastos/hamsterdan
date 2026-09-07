@@ -94,97 +94,64 @@ def test_owned_composition_retains_a_finite_runtime_deadline(tmp_path: Path) -> 
         host.close()
 
 
-def test_direct_key_config_and_probe_validate_path_without_reading_authority(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    path = tmp_path / "authority"
-    path.write_text("x" * 32)
-    path.chmod(0o600)
-    runtime = tmp_path / "runtime"
-    runtime.mkdir()
-    cli, node = runtime / "cli.js", runtime / "node"
-    cli.touch()
-    node.touch()
+def test_direct_key_config_redacts_authority_and_supplies_it_once(tmp_path: Path) -> None:
     config = PiA2InstallationConfig.from_environment(
         {
             "HAMSTERDAN_PI_PROVIDER": "openai",
             "HAMSTERDAN_PI_MODEL": "gpt-5.6-sol",
-            "HAMSTERDAN_PI_API_KEY_FILE": str(path),
-            "HAMSTERDAN_PI_CLI_PATH": str(cli),
-            "HAMSTERDAN_PI_NODE_PATH": str(node),
-            "HAMSTERDAN_PI_PACKAGE_ROOT": str(runtime),
+            "HAMSTERDAN_PI_API_KEY": "synthetic-direct-key",
+            "HAMSTERDAN_PI_CLI_PATH": str(tmp_path / "cli"),
+            "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
+            "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),
         }
     )
-    calls = 0
-
-    def observe(selected: Path) -> bytearray:
-        nonlocal calls
-        calls += 1
-        return bytearray(b"synthetic-direct-key")
-
-    monkeypatch.setattr(pi_a2, "_load_direct_key", observe)
+    assert "synthetic-direct-key" not in repr(config)
     host = compose_owned_pi_a2(tmp_path / "state", config)
     try:
-        assert host.authority.connection.provider == "openai"
         host.probe()
-        assert calls == 0 and not host.authority_requested
+        assert not host.authority_requested
         supplied = host.authority.supply_api_key()
         assert supplied == bytearray(b"synthetic-direct-key")
-        assert calls == 1
+        supplied[:] = bytes(len(supplied))
         with pytest.raises(RuntimeError, match="already spent"):
             host.authority.supply_api_key()
     finally:
-        for index in range(len(supplied)):
-            supplied[index] = 0
         host.close()
 
 
-@pytest.mark.parametrize("failure", ["missing", "symlink", "permissions", "small", "large"])
-def test_direct_key_config_rejects_unsafe_files_without_reading_them(tmp_path: Path, failure: str) -> None:
-    path = tmp_path / "authority"
-    if failure != "missing":
-        path.write_bytes(b"x" * (513 if failure == "large" else 32))
-        path.chmod(0o600)
-    if failure == "symlink":
-        target = tmp_path / "target"
-        path.rename(target)
-        path.symlink_to(target)
-    elif failure == "permissions":
-        path.chmod(0o640)
-    elif failure == "small":
-        path.write_bytes(b"short")
-
-    with pytest.raises(ValueError) as caught:
+@pytest.mark.parametrize("value", ["", "short", "x" * 513, "x" * 16 + "\n", "x" * 16 + "\x00", "é" * 16])
+def test_direct_key_config_refuses_missing_or_malformed_authority(tmp_path: Path, value: str) -> None:
+    with pytest.raises(ValueError):
         PiA2InstallationConfig.from_environment(
             {
-                "HAMSTERDAN_PI_PROVIDER": "anthropic",
-                "HAMSTERDAN_PI_MODEL": "claude-sonnet-4-5",
-                "HAMSTERDAN_PI_API_KEY_FILE": str(path),
+                "HAMSTERDAN_PI_PROVIDER": "openai",
+                "HAMSTERDAN_PI_MODEL": "gpt-5.6-sol",
+                "HAMSTERDAN_PI_API_KEY": value,
                 "HAMSTERDAN_PI_CLI_PATH": str(tmp_path / "cli"),
                 "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
                 "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),
             }
         )
-    assert "x" * 16 not in str(caught.value)
+
+
+def test_direct_key_config_refuses_retired_file_inputs() -> None:
+    with pytest.raises(ValueError, match="retired Pi credential-file"):
+        PiA2InstallationConfig.from_environment({"HAMSTERDAN_PI_API_KEY_FILE": "/stale/key"})
 
 
 @pytest.mark.parametrize(
     "name",
     [
-        "HAMSTERDAN_PI_API_KEY_FILE",
         "HAMSTERDAN_PI_CLI_PATH",
         "HAMSTERDAN_PI_NODE_PATH",
         "HAMSTERDAN_PI_PACKAGE_ROOT",
     ],
 )
 def test_installation_config_rejects_relative_custody_paths(tmp_path: Path, name: str) -> None:
-    path = tmp_path / "authority"
-    path.write_bytes(b"synthetic-direct-authority")
-    path.chmod(0o600)
     environment = {
         "HAMSTERDAN_PI_PROVIDER": "anthropic",
         "HAMSTERDAN_PI_MODEL": "claude-sonnet-4-5",
-        "HAMSTERDAN_PI_API_KEY_FILE": str(path),
+        "HAMSTERDAN_PI_API_KEY": "synthetic-direct-authority",
         "HAMSTERDAN_PI_CLI_PATH": str(tmp_path / "cli"),
         "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
         "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),
@@ -206,13 +173,10 @@ def test_installation_config_rejects_relative_custody_paths(tmp_path: Path, name
 def test_installation_config_accepts_only_qualified_provider_model_pairs(
     tmp_path: Path, provider: str, model: str
 ) -> None:
-    key = tmp_path / "authority"
-    key.write_bytes(b"synthetic-direct-authority")
-    key.chmod(0o600)
     environment = {
         "HAMSTERDAN_PI_PROVIDER": provider,
         "HAMSTERDAN_PI_MODEL": model,
-        "HAMSTERDAN_PI_API_KEY_FILE": str(key),
+        "HAMSTERDAN_PI_API_KEY": "synthetic-direct-authority",
         "HAMSTERDAN_PI_CLI_PATH": str(tmp_path / "cli"),
         "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
         "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),
@@ -224,35 +188,20 @@ def test_installation_config_accepts_only_qualified_provider_model_pairs(
         PiA2InstallationConfig.from_environment(environment)
 
 
-def test_existing_state_refuses_provider_change_before_authority_read_or_runtime_construction(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_existing_state_refuses_provider_change_before_runtime_construction(tmp_path: Path) -> None:
     state = tmp_path / "state"
     original = compose_owned_pi_a2(state)
     assert original.close()
-    key = tmp_path / "authority"
-    key.write_bytes(b"synthetic-direct-authority")
-    key.chmod(0o600)
     environment = {
         "HAMSTERDAN_PI_PROVIDER": "openai",
         "HAMSTERDAN_PI_MODEL": "gpt-5.6-sol",
-        "HAMSTERDAN_PI_API_KEY_FILE": str(key),
+        "HAMSTERDAN_PI_API_KEY": "synthetic-direct-authority",
         "HAMSTERDAN_PI_CLI_PATH": str(tmp_path / "cli"),
         "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
         "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),
     }
-    reads = 0
-
-    def read_authority(path: Path) -> bytearray:
-        nonlocal reads
-        reads += 1
-        return bytearray(b"must-not-be-read")
-
-    monkeypatch.setattr(pi_a2, "_load_direct_key", read_authority)
-
     with pytest.raises(ValueError, match="existing Pi A2 state"):
         PiA2InstallationConfig.from_environment(environment, state_path=state)
-    assert reads == 0
 
 
 def test_competing_provider_binding_winner_is_revalidated_before_runtime_construction(
@@ -312,20 +261,6 @@ def test_installation_binding_is_restartable_under_a_restrictive_umask(tmp_path:
 
     assert stat.S_IMODE((root / "installation").stat().st_mode) == 0o600
     pi_a2._bind_installation(root, "openai", "gpt-5.6-sol")
-
-
-def test_direct_key_loader_returns_erasable_exact_material_and_refuses_whitespace(tmp_path: Path) -> None:
-    path = tmp_path / "authority"
-    path.write_bytes(b"synthetic-direct-key-material")
-    path.chmod(0o600)
-    value = pi_a2._load_direct_key(path)
-    assert value == bytearray(b"synthetic-direct-key-material")
-    for index in range(len(value)):
-        value[index] = 0
-
-    path.write_bytes(b"synthetic-direct-key-material\n")
-    with pytest.raises(ValueError, match="malformed"):
-        pi_a2._load_direct_key(path)
 
 
 def test_production_composition_does_not_inject_provider_or_client_factory() -> None:

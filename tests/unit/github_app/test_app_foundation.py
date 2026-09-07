@@ -30,12 +30,6 @@ from hamsterdan.github_app.webhooks import (
 )
 
 
-def secret(path: Path, value: bytes) -> Path:
-    path.write_bytes(value)
-    path.chmod(0o600)
-    return path
-
-
 def installation_config(path: Path, *, second_account: bool = False) -> Path:
     value = """
 [[accounts]]
@@ -71,8 +65,8 @@ def environment(tmp_path: Path) -> dict[str, str]:
         "HAMSTERDAN_GITHUB_CLIENT_ID": "Iv1.explicit",
         "HAMSTERDAN_GITHUB_INSTALLATIONS_FILE": str(installation_config(tmp_path / "installations.toml")),
         "HAMSTERDAN_STATE_PATH": str(tmp_path / "state.db"),
-        "HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE": str(secret(tmp_path / "key", key)),
-        "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE": str(secret(tmp_path / "hook", b"hook-secret")),
+        "HAMSTERDAN_GITHUB_PRIVATE_KEY": key.decode(),
+        "HAMSTERDAN_GITHUB_WEBHOOK_SECRET": "hook-secret",
     }
 
 
@@ -142,13 +136,14 @@ def test_conversation_admission_rejects_provider_policy_failures(changes: dict[s
     )
 
 
-def test_config_accepts_only_explicit_secure_secret_files_and_is_redacted(tmp_path: Path) -> None:
+def test_config_preserves_multiline_credentials_and_redacts_them(tmp_path: Path) -> None:
     env = environment(tmp_path)
     config = HostConfig.from_environment(env)
     assert config.app_id == 17 and config.bot_login == "hamsterdan-test[bot]"
     assert tuple((account.account_id, account.account_login) for account in config.accounts) == ((23, "Owner"),)
     assert config.accounts[0].repositories == ((31, "owner/one"), (32, "owner/two"))
     assert "hook-secret" not in repr(config) and "PRIVATE KEY" not in repr(config)
+    assert config._credentials() == (env["HAMSTERDAN_GITHUB_PRIVATE_KEY"], "hook-secret")
     with pytest.raises(AttributeError):
         config.app_id = 18
     env["GITHUB_APP_ID"] = "999"
@@ -208,28 +203,24 @@ def test_config_rejects_unsafe_installation_file_custody(tmp_path: Path, failure
         HostConfig.from_environment(env)
 
 
-@pytest.mark.parametrize("failure", ["symlink", "directory", "permissions", "empty", "oversized", "invalid"])
-def test_config_rejects_unsafe_secret_files_without_disclosure(tmp_path: Path, failure: str) -> None:
+@pytest.mark.parametrize("value", [None, "", " \n", "x" * 65_537, "do-not-disclose\x00", "do-not-disclose\udcff"])
+def test_config_rejects_invalid_credentials_without_disclosure(tmp_path: Path, value: str | None) -> None:
     env = environment(tmp_path)
-    path = Path(env["HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE"])
-    if failure == "symlink":
-        target = secret(tmp_path / "target", b"do-not-disclose")
-        path.unlink()
-        path.symlink_to(target)
-    elif failure == "directory":
-        path.unlink()
-        path.mkdir()
-    elif failure == "permissions":
-        path.chmod(0o640)
-    elif failure == "empty":
-        path.write_bytes(b"")
-    elif failure == "oversized":
-        path.write_bytes(b"x" * 65_537)
+    if value is None:
+        del env["HAMSTERDAN_GITHUB_WEBHOOK_SECRET"]
     else:
-        path.write_bytes(b"\xff")
+        env["HAMSTERDAN_GITHUB_WEBHOOK_SECRET"] = value
     with pytest.raises(ConfigurationError) as caught:
         HostConfig.from_environment(env)
     assert "do-not-disclose" not in str(caught.value)
+
+
+@pytest.mark.parametrize("name", ["HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE", "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE"])
+def test_config_refuses_competing_credential_files(tmp_path: Path, name: str) -> None:
+    env = environment(tmp_path)
+    env[name] = "/stale/credential"
+    with pytest.raises(ConfigurationError, match="retired GitHub credential-file"):
+        HostConfig.from_environment(env)
 
 
 def test_config_watches_every_author_by_default_and_narrows_casefolded(tmp_path: Path) -> None:

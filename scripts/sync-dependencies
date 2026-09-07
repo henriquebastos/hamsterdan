@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set +x
+set -euo pipefail
+petrus_github_token="${PETRUS_GITHUB_TOKEN:-}"
+unset PETRUS_GITHUB_TOKEN
+sync_private_petrus_dependency() {
+    local auth_root token_file askpass_file config_file status
+    [[ -n "$petrus_github_token" ]] || {
+        echo "==> PETRUS_GITHUB_TOKEN is required to install the private Petrus dependency" >&2
+        return 1
+    }
+    (( ${#petrus_github_token} <= 65536 )) || return 1
+    auth_root="$(mktemp -d "${TMPDIR:-/tmp}/hamsterdan-petrus-auth.XXXXXX")"
+    chmod 0700 "$auth_root"
+    token_file="$auth_root/token"
+    askpass_file="$auth_root/askpass"
+    config_file="$auth_root/config"
+    cleanup_petrus_auth() {
+        rm -rf -- "$auth_root"
+    }
+    trap cleanup_petrus_auth EXIT
+    install -m 0600 /dev/null "$token_file"
+    printf '%s' "$petrus_github_token" > "$token_file"
+    unset petrus_github_token
+    cat > "$askpass_file" <<EOF
+#!/usr/bin/env bash
+case "\${1:-}" in
+    *Username*) printf '%s\\n' x-access-token ;;
+    *Password*) cat '$token_file'; printf '\\n' ;;
+    *) exit 1 ;;
+esac
+EOF
+    chmod 0700 "$askpass_file"
+    cat > "$config_file" <<EOF
+[core]
+    askPass = $askpass_file
+[credential "https://github.com/henriquebastos/petrus"]
+    username = x-access-token
+EOF
+    chmod 0600 "$config_file"
+    status=0
+    GIT_CONFIG_GLOBAL="$config_file" GIT_CONFIG_SYSTEM=/dev/null \
+        GIT_TERMINAL_PROMPT=0 uv sync --frozen || status=$?
+    cleanup_petrus_auth
+    trap - EXIT
+    return "$status"
+}
+
+sync_private_petrus_dependency

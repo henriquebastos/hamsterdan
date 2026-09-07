@@ -2,8 +2,12 @@
 
 This directory owns the deployment axis. It builds one `linux/amd64` OCI image,
 qualifies that exact image on the owned exe.dev VM, and provisions private
-runtime custody for no-launch App validation. No deployment command starts the
-Hamsterdan service.
+runtime custody for no-launch App validation. Initial provisioning leaves the
+service inactive. A configuration update restarts an already active service.
+
+RS-037 rollout is pending. The code below describes the prepared Environment
+contract; production still uses the prior vault/file contract until migration
+and the accepted image cutover are verified.
 
 ## Release contract
 
@@ -30,20 +34,20 @@ an image layer.
 ## Build locally or in a Docker-enabled Amp orb
 
 Prerequisites are Python 3.11 or newer, Docker with Buildx, and
-`PETRUS_GITHUB_TOKEN` in the environment. In an Amp orb, run Docker as a
+access to the `hamsterdan-build` vault through 1Password CLI. In an Amp orb, run Docker as a
 supervised orb service rather than a background shell process.
 
 A release candidate must come from a clean commit:
 
 ```shell
-python deployment/release.py build
+scripts/build-secrets python deployment/release.py build
 python deployment/release.py verify
 ```
 
 During development, an explicit local-only build may include uncommitted files:
 
 ```shell
-python deployment/release.py build --development
+scripts/build-secrets python deployment/release.py build --development
 python deployment/release.py verify
 ```
 
@@ -59,7 +63,8 @@ the current checkout.
 
 ## Qualify a candidate on exe.dev
 
-Install the locked development tools with `uv sync --frozen`. Every deployment
+Install the locked development tools with
+`scripts/build-secrets scripts/sync-dependencies`. Every deployment
 command runs through `scripts/ops`, which resolves the committed `env-ops.tpl`
 with `op run` for that one command and never writes a rendered file:
 
@@ -67,30 +72,23 @@ with `op run` for that one command and never writes a rendered file:
 scripts/ops uv run --frozen python deployment/exe_vm.py ...
 ```
 
-The template resolves only from the `hamsterdan-ops` vault, which holds the
-deployment authority the running service must never be able to read: the exe.dev
-API token, the exe.dev SSH key as one base64 line, the App identity, the agent
-key, the read-only Petrus source token, and the target's own service-account
-token. Neither `hamsterdan-dev` nor `hamsterdan-prod` carries any of it, so a
-stolen sandbox token cannot reach the production host and the production host
-cannot reprovision itself.
+The operations vault supplies the exe.dev API token and SSH key. Build
+credentials live in `hamsterdan-build`; application credentials live in the
+selected Environment. `scripts/ops --provision` additionally retrieves the
+production Environment-reader bootstrap from its operations recovery item.
+Ordinary deployment and observation commands never receive that bootstrap.
 
-Authority comes from one of two places. With `OP_SA_HAMSTERDAN_OPS` loaded,
-including through the workstation's project `.envrc`, `scripts/ops` uses the
-operations service account for that command. Without it, `op run` authenticates
-personally and may request Touch ID. The same deployment commands support both.
+A workstation can use personal desktop authentication. For unattended commands,
+set `HAMSTERDAN_OPS_TOKEN_FILE` to its protected operations-reader file, or supply
+`OP_SA_HAMSTERDAN_OPS`. The wrapper removes loader tokens before executing the
+command. `HAMSTERDAN_BUILD_TOKEN_FILE` or `OP_SA_HAMSTERDAN_BUILD` selects the
+independent build reader. These readers must belong to the machine running the
+command; copying a production reader onto a development sandbox is unnecessary.
 
 Register the exe.dev public key and scope it to the VM ownership tag:
 
 ```shell
 cat /path/to/key.pub | ssh exe.dev ssh-key add --tag=hamsterdan
-```
-
-To replace the stored key, encode it as one line before writing the item, and do
-not print or persist that output:
-
-```shell
-op read 'op://example-ops/example-ssh-key/credential' | base64 -d   # recover
 ```
 
 The owned VM contract is `hamsterdan-prod`, tag `hamsterdan`, two CPUs, 4 GiB
@@ -120,48 +118,42 @@ GitHub credential, and does not start the Hamsterdan host.
 
 ## Provision and validate an inactive runtime
 
-Runtime provisioning consumes the installation and repository inputs from
-`deployment/config/installations.toml` plus everything `env-ops.tpl` resolves,
-including `OP_SERVICE_ACCOUNT_TOKEN_VPS`: the target's own 1Password
-service-account token, persisted on the VM as owner-only
-`/etc/hamsterdan/op-token`.
+Runtime provisioning installs the selected Environment ID, its bootstrap,
+the checksum-pinned 1Password CLI, and the installation allowlist. It transfers
+no application credential. `deployment/config/runtime.env` supplies non-secret
+settings shared by development and production. The installed
+`/etc/hamsterdan/runtime.env` adds the selected Environment ID and container paths.
 
-The App private key, the webhook secret, and the runtime environment are no
-longer produced by the deploy. Provisioning installs a pinned, checksum-verified
-`op` CLI, the target token, and the committed `env-prod.tpl` at
-`/etc/hamsterdan/env-prod.tpl`. The systemd unit's `ExecStartPre` steps then run
-as root before every `docker run`: they read the token from its file, render
-`/etc/hamsterdan/hamsterdan.env` with `op inject`, fetch `github-app.pem`, and
-write the webhook secret, all from the `hamsterdan-prod` vault. That is the
-rotation contract — change the item in 1Password, run
-`systemctl restart hamsterdan`, and the new credentials are live. The token
-never appears in a command argument.
+Both validation and service startup mount the CLI and bootstrap into the image
+and run `/opt/hamsterdan/with-runtime-secrets`. This uses the official
+`op run --environment` command, clears inherited credential variables before
+retrieval, and removes the bootstrap from the application environment. Values
+never pass through Docker's environment-file parser or stored environment
+metadata. The host accepts multiline PEM, webhook-secret, and AI-key values
+directly; it removes those variables after parsing so agent children cannot
+inherit them.
 
-`GITHUB_APP_PRIVATE_KEY_PEM`, `GITHUB_APP_WEBHOOK_SECRET`,
-`GITHUB_APP_CLIENT_ID`, `READINESS_WORKFLOW_PATH`, and
-`READINESS_REMINDER_SECONDS` are therefore no longer read by this command; the
-last four are declared in `env-prod.tpl` instead.
+The image sets `OP_CONFIG_DIR=/tmp/hamsterdan-op` on the existing private tmpfs.
+The launcher passes this non-secret path as a CLI option, then removes the
+variable before starting the application. The CLI can initialize without a
+writable home directory or persistent configuration cache.
 
-The agent-provider key is deployment authority rather than runtime authority.
-`env-ops.tpl` resolves the production OpenAI key from `hamsterdan-ops`, and the
-controller carries it as a temporary private file into
-`/etc/hamsterdan/secrets/agent-api-key` under the existing
-no-implicit-replacement guard. Provisioning refuses to start
-when the selected provider key disagrees with the `HAMSTERDAN_PI_PROVIDER` and
-`HAMSTERDAN_PI_MODEL` pair `env-prod.tpl` declares. Values remain in temporary
-controller files and private VM files; secret values do not enter Ansible
-arguments.
+The bootstrap is stored at `/etc/hamsterdan/op-token`, mode 0400 and UID 10001,
+inside the root-only runtime directory. Its read-only container mount remains
+readable to that container UID. Removing the environment variable does not make
+the mounted file inaccessible to code with that UID. Agent file tools are
+restricted to their workspace and do not receive the mount or bootstrap as a
+capability.
 
-No-launch validation still needs App credentials, so the playbook resolves a
-throwaway copy of the environment, private key, and webhook secret into a
-private temporary directory, runs the one-shot validation container against it,
-and deletes it on both the success and failure paths. Nothing secret is
-published to `/etc/hamsterdan/` by the deploy.
+The pinned Environment CLI is `2.39.1-beta.01`. Its Linux amd64 archive SHA-256
+is `57a5d7637e1f508194b48732136de57e53efcc447877a5dbcaed7801abeb7f49`.
+The evaluated stable CLI does not support Environment retrieval.
 
 Select the exact previously qualified manifest:
 
 ```shell
-scripts/ops uv run --frozen python deployment/runtime.py \
+HAMSTERDAN_ENVIRONMENT_ID=EXAMPLE_PROD_ENVIRONMENT_ID \
+  scripts/ops --provision uv run --frozen python deployment/runtime.py \
   provision \
   --manifest dist/deployment/<revision>/release.json
 ```
@@ -185,12 +177,10 @@ scripts/ops uv run --frozen python deployment/runtime.py configure \
   --file deployment/config/installations.toml
 ```
 
-It requires a provisioned runtime but not a started one. Like provisioning, it
-resolves a throwaway environment, App private key, and webhook secret from
-`env-prod.tpl` and the installed target token, validates the proposed
-configuration against them, and deletes them on both the success and failure
-paths. Nothing it validates against depends on a previous service start, and the
-authoritative fetch remains the unit's `ExecStartPre`.
+It requires a provisioned runtime but not a started one. The validation
+container retrieves the selected Environment through the same launcher as the
+service, using isolated temporary state and the proposed installation file.
+It never reads previously generated application credentials.
 
 This command does not build, transfer, or replace an OCI image; change the
 systemd unit; rotate secrets; or alter VM infrastructure. It uses the exact
@@ -214,7 +204,7 @@ provider-invalid input cannot replace the working copy.
 
 ## 1. Inspect production without starting a host
 
-Load the project `.envrc` so `OP_SA_HAMSTERDAN_OPS` is available, then export
+Load the project `.envrc` so `HAMSTERDAN_OPS_TOKEN_FILE` selects the reader, then export
 one PR's runtime metadata:
 
 ```shell
@@ -243,14 +233,59 @@ changes. It requires the pinned LocalDispatch schema 3 and bounds History to
 claimant identities, and provider error prose. These metadata snapshots do not
 replace agent transcripts or a complete offline proof package.
 
-## CI and publication boundary
+## 2. Application credentials and recovery
 
-The **OCI image candidate** workflow is manual and runs the clean build and
-verification commands above. It deliberately has no package-write permission
-and does not publish an image.
+The two application Environments use the same schema:
 
-GHCR publication is deliberately absent from this slice. The later publication
-command must consume an already verified clean candidate without rebuilding,
-push it under an immutable revision identity, and record the registry-returned
-digest for deployment. Building must never push, and publishing must never
-rebuild.
+| Variable | Value |
+| --- | --- |
+| `HAMSTERDAN_GITHUB_APP_ID` | App numeric ID |
+| `HAMSTERDAN_GITHUB_APP_SLUG` | App slug |
+| `HAMSTERDAN_GITHUB_CLIENT_ID` | App client ID |
+| `HAMSTERDAN_GITHUB_PRIVATE_KEY` | Complete private-key PEM |
+| `HAMSTERDAN_GITHUB_WEBHOOK_SECRET` | Webhook signing secret |
+| `HAMSTERDAN_PI_API_KEY` | Selected provider's API key |
+
+Development selects `hamsterdan-dev`, ID `EXAMPLE_DEV_ENVIRONMENT_ID`.
+Production selects `hamsterdan-prod`, ID `EXAMPLE_PROD_ENVIRONMENT_ID`.
+Each has its own read-only service account. Creation, grants, expiry and recovery
+details are recorded in RS-037. Both Environments contain the six variables and
+have passed read-only provider validation. The development reader is installed
+locally; production reader installation and service cutover remain pending.
+
+For development, select the Environment and protected bootstrap path in the
+local ignored `.envrc`, then run `scripts/hamsterdan-host`. The local loader does
+not render or read a `.env`. Optional tool credentials use
+`scripts/dev-tools COMMAND` and `env-tools.tpl`; this retains their existing
+vault authority separately from the application's selected Environment.
+
+For an application credential change, edit its selected Environment and restart
+that application. In production use `systemctl restart hamsterdan`; in development
+stop and rerun `scripts/hamsterdan-host`. A failed retrieval or missing required
+value prevents startup. An already running process keeps its acquired values.
+A Docker restart must execute the configured loader again; never substitute
+stored environment values from an old container definition.
+
+Recovery restores a valid Environment-reader bootstrap from protected recovery
+custody, or restores the intended value in the selected Environment, then repeats
+the same startup. Backups are never automatic fallbacks. Keep operation and
+workflow state intact. The accompanying Petrus fix refreshes current AI authority
+before new work after a crash. The dependency is published and pinned at
+`9ad2f7a8daac7aee03ba9529f65e18894aa8f608`; production deployment remains pending.
+No issuer-side key rotation or identity revocation is part of this migration.
+
+## 3. CI and publication boundary
+
+Both workflows retrieve `PETRUS_GITHUB_TOKEN` from
+`hamsterdan-build/petrus-github-token/credential` with the official
+`1password/load-secrets-action@v4`. The only installed CI credential is
+`OP_SERVICE_ACCOUNT_TOKEN_BUILD`, a reader granted only the build vault.
+`export-env: false` limits delivery to the declared dependency/build step.
+The build vault and separate Mac/CI read-only readers are installed. The CI
+bootstrap was installed on 2026-09-07. The old independently edited GitHub
+`PETRUS_GITHUB_TOKEN` secret remains until the new workflow route passes;
+workflow publication and verification are pending. Reader grants, protected
+local paths and operations recovery item IDs are recorded in RS-037.
+
+The OCI image candidate workflow remains manual and has no package-write
+permission. GHCR publication remains outside this deployment interface.

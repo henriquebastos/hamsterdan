@@ -12,9 +12,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v3
+      - name: Load the build credential from 1Password
+        uses: 1password/load-secrets-action@v4
+        id: build-secrets
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN_BUILD }}
+          PETRUS_GITHUB_TOKEN: op://hamsterdan-build/petrus-github-token/credential
       - name: Build image candidate
         env:
-          PETRUS_GITHUB_TOKEN: ${{ secrets.PETRUS_GITHUB_TOKEN }}
+          PETRUS_GITHUB_TOKEN: ${{ steps.build-secrets.outputs.PETRUS_GITHUB_TOKEN }}
         run: python deployment/release.py build
       - name: Verify image candidate
         run: python deployment/release.py verify

@@ -20,6 +20,8 @@ def test_build_context_admits_only_declared_image_inputs() -> None:
         "!src/",
         "!src/**",
         "!uv.lock",
+        "!scripts/",
+        "!scripts/with-runtime-secrets",
     }
 
 

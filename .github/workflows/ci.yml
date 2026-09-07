@@ -16,9 +16,17 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: "3.14"
+      - name: Load the build credential from 1Password
+        uses: 1password/load-secrets-action@v4
+        id: build-secrets
+        with:
+          export-env: false
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN_BUILD }}
+          PETRUS_GITHUB_TOKEN: op://hamsterdan-build/petrus-github-token/credential
       - name: Configure Petrus dependency authentication
         env:
-          PETRUS_GITHUB_TOKEN: ${{ secrets.PETRUS_GITHUB_TOKEN }}
+          PETRUS_GITHUB_TOKEN: ${{ steps.build-secrets.outputs.PETRUS_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           auth_dir="$RUNNER_TEMP/petrus-git-auth"

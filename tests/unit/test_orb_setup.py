@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import pwd
 import shutil
 import stat
 import subprocess
@@ -50,7 +52,18 @@ def _sandbox(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         ROOT / "deployment" / "pi" / "package-lock.json", workspace / "deployment" / "pi" / "package-lock.json"
     )
     shutil.copy2(ROOT / "scripts" / "hamsterdan-host", workspace / "scripts" / "hamsterdan-host")
-    for name in ("bun", "bunx", "ffmpeg", "ffprobe", "montage"):
+    for script in ("build-secrets", "sync-dependencies"):
+        shutil.copy2(ROOT / "scripts" / script, workspace / "scripts" / script)
+    shutil.copy2(ROOT / "env-build.tpl", workspace / "env-build.tpl")
+    _executable(
+        binaries / "op",
+        "#!/bin/sh\nset -eu\n"
+        'test "${TEST_DENIED:-0}" = 0 || exit 23\n'
+        'while [ "$1" != -- ]; do shift; done; shift\n'
+        'export PETRUS_GITHUB_TOKEN="$TEST_BUILD_KEY_EXPECTED"\n'
+        'exec "$@"\n',
+    )
+    for name in ("bun", "bunx", "ffmpeg", "ffprobe", "montage", "sudo"):
         _executable(binaries / name)
     _executable(binaries / "docker")
     _executable(
@@ -64,7 +77,7 @@ grep -F 'henriquebastos/petrus' "$GIT_CONFIG_GLOBAL" >/dev/null
 askpass=$(sed -n 's/^    askPass = //p' "$GIT_CONFIG_GLOBAL")
 test -x "$askpass"
 test "$($askpass 'Username for https://github.com')" = x-access-token
-test "$($askpass 'Password for https://github.com')" = "$PETRUS_GITHUB_TOKEN_EXPECTED"
+test "$($askpass 'Password for https://github.com')" = "$TEST_BUILD_KEY_EXPECTED"
 printf used > "$UV_AUTH_BOUNDARY_MARKER"
 """,
     )
@@ -119,6 +132,7 @@ exit 91
 """,
     )
     environment = {
+        "TMPDIR": str(tmp_path),
         "HOME": str(home),
         "PATH": f"{binaries}:/usr/bin:/bin",
         "GITHUB_DEMO_AUTHOR_HOSTS": AUTHOR_SECRET,
@@ -137,7 +151,7 @@ exit 91
         "READINESS_WORKFLOW_PATH": ".github/workflows/ci.yml",
         "READINESS_REMINDER_SECONDS": "259200",
         "PETRUS_GITHUB_TOKEN": PETRUS_SECRET,
-        "PETRUS_GITHUB_TOKEN_EXPECTED": PETRUS_SECRET,
+        "TEST_BUILD_KEY_EXPECTED": PETRUS_SECRET,
         "UV_AUTH_BOUNDARY_MARKER": str(tmp_path / "uv-auth-boundary"),
     }
     return workspace, environment
@@ -160,7 +174,7 @@ def _private(path: Path) -> bool:
     return stat.S_ISREG(metadata.st_mode) and stat.S_IMODE(metadata.st_mode) == 0o600
 
 
-def test_setup_materializes_complete_role_based_runtime_without_disclosure(tmp_path: Path) -> None:
+def test_setup_installs_tools_and_demo_roles_without_persisting_application_credentials(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
 
     result = _run(workspace, environment)
@@ -168,7 +182,7 @@ def test_setup_materializes_complete_role_based_runtime_without_disclosure(tmp_p
     assert result.returncode == 0, result.stdout
     assert PETRUS_SECRET not in result.stdout
     assert Path(environment["UV_AUTH_BOUNDARY_MARKER"]).read_text() == "used"
-    assert not list((workspace / ".amp" / "runtime").glob(".petrus-git-auth.*"))
+    assert not list(tmp_path.glob("hamsterdan-petrus-auth.*"))
     assert not any(
         secret in result.stdout
         for secret in (AUTHOR_SECRET, REVIEWER_SECRET, APP_SECRET, WEBHOOK_SECRET, PROVIDER_SECRET, OPENAI_SECRET)
@@ -177,65 +191,19 @@ def test_setup_materializes_complete_role_based_runtime_without_disclosure(tmp_p
     expected = {
         "gh-demo-author/gh/hosts.yml": AUTHOR_SECRET,
         "gh-demo-reviewer/gh/hosts.yml": REVIEWER_SECRET,
-        "github-app.pem": APP_SECRET,
-        "webhook-secret": WEBHOOK_SECRET,
-        "agent-api-key": PROVIDER_SECRET,
     }
     for relative, secret in expected.items():
         path = runtime / relative
         assert _private(path)
         assert path.read_text() == secret
-    launch = runtime / "hamsterdan.env"
-    assert _private(launch)
-    configuration = launch.read_text()
-    assert "HAMSTERDAN_GITHUB_APP_ID=4452953" in configuration
-    assert "HAMSTERDAN_GITHUB_INSTALLATIONS_FILE=" in configuration
-    assert "HAMSTERDAN_PI_PROVIDER=anthropic" in configuration
-    assert "HAMSTERDAN_PI_MODEL=claude-sonnet-4-5" in configuration
-    assert "HAMSTERDAN_PI_API_KEY_FILE=" in configuration
-    assert "HAMSTERDAN_READINESS_TOPOLOGY" not in configuration
-    assert not any(secret in configuration for secret in expected.values())
-    assert str(workspace / "deployment/config/installations.toml") in configuration
+    assert not (runtime / "hamsterdan.env").exists()
+    assert not (runtime / "github-app.pem").exists()
+    assert not (runtime / "webhook-secret").exists()
+    assert not (runtime / "agent-api-key").exists()
+    assert (runtime / "state").is_dir()
     assert not (runtime / "installations.toml").exists()
     assert not (runtime / "gh-henriquebastos").exists()
     assert not (runtime / "gh-crisbastos").exists()
-
-
-def test_setup_selects_openai_when_anthropic_is_unavailable(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    for name in ("ANTHROPIC_AGENT_API_KEY", "ANTHROPIC_API_KEY"):
-        environment.pop(name)
-
-    result = _run(workspace, environment)
-
-    assert result.returncode == 0, result.stdout
-    runtime = workspace / ".amp" / "runtime"
-    assert (runtime / "agent-api-key").read_text() == OPENAI_SECRET
-    configuration = (runtime / "hamsterdan.env").read_text()
-    assert "HAMSTERDAN_PI_PROVIDER=openai" in configuration
-    assert "HAMSTERDAN_PI_MODEL=gpt-5.6-sol" in configuration
-    assert "anthropic" not in configuration
-
-
-def test_setup_selects_openrouter_only_after_higher_priority_providers(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    for name in (
-        "ANTHROPIC_AGENT_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "OPENAI_AGENT_API_KEY",
-        "OPENAI_API_KEY",
-    ):
-        environment.pop(name)
-    environment["OPENROUTER_AGENT_API_KEY"] = "openrouter-provider-canary"
-
-    result = _run(workspace, environment)
-
-    assert result.returncode == 0, result.stdout
-    runtime = workspace / ".amp" / "runtime"
-    assert (runtime / "agent-api-key").read_text() == "openrouter-provider-canary"
-    configuration = (runtime / "hamsterdan.env").read_text()
-    assert "HAMSTERDAN_PI_PROVIDER=openrouter" in configuration
-    assert "HAMSTERDAN_PI_MODEL=anthropic/claude-sonnet-4.5" in configuration
 
 
 def test_setup_role_verification_uses_orb_user_gh_without_accepting_a_path_wrapper(tmp_path: Path) -> None:
@@ -265,7 +233,7 @@ def test_setup_does_not_make_optional_demo_identities_a_production_prerequisite(
 
     assert result.returncode == 0, result.stdout
     runtime = workspace / ".amp" / "runtime"
-    assert (runtime / "hamsterdan.env").is_file()
+    assert (runtime / "state").is_dir()
     assert not (runtime / "gh-demo-author").exists()
     assert not (runtime / "gh-demo-reviewer").exists()
 
@@ -279,40 +247,12 @@ def test_setup_retires_mismatched_demo_identity_without_blocking_production(tmp_
     assert result.returncode == 0, result.stdout
     assert "Optional demo identities are not valid and were not retained" in result.stdout
     runtime = workspace / ".amp" / "runtime"
-    assert (runtime / "hamsterdan.env").is_file()
+    assert (runtime / "state").is_dir()
     assert not (runtime / "gh-demo-author").exists()
     assert not (runtime / "gh-demo-reviewer").exists()
 
 
-def test_setup_removes_stale_launch_and_managed_authority_when_inputs_disappear(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    assert _run(workspace, environment).returncode == 0
-    for name in (
-        "GITHUB_DEMO_AUTHOR_HOSTS",
-        "GITHUB_DEMO_REVIEWER_HOSTS",
-        "GITHUB_APP_PRIVATE_KEY_PEM",
-        "GITHUB_APP_WEBHOOK_SECRET",
-        "ANTHROPIC_AGENT_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "OPENAI_AGENT_API_KEY",
-        "OPENAI_API_KEY",
-    ):
-        environment.pop(name)
-
-    result = _run(workspace, environment)
-
-    assert result.returncode == 0, result.stdout
-    runtime = workspace / ".amp" / "runtime"
-    assert not (runtime / "hamsterdan.env").exists()
-    assert not (runtime / "github-app.pem").exists()
-    assert not (runtime / "webhook-secret").exists()
-    assert not (runtime / "agent-api-key").exists()
-    assert not (runtime / "anthropic-api-key").exists()
-    assert not (runtime / "gh-demo-author").exists()
-    assert not (runtime / "gh-demo-reviewer").exists()
-
-
-def test_setup_invalidates_launch_before_external_installer_failure(tmp_path: Path) -> None:
+def test_dependency_installer_failure_removes_temporary_authentication(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
     assert _run(workspace, environment).returncode == 0
     _executable(Path(environment["PATH"].split(":", 1)[0]) / "uv", "#!/bin/sh\nexit 17\n")
@@ -321,21 +261,21 @@ def test_setup_invalidates_launch_before_external_installer_failure(tmp_path: Pa
 
     assert result.returncode == 17
     assert not (workspace / ".amp" / "runtime" / "hamsterdan.env").exists()
-    assert not list((workspace / ".amp" / "runtime").glob(".petrus-git-auth.*"))
+    assert not list(tmp_path.glob("hamsterdan-petrus-auth.*"))
 
 
-def test_setup_requires_dedicated_petrus_auth_before_dependency_or_runtime_success(tmp_path: Path) -> None:
+def test_setup_stops_when_build_credential_retrieval_fails(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
-    environment.pop("PETRUS_GITHUB_TOKEN")
+    environment["TEST_DENIED"] = "1"
 
     result = _run(workspace, environment)
 
     assert result.returncode != 0
-    assert "PETRUS_GITHUB_TOKEN is required" in result.stdout
+    assert result.returncode == 23
     assert not Path(environment["UV_AUTH_BOUNDARY_MARKER"]).exists()
     runtime = workspace / ".amp" / "runtime"
     assert not (runtime / "hamsterdan.env").exists()
-    assert not list(runtime.glob(".petrus-git-auth.*"))
+    assert not list(tmp_path.glob("hamsterdan-petrus-auth.*"))
 
 
 def test_setup_refuses_symlinked_role_root_without_touching_outside_file(tmp_path: Path) -> None:
@@ -354,11 +294,28 @@ def test_setup_refuses_symlinked_role_root_without_touching_outside_file(tmp_pat
     assert protected.read_text() == "unchanged"
 
 
-def test_service_requires_an_owned_private_regular_runtime_environment() -> None:
+def test_service_uses_the_runtime_launcher() -> None:
     service = (ROOT / ".amp" / "services.yaml").read_text()
 
     assert "scripts/hamsterdan-host" in service
     assert "hamsterdan.env" not in service
+
+
+@pytest.mark.parametrize("ambient_user", [None, "wrong-user"])
+def test_setup_resolves_the_docker_account_from_effective_identity(tmp_path: Path, ambient_user: str | None) -> None:
+    workspace, environment = _sandbox(tmp_path)
+    if ambient_user is not None:
+        environment["USER"] = ambient_user
+    marker = tmp_path / "usermod-call"
+    environment["TEST_USERMOD_CALL"] = str(marker)
+    binaries = Path(environment["PATH"].split(":", 1)[0])
+    _executable(
+        binaries / "sudo",
+        '#!/bin/sh\nif [ "$1" = usermod ]; then printf "%s\\n" "$*" > "$TEST_USERMOD_CALL"; fi\n',
+    )
+    result = _run(workspace, environment)
+    assert result.returncode == 0, result.stdout
+    assert marker.read_text() == f"usermod -aG docker {pwd.getpwuid(os.geteuid()).pw_name}\n"
 
 
 def test_setup_keeps_locked_media_checks_without_remotion_browser_download() -> None:
@@ -375,165 +332,3 @@ def test_setup_installs_pi_from_the_release_lockfile() -> None:
     assert "deployment/pi/package-lock.json" in setup
     assert 'npm ci --prefix "$PI_PREFIX"' in setup
     assert "npm install --prefix" not in setup
-
-
-def test_host_launcher_strips_setup_and_ambient_provider_authority(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    assert _run(workspace, environment).returncode == 0
-    capture = tmp_path / "environment-names"
-    binaries = Path(environment["PATH"].split(":", 1)[0])
-    _executable(binaries / "uv", '#!/bin/sh\nenv | cut -d= -f1 | sort > "$CAPTURE"\n')
-    environment.update(
-        {
-            "CAPTURE": str(capture),
-            "AMP_API_KEY": "amp-canary",
-            "GH_TOKEN": "gh-canary",
-            "OPENAI_API_KEY": "openai-canary",
-            "HAMSTERDAN_GITHUB_WORKFLOW_TOKEN": "workflow-canary",
-            "HAMSTERDAN_QUALIFICATION_FAULT": "fault-canary",
-        }
-    )
-
-    result = subprocess.run(
-        ("scripts/hamsterdan-host",),
-        cwd=workspace,
-        env=environment,
-        check=False,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
-
-    assert result.returncode == 0, result.stdout
-    names = set(capture.read_text().splitlines())
-    assert REQUIRED_LAUNCH_NAMES <= names
-    assert "HAMSTERDAN_READINESS_TOPOLOGY" not in names
-    assert "HAMSTERDAN_QUALIFICATION_FAULT" in names
-    assert (
-        not {
-            "AMP_API_KEY",
-            "ANTHROPIC_AGENT_API_KEY",
-            "ANTHROPIC_API_KEY",
-            "GH_TOKEN",
-            "GITHUB_APP_PRIVATE_KEY_PEM",
-            "GITHUB_APP_WEBHOOK_SECRET",
-            "GITHUB_DEMO_AUTHOR_HOSTS",
-            "GITHUB_DEMO_REVIEWER_HOSTS",
-            "HAMSTERDAN_GITHUB_WORKFLOW_TOKEN",
-            "OPENAI_API_KEY",
-            "OPENAI_AGENT_API_KEY",
-        }
-        & names
-    )
-
-
-def test_host_launcher_refuses_a_broad_or_symlinked_environment_file(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    assert _run(workspace, environment).returncode == 0
-    launch = workspace / ".amp" / "runtime" / "hamsterdan.env"
-    launch.chmod(0o644)
-
-    broad = subprocess.run(
-        ("scripts/hamsterdan-host",), cwd=workspace, env=environment, check=False, capture_output=True, text=True
-    )
-    launch.chmod(0o600)
-    target = tmp_path / "launch-target"
-    launch.rename(target)
-    launch.symlink_to(target)
-    symlinked = subprocess.run(
-        ("scripts/hamsterdan-host",), cwd=workspace, env=environment, check=False, capture_output=True, text=True
-    )
-
-    assert broad.returncode != 0
-    assert symlinked.returncode != 0
-
-
-def test_host_launcher_refuses_unqualified_or_redirected_pi_authority(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    assert _run(workspace, environment).returncode == 0
-    launch = workspace / ".amp" / "runtime" / "hamsterdan.env"
-    original = launch.read_text()
-    mutations = (
-        original.replace("HAMSTERDAN_PI_MODEL=claude-sonnet-4-5", "HAMSTERDAN_PI_MODEL=unqualified"),
-        original.replace("/agent-api-key", "/other-api-key"),
-    )
-
-    for mutation in mutations:
-        launch.write_text(mutation)
-        result = subprocess.run(
-            ("scripts/hamsterdan-host",),
-            cwd=workspace,
-            env=environment,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode != 0
-    launch.write_text(original)
-
-
-def test_host_launcher_refuses_a_symlinked_runtime_ancestor_with_stale_authority(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    assert _run(workspace, environment).returncode == 0
-    runtime = workspace / ".amp" / "runtime"
-    stale_runtime = tmp_path / "stale-runtime"
-    runtime.rename(stale_runtime)
-    runtime.symlink_to(stale_runtime, target_is_directory=True)
-
-    result = subprocess.run(
-        ("scripts/hamsterdan-host",),
-        cwd=workspace,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode != 0
-    assert (stale_runtime / "hamsterdan.env").read_text()
-
-
-def test_host_launcher_rejects_the_retired_parallel_topology_switch(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    assert _run(workspace, environment).returncode == 0
-    selector = workspace / ".amp" / "runtime" / "readiness-topology"
-
-    v5 = subprocess.run(
-        ("scripts/hamsterdan-host", "topology", "v5"),
-        cwd=workspace,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    production = subprocess.run(
-        ("scripts/hamsterdan-host", "topology", "production"),
-        cwd=workspace,
-        env=environment,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert v5.returncode != 0
-    assert production.returncode != 0
-    assert not selector.exists()
-
-
-REQUIRED_LAUNCH_NAMES = {
-    "HAMSTERDAN_GITHUB_APP_ID",
-    "HAMSTERDAN_GITHUB_APP_SLUG",
-    "HAMSTERDAN_GITHUB_CLIENT_ID",
-    "HAMSTERDAN_GITHUB_INSTALLATIONS_FILE",
-    "HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE",
-    "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE",
-    "HAMSTERDAN_PI_API_KEY_FILE",
-    "HAMSTERDAN_PI_CLI_PATH",
-    "HAMSTERDAN_PI_MODEL",
-    "HAMSTERDAN_PI_NODE_PATH",
-    "HAMSTERDAN_PI_PACKAGE_ROOT",
-    "HAMSTERDAN_PI_PROVIDER",
-    "HAMSTERDAN_REMINDER_SECONDS",
-    "HAMSTERDAN_STATE_PATH",
-    "HAMSTERDAN_WORKFLOW_PATH",
-}

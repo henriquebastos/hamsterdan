@@ -9,12 +9,6 @@
     ansible_python_interpreter: /usr/bin/python3
     runtime_state: /var/lib/hamsterdan
     runtime_unit: /etc/systemd/system/hamsterdan.service
-    managed_secret_files:
-      - name: agent-api-key
-        source: "{{ runtime_agent_key }}"
-        destination: "{{ runtime_secrets }}/agent-api-key"
-        owner: "10001"
-        group: "10001"
 
   tasks:
     - name: Validate target and runtime inputs
@@ -24,8 +18,7 @@
           - ansible_architecture == 'x86_64'
           - candidate_revision is match('^[0-9a-f]{40}$')
           - candidate_image_id is match('^sha256:[0-9a-f]{64}$')
-          - expected_app_id | int > 0
-          - expected_app_slug is match('^[a-z0-9]+(-[a-z0-9]+)*$')
+          - runtime_environment_id is match('^[a-z0-9]{26}$')
           - expected_installation_count | int > 0
           - expected_repository_count | int > 0
 
@@ -83,9 +76,6 @@
         - path: "{{ runtime_config }}"
           owner: root
           mode: "0755"
-        - path: "{{ runtime_secrets }}"
-          owner: "10001"
-          mode: "0700"
         - path: "{{ runtime_state }}"
           owner: "10001"
           mode: "0700"
@@ -113,9 +103,6 @@
         - path: "{{ runtime_config }}"
           owner: root
           mode: "0755"
-        - path: "{{ runtime_secrets }}"
-          owner: "10001"
-          mode: "0700"
         - path: "{{ runtime_state }}"
           owner: "10001"
           mode: "0700"
@@ -172,91 +159,28 @@
       ansible.builtin.copy:
         src: "{{ runtime_op_token }}"
         dest: "{{ runtime_op_token_file }}"
-        owner: root
-        group: root
-        mode: "0600"
+        owner: "10001"
+        group: "10001"
+        mode: "0400"
       no_log: true
 
-    - name: Read the target secret-provider authority
-      ansible.builtin.slurp:
-        src: "{{ runtime_op_token_file }}"
-      register: op_authority
-      no_log: true
-
-    - name: Inspect the runtime environment template path
-      ansible.builtin.stat:
-        path: "{{ runtime_environment_template }}"
-        follow: false
-      register: runtime_template_before
-
-    - name: Refuse an unsafe existing runtime environment template
-      ansible.builtin.assert:
-        that:
-          - not runtime_template_before.stat.exists or (runtime_template_before.stat.isreg and not runtime_template_before.stat.islnk)
-
-    - name: Install the boot-resolved runtime environment template
+    - name: Install non-secret runtime launch settings
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../../env-prod.tpl"
-        dest: "{{ runtime_environment_template }}"
+        content: |
+          {{ lookup('file', playbook_dir + '/../config/runtime.env') }}
+          HAMSTERDAN_ENVIRONMENT_ID={{ runtime_environment_id }}
+          HAMSTERDAN_OP_TOKEN_FILE=/run/secrets/op-token
+          HAMSTERDAN_GITHUB_INSTALLATIONS_FILE=/run/config/hamsterdan/installations.toml
+        dest: "{{ runtime_environment_file }}"
         owner: root
         group: root
         mode: "0644"
-
-    - name: Inspect existing managed secret files
-      ansible.builtin.stat:
-        path: "{{ item.destination }}"
-        follow: false
-      loop: "{{ managed_secret_files }}"
-      register: managed_secrets_before
-      no_log: true
-
-    - name: Refuse unsafe existing managed secret files
-      ansible.builtin.assert:
-        that:
-          - not item.stat.exists or (item.stat.isreg and not item.stat.islnk)
-      loop: "{{ managed_secrets_before.results }}"
-      no_log: true
-
-    - name: Probe whether existing secret custody matches the supplied authority
-      ansible.builtin.copy:
-        src: "{{ item.source }}"
-        dest: "{{ item.destination }}"
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "0600"
-        force: true
-      loop: "{{ managed_secret_files }}"
-      check_mode: true
-      register: managed_secrets_probe
-      no_log: true
-
-    - name: Refuse implicit secret authority replacement
-      ansible.builtin.assert:
-        that:
-          - not managed_secrets_before.results[item].stat.exists or not managed_secrets_probe.results[item].changed
-        fail_msg: Existing runtime authority differs; rotation requires a separate operation.
-      loop: "{{ range(0, managed_secret_files | length) | list }}"
-      no_log: true
-
-    - name: Install previously absent secret custody
-      ansible.builtin.copy:
-        src: "{{ item.source }}"
-        dest: "{{ item.destination }}"
-        owner: "{{ item.owner }}"
-        group: "{{ item.group }}"
-        mode: "0600"
-        force: false
-      loop: "{{ managed_secret_files }}"
-      no_log: true
 
     - name: Inspect replaceable runtime configuration paths
       ansible.builtin.stat:
         path: "{{ item }}"
         follow: false
       loop:
-        - "{{ runtime_root }}/hamsterdan.env"
-        - "{{ runtime_secrets }}/github-app.pem"
-        - "{{ runtime_secrets }}/webhook-secret"
         - "{{ runtime_config }}/installations.toml"
         - "{{ runtime_image_identity }}"
       register: runtime_configuration_before
@@ -284,99 +208,6 @@
             owner: root
             group: root
             mode: "0755"
-          changed_when: false
-
-        - name: Render the throwaway validation environment from the installed template
-          ansible.builtin.command:
-            argv:
-              - "{{ op_command }}"
-              - inject
-              - --in-file
-              - "{{ runtime_environment_template }}"
-              - --out-file
-              - "{{ staged_config.path }}/hamsterdan.env"
-              - --file-mode
-              - "0600"
-              - --force
-          environment:
-            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
-          changed_when: false
-          no_log: true
-
-        - name: Create throwaway validation secret custody
-          ansible.builtin.tempfile:
-            state: directory
-            path: "{{ runtime_root }}"
-            prefix: .candidate-secrets-
-          register: validation_secrets
-          changed_when: false
-
-        - name: Give the image user throwaway validation secret custody
-          ansible.builtin.file:
-            path: "{{ validation_secrets.path }}"
-            state: directory
-            owner: "10001"
-            group: "10001"
-            mode: "0700"
-          changed_when: false
-
-        - name: Resolve the App private key for validation only
-          ansible.builtin.command:
-            argv:
-              - "{{ op_command }}"
-              - document
-              - get
-              - github-app.pem
-              - --vault
-              - "{{ runtime_vault }}"
-              - --out-file
-              - "{{ validation_secrets.path }}/github-app.pem"
-              - --file-mode
-              - "0600"
-              - --force
-          environment:
-            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
-          changed_when: false
-          no_log: true
-
-        - name: Resolve the webhook secret for validation only
-          ansible.builtin.command:
-            argv:
-              - "{{ op_command }}"
-              - read
-              - "op://{{ runtime_vault }}/github-app/webhook_secret"
-              - --out-file
-              - "{{ validation_secrets.path }}/webhook-secret"
-              - --file-mode
-              - "0600"
-              - --no-newline
-              - --force
-          environment:
-            OP_SERVICE_ACCOUNT_TOKEN: "{{ op_authority.content | b64decode | trim }}"
-          changed_when: false
-          no_log: true
-
-        - name: Copy installed secret custody into the throwaway validation set
-          ansible.builtin.copy:
-            src: "{{ item.destination }}"
-            remote_src: true
-            dest: "{{ validation_secrets.path }}/{{ item.name }}"
-            owner: "10001"
-            group: "10001"
-            mode: "0600"
-          loop: "{{ managed_secret_files }}"
-          changed_when: false
-          no_log: true
-
-        - name: Give the image user readable throwaway validation secrets
-          ansible.builtin.file:
-            path: "{{ validation_secrets.path }}/{{ item }}"
-            owner: "10001"
-            group: "10001"
-            mode: "0600"
-          loop:
-            - github-app.pem
-            - webhook-secret
           changed_when: false
 
         - name: Stage the installation configuration
@@ -417,11 +248,16 @@
               - --security-opt=no-new-privileges
               - --tmpfs=/tmp:rw,noexec,nosuid,nodev,size=268435456,mode=0700,uid=10001,gid=10001
               - --env-file
-              - "{{ staged_config.path }}/hamsterdan.env"
+              - "{{ runtime_environment_file }}"
+              - --entrypoint=/opt/hamsterdan/with-runtime-secrets
               - --mount=type=bind,source={{ validation_state.path }},target=/var/lib/hamsterdan
-              - --mount=type=bind,source={{ validation_secrets.path }},target=/run/secrets/hamsterdan,readonly
+              - --mount=type=bind,source={{ runtime_op_token_file }},target=/run/secrets/op-token,readonly
+              - --mount=type=bind,source={{ op_command }},target=/usr/local/bin/op,readonly
               - --mount=type=bind,source={{ staged_config.path }},target=/run/config/hamsterdan,readonly
               - "{{ candidate_image_id }}"
+              - /opt/hamsterdan/.venv/bin/python
+              - -m
+              - hamsterdan.host
               - validate
           register: runtime_validation
           changed_when: false
@@ -429,30 +265,14 @@
         - name: Require exact App and repository validation evidence
           ansible.builtin.assert:
             that:
-              - (runtime_validation.stdout | from_json).app_id == expected_app_id | int
-              - (runtime_validation.stdout | from_json).app_slug == expected_app_slug
               - (runtime_validation.stdout | from_json).reconciled_installations == expected_installation_count | int
               - (runtime_validation.stdout | from_json).admitted_repositories == expected_repository_count | int
       rescue:
-        - name: Remove secrets first introduced by the failed validation
-          ansible.builtin.file:
-            path: "{{ managed_secret_files[item].destination }}"
-            state: absent
-          when: not managed_secrets_before.results[item].stat.exists
-          loop: "{{ range(0, managed_secret_files | length) | list }}"
-          no_log: true
-
         - name: Remove failed staged candidate configuration
           ansible.builtin.file:
             path: "{{ staged_config.path }}"
             state: absent
           when: staged_config is defined and staged_config.path is defined
-
-        - name: Remove failed throwaway validation secret custody
-          ansible.builtin.file:
-            path: "{{ validation_secrets.path }}"
-            state: absent
-          when: validation_secrets is defined and validation_secrets.path is defined
 
         - name: Remove failed isolated candidate validation state
           ansible.builtin.file:
@@ -484,12 +304,6 @@
     - name: Remove staged candidate configuration
       ansible.builtin.file:
         path: "{{ staged_config.path }}"
-        state: absent
-      changed_when: false
-
-    - name: Remove throwaway validation secret custody
-      ansible.builtin.file:
-        path: "{{ validation_secrets.path }}"
         state: absent
       changed_when: false
 

@@ -175,13 +175,10 @@ def test_not_ready_probe_fails_closed(disposition: ProbeDisposition) -> None:
 def test_production_runtime_constructs_workspace_before_owned_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    key = tmp_path / "authority"
-    key.write_bytes(b"synthetic-direct-authority")
-    key.chmod(0o600)
     environment = {
         "HAMSTERDAN_PI_PROVIDER": "anthropic",
         "HAMSTERDAN_PI_MODEL": "claude-sonnet-4-5",
-        "HAMSTERDAN_PI_API_KEY_FILE": str(key),
+        "HAMSTERDAN_PI_API_KEY": "synthetic-direct-authority",
         "HAMSTERDAN_PI_CLI_PATH": str(tmp_path / "cli"),
         "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
         "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),

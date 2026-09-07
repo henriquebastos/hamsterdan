@@ -24,24 +24,19 @@ from hamsterdan.github_app.config import ConfigurationError, installation_accoun
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INSTALLATIONS = ROOT / "deployment" / "config" / "installations.toml"
-RUNTIME_TEMPLATE = ROOT / "env-prod.tpl"
 MAX_SECRET_BYTES = 64 * 1024
-_SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+_ENVIRONMENT_ID = re.compile(r"[a-z0-9]{26}")
 _STRIPPED_ENVIRONMENT_PREFIXES = (
     "AMP_",
     "ANTHROPIC_",
     "EXE_DEV_",
+    "HAMSTERDAN_",
     "GH_",
     "GITHUB_",
     "OP_",
     "OPENAI_",
     "OPENROUTER_",
     "PETRUS_",
-)
-_PROVIDERS = (
-    ("anthropic", "claude-sonnet-4-5", ("ANTHROPIC_AGENT_API_KEY", "ANTHROPIC_API_KEY")),
-    ("openai", "gpt-5.6-sol", ("OPENAI_AGENT_API_KEY", "OPENAI_API_KEY")),
-    ("openrouter", "anthropic/claude-sonnet-4.5", ("OPENROUTER_AGENT_API_KEY", "OPENROUTER_API_KEY")),
 )
 
 
@@ -54,16 +49,6 @@ def _required(environment: Mapping[str, str], name: str, label: str) -> str:
     if value is None or not value:
         raise RuntimeDeploymentError(f"{label} is missing")
     return value
-
-
-def _positive_decimal(environment: Mapping[str, str], name: str, label: str) -> int:
-    value = environment.get(name)
-    if value is None or not value.isascii() or not value.isdecimal() or value.startswith("0"):
-        raise RuntimeDeploymentError(f"{label} is malformed")
-    result = int(value)
-    if result <= 0:
-        raise RuntimeDeploymentError(f"{label} is malformed")
-    return result
 
 
 def _matches(environment: Mapping[str, str], name: str, label: str, pattern: re.Pattern[str]) -> str:
@@ -84,20 +69,6 @@ def _secret(environment: Mapping[str, str], name: str, label: str) -> str:
     return value
 
 
-def _provider(environment: Mapping[str, str]) -> tuple[str, str, str]:
-    for provider, model, names in _PROVIDERS:
-        key = environment.get(names[0]) or environment.get(names[1])
-        if key:
-            try:
-                encoded = key.encode("ascii")
-            except UnicodeEncodeError:
-                raise RuntimeDeploymentError("agent provider authority is malformed") from None
-            if not 16 <= len(encoded) <= 512 or any(byte < 0x21 or byte > 0x7E for byte in encoded):
-                raise RuntimeDeploymentError("agent provider authority is malformed")
-            return provider, model, key
-    raise RuntimeDeploymentError("agent provider authority is missing")
-
-
 @dataclass(frozen=True)
 class InstallationConfiguration:
     account_count: int
@@ -114,29 +85,10 @@ class InstallationConfiguration:
         return cls(len(accounts), sum(len(account.repositories) for account in accounts), content)
 
 
-def _declared_agent_route(path: Path) -> tuple[str, str]:
-    declarations = {"HAMSTERDAN_PI_PROVIDER": "", "HAMSTERDAN_PI_MODEL": ""}
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError) as error:
-        raise RuntimeDeploymentError("runtime environment template is unavailable") from error
-    for line in lines:
-        name, _, value = line.partition("=")
-        if name in declarations:
-            declarations[name] = value
-    if not all(declarations.values()):
-        raise RuntimeDeploymentError("runtime environment template declares no agent route")
-    return declarations["HAMSTERDAN_PI_PROVIDER"], declarations["HAMSTERDAN_PI_MODEL"]
-
-
 @dataclass(frozen=True)
 class RuntimeConfig:
-    app_id: int
-    app_slug: str
+    environment_id: str
     installations: InstallationConfiguration
-    provider: str
-    model: str
-    agent_key: str = field(repr=False)
     op_token: str = field(repr=False)
 
     @classmethod
@@ -145,19 +97,11 @@ class RuntimeConfig:
         environment: Mapping[str, str] | None = None,
         *,
         installations_path: Path = DEFAULT_INSTALLATIONS,
-        template_path: Path = RUNTIME_TEMPLATE,
     ) -> RuntimeConfig:
         values = os.environ if environment is None else environment
-        provider, model, agent_key = _provider(values)
-        if (provider, model) != _declared_agent_route(template_path):
-            raise RuntimeDeploymentError("agent provider authority does not match the runtime environment template")
         return cls(
-            app_id=_positive_decimal(values, "GITHUB_APP_ID", "GitHub App id"),
-            app_slug=_matches(values, "GITHUB_APP_SLUG", "GitHub App slug", _SLUG),
+            environment_id=_matches(values, "HAMSTERDAN_ENVIRONMENT_ID", "application Environment id", _ENVIRONMENT_ID),
             installations=InstallationConfiguration.from_file(installations_path),
-            provider=provider,
-            model=model,
-            agent_key=agent_key,
             op_token=_secret(values, "OP_SERVICE_ACCOUNT_TOKEN_VPS", "target secret-provider authority"),
         )
 
@@ -165,7 +109,6 @@ class RuntimeConfig:
 @dataclass(frozen=True)
 class RuntimeFiles:
     installations: Path
-    agent_key: Path
     op_token: Path
 
 
@@ -186,12 +129,10 @@ def materialized_runtime(config: RuntimeConfig, *, parent: Path | None = None) -
     root.chmod(0o700)
     files = RuntimeFiles(
         installations=root / "installations.toml",
-        agent_key=root / "agent-api-key",
         op_token=root / "op-token",
     )
     try:
         _write_private(files.installations, config.installations.content)
-        _write_private(files.agent_key, config.agent_key)
         _write_private(files.op_token, config.op_token)
         yield files
     finally:
@@ -208,11 +149,9 @@ def ansible_invocation(
     variables: dict[str, object] = {
         "candidate_image_id": candidate.image_id,
         "candidate_revision": candidate.revision,
-        "runtime_agent_key": str(files.agent_key),
         "runtime_installations": str(files.installations),
         "runtime_op_token": str(files.op_token),
-        "expected_app_id": config.app_id,
-        "expected_app_slug": config.app_slug,
+        "runtime_environment_id": config.environment_id,
         "expected_installation_count": config.installations.account_count,
         "expected_repository_count": config.installations.repository_count,
     }

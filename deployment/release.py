@@ -27,6 +27,7 @@ PINNED_INPUTS = (
     Path("deployment/Containerfile"),
     Path("deployment/pi/package-lock.json"),
     Path("deployment/pi/package.json"),
+    Path("scripts/with-runtime-secrets"),
     Path("pyproject.toml"),
     Path("uv.lock"),
 )

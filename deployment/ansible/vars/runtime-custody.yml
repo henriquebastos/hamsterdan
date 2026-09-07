@@ -1,17 +1,15 @@
 ---
 # Installed runtime custody and secret-provider contract. Provisioning,
 # configuration, and the service unit resolve secrets through the same paths,
-# the same pinned `op` binary, and the same vault, so no operation can drift
+# the same pinned `op` binary, and the selected Environment, so no operation can drift
 # onto a version or location another one never installed.
 runtime_root: /etc/hamsterdan
 runtime_config: /etc/hamsterdan/config
-runtime_secrets: /etc/hamsterdan/secrets
 runtime_image_identity: /etc/hamsterdan/image-id
 runtime_op_token_file: /etc/hamsterdan/op-token
-runtime_environment_template: /etc/hamsterdan/env-prod.tpl
-runtime_vault: hamsterdan-prod
-op_version: 2.35.0
-op_archive_sha256: 4457ade59850b852c64c77164235b34dd0b984ef7826eb0ccd32f1fd78a2ceb7
+runtime_environment_file: /etc/hamsterdan/runtime.env
+op_version: 2.39.1-beta.01
+op_archive_sha256: 57a5d7637e1f508194b48732136de57e53efcc447877a5dbcaed7801abeb7f49
 op_archive_url: "https://cache.agilebits.com/dist/1P/op2/pkg/v{{ op_version }}/op_linux_amd64_v{{ op_version }}.zip"
 op_directory: "/opt/hamsterdan/op/{{ op_version }}"
 op_archive: "{{ op_directory }}/op_linux_amd64_v{{ op_version }}.zip"

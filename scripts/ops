@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
-# Run one deployment command under hamsterdan-ops authority.
-#
-# OP_SA_HAMSTERDAN_OPS, including when loaded by local direnv, selects the
-# service account. Without it, op authenticates personally.
+set +x
 set -euo pipefail
-
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
-
-if [[ $# -eq 0 ]]; then
-    echo "usage: scripts/ops COMMAND [ARG ...]" >&2
-    exit 2
+cd "$(dirname "$0")/.."
+bootstrap="${OP_SA_HAMSTERDAN_OPS:-}"
+if [[ -n "${HAMSTERDAN_OPS_TOKEN_FILE:-}" ]]; then
+    bootstrap="$(< "$HAMSTERDAN_OPS_TOKEN_FILE")"
+    [[ -n "$bootstrap" ]] || exit 2
 fi
-
-if [[ -n "${OP_SA_HAMSTERDAN_OPS:-}" ]]; then
-    export OP_SERVICE_ACCOUNT_TOKEN="$OP_SA_HAMSTERDAN_OPS"
-else
-    unset OP_SERVICE_ACCOUNT_TOKEN
+for name in "${!OP_@}" "${!PETRUS_@}" "${!EXE_DEV_@}" "${!OPENAI_@}" "${!OPENROUTER_@}" "${!ANTHROPIC_@}"; do
+    [[ -z "$name" ]] || unset "$name"
+done
+if [[ -n "$bootstrap" ]]; then
+    export OP_SERVICE_ACCOUNT_TOKEN="$bootstrap"
 fi
-
-exec op run --env-file=env-ops.tpl -- "$@"
+unset bootstrap
+files=(--env-file=env-ops.tpl)
+if [[ "${1:-}" == --provision ]]; then
+    files+=(--env-file=env-provision.tpl)
+    shift
+fi
+(( $# > 0 )) || exit 2
+exec op run "${files[@]}" -- env -u OP_SERVICE_ACCOUNT_TOKEN "$@"

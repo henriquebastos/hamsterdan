@@ -90,15 +90,16 @@ def _bounded_file(value: str | None, label: str, *, forbidden_mode: int) -> byte
     return raw
 
 
-def _secret_file(value: str | None, label: str) -> str:
-    raw = _bounded_file(value, label, forbidden_mode=0o077)
+def _secret(value: str | None, label: str) -> str:
+    if not value or not value.strip() or "\x00" in value:
+        raise ConfigurationError(f"{label} is missing or malformed")
     try:
-        secret = raw.decode("utf-8").strip()
-    except UnicodeDecodeError:
-        raise ConfigurationError(f"{label} file is not valid text") from None
-    if not secret:
-        raise ConfigurationError(f"{label} file is empty")
-    return secret
+        size = len(value.encode("utf-8"))
+    except UnicodeEncodeError:
+        raise ConfigurationError(f"{label} is not valid text") from None
+    if size > MAX_SECRET_BYTES:
+        raise ConfigurationError(f"{label} size is not admitted")
+    return value
 
 
 @dataclass(frozen=True)
@@ -230,6 +231,8 @@ class HostConfig:
         env = os.environ if environment is None else environment
         if _RETIRED_INSTALLATION_ENVIRONMENT & env.keys():
             raise ConfigurationError("retired single-account configuration is present")
+        if {"HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE", "HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE"} & env.keys():
+            raise ConfigurationError("retired GitHub credential-file configuration is present")
         state_path = Path(env.get("HAMSTERDAN_STATE_PATH", ""))
         if not str(state_path) or state_path == Path("."):
             raise ConfigurationError("state path is missing")
@@ -239,8 +242,8 @@ class HostConfig:
             client_id=_identifier(env.get("HAMSTERDAN_GITHUB_CLIENT_ID"), "client id"),
             accounts=installation_accounts(env.get("HAMSTERDAN_GITHUB_INSTALLATIONS_FILE", "")),
             state_path=state_path,
-            private_key=_secret_file(env.get("HAMSTERDAN_GITHUB_PRIVATE_KEY_FILE"), "private key"),
-            webhook_secret=_secret_file(env.get("HAMSTERDAN_GITHUB_WEBHOOK_SECRET_FILE"), "webhook secret"),
+            private_key=_secret(env.get("HAMSTERDAN_GITHUB_PRIVATE_KEY"), "private key"),
+            webhook_secret=_secret(env.get("HAMSTERDAN_GITHUB_WEBHOOK_SECRET"), "webhook secret"),
             watched_authors=_watched_authors(env.get("HAMSTERDAN_WATCH_AUTHORS")),
         )
 

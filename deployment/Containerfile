@@ -59,7 +59,9 @@ RUN apt-get update \
 WORKDIR /opt/hamsterdan
 COPY --from=build --chown=hamsterdan:hamsterdan /opt/hamsterdan/.venv ./.venv
 COPY --from=pi --chown=hamsterdan:hamsterdan /opt/hamsterdan/pi ./pi
+COPY --chmod=0755 scripts/with-runtime-secrets /opt/hamsterdan/with-runtime-secrets
 ENV PATH="/opt/hamsterdan/.venv/bin:${PATH}" \
+    OP_CONFIG_DIR="/tmp/hamsterdan-op" \
     HAMSTERDAN_PI_CLI_PATH="/opt/hamsterdan/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" \
     HAMSTERDAN_PI_NODE_PATH="/opt/hamsterdan/pi/node_modules/node/bin/node" \
     HAMSTERDAN_PI_PACKAGE_ROOT="/opt/hamsterdan/pi/node_modules/@earendil-works/pi-coding-agent" \

@@ -87,24 +87,36 @@ project policy.
 
 ## Secrets
 
-1Password holds every credential, split by who reads it into three vaults, each
-with one committed template.
+RS-037 implements two application Environments with one shared startup contract.
+The migration is not deployed yet; consult the Workbench record before any
+production action.
 
-`hamsterdan-dev` is what a sandbox reads. direnv renders `env-dev.tpl` into the
-gitignored `.env` and loads it; regenerate with `rm .env && direnv reload`. The
-`.envrc` that does it is untracked, because how an individual loads a template
-is personal; `~/.config/op/envrc.reference` holds the recipe.
+`hamsterdan-dev` and `hamsterdan-prod` Environments contain the GitHub App
+identity, private-key PEM, webhook secret, and AI API key using the same variable
+names. `scripts/with-runtime-secrets` clears inherited credentials, invokes
+`op run --environment`, and removes the loader token from the application child.
+The host accepts values directly. A missing value or failed retrieval prevents
+startup. Never restore a credential-file fallback or delete runtime history to
+refresh credentials.
 
-`hamsterdan-prod` is what the running service reads. Provisioning installs
-`env-prod.tpl` and that box's own service-account token, and every service start
-renders `/etc/hamsterdan/hamsterdan.env` and fetches the App private key and
-webhook secret. Rotation is therefore: edit the item in 1Password, then
-`systemctl restart hamsterdan`. The deploy never carries or persists those
-values.
+Development runs `scripts/hamsterdan-host`. Production and isolated validation
+run the same loader inside the container. The pinned CLI and protected bootstrap
+are mounted read-only; application values stay out of Docker metadata. Edit the
+selected Environment and restart its application to refresh credentials.
 
-`hamsterdan-ops` is what a deployer reads, and neither of the other two can
-reach it. Run every deployment command through `scripts/ops`, which resolves
-`env-ops.tpl` with `op run` for that one command. The local ignored `.envrc`
-loads project service-account tokens using the reference recipe. The wrapper
-uses `OP_SA_HAMSTERDAN_OPS` when supplied, otherwise personal authentication.
-Only this machine's tokens belong locally.
+Builds read only `hamsterdan-build` through `scripts/build-secrets`. Dependency
+installation uses `scripts/build-secrets scripts/sync-dependencies`. GitHub Actions
+uses the official load-secrets action and a build-vault-only bootstrap.
+Deployment reads `hamsterdan-ops` through `scripts/ops`. Only
+`scripts/ops --provision` retrieves the target Environment-reader bootstrap.
+
+Optional developer tools keep their existing vault items under `hamsterdan-dev`
+and use `scripts/dev-tools`, with `env-tools.tpl`. This vault is separate from
+the application Environment of the same name. There is no shared AI, build, or
+operations Environment and no credential synchronization.
+
+The local ignored `.envrc` contains selectors and paths only; it never renders
+or loads `.env` or exports service-account values. Keep machine-specific reader
+files private. Preserve recovery outside active loading paths. The full schema,
+bootstrap locations, beta CLI version, and recovery workflow are in
+`deployment/README.md`.

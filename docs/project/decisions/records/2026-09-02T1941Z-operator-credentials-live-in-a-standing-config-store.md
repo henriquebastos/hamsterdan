@@ -1,5 +1,6 @@
 ---
-status: Decided
+status: Superseded
+superseded_by: 2026-09-07T0220Z-environments-own-application-credentials.md
 raised: 2026-09-01
 decided: 2026-09-01
 recorded: 2026-09-02T1941Z
@@ -13,6 +14,10 @@ related:
 # Operator credentials live in a standing config store
 
 ## Decision
+
+Superseded by the accepted RS-037 Environment contract. Existing files may be
+retained as private recovery, but must not be an active credential source. The
+RS-037 record distinguishes prepared code from pending production migration.
 
 The operator's Hamsterdan credentials live permanently in
 `~/.config/hamsterdan/` (directory mode 0700, files 0600), replacing the

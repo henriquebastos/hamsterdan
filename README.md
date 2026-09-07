@@ -83,7 +83,7 @@ Start with:
 Python 3.14, [uv](https://docs.astral.sh/uv/), and Bun 1.3.10 are required.
 
 ```sh
-uv sync --frozen
+scripts/build-secrets scripts/sync-dependencies
 scripts/check full
 ```
 
@@ -93,10 +93,15 @@ resume checks restart Docker when needed; no manual daemon setup is required.
 
 Petrus is pinned to an exact Git revision and is currently a private source
 dependency. Installation therefore requires a dedicated read-only
-`PETRUS_GITHUB_TOKEN`; it is build authority, not a host runtime credential.
+`PETRUS_GITHUB_TOKEN` retrieved from the separate `hamsterdan-build` vault.
 Orb setup presents it only through temporary Git askpass/config files and
 removes those files on every outcome. Canonical environments never float on
 Petrus `main`, assume package publication, or depend on a local checkout.
+
+Application starts retrieve either the development or production 1Password
+Environment through `scripts/hamsterdan-host` and the shared secret launcher.
+See [deployment and credential operations](deployment/README.md) for the schema,
+bootstrap paths, migration status, and restart/recovery workflow.
 
 ## Runtime ownership
 
