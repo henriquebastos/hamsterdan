@@ -54,6 +54,8 @@ existing Hamsterdan capability outside the delivery roadmap.
   contract, separate build and operations vaults, and current AI authority after
   crashes. Production cutover and PR84's full comparison with PR83 passed.
   Production evidence accepted; remote Amp migration remains outstanding.
+  Amp's accepted direction is one development Environment fetch for the whole
+  session. The live orb's environment-loading path still needs inspection.
 
 ## Closed
 

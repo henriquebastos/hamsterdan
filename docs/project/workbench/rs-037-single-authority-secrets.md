@@ -614,3 +614,36 @@ copies. No new SDK, synchronization process or secret-storage service was added.
 The beta CLI dependency and incomplete external migration remain explicit
 operational limitations. RS-037 stays Active until those operations and the
 Navigator's acceptance/history checkpoints are complete.
+
+## 1k. Amp session owns one development Environment fetch
+
+The Navigator clarified that the entire Amp session should fetch the development
+application Environment once. All session tools and the development host should
+use those acquired values. A new session or an explicit refresh obtains current
+values; restarting only Hamsterdan within that session reuses the session's
+values. This direction replaces the earlier per-command application retrieval
+proposal for Amp. Production retains its verified fetch-on-application-start
+contract. Separate build and operations vault authority remains unchanged.
+
+The implementation is not complete. `scripts/hamsterdan-host` currently always
+invokes the shared loader, which clears inherited application credentials and
+retrieves them again. Amp therefore needs an explicit session-owned input path;
+ordinary startup must not silently fall back to ambient or cached credentials.
+
+The Navigator reports that Amp maintains a `.env` under the orb user's home.
+Its exact path, format, ownership and reload behavior have not been inspected
+in a live orb. Official Amp documentation says the current thread environment
+is applied before `.agents/resume`, and that the hook may continue beyond the
+ten-second wait while the agent proceeds. An `export` inside that child script
+cannot alter the parent executor's environment. A hook name alone therefore
+does not establish session-wide delivery or failure-before-use behavior.
+
+Inspect an existing orb's actual environment-loading path before choosing how
+to supply the fetched values. An existing task URL was requested. Verify one
+fetch reaches a fresh tool process and a managed service, repeated commands
+reuse the values, explicit refresh replaces them, and retrieval failure cannot
+silently reuse a previous session's values. Preserve unrelated Amp-managed
+entries and avoid placing fetched credentials in reusable setup snapshots.
+
+References: [Amp lifecycle](https://ampcode.com/docs/orbs/customizing) and
+[Amp secret delivery and refresh](https://ampcode.com/docs/orbs/handling-secrets).
