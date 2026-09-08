@@ -7,9 +7,9 @@ and readiness advisories through one explicit Petri-net workflow.
 
 This is an early source publication under the [Apache License 2.0](LICENSE).
 Copyright 2026 Henrique Bastos. Third-party material retains its own notices.
-The pinned Petrus dependency is currently private, so a public clone alone
-cannot install or run Hamsterdan. Public CI is disabled pending a public
-dependency contract. See [contributing](CONTRIBUTING.md),
+The pinned Petrus source dependency is public. Public CI remains disabled;
+running Hamsterdan requires a configured GitHub App and runtime credentials.
+See [contributing](CONTRIBUTING.md),
 [security reports](SECURITY.md), and the [code of conduct](CODE_OF_CONDUCT.md).
 
 Historical tags and operational records describe private qualification;
@@ -24,13 +24,13 @@ without mutation.
 
 The V5 route has accepted deterministic evidence across eleven semantic
 journeys and real GitHub evidence for clean green, transient-CI recovery, and a
-complete three-actor repair. The current candidate passes the local full gate.
-GitHub-hosted CI and image qualification passed for release `85c109e` using the
-separate build-vault reader.
-The production host is active on exe.dev. PR83 passed the full review/repair/
-readiness journey with initial summary publication before other Activities;
-its capture package, stated media limits, and remaining
-repository-monitoring work live under
+complete three-actor repair. Production runs release `1eef74a` with Petrus
+`913acb0`, qualified through the local release gate and image verification.
+[PR85](docs/project/roadmap/cv19-private-v0-1-production/proof/pr85.md) completed
+review, App repair, clear rereview, human approval, and one readiness advisory.
+The exercise also found misleading approval wording in a status reply and an
+older Pi cleanup record that causes shutdown errors. Both findings remain open.
+Capture acceptance and broader repository monitoring remain under
 [CV19](docs/project/roadmap/cv19-private-v0-1-production/index.md).
 
 ## Architecture
@@ -97,9 +97,9 @@ Orb setup also installs and starts Docker and Graphviz so the adjacent Petrus
 checkout can run its PostgreSQL and graph-validation feedback locally. Orb
 resume checks restart Docker when needed; no manual daemon setup is required.
 
-Petrus is pinned to an exact Git revision and is currently a private source
-dependency. Installation therefore requires a dedicated read-only
-`PETRUS_GITHUB_TOKEN` retrieved from the separate `hamsterdan-build` vault.
+Petrus is a public source dependency pinned to exact revision `913acb0`.
+The existing build wrappers still retrieve a dedicated read-only
+`PETRUS_GITHUB_TOKEN` from the separate `hamsterdan-build` vault.
 Orb setup presents it only through temporary Git askpass/config files and
 removes those files on every outcome. Canonical environments never float on
 Petrus `main`, assume package publication, or depend on a local checkout.

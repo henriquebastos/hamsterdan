@@ -2,8 +2,8 @@
 code: CV19
 level: Value
 status: Active
-status_reason: PR83 passed the full hero journey with initial summary first; capture-package acceptance and broader repository monitoring remain
-updated: 2026-09-05
+status_reason: PR85 completed the core hero journey; status wording and shutdown cleanup findings, capture acceptance, and broader monitoring remain open
+updated: 2026-09-08
 related:
   - ../../decisions/records/2026-08-23T2152Z-v5-is-the-only-runtime-and-retired-topology-state-fails-closed.md
   - ../../decisions/records/2026-08-25T1042Z-operator-installation-portfolios-are-restart-applied-configuration.md
@@ -28,8 +28,23 @@ open-source release.
 
 ## Current state
 
-Production is active on revision `2f1b646906bcd8e3b13f6b969eed808f6d70e905`.
-[PR83 passed the full hero journey](proof/pr83.md) on this revision, including
+Production is active on revision `1eef74aee3d1361e26bac1b4c7a6419c22c987ae`
+with Petrus `913acb0a82928f34281d9ed15aaaf5c44de34617`.
+[PR85 completed the core hero journey](proof/pr85.md): initial summary first,
+three findings, App repair, six green jobs on both heads, automatic resolution
+after clear rereview, human approval, and one readiness advisory. It was closed
+unmerged. Its 2,688-record post-closure History replayed without effects; all
+21 earlier PR histories remain unchanged. Production is healthy with zero
+automatic restarts and no scheduler errors.
+
+Two findings remain open: a conversational status reply described an approval
+before one existed, and an older unverified Pi cleanup record causes shutdown
+errors even though the service returns healthy. Neither finding is fixed or
+accepted as deferred debt. Capture acceptance and broader monitoring also
+remain open; production admits one repository.
+
+[PR83 passed the full hero journey](proof/pr83.md) on the earlier revision
+`2f1b646906bcd8e3b13f6b969eed808f6d70e905`, including
 initial summary ordering, three findings in one review, App repair, six green
 jobs on both heads, clear rereview and automatic thread resolution before
 approval, and one final readiness advisory. Both strict inspectors passed all

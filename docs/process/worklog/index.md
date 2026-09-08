@@ -131,3 +131,4 @@ file per milestone. Record outcomes and verification, not every edit.
 - [2026-09-05 — PR83 proof demo rendered](entries/2026-09-05T0325Z-pr83-proof-demo-rendered.md)
 - [2026-09-05 — PR83 presentation made consistently dark](entries/2026-09-05T1005Z-pr83-dark-presentation.md)
 - [2026-09-07 — Secrets cutover and PR84 comparison passed](entries/2026-09-07T0524Z-secrets-cutover-and-pr84-comparison.md)
+- [2026-09-08 — Production deployed and PR85 exercised](entries/2026-09-08T1934Z-production-deployed-and-pr85-exercised.md)

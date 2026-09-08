@@ -5,9 +5,11 @@ qualifies that exact image on the owned exe.dev VM, and provisions private
 runtime custody for no-launch App validation. Initial provisioning leaves the
 service inactive. A configuration update restarts an already active service.
 
-RS-037 is deployed on production at `85c109e`. Provisioning, restart and isolated
-startup-failure checks passed through the Environment contract below. The
-Workbench record owns the fresh PR83 comparison and remaining remote Amp work.
+Production runs `1eef74a` with Petrus `913acb0`. The
+[PR85 proof](../docs/project/roadmap/cv19-private-v0-1-production/proof/pr85.md)
+records deployment, the fresh hero journey, and two open findings. RS-037 first
+deployed the Environment contract at `85c109e`; its Workbench record owns the
+earlier startup-failure checks, PR84 comparison, and remaining remote Amp work.
 
 ## Release contract
 
@@ -28,7 +30,8 @@ Workbench record owns the fresh PR83 comparison and remaining remote Amp work.
   CI does not contain a second build implementation.
 
 The build uses a BuildKit secret named `petrus_github_token` to install the
-private, commit-pinned Petrus dependency. The secret is not a build argument or
+public, commit-pinned Petrus dependency. The existing credential interface is
+retained. The secret is not a build argument or
 an image layer.
 
 ## Build locally or in a Docker-enabled Amp orb
@@ -272,10 +275,13 @@ custody, or restores the intended value in the selected Environment, then repeat
 the same startup. Backups are never automatic fallbacks. Keep operation and
 workflow state intact. The accompanying Petrus fix refreshes current AI authority
 before new work after a crash. The dependency is published and pinned at
-`9ad2f7a8daac7aee03ba9529f65e18894aa8f608` and deployed in production.
+`913acb0a82928f34281d9ed15aaaf5c44de34617` and deployed in production.
 No issuer-side key rotation or identity revocation is part of this migration.
 
 ## 3. CI and publication boundary
+
+Public Actions are currently disabled. The historical workflow results below
+do not qualify the current release through public CI.
 
 Both workflows retrieve `PETRUS_GITHUB_TOKEN` from
 `hamsterdan-build/petrus-github-token/credential` with the official

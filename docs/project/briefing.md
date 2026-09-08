@@ -67,10 +67,12 @@ after private production qualification.
 movement: the private `v0.1.0` launch of the current V5 runtime is the first
 production alpha. The supervised host is active on the owned `hamsterdan-prod`
 exe.dev VM, and Gate B and the `v0.1.0` tag are complete. CV19 remains active
-for capture-package acceptance and repository-monitoring scope. PR83 passed the
-full hero journey with initial summary first and was closed unmerged after
-capture. Its roadmap and linked
-worklog own current revisions, media limits, and discarded proof runs.
+for capture-package acceptance and repository-monitoring scope.
+[PR85](roadmap/cv19-private-v0-1-production/proof/pr85.md) completed the core hero
+journey on release `1eef74a` with Petrus `913acb0` and was closed unmerged. A
+status reply falsely described an approval, and an older Pi cleanup record
+causes shutdown errors. Both findings remain open. The roadmap and linked
+worklog own current revisions, evidence limits, and earlier proof runs.
 
 [CV21](roadmap/cv21-composable-outer-hamsterdan/index.md) continues as the
 quality track without gating that alpha. Its non-selectable outer-system
@@ -91,15 +93,15 @@ dropped before implementation and remains design history. Neither successor is
 a runtime choice; V5 remains the sole runtime until a separately approved CV22
 cutover.
 
-The pinned Petrus source dependency is currently private. Dependency installation
+The pinned Petrus source dependency is public. Existing dependency installation
 reads the token through the separate build vault, removes temporary Git authority
 on every outcome, and keeps that token out of host runtime state. Remote Amp
 settings still need migration; RS-037 owns that unfinished operation.
 Optional demo author/reviewer identities do not gate production setup.
 
-GitHub-hosted CI and image qualification passed for release `85c109e`, which is
-deployed on production through the new application Environment. RS-037 owns
-the cutover evidence and fresh comparison with PR83.
+Release `1eef74a` is deployed through the application Environment after local
+release-gate and image qualification. RS-037 owns the earlier cutover evidence
+and PR84 comparison with PR83; the PR85 proof owns current deployment evidence.
 
-The pinned Petrus dependency must become publicly accessible before anonymous
-installation and public CI can be qualified. Public Actions remain disabled.
+Anonymous access to the exact Petrus pin is verified. Public Actions remain
+disabled; the build wrappers still use the separate build-vault reader.

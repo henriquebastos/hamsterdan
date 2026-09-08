@@ -1,0 +1,180 @@
+{
+  "schema": 1,
+  "recorded_at": "2026-09-08T19:34:42.370445+00:00",
+  "pull_request": "https://github.com/HBNetwork/demo-pr-readiness/pull/85",
+  "release": "1eef74aee3d1361e26bac1b4c7a6419c22c987ae",
+  "petrus": "913acb0a82928f34281d9ed15aaaf5c44de34617",
+  "evidence_location": "ignored local files; artifacts are not included in Git",
+  "files": [
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/01-opening-github.json",
+      "bytes": 57887,
+      "sha256": "0d029a98a530529005de14479d47571861781faefbca3ae2e34c357ad86c342c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/02-opening-history.jsonl",
+      "bytes": 148342,
+      "sha256": "4fa5a749d1b378ed2747372fe446e230666efd4813e42c105a2dfa70c2b4f54c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/03-summary-github.json",
+      "bytes": 68163,
+      "sha256": "a91d0a76ea5d46b9d8ad0882630b1d6976d075d3177ed2d1f9ddec3da0e94831"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/04-initial-summary.png",
+      "bytes": 179505,
+      "sha256": "69f0398d545879eb48d40e62cef52f0378d5d1f95ccfbaf991981b16eb02a7c9"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/05-opening-runtime.jsonl",
+      "bytes": 164554,
+      "sha256": "4af22fe3d463f2f7ffa3e4ec4989997dfbd0d990fb560d92b998e9193277c7ed"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/06-review-progress-github.json",
+      "bytes": 68163,
+      "sha256": "a91d0a76ea5d46b9d8ad0882630b1d6976d075d3177ed2d1f9ddec3da0e94831"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/07-review-progress-github.json",
+      "bytes": 86020,
+      "sha256": "be863f2f7e0e46f348a5e230eae7123a2d453c78604d468a8ec0d3143e16392a"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/08-opening-inspector.json",
+      "bytes": 4217,
+      "sha256": "39d0f1217927935a51b96cb78bd6a162c38aab553b8be89aa909d63e60d338b2"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/09-findings.png",
+      "bytes": 394371,
+      "sha256": "62e47efdb4860bf2f79fa5439be13a3d2eb4e2a6c2bd1135240a34bec23c1b60"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/10-changes-requested-github.json",
+      "bytes": 88101,
+      "sha256": "7b346902522e5d14da94cfea343e8990a3b1b42f86f7ee50cdbf04af6ac7e9b4"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/11-repair-request-github.json",
+      "bytes": 89162,
+      "sha256": "5932410de25bb1c24564f14cb26800eef81db4b1ad8cab18cc576c57d8dae088"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/12-repair-request-history.jsonl",
+      "bytes": 484932,
+      "sha256": "ad7f29eb4c9d79c71d2eccf615b2f91673cd591e25f8d34cdd7a7b50dd5db439"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/13-repair-progress-github.json",
+      "bytes": 92818,
+      "sha256": "d61bde6b5b071d4d7d0d2bafc64bf13292f49af15cc7a287087a87df067fd438"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/14-app-repair.png",
+      "bytes": 458329,
+      "sha256": "4638307631311248b46ffd58bee8e409b096294ca448c5b853f834a90fb38008"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/15-repair-commit.json",
+      "bytes": 6021,
+      "sha256": "4c3e045b7af98fb9a52872b49b3b6516f52988b48114f59ca1e2a26c994bc385"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/16-rereview-progress-github.json",
+      "bytes": 98310,
+      "sha256": "fa5dbe532db617579e0d7ea54c34588866d344316e6390110372dfa491d1ea77"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/17-before-approval-github.json",
+      "bytes": 98383,
+      "sha256": "2ca5969081f2a03e424c06268a957380b80013db4e1a0d3004d09c338779d3ed"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/18-rereview-history.jsonl",
+      "bytes": 1163938,
+      "sha256": "0630cf7dd65d7d5fd1d37e8913d28653402e32941b7e06eccd37b2b90eaee1c3"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/18-rereview-replay.json",
+      "bytes": 68,
+      "sha256": "df2faf01d1c427bd238025dc042e2e4f751acf4a44b0314a1e8f0cbd18bac75b"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/19-clear-before-approval.png",
+      "bytes": 314174,
+      "sha256": "97eecc3232b461198890100871198a554adbdc00c1208a418b06f144d0ac1f32"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/20-status-progress-github.json",
+      "bytes": 105166,
+      "sha256": "7ddc5b05becd55f9d7bf0b8b4e59522ef81b88db1c4b51eb0f79ab988fe8a8e6"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/21-approved-github.json",
+      "bytes": 107180,
+      "sha256": "addb2cce36f57fd8c816e9e5f04744038e81b8e0a4746b01c6198d030e3aa376"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/22-final-inspector.json",
+      "bytes": 4738,
+      "sha256": "dba6619e77095ccfaf4675d455ef279547647ca82afe4ff5c64b5692d6887c25"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/23-all-clear-github.json",
+      "bytes": 111775,
+      "sha256": "6cd94aeae3a09961757460c2c210303107f73da3e226a422d97fd5e4d263cc66"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/24-all-clear.png",
+      "bytes": 383137,
+      "sha256": "544ea7e931cff086e336e3cbdd3e85502390df330285c0f40a85d848b7b6c671"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/25-preclosure-history.jsonl",
+      "bytes": 1367265,
+      "sha256": "d384070536e61f8cd65e2f8f0197d750c36eae0b24a74629c3439e769b464b1c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/25-preclosure-replay.json",
+      "bytes": 68,
+      "sha256": "a6e8f716271ec5079181ec20a9d4715e845c61fe97585a19174366c25b95337c"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/26-closed-github.json",
+      "bytes": 106551,
+      "sha256": "7c69532afe51bed670f2a209186e7b577d835b208b45f3c7d9542dcdae64afa1"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/27-closed-history.jsonl",
+      "bytes": 1390909,
+      "sha256": "7a159777629c7a5903f3dc1143977d8bb3397e91bb116a2604106407e9a13f75"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/27-closed-replay.json",
+      "bytes": 68,
+      "sha256": "7b714d39c4e4c097e13a8e0abc88b83808b7c1e45d77d30ff104861c90d9993f"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/28-closed-runtime.jsonl",
+      "bytes": 801871,
+      "sha256": "5b18c579c4d524b7b0f40468d384bb30c948a224ee01dff8687cc0cae7a083ec"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/29-closed.png",
+      "bytes": 392537,
+      "sha256": "b90ad9d32242fc4d061e913147e70fb18bb340f6e9fab0dd99d5f68689cc18ca"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/30-production-receipt.json",
+      "bytes": 1384,
+      "sha256": "6e25fa1bb64f8b9038307ed3f239a559440311387075557b0def3f9585dd5b91"
+    },
+    {
+      "path": "tools/demo-video/output/proof/cv19-pr85/reference-repair.json",
+      "bytes": 1150,
+      "sha256": "9259126ae558a5e57c837e8c99a2b784a2fd914105b9ed7af496888c8238db8a"
+    }
+  ]
+}
