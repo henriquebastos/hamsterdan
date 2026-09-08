@@ -7,7 +7,6 @@ The plain-language identity page is
 language is the [project glossary](glossary/index.md). This briefing predates
 both and still uses retired vocabulary.
 
-The source project lives in the private `henriquebastos/hamsterdan` repository.
 HBNetwork owns the first private GitHub App used for real-provider validation.
 An operator may run the code with one App registration, host deployment,
 secrets, and durable state. The accepted first-release direction admits a
@@ -102,8 +101,5 @@ GitHub-hosted CI and image qualification passed for release `85c109e`, which is
 deployed on production through the new application Environment. RS-037 owns
 the cutover evidence and fresh comparison with PR83.
 
-After CV19's production proof, a dedicated debt item owns the repository-wide
-open-source audit, community/security documents, dependency-publication
-contract, historical experiment disposition, and decision to retain or remove
-the secondary Remotion studio. No repository visibility or public publication
-change is authorized.
+The pinned Petrus dependency must become publicly accessible before anonymous
+installation and public CI can be qualified. Public Actions remain disabled.

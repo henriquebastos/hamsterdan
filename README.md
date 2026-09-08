@@ -5,9 +5,15 @@ Hamsterdan is a GitHub-native PR-readiness application powered by
 review, GitHub Actions observation, human decisions, guarded repository effects,
 and readiness advisories through one explicit Petri-net workflow.
 
-This repository remains private for the first production release. Source
-ownership, GitHub App registration, selected-repository installation, deployment
-state, and future open-source publication are separate boundaries.
+This is an early source publication under the [Apache License 2.0](LICENSE).
+Copyright 2026 Henrique Bastos. Third-party material retains its own notices.
+The pinned Petrus dependency is currently private, so a public clone alone
+cannot install or run Hamsterdan. Public CI is disabled pending a public
+dependency contract. See [contributing](CONTRIBUTING.md),
+[security reports](SECURITY.md), and the [code of conduct](CODE_OF_CONDUCT.md).
+
+Historical tags and operational records describe private qualification;
+they are not public release or compatibility promises.
 
 ## Status
 
