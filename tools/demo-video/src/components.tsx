@@ -1,5 +1,4 @@
 import React from "react";
-import {Img, staticFile} from "remotion";
 import {COLORS} from "./config";
 
 export type Actor = "henrique" | "cris" | "dan";
@@ -7,17 +6,17 @@ export type Actor = "henrique" | "cris" | "dan";
 export const ACTORS = {
   henrique: {
     name: "henriquebastos",
-    avatar: "avatars/henrique.png",
+    initials: "HB",
     color: COLORS.henrique,
   },
   cris: {
     name: "crisbastos",
-    avatar: "avatars/cris.png",
+    initials: "CB",
     color: COLORS.cris,
   },
   dan: {
     name: "hamster-dan",
-    avatar: "avatars/dan.png",
+    initials: "HD",
     color: COLORS.dan,
   },
 } as const;
@@ -146,17 +145,25 @@ export const ActorHeader: React.FC<{actor: Actor; action: string}> = ({actor, ac
   const value = ACTORS[actor];
   return (
     <div style={{display: "flex", alignItems: "center", gap: 12}}>
-      <Img
-        src={staticFile(value.avatar)}
+      <div
+        aria-label={value.name}
         style={{
           width: 44,
           height: 44,
           borderRadius: "50%",
-          objectFit: "cover",
+          display: "grid",
+          placeItems: "center",
+          flexShrink: 0,
+          fontSize: 14,
+          fontWeight: 700,
+          color: value.color,
+          background: COLORS.surface,
           border: `3px solid ${value.color}`,
           boxSizing: "border-box",
         }}
-      />
+      >
+        {value.initials}
+      </div>
       <div style={{lineHeight: 1.25}}>
         <div style={{fontSize: 16}}>
           <strong>{value.name}</strong> <span style={{color: COLORS.muted}}>{action}</span>

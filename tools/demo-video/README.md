@@ -14,7 +14,7 @@ the creative brief from conversation history. The second supplies provider-
 visible acceptance evidence; it is not a recreation and does not use Remotion.
 
 The rendered MP4 is a generated release asset. Source, scenario copy, timing
-rules, avatars, and render commands live here in Git.
+rules, and render commands live here in Git. Actor cards display initials.
 
 ## Capture real GitHub evidence
 
