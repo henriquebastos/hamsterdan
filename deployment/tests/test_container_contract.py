@@ -17,6 +17,7 @@ def test_build_context_admits_only_declared_image_inputs() -> None:
         "!deployment/pi/package.json",
         "!pyproject.toml",
         "!README.md",
+        "!LICENSE",
         "!src/",
         "!src/**",
         "!uv.lock",

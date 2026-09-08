@@ -5,6 +5,7 @@
 !deployment/pi/package.json
 !pyproject.toml
 !README.md
+!LICENSE
 !src/
 !src/**
 !uv.lock
