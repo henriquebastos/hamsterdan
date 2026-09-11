@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -26,18 +27,30 @@ def test_build_context_admits_only_declared_image_inputs() -> None:
     }
 
 
-def test_container_build_has_pinned_runtime_and_secret_mount() -> None:
+def test_container_build_has_pinned_runtime_without_build_credentials() -> None:
     containerfile = (ROOT / "deployment" / "Containerfile").read_text()
 
     assert containerfile.startswith("# syntax=docker/dockerfile:1.7@sha256:")
     assert containerfile.count("FROM ") >= 2
     assert all("@sha256:" in line for line in containerfile.splitlines() if line.startswith("FROM "))
-    assert "--mount=type=secret,id=petrus_github_token" in containerfile
+    assert "--mount=type=secret" not in containerfile
+    assert "PETRUS_GITHUB_TOKEN" not in containerfile
     assert "uv sync --frozen --no-dev" in containerfile
     assert "npm ci" in containerfile
     assert "ARG PETRUS_GITHUB_TOKEN" not in containerfile
     assert "USER hamsterdan" in containerfile
     assert 'ENTRYPOINT ["/opt/hamsterdan/.venv/bin/python", "-m", "hamsterdan.host"]' in containerfile
+
+
+def test_public_petrus_revision_is_exact_and_locked() -> None:
+    revision = "89baf78aa030b047f239435a1ad5f25cde67e4d8"
+    with (ROOT / "pyproject.toml").open("rb") as stream:
+        dependencies = tomllib.load(stream)["project"]["dependencies"]
+    petrus = next(dependency for dependency in dependencies if dependency.startswith("petrus @ "))
+    lock = (ROOT / "uv.lock").read_text()
+
+    assert petrus.endswith(f"@{revision}")
+    assert f"rev={revision}#{revision}" in lock
 
 
 def test_pi_runtime_is_locked_to_the_qualified_node_and_agent_versions() -> None:

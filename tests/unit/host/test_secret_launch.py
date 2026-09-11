@@ -23,6 +23,7 @@ PEM = "-----BEGIN PRIVATE KEY-----\nfixture-only\n-----END PRIVATE KEY-----\n"
 def launch(
     tmp_path: Path, *, missing: str | None = None, denied: bool = False, unusable_home: bool = False
 ) -> subprocess.CompletedProcess[str]:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     source = {
         "HAMSTERDAN_GITHUB_APP_ID": "17",
         "HAMSTERDAN_GITHUB_APP_SLUG": "hamsterdan-test",
@@ -45,6 +46,8 @@ def launch(
         "assert os.environ['OP_SERVICE_ACCOUNT_TOKEN'] == 'loader-only-canary'\n"
         "assert not any(name.startswith('OP_SA_') for name in os.environ)\n"
         "assert sys.argv[1:4] == ['run', '--environment', 'a' * 26]\n"
+        "counter = Path(os.environ['TEST_FETCH_COUNTER'])\n"
+        "counter.write_text(str(int(counter.read_text()) + 1) if counter.exists() else '1')\n"
         "config = Path(sys.argv[sys.argv.index('--config') + 1]) if '--config' in sys.argv else Path.home() / '.config/op'\n"
         "config.mkdir(parents=True, exist_ok=True)\n"
         "if os.environ.get('TEST_DENIED') == '1': sys.exit(23)\n"
@@ -59,7 +62,9 @@ def launch(
         "import os\n"
         "from hamsterdan.github_app.config import HostConfig\n"
         "from hamsterdan.host.pi_a2 import PiA2InstallationConfig\n"
-        "assert not any(name.startswith(('OP_', 'GH_', 'GITHUB_', 'OPENAI_')) for name in os.environ)\n"
+        "assert not any(name.startswith(('OP_', 'GH_', 'GITHUB_', 'AMP_', 'ANTHROPIC_', 'OPENAI_', 'OPENROUTER_', 'PETRUS_', 'EXE_DEV_')) for name in os.environ)\n"
+        "assert 'HAMSTERDAN_OP_TOKEN_FILE' not in os.environ\n"
+        "assert 'HAMSTERDAN_OP_COMMAND' not in os.environ\n"
         "config = HostConfig.from_environment()\n"
         f"assert config._credentials() == ({PEM!r}, 'current-webhook-secret')\n"
         "installation = PiA2InstallationConfig.from_environment(os.environ)\n"
@@ -73,8 +78,9 @@ def launch(
         "HAMSTERDAN_PI_API_KEY_FILE": "/stale/key",
         "HAMSTERDAN_ENVIRONMENT_ID": "a" * 26,
         "HAMSTERDAN_OP_COMMAND": str(fake_op),
-        "OP_SERVICE_ACCOUNT_TOKEN": "loader-only-canary",
+        "OP_SA_HAMSTERDAN_DEV": "loader-only-canary",
         "OP_SA_HAMSTERDAN_OPS": "must-not-inherit",
+        "OP_SERVICE_ACCOUNT_TOKEN": "unrelated-loader-must-not-win",
         "OPENAI_API_KEY": "must-not-inherit",
         "GH_TOKEN": "must-not-inherit",
         "HAMSTERDAN_GITHUB_INSTALLATIONS_FILE": str(installations),
@@ -85,6 +91,7 @@ def launch(
         "HAMSTERDAN_PI_NODE_PATH": str(tmp_path / "node"),
         "HAMSTERDAN_PI_PACKAGE_ROOT": str(tmp_path / "package"),
         "TEST_SOURCE": str(source_path),
+        "TEST_FETCH_COUNTER": str(tmp_path / "fetch-count"),
         "TEST_DENIED": "1" if denied else "0",
     }
     environment.pop("HAMSTERDAN_OP_TOKEN_FILE", None)
@@ -108,6 +115,14 @@ def test_launcher_refreshes_multiline_values_and_excludes_bootstrap_from_applica
     result = launch(tmp_path)
     assert result.returncode == 0, result.stderr
     assert result.stdout == "current credentials accepted\n"
+
+
+def test_each_application_start_fetches_current_environment(tmp_path: Path) -> None:
+    first = launch(tmp_path)
+    second = launch(tmp_path)
+
+    assert first.returncode == second.returncode == 0
+    assert (tmp_path / "fetch-count").read_text() == "2"
 
 
 def test_temporary_cli_configuration_allows_start_without_a_writable_home(tmp_path: Path) -> None:

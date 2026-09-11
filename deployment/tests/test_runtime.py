@@ -200,13 +200,10 @@ def test_validation_and_service_use_the_same_environment_loader() -> None:
     assert "op inject" not in unit and "hamsterdan.env" not in unit
 
 
-def test_tool_credentials_have_distinct_build_and_operations_authorities() -> None:
+def test_operations_credentials_remain_separate_from_application_authority() -> None:
     root = Path(__file__).parents[2]
-    build = (root / "env-build.tpl").read_text()
     operations = (root / "env-ops.tpl").read_text()
     provision = (root / "env-provision.tpl").read_text()
-    assert "PETRUS_GITHUB_TOKEN=op://hamsterdan-build/petrus-github-token/credential" in build
-    assert "example-ops" not in build
     assert "PETRUS_GITHUB_TOKEN" not in operations and "OPENAI" not in operations
     assert "OP_SERVICE_ACCOUNT_TOKEN_VPS" not in operations
     assert "OP_SERVICE_ACCOUNT_TOKEN_VPS=op://example-ops/" in provision

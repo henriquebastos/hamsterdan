@@ -6,7 +6,7 @@ This is Hamsterdan's project-specific Ariad operating contract.
 
 Python 3.14 is managed with uv.
 
-- Install: `scripts/build-secrets scripts/sync-dependencies`
+- Install: `uv sync --frozen`
 - Focused test: `uv run --frozen pytest -q PATH::NODE`
 - Static feedback: `scripts/check quick`
 - Path-scoped static feedback: `scripts/check quick PATH [PATH ...]`

@@ -93,10 +93,10 @@ dropped before implementation and remains design history. Neither successor is
 a runtime choice; V5 remains the sole runtime until a separately approved CV22
 cutover.
 
-The pinned Petrus source dependency is public. Existing dependency installation
-reads the token through the separate build vault, removes temporary Git authority
-on every outcome, and keeps that token out of host runtime state. Remote Amp
-settings still need migration; RS-037 owns that unfinished operation.
+The pinned Petrus source dependency is public. Dependency installation uses
+ordinary frozen uv synchronization without a GitHub or 1Password credential.
+Remote Amp application settings still need migration; RS-037 owns that unfinished
+operation.
 Optional demo author/reviewer identities do not gate production setup.
 
 Release `1eef74a` is deployed through the application Environment after local
@@ -104,4 +104,4 @@ release-gate and image qualification. RS-037 owns the earlier cutover evidence
 and PR84 comparison with PR83; the PR85 proof owns current deployment evidence.
 
 Anonymous access to the exact Petrus pin is verified. Public Actions remain
-disabled; the build wrappers still use the separate build-vault reader.
+disabled.

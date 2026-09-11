@@ -17,7 +17,7 @@ def source(*, dirty: bool = False) -> release.Source:
     )
 
 
-def test_build_command_is_shared_and_passes_only_the_petrus_secret_name(tmp_path: Path) -> None:
+def test_build_command_is_shared_and_requires_no_build_secret(tmp_path: Path) -> None:
     command = release.build_command(
         container=("docker",),
         image="hamsterdan:sha-aaaaaaaaaaaa",
@@ -27,7 +27,8 @@ def test_build_command_is_shared_and_passes_only_the_petrus_secret_name(tmp_path
 
     assert command[:4] == ("docker", "buildx", "build", "--load")
     assert ("--platform", "linux/amd64") == command[command.index("--platform") : command.index("--platform") + 2]
-    assert "id=petrus_github_token,env=PETRUS_GITHUB_TOKEN" in command
+    assert "--secret" not in command
+    assert not any("PETRUS_GITHUB_TOKEN" in argument for argument in command)
     assert f"SOURCE_REVISION={'a' * 40}" in command
     assert "SOURCE_VERSION=0.1.0" in command
     assert any(argument.startswith("SOURCE_CREATED=") and argument.endswith("Z") for argument in command)
@@ -36,14 +37,10 @@ def test_build_command_is_shared_and_passes_only_the_petrus_secret_name(tmp_path
     assert command[-3:] == ("--file", "deployment/Containerfile", ".")
 
 
-def test_orb_container_command_preserves_only_the_named_build_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_orb_container_command_uses_sudo_without_preserving_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(release.shutil, "which", lambda _: "/usr/bin/docker")
 
-    assert release.container_command({"AMP_ORB": "1", "PETRUS_GITHUB_TOKEN": "secret-canary"}) == (
-        "sudo",
-        "--preserve-env=PETRUS_GITHUB_TOKEN",
-        "docker",
-    )
+    assert release.container_command({"AMP_ORB": "1"}) == ("sudo", "docker")
 
 
 def test_dirty_source_requires_an_explicit_development_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,9 +7,14 @@ if [[ -n "${HAMSTERDAN_OPS_TOKEN_FILE:-}" ]]; then
     bootstrap="$(< "$HAMSTERDAN_OPS_TOKEN_FILE")"
     [[ -n "$bootstrap" ]] || exit 2
 fi
-for name in "${!OP_@}" "${!PETRUS_@}" "${!EXE_DEV_@}" "${!OPENAI_@}" "${!OPENROUTER_@}" "${!ANTHROPIC_@}"; do
+unset HAMSTERDAN_OPS_TOKEN_FILE
+for name in "${!OP_@}" "${!GH_@}" "${!GITHUB_@}" "${!AMP_@}" \
+    "${!ANTHROPIC_@}" "${!OPENAI_@}" "${!OPENROUTER_@}" "${!PETRUS_@}" "${!EXE_DEV_@}"; do
     [[ -z "$name" ]] || unset "$name"
 done
+unset HAMSTERDAN_GITHUB_APP_ID HAMSTERDAN_GITHUB_APP_SLUG HAMSTERDAN_GITHUB_CLIENT_ID
+unset HAMSTERDAN_GITHUB_WORKFLOW_TOKEN
+unset HAMSTERDAN_GITHUB_PRIVATE_KEY HAMSTERDAN_GITHUB_WEBHOOK_SECRET HAMSTERDAN_PI_API_KEY
 if [[ -n "$bootstrap" ]]; then
     export OP_SERVICE_ACCOUNT_TOKEN="$bootstrap"
 fi
@@ -20,4 +25,4 @@ if [[ "${1:-}" == --provision ]]; then
     shift
 fi
 (( $# > 0 )) || exit 2
-exec op run "${files[@]}" -- env -u OP_SERVICE_ACCOUNT_TOKEN "$@"
+exec op run "${files[@]}" -- env -u OP_SERVICE_ACCOUNT_TOKEN -u HAMSTERDAN_OPS_TOKEN_FILE "$@"

@@ -96,9 +96,12 @@ reader and the pinned beta CLI as described in
 owns App identity and AI credentials. Shared non-secret policy lives in
 `deployment/config/runtime.env`.
 
-Remote Amp settings still need migration to separate application and build
-readers. The old direct-secret project entries do not satisfy the current
-launcher. RS-037 owns that unfinished operation and fresh-orb qualification.
+Amp starts each credentialed process through Hamsterdan's matching loader. The
+managed host needs `HAMSTERDAN_ENVIRONMENT_ID` and the Environment-only reader
+secret `OP_SA_HAMSTERDAN_DEV`. Dependency setup needs
+no credential; controlled hero-journey identities use
+`OP_SA_HAMSTERDAN_DEMO`. RS-037 owns the remaining application settings
+migration and fresh-orb qualification.
 
 The optional qualification identities retain their project settings:
 
@@ -125,26 +128,26 @@ listed repository. The current private App is installable only on HBNetwork;
 changing its visibility or installing it on another account remains a separate
 operator-approved GitHub action.
 
-The pinned Petrus source repository is private. Install dependencies with
-`scripts/build-secrets scripts/sync-dependencies`. Its reader grants access only
-to `hamsterdan-build`, where the read-only GitHub token lives. Temporary build
-authority is removed after installation and kept out of the application child.
+Petrus is a public source dependency pinned to an exact revision. Install
+dependencies with `uv sync --frozen`; no GitHub or 1Password build credential is
+required.
 
-The two demo-human identities are optional and do not gate production setup.
-Only for the controlled three-actor fixture, set both login variables above and
-store their `gh` `hosts.yml` documents as `GITHUB_DEMO_AUTHOR_HOSTS` and
-`GITHUB_DEMO_REVIEWER_HOSTS`. Setup accepts the pair only when both exact,
-distinct logins validate; otherwise it retires both identity roots while still
-allowing a fully configured App/provider runtime. Role names are deliberate:
-changing the people later changes project settings, not source code.
+The two demo-human identities are optional and do not gate setup. Their `gh`
+`hosts.yml` documents remain separate items in the development vault.
+`scripts/demo-github author COMMAND` and
+`scripts/demo-github reviewer COMMAND` fetch only the selected document, verify
+its configured login, run the command with a private temporary `XDG_CONFIG_HOME`,
+and remove that directory when the command ends. Role names are deliberate:
+changing the people later changes the vault documents and non-secret login
+settings, not source code.
 
-On each new orb, `.agents/setup` installs dependencies through the build reader,
-verifies the optional demo identities through the trusted GitHub CLI, and
-installs the pinned Pi runtime. It does not generate application credential
-files or a runtime `.env`. `scripts/hamsterdan-host` retrieves current values
-from the selected Environment on each start. Missing access or required values
-prevent startup. Edit the Environment and restart the application to refresh
-credentials while preserving runtime history.
+On each new orb, `.agents/setup` installs public dependencies without credentials
+and installs the pinned Pi runtime. It removes legacy setup-owned demo identity
+roots and does not acquire demo or application credentials, generate application
+credential files, or render a runtime `.env`. `scripts/hamsterdan-host` retrieves
+current values from the selected Environment on each start. Missing access or
+required values prevent startup. Edit the Environment and restart the application
+to refresh credentials while preserving runtime history.
 
 GitHub assigned this registration the slug `hamster-dan`, so its bot login is
 `hamster-dan[bot]` and its exact public mention is `@hamster-dan`. Trusted PR
@@ -241,23 +244,17 @@ scripts/hamsterdan-demo inspect --pr <number>
 scripts/hamsterdan-demo inspect --pr <hero-number> --expect-hero-review --expect-readiness absent
 ```
 
-Qualification orbs receive the two human operator sessions from the role-based
-Amp project secrets when that optional pair is configured. `.agents/setup`
-writes them only to ignored, mode-`0700`
-identity roots under `.amp/runtime/`, with mode-`0600` files. Human commands
-must bypass Amp's injected `gh` wrapper and select one identity explicitly:
+Qualification orbs retrieve the selected human operator session from the
+development vault only when its command starts. Each document is mode `0600`
+under an invocation-owned mode-`0700` temporary configuration root. Select one
+identity explicitly:
 
 ```sh
-GH_BIN=/usr/bin/gh
-[[ -x "$GH_BIN" ]] || GH_BIN="$HOME/.local/bin/gh"
-
 # Author/operator
-/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" \
-  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-demo-author" "$GH_BIN" api user
+scripts/demo-github author gh api user
 
 # Distinct reviewer
-/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" \
-  XDG_CONFIG_HOME="$PWD/.amp/runtime/gh-demo-reviewer" "$GH_BIN" api user
+scripts/demo-github reviewer gh api user
 ```
 
 Never print, copy into source, or pass either session into the host or agent
@@ -265,8 +262,8 @@ checkout. `henriquebastos` owns fixture branches, PR lifecycle, and operator
 actions; `crisbastos` owns distinct-human reviews. GitHub renamed this same
 reviewer account from `hsbastos` after CV3 acceptance; historical evidence keeps
 the login observed at the time. The App remains the only product effect
-identity. Rotate the project secrets when either OAuth session is revoked or
-replaced.
+identity. Replace the corresponding vault document when either OAuth session is
+revoked or replaced.
 
 Creation branches from fresh `origin/main`, changes only paths admitted by the
 fixture's closed schema, validates them, and creates—but never merges—the PR.

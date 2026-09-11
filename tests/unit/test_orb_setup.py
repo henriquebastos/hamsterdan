@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import pwd
 import shutil
-import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -21,7 +20,6 @@ REVIEWER_SECRET = "reviewer-session-canary"
 APP_SECRET = "app-private-key-canary"
 OPENAI_SECRET = "openai-provider-canary"
 WEBHOOK_SECRET = "webhook-secret-canary"
-PETRUS_SECRET = "petrus-install-token-canary"
 PROVIDER_SECRET = "anthropic-provider-canary"
 
 
@@ -52,32 +50,18 @@ def _sandbox(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         ROOT / "deployment" / "pi" / "package-lock.json", workspace / "deployment" / "pi" / "package-lock.json"
     )
     shutil.copy2(ROOT / "scripts" / "hamsterdan-host", workspace / "scripts" / "hamsterdan-host")
-    for script in ("build-secrets", "sync-dependencies"):
-        shutil.copy2(ROOT / "scripts" / script, workspace / "scripts" / script)
-    shutil.copy2(ROOT / "env-build.tpl", workspace / "env-build.tpl")
-    _executable(
-        binaries / "op",
-        "#!/bin/sh\nset -eu\n"
-        'test "${TEST_DENIED:-0}" = 0 || exit 23\n'
-        'while [ "$1" != -- ]; do shift; done; shift\n'
-        'export PETRUS_GITHUB_TOKEN="$TEST_BUILD_KEY_EXPECTED"\n'
-        'exec "$@"\n',
-    )
-    for name in ("bun", "bunx", "ffmpeg", "ffprobe", "montage", "sudo"):
+    for name in ("bun", "bunx", "dot", "ffmpeg", "ffprobe", "montage", "sudo"):
         _executable(binaries / name)
     _executable(binaries / "docker")
     _executable(
         binaries / "uv",
         """#!/bin/sh
 set -eu
-test "${GIT_TERMINAL_PROMPT:-}" = 0
-test "${GIT_CONFIG_SYSTEM:-}" = /dev/null
-test -f "${GIT_CONFIG_GLOBAL:?}"
-grep -F 'henriquebastos/petrus' "$GIT_CONFIG_GLOBAL" >/dev/null
-askpass=$(sed -n 's/^    askPass = //p' "$GIT_CONFIG_GLOBAL")
-test -x "$askpass"
-test "$($askpass 'Username for https://github.com')" = x-access-token
-test "$($askpass 'Password for https://github.com')" = "$TEST_BUILD_KEY_EXPECTED"
+test "$#" = 2
+test "$1" = sync
+test "$2" = --frozen
+! env | grep '^OP_' >/dev/null
+! env | grep '^PETRUS_' >/dev/null
 printf used > "$UV_AUTH_BOUNDARY_MARKER"
 """,
     )
@@ -110,27 +94,6 @@ EOF
 chmod 755 "$prefix/node_modules/node/bin/node"
 """,
     )
-    user_gh = home / ".local" / "bin" / "gh"
-    user_gh.parent.mkdir(parents=True)
-    _executable(
-        user_gh,
-        """#!/bin/sh
-case "$XDG_CONFIG_HOME" in
-    */gh-demo-author) printf '%s\\n' author ;;
-    */gh-demo-reviewer) printf '%s\\n' reviewer ;;
-    *) exit 1 ;;
-esac
-""",
-    )
-    setup = workspace / ".agents" / "setup"
-    setup.write_text(setup.read_text().replace("SYSTEM_GH=/usr/bin/gh", f"SYSTEM_GH={tmp_path / 'missing-gh'}"))
-    _executable(
-        binaries / "gh",
-        f"""#!/bin/sh
-printf called > {binaries / "gh-wrapper-called"}
-exit 91
-""",
-    )
     environment = {
         "TMPDIR": str(tmp_path),
         "HOME": str(home),
@@ -150,8 +113,8 @@ exit 91
         "GITHUB_APP_CLIENT_ID": "Iv23liKF36r9YtMkGf0m",
         "READINESS_WORKFLOW_PATH": ".github/workflows/ci.yml",
         "READINESS_REMINDER_SECONDS": "259200",
-        "PETRUS_GITHUB_TOKEN": PETRUS_SECRET,
-        "TEST_BUILD_KEY_EXPECTED": PETRUS_SECRET,
+        "OP_SA_HAMSTERDAN_DEMO": "demo-reader-must-not-leak",
+        "OP_SA_HAMSTERDAN_OPS": "operations-reader-must-not-leak",
         "UV_AUTH_BOUNDARY_MARKER": str(tmp_path / "uv-auth-boundary"),
     }
     return workspace, environment
@@ -169,33 +132,20 @@ def _run(workspace: Path, environment: dict[str, str]) -> subprocess.CompletedPr
     )
 
 
-def _private(path: Path) -> bool:
-    metadata = path.lstat()
-    return stat.S_ISREG(metadata.st_mode) and stat.S_IMODE(metadata.st_mode) == 0o600
-
-
-def test_setup_installs_tools_and_demo_roles_without_persisting_application_credentials(tmp_path: Path) -> None:
+def test_setup_installs_dependencies_without_build_credentials(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
 
     result = _run(workspace, environment)
 
     assert result.returncode == 0, result.stdout
-    assert PETRUS_SECRET not in result.stdout
     assert Path(environment["UV_AUTH_BOUNDARY_MARKER"]).read_text() == "used"
-    assert not list(tmp_path.glob("hamsterdan-petrus-auth.*"))
     assert not any(
         secret in result.stdout
         for secret in (AUTHOR_SECRET, REVIEWER_SECRET, APP_SECRET, WEBHOOK_SECRET, PROVIDER_SECRET, OPENAI_SECRET)
     )
     runtime = workspace / ".amp" / "runtime"
-    expected = {
-        "gh-demo-author/gh/hosts.yml": AUTHOR_SECRET,
-        "gh-demo-reviewer/gh/hosts.yml": REVIEWER_SECRET,
-    }
-    for relative, secret in expected.items():
-        path = runtime / relative
-        assert _private(path)
-        assert path.read_text() == secret
+    assert not (runtime / "gh-demo-author").exists()
+    assert not (runtime / "gh-demo-reviewer").exists()
     assert not (runtime / "hamsterdan.env").exists()
     assert not (runtime / "github-app.pem").exists()
     assert not (runtime / "webhook-secret").exists()
@@ -204,19 +154,6 @@ def test_setup_installs_tools_and_demo_roles_without_persisting_application_cred
     assert not (runtime / "installations.toml").exists()
     assert not (runtime / "gh-henriquebastos").exists()
     assert not (runtime / "gh-crisbastos").exists()
-
-
-def test_setup_role_verification_uses_orb_user_gh_without_accepting_a_path_wrapper(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-
-    result = _run(workspace, environment)
-
-    assert result.returncode == 0, result.stdout
-    assert not (Path(environment["PATH"].split(":", 1)[0]) / "gh-wrapper-called").exists()
-    setup = (ROOT / ".agents" / "setup").read_text()
-    assert "SYSTEM_GH=/usr/bin/gh" in setup
-    assert 'SYSTEM_GH="$HOME/.local/bin/gh"' in setup
-    assert '$(/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin"' in setup
 
 
 def test_setup_does_not_make_optional_demo_identities_a_production_prerequisite(tmp_path: Path) -> None:
@@ -238,21 +175,23 @@ def test_setup_does_not_make_optional_demo_identities_a_production_prerequisite(
     assert not (runtime / "gh-demo-reviewer").exists()
 
 
-def test_setup_retires_mismatched_demo_identity_without_blocking_production(tmp_path: Path) -> None:
+def test_setup_retires_legacy_demo_identity_files(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
-    environment["GITHUB_DEMO_REVIEWER_LOGIN"] = "different-reviewer"
+    runtime = workspace / ".amp" / "runtime"
+    for role in ("author", "reviewer"):
+        identity = runtime / f"gh-demo-{role}" / "gh"
+        identity.mkdir(parents=True)
+        (identity / "hosts.yml").write_text(f"legacy-{role}")
 
     result = _run(workspace, environment)
 
     assert result.returncode == 0, result.stdout
-    assert "Optional demo identities are not valid and were not retained" in result.stdout
-    runtime = workspace / ".amp" / "runtime"
-    assert (runtime / "state").is_dir()
     assert not (runtime / "gh-demo-author").exists()
     assert not (runtime / "gh-demo-reviewer").exists()
+    assert (runtime / "state").is_dir()
 
 
-def test_dependency_installer_failure_removes_temporary_authentication(tmp_path: Path) -> None:
+def test_dependency_sync_failure_stops_setup_without_credential_artifacts(tmp_path: Path) -> None:
     workspace, environment = _sandbox(tmp_path)
     assert _run(workspace, environment).returncode == 0
     _executable(Path(environment["PATH"].split(":", 1)[0]) / "uv", "#!/bin/sh\nexit 17\n")
@@ -261,21 +200,6 @@ def test_dependency_installer_failure_removes_temporary_authentication(tmp_path:
 
     assert result.returncode == 17
     assert not (workspace / ".amp" / "runtime" / "hamsterdan.env").exists()
-    assert not list(tmp_path.glob("hamsterdan-petrus-auth.*"))
-
-
-def test_setup_stops_when_build_credential_retrieval_fails(tmp_path: Path) -> None:
-    workspace, environment = _sandbox(tmp_path)
-    environment["TEST_DENIED"] = "1"
-
-    result = _run(workspace, environment)
-
-    assert result.returncode != 0
-    assert result.returncode == 23
-    assert not Path(environment["UV_AUTH_BOUNDARY_MARKER"]).exists()
-    runtime = workspace / ".amp" / "runtime"
-    assert not (runtime / "hamsterdan.env").exists()
-    assert not list(tmp_path.glob("hamsterdan-petrus-auth.*"))
 
 
 def test_setup_refuses_symlinked_role_root_without_touching_outside_file(tmp_path: Path) -> None:

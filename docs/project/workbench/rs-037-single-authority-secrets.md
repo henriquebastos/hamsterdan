@@ -615,35 +615,75 @@ The beta CLI dependency and incomplete external migration remain explicit
 operational limitations. RS-037 stays Active until those operations and the
 Navigator's acceptance/history checkpoints are complete.
 
-## 1k. Amp session owns one development Environment fetch
+## 1k. Amp uses Hamsterdan-owned per-process loaders
 
-The Navigator clarified that the entire Amp session should fetch the development
-application Environment once. All session tools and the development host should
-use those acquired values. A new session or an explicit refresh obtains current
-values; restarting only Hamsterdan within that session reuses the session's
-values. This direction replaces the earlier per-command application retrieval
-proposal for Amp. Production retains its verified fetch-on-application-start
-contract. Separate build and operations vault authority remains unchanged.
+The Navigator replaced the proposed session-wide fetch with the smaller
+per-process contract on 2026-09-10. Amp's generated environment files deliver
+only selectors and scoped reader bootstraps. Each application, build,
+operations, or optional-tool entry point retrieves its own credentials when its
+process starts. A process retains those values for its lifetime; restarting it
+fetches again. Retrieval failure blocks that command without blocking Amp. No
+shared cache, rendered application `.env`, Amp plugin, or host bypass is needed.
 
-The implementation is not complete. `scripts/hamsterdan-host` currently always
-invokes the shared loader, which clears inherited application credentials and
-retrieves them again. Amp therefore needs an explicit session-owned input path;
-ordinary startup must not silently fall back to ambient or cached credentials.
+A fresh orb at `/home/user/workspace/repo`, revision `d61cd79`, confirmed that
+Amp maintains separate shell and systemd environment serializations. Tool
+processes inherit the executor environment, while managed services source the
+shell serialization when they start. `amp orb restart-processes` replaces both,
+restarts the executor and services, and reruns `.agents/resume`. Those facts no
+longer define application credential lifetime because
+`scripts/hamsterdan-host` continues through `scripts/with-runtime-secrets`.
 
-The Navigator reports that Amp maintains a `.env` under the orb user's home.
-Its exact path, format, ownership and reload behavior have not been inspected
-in a live orb. Official Amp documentation says the current thread environment
-is applied before `.agents/resume`, and that the hook may continue beyond the
-ten-second wait while the agent proceeds. An `export` inside that child script
-cannot alter the parent executor's environment. A hook name alone therefore
-does not establish session-wide delivery or failure-before-use behavior.
+The project pre-setup script failed before repository setup because it installed
+`op` into a missing `$HOME/.local/bin` and pinned stable `2.32.0`, which lacks
+Environment support. Its replacement creates the directory and installs the
+qualified Linux amd64 `2.39.1-beta.01` archive only after checking the documented
+SHA-256, binary version, and `--environment` flag. A local clean-home run and
+idempotent second run passed, including an incompatible `op` earlier on `PATH`.
+The Amp project setting read-back contains the corrected script.
 
-Inspect an existing orb's actual environment-loading path before choosing how
-to supply the fetched values. An existing task URL was requested. Verify one
-fetch reaches a fresh tool process and a managed service, repeated commands
-reuse the values, explicit refresh replaces them, and retrieval failure cannot
-silently reuse a previous session's values. Preserve unrelated Amp-managed
-entries and avoid placing fetched credentials in reusable setup snapshots.
+Synthetic launcher tests now cover a fetch on every application start,
+multiline PEM preservation, stale-value refusal, retrieval failure, separate
+operations output, unrelated reader removal, and invocation-owned
+demo identity cleanup. `.agents/setup` no longer reads or persists demo sessions
+and retires its legacy identity roots. `scripts/demo-github author` and
+`reviewer` fetch one selected vault document, verify the distinct login, and
+clean the temporary configuration root.
 
-References: [Amp lifecycle](https://ampcode.com/docs/orbs/customizing) and
-[Amp secret delivery and refresh](https://ampcode.com/docs/orbs/handling-secrets).
+The Navigator retired the generic developer-tools bundle after tracked-code
+searches found no current consumer. `env-tools.tpl` and `scripts/dev-tools` are
+removed; Amp and AI Memory authentication remain platform-owned, and the coding
+agent retains its own authentication. The corresponding vault items still exist
+because the available reader cannot delete them. Vault-administrator cleanup
+remains pending. Hamsterdan's Pi runtime continues to receive only
+`HAMSTERDAN_PI_API_KEY` from its application Environment.
+
+The dedicated demo command and both identities passed live read-only validation
+through `OP_SA_HAMSTERDAN_DEMO`. After an Amp refresh proved that replacement,
+`OP_SA_HAMSTERDAN_DEV_TOOLS` was removed and a second refresh proved its absence.
+Direct demo-host documents and the direct workflow-tool token also remain
+removed. `OP_SA_HAMSTERDAN_DEV` is retained as the name for the future
+Environment-only application reader. No vault item, service account, or issuer
+key was deleted or revoked.
+
+Petrus is now public. Hamsterdan translates the former private runtime pin to
+the exact public revision `89baf78aa030b047f239435a1ad5f25cde67e4d8`; its
+`src`, `pyproject.toml`, and `uv.lock` Git objects match the previous runtime pin.
+Dependency setup, CI, and OCI builds now use ordinary frozen uv synchronization.
+The build-vault loader, temporary Git authentication, and BuildKit secret route
+are retired; no service account or provider token was revoked.
+A cold sync with an empty home, uv cache, and virtual environment installed that
+exact revision anonymously. A clean-environment development OCI build and its
+canonical verifier also passed. The obsolete Amp project
+`PETRUS_GITHUB_TOKEN` setting was then removed; `OP_SA_HAMSTERDAN_BUILD` was
+already absent. Repository Actions-secret inspection is denied to the current
+GitHub integration, so administrator confirmation and removal of the historical
+`OP_SERVICE_ACCOUNT_TOKEN_BUILD` secret remains pending if it still exists.
+
+The application Environment ID and its development Environment-only reader are
+still unavailable in this orb. Therefore `HAMSTERDAN_ENVIRONMENT_ID` and
+`OP_SA_HAMSTERDAN_DEV` were not installed, the managed host was not
+started, and legacy direct application entries remain. Obtain the legitimate
+development Environment reader from recovery custody, install those two
+settings, validate `scripts/hamsterdan-host`, then remove only the replaced
+legacy application entries and qualify a fresh orb. Production and operations
+were not contacted.

@@ -15,30 +15,7 @@ RUN apt-get update \
 WORKDIR /opt/hamsterdan
 COPY pyproject.toml uv.lock README.md LICENSE ./
 COPY src ./src
-RUN --mount=type=secret,id=petrus_github_token,required=true <<'SHELL'
-set -eu
-auth="$(mktemp -d)"
-cleanup() { rm -rf "$auth"; }
-trap cleanup EXIT
-cat > "$auth/askpass" <<'ASKPASS'
-#!/bin/sh
-case "${1:-}" in
-    *Username*) printf '%s\n' x-access-token ;;
-    *Password*) cat /run/secrets/petrus_github_token; printf '\n' ;;
-    *) exit 1 ;;
-esac
-ASKPASS
-chmod 0700 "$auth/askpass"
-cat > "$auth/gitconfig" <<GITCONFIG
-[core]
-    askPass = $auth/askpass
-[credential "https://github.com/henriquebastos/petrus"]
-    username = x-access-token
-GITCONFIG
-chmod 0600 "$auth/gitconfig"
-GIT_CONFIG_GLOBAL="$auth/gitconfig" GIT_CONFIG_SYSTEM=/dev/null GIT_TERMINAL_PROMPT=0 \
-    UV_COMPILE_BYTECODE=1 uv sync --frozen --no-dev --no-editable
-SHELL
+RUN UV_COMPILE_BYTECODE=1 uv sync --frozen --no-dev --no-editable
 
 FROM python:3.14.7-slim-bookworm@sha256:23c59390fc717bf09f9336908199a0ae75d9c4264bf296123f94ad772fea3b52 AS runtime
 ARG SOURCE_REVISION

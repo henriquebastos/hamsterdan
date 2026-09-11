@@ -118,7 +118,7 @@ def container_command(environment: Mapping[str, str] | None = None) -> tuple[str
     if shutil.which("docker") is None:
         raise ReleaseError("Docker with Buildx is required")
     if env.get("AMP_ORB") == "1":
-        return ("sudo", "--preserve-env=PETRUS_GITHUB_TOKEN", "docker")
+        return ("sudo", "docker")
     return ("docker",)
 
 
@@ -130,8 +130,6 @@ def build_command(*, container: tuple[str, ...], image: str, metadata: Path, sou
         "--load",
         "--platform",
         PLATFORM,
-        "--secret",
-        "id=petrus_github_token,env=PETRUS_GITHUB_TOKEN",
         "--build-arg",
         f"SOURCE_REVISION={source.revision}",
         "--build-arg",
@@ -184,8 +182,6 @@ def _read_manifest(path: Path) -> dict[str, Any]:
 
 def build(*, development: bool, environment: Mapping[str, str] | None = None) -> Path:
     env = dict(os.environ if environment is None else environment)
-    if not env.get("PETRUS_GITHUB_TOKEN"):
-        raise ReleaseError("PETRUS_GITHUB_TOKEN is required as temporary build authority")
     source = read_source(ROOT, development=development)
     directory = _candidate_directory(ROOT, source)
     directory.mkdir(mode=0o755, parents=True, exist_ok=True)

@@ -29,28 +29,25 @@ earlier startup-failure checks, PR84 comparison, and remaining remote Amp work.
 - `.github/workflows/image.yml` is a manual CI adapter over the same commands.
   CI does not contain a second build implementation.
 
-The build uses a BuildKit secret named `petrus_github_token` to install the
-public, commit-pinned Petrus dependency. The existing credential interface is
-retained. The secret is not a build argument or
-an image layer.
+The build installs the public, commit-pinned Petrus dependency with ordinary
+frozen uv synchronization. It requires no GitHub, 1Password, or BuildKit secret.
 
 ## Build locally or in a Docker-enabled Amp orb
 
-Prerequisites are Python 3.11 or newer, Docker with Buildx, and
-access to the `hamsterdan-build` vault through 1Password CLI. In an Amp orb, run Docker as a
-supervised orb service rather than a background shell process.
+Prerequisites are Python 3.11 or newer and Docker with Buildx. In an Amp orb,
+run Docker as a supervised orb service rather than a background shell process.
 
 A release candidate must come from a clean commit:
 
 ```shell
-scripts/build-secrets python deployment/release.py build
+python deployment/release.py build
 python deployment/release.py verify
 ```
 
 During development, an explicit local-only build may include uncommitted files:
 
 ```shell
-scripts/build-secrets python deployment/release.py build --development
+python deployment/release.py build --development
 python deployment/release.py verify
 ```
 
@@ -66,8 +63,7 @@ the current checkout.
 
 ## Qualify a candidate on exe.dev
 
-Install the locked development tools with
-`scripts/build-secrets scripts/sync-dependencies`. Every deployment
+Install the locked development tools with `uv sync --frozen`. Every deployment
 command runs through `scripts/ops`, which resolves the committed `env-ops.tpl`
 with `op run` for that one command and never writes a rendered file:
 
@@ -75,18 +71,17 @@ with `op run` for that one command and never writes a rendered file:
 scripts/ops uv run --frozen python deployment/exe_vm.py ...
 ```
 
-The operations vault supplies the exe.dev API token and SSH key. Build
-credentials live in `hamsterdan-build`; application credentials live in the
-selected Environment. `scripts/ops --provision` additionally retrieves the
-production Environment-reader bootstrap from its operations recovery item.
-Ordinary deployment and observation commands never receive that bootstrap.
+The operations vault supplies the exe.dev API token and SSH key. Application
+credentials live in the selected Environment. `scripts/ops --provision`
+additionally retrieves the production Environment-reader bootstrap from its
+operations recovery item. Ordinary deployment and observation commands never
+receive that bootstrap.
 
 A workstation can use personal desktop authentication. For unattended commands,
 set `HAMSTERDAN_OPS_TOKEN_FILE` to its protected operations-reader file, or supply
 `OP_SA_HAMSTERDAN_OPS`. The wrapper removes loader tokens before executing the
-command. `HAMSTERDAN_BUILD_TOKEN_FILE` or `OP_SA_HAMSTERDAN_BUILD` selects the
-independent build reader. These readers must belong to the machine running the
-command; copying a production reader onto a development sandbox is unnecessary.
+command. This reader must belong to the machine running the command; copying a
+production reader onto a development sandbox is unnecessary.
 
 Register the exe.dev public key and scope it to the VM ownership tag:
 
@@ -151,6 +146,13 @@ capability.
 The pinned Environment CLI is `2.39.1-beta.01`. Its Linux amd64 archive SHA-256
 is `57a5d7637e1f508194b48732136de57e53efcc447877a5dbcaed7801abeb7f49`.
 The evaluated stable CLI does not support Environment retrieval.
+
+The Amp project pre-setup script installs that exact archive under
+`$HOME/.local/bin`, creating the directory when absent. It checks the amd64
+architecture, archive checksum, installed version, and `op run --environment`
+support; another executable named `op` does not satisfy the check. The script
+installs only the CLI. Readers remain Amp project secrets and no login cache or
+application value enters a reusable setup snapshot.
 
 Select the exact previously qualified manifest:
 
@@ -259,9 +261,15 @@ and supervised restart passed on 2026-09-07.
 
 For development, select the Environment and protected bootstrap path in the
 local ignored `.envrc`, then run `scripts/hamsterdan-host`. The local loader does
-not render or read a `.env`. Optional tool credentials use
-`scripts/dev-tools COMMAND` and `env-tools.tpl`; this retains their existing
-vault authority separately from the application's selected Environment.
+not render or read a `.env`. The hero journey's two human GitHub identities use
+`scripts/demo-github ROLE COMMAND` and remain separate from the application's
+selected Environment.
+In an Amp orb, project environment variable `HAMSTERDAN_ENVIRONMENT_ID` selects
+the development Environment and secret `OP_SA_HAMSTERDAN_DEV`
+supplies its Environment-only reader. The managed service continues through
+`scripts/hamsterdan-host` and fetches on every service start. Dependency setup,
+requires no reader. Operations and demo identities retain separate readers;
+every wrapper removes unrelated inherited credential families before retrieval.
 
 For an application credential change, edit its selected Environment and restart
 that application. In production use `systemctl restart hamsterdan`; in development
@@ -283,17 +291,11 @@ No issuer-side key rotation or identity revocation is part of this migration.
 Public Actions are currently disabled. The historical workflow results below
 do not qualify the current release through public CI.
 
-Both workflows retrieve `PETRUS_GITHUB_TOKEN` from
-`hamsterdan-build/petrus-github-token/credential` with the official
-`1password/load-secrets-action@v4`. The only installed CI credential is
-`OP_SERVICE_ACCOUNT_TOKEN_BUILD`, a reader granted only the build vault.
-`export-env: false` limits delivery to the declared dependency/build step.
-The build vault and separate Mac/CI read-only readers are installed. The CI
-bootstrap was installed on 2026-09-07. Both workflows passed for release
-`85c109eb0099ce1aad32d041c9ca69492f3b1272` using that reader. The obsolete GitHub
-`PETRUS_GITHUB_TOKEN` secret was then removed; the build-vault item is the editing
-authority. Reader grants, protected
-local paths and operations recovery item IDs are recorded in RS-037.
+Both workflows now install the exact public Petrus revision without GitHub or
+1Password credentials. The prior build-reader and temporary Git-authentication
+wiring is retired. Historical release `85c109eb0099ce1aad32d041c9ca69492f3b1272`
+used the former reader; no service account or provider token was revoked by this
+source migration.
 
 The OCI image candidate workflow remains manual and has no package-write
 permission. GHCR publication remains outside this deployment interface.

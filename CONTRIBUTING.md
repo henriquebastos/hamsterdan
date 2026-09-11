@@ -4,10 +4,9 @@ Hamsterdan is an early source publication. Issues may describe bugs, ask
 questions, or propose changes. Discuss substantial changes before opening a
 pull request. Maintainer review and response times are not guaranteed.
 
-The pinned Petrus source dependency is public. Public CI remains disabled, and
-the existing build wrappers still use a build-vault credential. Running the
-application requires GitHub App and AI credentials; never submit credentials
-in a contribution.
+The pinned Petrus source dependency is public and installs without credentials.
+Public CI remains disabled. Running the application requires GitHub App and AI
+credentials; never submit credentials in a contribution.
 
 Follow the
 [development guide](docs/process/development-guide.md). Use Python 3.14, uv,

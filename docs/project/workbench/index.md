@@ -53,9 +53,9 @@ existing Hamsterdan capability outside the delivery roadmap.
   accepted two application Environments with the same direct credential-input
   contract, separate build and operations vaults, and current AI authority after
   crashes. Production cutover and PR84's full comparison with PR83 passed.
-  Production evidence accepted; remote Amp migration remains outstanding.
-  Amp's accepted direction is one development Environment fetch for the whole
-  session. The live orb's environment-loading path still needs inspection.
+  Production evidence accepted. Amp now uses per-process Hamsterdan loaders;
+  its CLI installer and dedicated demo-identity custody are corrected. The
+  application reader settings and fresh-orb qualification remain.
 
 ## Closed
 

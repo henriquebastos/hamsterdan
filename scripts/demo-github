@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set +x
+set -euo pipefail
+cd "$(dirname "$0")/.."
+(( $# > 1 )) || exit 2
+
+bootstrap="${OP_SA_HAMSTERDAN_DEMO:-}"
+[[ -n "$bootstrap" ]] || exit 2
+op_command="${HAMSTERDAN_OP_COMMAND:-op}"
+gh_command="$(command -v gh || true)"
+role="$1"
+shift
+if [[ "$role" == author ]]; then
+    document=demo-author-hosts.yml
+    expected_login="${GITHUB_DEMO_AUTHOR_LOGIN:-}"
+elif [[ "$role" == reviewer ]]; then
+    document=demo-reviewer-hosts.yml
+    expected_login="${GITHUB_DEMO_REVIEWER_LOGIN:-}"
+else
+    exit 2
+fi
+for name in "${!OP_@}" "${!GH_@}" "${!GITHUB_@}" "${!AMP_@}" \
+    "${!ANTHROPIC_@}" "${!OPENAI_@}" "${!OPENROUTER_@}" "${!PETRUS_@}" "${!EXE_DEV_@}"; do
+    [[ -z "$name" ]] || unset "$name"
+done
+unset HAMSTERDAN_GITHUB_APP_ID HAMSTERDAN_GITHUB_APP_SLUG HAMSTERDAN_GITHUB_CLIENT_ID
+unset HAMSTERDAN_GITHUB_WORKFLOW_TOKEN
+unset HAMSTERDAN_GITHUB_PRIVATE_KEY HAMSTERDAN_GITHUB_WEBHOOK_SECRET HAMSTERDAN_PI_API_KEY
+export OP_SERVICE_ACCOUNT_TOKEN="$bootstrap"
+unset bootstrap
+[[ "$expected_login" =~ ^[A-Za-z0-9-]{1,39}$ ]] || exit 2
+identity_root="$(mktemp -d "${TMPDIR:-/tmp}/hamsterdan-demo-identity.XXXXXX")"
+cleanup() {
+    rm -rf -- "$identity_root"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+install -d -m 0700 "$identity_root/gh"
+"$op_command" document get "$document" --vault hamsterdan-dev \
+    --out-file "$identity_root/gh/hosts.yml" --file-mode 0600
+unset OP_SERVICE_ACCOUNT_TOKEN HAMSTERDAN_OP_COMMAND
+[[ -x "$gh_command" && ! -L "$gh_command" ]] || exit 2
+observed_login="$(/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" \
+    XDG_CONFIG_HOME="$identity_root" "$gh_command" api user --jq .login)"
+[[ "$observed_login" == "$expected_login" ]] || exit 2
+unset document expected_login observed_login gh_command op_command role
+XDG_CONFIG_HOME="$identity_root" "$@"

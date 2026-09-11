@@ -104,16 +104,16 @@ run the same loader inside the container. The pinned CLI and protected bootstrap
 are mounted read-only; application values stay out of Docker metadata. Edit the
 selected Environment and restart its application to refresh credentials.
 
-Builds read only `hamsterdan-build` through `scripts/build-secrets`. Dependency
-installation uses `scripts/build-secrets scripts/sync-dependencies`. GitHub Actions
-uses the official load-secrets action and a build-vault-only bootstrap.
+Builds and dependency installation use ordinary frozen uv synchronization
+against the exact public Petrus revision; they require no build credential.
 Deployment reads `hamsterdan-ops` through `scripts/ops`. Only
 `scripts/ops --provision` retrieves the target Environment-reader bootstrap.
 
-Optional developer tools keep their existing vault items under `hamsterdan-dev`
-and use `scripts/dev-tools`, with `env-tools.tpl`. This vault is separate from
-the application Environment of the same name. There is no shared AI, build, or
-operations Environment and no credential synchronization.
+The hero journey's demo-author and demo-reviewer GitHub documents remain under
+the `hamsterdan-dev` vault and are loaded only by `scripts/demo-github`. This
+vault is separate from the application Environment of the same name. There is
+no generic developer-tools loader, shared AI, build, or operations Environment,
+and no credential synchronization.
 
 The local ignored `.envrc` contains selectors and paths only; it never renders
 or loads `.env` or exports service-account values. Keep machine-specific reader

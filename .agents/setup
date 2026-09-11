@@ -3,20 +3,14 @@ set +x
 set -euo pipefail
 export LC_ALL=C
 
-MAX_PRIVATE_BYTES=65536
 RUNTIME=.amp/runtime
-SYSTEM_GH=/usr/bin/gh
-if [[ ! -x "$SYSTEM_GH" ]]; then
-    SYSTEM_GH="$HOME/.local/bin/gh"
-fi
-
-demo_author_hosts="${GITHUB_DEMO_AUTHOR_HOSTS:-}"
-demo_reviewer_hosts="${GITHUB_DEMO_REVIEWER_HOSTS:-}"
-unset GITHUB_DEMO_AUTHOR_HOSTS GITHUB_DEMO_REVIEWER_HOSTS
-unset GITHUB_APP_PRIVATE_KEY_PEM GITHUB_APP_WEBHOOK_SECRET
-unset ANTHROPIC_AGENT_API_KEY ANTHROPIC_API_KEY
-unset OPENAI_AGENT_API_KEY OPENAI_API_KEY OPENROUTER_AGENT_API_KEY OPENROUTER_API_KEY
-unset PETRUS_GITHUB_TOKEN
+for name in "${!OP_@}" "${!GH_@}" "${!GITHUB_@}" "${!AMP_@}" \
+    "${!ANTHROPIC_@}" "${!OPENAI_@}" "${!OPENROUTER_@}" "${!PETRUS_@}" "${!EXE_DEV_@}"; do
+    [[ -z "$name" ]] || unset "$name"
+done
+unset HAMSTERDAN_GITHUB_APP_ID HAMSTERDAN_GITHUB_APP_SLUG HAMSTERDAN_GITHUB_CLIENT_ID
+unset HAMSTERDAN_GITHUB_WORKFLOW_TOKEN
+unset HAMSTERDAN_GITHUB_PRIVATE_KEY HAMSTERDAN_GITHUB_WEBHOOK_SECRET HAMSTERDAN_PI_API_KEY
 
 fail() {
     echo "==> Hamsterdan setup refused unsafe runtime custody" >&2
@@ -44,36 +38,6 @@ retire_managed_file() {
     fi
 }
 
-verify_private_file() {
-    local path="$1"
-    [[ -f "$path" && ! -L "$path" ]] || fail
-    [[ "$(stat -c '%u' "$path")" = "$(id -u)" ]] || fail
-    [[ "$(stat -c '%a' "$path")" = 600 ]] || fail
-    local size
-    size="$(stat -c '%s' "$path")"
-    (( size > 0 && size <= MAX_PRIVATE_BYTES )) || fail
-}
-
-install_private_file() {
-    local path="$1"
-    local value="$2"
-    local parent temporary
-    parent="$(dirname "$path")"
-    assert_private_directory "$parent"
-    [[ ! -L "$path" ]] || fail
-    [[ ! -e "$path" || -f "$path" ]] || fail
-    if [[ -z "$value" ]]; then
-        retire_managed_file "$path"
-        return
-    fi
-    (( ${#value} <= MAX_PRIVATE_BYTES )) || fail
-    temporary="$(mktemp "$parent/.hamsterdan-private.XXXXXX")"
-    chmod 0600 "$temporary"
-    printf '%s' "$value" > "$temporary"
-    mv -fT -- "$temporary" "$path"
-    verify_private_file "$path"
-}
-
 retire_identity() {
     local root="$1"
     [[ ! -L "$root" ]] || fail
@@ -94,64 +58,27 @@ retire_identity() {
     rmdir -- "$root" 2>/dev/null || fail
 }
 
-install_identity() {
-    local root="$1"
-    local value="$2"
-    if [[ -z "$value" ]]; then
-        retire_identity "$root"
-        return
-    fi
-    assert_private_directory "$root"
-    assert_private_directory "$root/gh"
-    retire_managed_file "$root/gh/config.yml"
-    install_private_file "$root/gh/hosts.yml" "$value"
-}
-
-verify_identity() {
-    local root="$1"
-    local expected="$2"
-    local observed
-    [[ "$expected" =~ ^[A-Za-z0-9-]{1,39}$ ]] || return 1
-    verify_private_file "$root/gh/hosts.yml"
-    [[ -x "$SYSTEM_GH" && ! -L "$SYSTEM_GH" ]] || fail
-    observed="$(/usr/bin/env -i HOME="$HOME" PATH="/usr/bin:/bin" XDG_CONFIG_HOME="$PWD/$root" "$SYSTEM_GH" api user --jq .login)" || return 1
-    [[ "$observed" = "$expected" ]]
-}
-
 assert_private_directory .amp
 assert_private_directory "$RUNTIME"
 retire_managed_file "$RUNTIME/readiness-topology"
-
-if [[ -n "$demo_author_hosts" && -n "$demo_reviewer_hosts" \
-    && -n "${GITHUB_DEMO_AUTHOR_LOGIN:-}" && -n "${GITHUB_DEMO_REVIEWER_LOGIN:-}" \
-    && "$GITHUB_DEMO_AUTHOR_LOGIN" != "$GITHUB_DEMO_REVIEWER_LOGIN" ]]; then
-    install_identity "$RUNTIME/gh-demo-author" "$demo_author_hosts"
-    install_identity "$RUNTIME/gh-demo-reviewer" "$demo_reviewer_hosts"
-    if verify_identity "$RUNTIME/gh-demo-author" "$GITHUB_DEMO_AUTHOR_LOGIN" \
-        && verify_identity "$RUNTIME/gh-demo-reviewer" "$GITHUB_DEMO_REVIEWER_LOGIN"; then
-        echo "==> Optional demo identities verified"
-    else
-        retire_identity "$RUNTIME/gh-demo-author"
-        retire_identity "$RUNTIME/gh-demo-reviewer"
-        echo "==> Optional demo identities are not valid and were not retained"
-    fi
-else
-    retire_identity "$RUNTIME/gh-demo-author"
-    retire_identity "$RUNTIME/gh-demo-reviewer"
-    echo "==> Optional demo identities are not configured"
-fi
-unset demo_author_hosts demo_reviewer_hosts
+retire_identity "$RUNTIME/gh-demo-author"
+retire_identity "$RUNTIME/gh-demo-reviewer"
+echo "==> Demo identities are acquired only by scripts/demo-github"
 
 missing_petrus_feedback_tools=()
 command -v docker >/dev/null 2>&1 || missing_petrus_feedback_tools+=(docker.io)
+docker buildx version >/dev/null 2>&1 || missing_petrus_feedback_tools+=(docker-buildx-plugin)
 command -v dot >/dev/null 2>&1 || missing_petrus_feedback_tools+=(graphviz)
 if (( ${#missing_petrus_feedback_tools[@]} > 0 )); then
-    echo "==> Installing Petrus feedback tools"
+    echo "==> Installing container and Petrus feedback tools"
     sudo apt-get update
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_petrus_feedback_tools[@]}"
 else
-    echo "==> Petrus feedback tools already available"
+    echo "==> Container and Petrus feedback tools already available"
 fi
+command -v docker >/dev/null 2>&1
+docker buildx version >/dev/null 2>&1
+command -v dot >/dev/null 2>&1
 
 echo "==> Starting Docker for Petrus PostgreSQL feedback"
 sudo usermod -aG docker "$(id -un)"
@@ -178,7 +105,7 @@ export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 echo "==> Syncing the locked Hamsterdan environment"
-scripts/build-secrets scripts/sync-dependencies
+uv sync --frozen
 
 missing_media_tools=()
 if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
